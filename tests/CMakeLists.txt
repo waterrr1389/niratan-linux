@@ -93,3 +93,11 @@ target_include_directories(tst_mining_gate PRIVATE ${CMAKE_SOURCE_DIR}/src)
 target_link_libraries(tst_mining_gate PRIVATE niratan_core Qt6::Test)
 target_compile_options(tst_mining_gate PRIVATE -Wall -Wextra -Wpedantic -Werror)
 add_test(NAME mining_gate COMMAND tst_mining_gate)
+
+qt_add_executable(tst_audio_source
+    audio/tst_audio_source.cpp
+)
+target_include_directories(tst_audio_source PRIVATE ${CMAKE_SOURCE_DIR}/src)
+target_link_libraries(tst_audio_source PRIVATE niratan_core Qt6::Test)
+target_compile_options(tst_audio_source PRIVATE -Wall -Wextra -Wpedantic -Werror)
+add_test(NAME audio_source COMMAND tst_audio_source)

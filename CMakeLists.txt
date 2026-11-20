@@ -17,6 +17,7 @@ find_package(Qt6 6.12 REQUIRED COMPONENTS Quick QuickControls2 Test)
 qt_standard_project_setup(REQUIRES 6.12)
 
 qt_add_library(niratan_core STATIC
+    src/models/dictionary/audio_source.cpp
     src/services/anki/field_mapping.cpp
     src/services/anki/duplicate_scope.cpp
     src/services/anki/duplicate_query.cpp
