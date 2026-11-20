@@ -39,6 +39,10 @@ struct DuplicateOptions {
     bool operator==(const DuplicateOptions&) const = default;
 };
 
+// The root deck as the deck root scope sees it: the first non-empty piece
+// between "::" separators. A name with no such piece is returned whole.
+std::string deck_root(std::string_view deck);
+
 DuplicateOptions duplicate_options(DuplicateScope scope, std::string_view deck, bool allow_duplicates,
                                    bool check_all_models);
 

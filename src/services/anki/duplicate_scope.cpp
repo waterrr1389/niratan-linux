@@ -3,7 +3,6 @@
 #include "duplicate_scope.h"
 
 namespace niratan::anki {
-namespace {
 
 // deck.split(separator: "::", maxSplits: 1).first: empty pieces are dropped
 // and do not count as a split, so leading separators are skipped. A name made
@@ -19,8 +18,6 @@ std::string deck_root(std::string_view deck) {
     }
     return std::string(rest.substr(0, rest.find("::")));
 }
-
-}  // namespace
 
 DuplicateOptions duplicate_options(DuplicateScope scope, std::string_view deck, bool allow_duplicates,
                                    bool check_all_models) {
