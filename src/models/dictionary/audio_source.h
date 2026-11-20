@@ -5,7 +5,8 @@
 // AudioSourceReorder.audioSourceID(from:),
 // AudioSourceReorder.destinationOffset(sourceIndex:targetIndex:) and
 // AudioSourceReorder.synchronizingLocalSource(_:enabled:canonicalSource:
-// legacyURLs:)).
+// legacyURLs:)), and the built-in sources of Core/UserConfig.swift
+// (defaultAudioSource, localAudioSource, legacyLocalAudioURLs).
 //
 // AudioSource mirrors the stored Swift value. Swift's computed id is the url,
 // so it has no member of its own.
@@ -68,5 +69,12 @@ std::vector<AudioSource> synchronizing_local_source(
     bool enabled,
     const AudioSource& canonical_source,
     const std::set<std::string>& legacy_urls);
+
+// Core/UserConfig.swift's static let defaultAudioSource and
+// static let localAudioSource, and its private static let
+// legacyLocalAudioURLs. The URLs keep the {term} and {reading} placeholders.
+AudioSource default_audio_source();
+AudioSource local_audio_source();
+std::vector<std::string> legacy_local_audio_urls();
 
 }  // namespace niratan::dictionary

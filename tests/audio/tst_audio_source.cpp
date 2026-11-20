@@ -12,6 +12,9 @@
 using niratan::dictionary::AudioSource;
 using niratan::dictionary::audio_source_id;
 using niratan::dictionary::destination_offset;
+using niratan::dictionary::default_audio_source;
+using niratan::dictionary::legacy_local_audio_urls;
+using niratan::dictionary::local_audio_source;
 using niratan::dictionary::payload;
 using niratan::dictionary::synchronizing_local_source;
 
@@ -68,6 +71,7 @@ class AudioSourceTest : public QObject {
     void the_first_local_source_decides_the_enabled_state();
     void a_local_source_at_the_last_index_stays_at_the_end();
     void disabling_without_local_sources_keeps_the_order();
+    void built_in_audio_sources_keep_their_defaults();
 };
 
 void AudioSourceTest::payload_round_trips_the_identifier() {
@@ -201,6 +205,20 @@ void AudioSourceTest::disabling_without_local_sources_keeps_the_order() {
     const auto result = synchronizing_local_source(sources, false, canonical_source(), legacy_urls());
 
     QCOMPARE(result, sources);
+}
+
+void AudioSourceTest::built_in_audio_sources_keep_their_defaults() {
+    QCOMPARE(default_audio_source(),
+             (AudioSource{"Default",
+                          "https://hoshi-reader.manhhaoo-do.workers.dev/?term={term}&reading={reading}",
+                          true, true}));
+    QCOMPARE(local_audio_source(),
+             (AudioSource{"Local",
+                          "http://localhost:18765/localaudio/get/?term={term}&reading={reading}", true,
+                          false}));
+    QCOMPARE(legacy_local_audio_urls(),
+             std::vector<std::string>{
+                 "http://localhost:8765/localaudio/get/?term={term}&reading={reading}"});
 }
 
 QTEST_APPLESS_MAIN(AudioSourceTest)

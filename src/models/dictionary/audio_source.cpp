@@ -74,4 +74,20 @@ std::vector<AudioSource> synchronizing_local_source(
     return synchronized;
 }
 
+AudioSource default_audio_source() {
+    return AudioSource{"Default",
+                       "https://hoshi-reader.manhhaoo-do.workers.dev/?term={term}&reading={reading}",
+                       true, true};
+}
+
+AudioSource local_audio_source() {
+    return AudioSource{"Local",
+                       "http://localhost:18765/localaudio/get/?term={term}&reading={reading}", true,
+                       false};
+}
+
+std::vector<std::string> legacy_local_audio_urls() {
+    return {"http://localhost:8765/localaudio/get/?term={term}&reading={reading}"};
+}
+
 }  // namespace niratan::dictionary
