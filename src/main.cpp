@@ -4,6 +4,7 @@
 #include <QQmlApplicationEngine>
 #include <QQuickStyle>
 #include <QStyleHints>
+#include <QtWebEngineQuick/QtWebEngineQuick>
 
 namespace {
 
@@ -21,6 +22,7 @@ void apply_debug_color_scheme() {
 }  // namespace
 
 int main(int argc, char* argv[]) {
+    QtWebEngineQuick::initialize();
     QGuiApplication app(argc, argv);
     QGuiApplication::setApplicationName("Niratan");
     QGuiApplication::setOrganizationName("niratan");

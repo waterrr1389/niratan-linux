@@ -26,6 +26,9 @@ namespace niratan::storage {
 std::filesystem::path data_root();
 std::filesystem::path cache_root();
 
+// SPEC.md 3.5's internal layout: the imported dictionary directories.
+std::filesystem::path dictionaries_root();
+
 // nullopt when the path is absolute or contains "..".
 std::optional<std::filesystem::path> resolve_within(const std::filesystem::path& root,
                                                     std::string_view relative);

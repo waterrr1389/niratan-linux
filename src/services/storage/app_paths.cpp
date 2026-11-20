@@ -34,6 +34,11 @@ std::filesystem::path cache_root() {
     return root_from("XDG_CACHE_HOME", ".cache");
 }
 
+std::filesystem::path dictionaries_root() {
+    const std::filesystem::path root = data_root();
+    return root.empty() ? root : root / "dictionaries";
+}
+
 std::optional<std::filesystem::path> resolve_within(const std::filesystem::path& root,
                                                     std::string_view relative) {
     const std::filesystem::path candidate(relative);

@@ -4,10 +4,9 @@ import QtQuick
 import QtQuick.Controls
 import Niratan
 
-// Placeholder window. The initial size is not a spec; the minimum follows
-// HoshiNativeMacApp's .frame(minWidth: 900, minHeight: 620) with
-// .windowResizability(.contentMinSize). Colors come from the theme module,
-// never literals.
+// Placeholder shell until the bookshelf and navigation land. The minimum
+// size follows HoshiNativeMacApp's .frame(minWidth: 900, minHeight: 620)
+// with .windowResizability(.contentMinSize).
 ApplicationWindow {
     visible: true
     width: 960
@@ -16,4 +15,8 @@ ApplicationWindow {
     minimumHeight: 620
     title: "Niratan"
     color: Theme.windowBackground
+
+    DictionaryPage {
+        anchors.fill: parent
+    }
 }

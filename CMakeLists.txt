@@ -13,7 +13,7 @@ set(HOSHI_WARNINGS ${CMAKE_CXX_FLAGS})
 add_subdirectory(third_party/hoshidicts EXCLUDE_FROM_ALL)
 set(CMAKE_CXX_FLAGS ${HOSHI_WARNINGS})
 
-find_package(Qt6 6.12 REQUIRED COMPONENTS Quick QuickControls2 Test Network)
+find_package(Qt6 6.12 REQUIRED COMPONENTS Quick QuickControls2 Test Network WebEngineQuick)
 qt_standard_project_setup(REQUIRES 6.12)
 find_package(SQLite3 REQUIRED)
 
@@ -56,6 +56,8 @@ target_compile_options(niratan_core PRIVATE -Wall -Wextra -Wpedantic -Werror)
 
 qt_add_executable(niratan
     src/main.cpp
+    src/viewmodels/dictionary/dictionary_popup_model.cpp
+    src/viewmodels/dictionary/dictionary_popup_model.h
     src/views/theme/theme_state.cpp
     src/views/theme/theme_state.h
 )
@@ -64,11 +66,12 @@ qt_add_qml_module(niratan
     URI Niratan
     QML_FILES
         src/views/MainWindow.qml
+        src/views/pages/DictionaryPage.qml
         src/views/theme/Theme.qml
         src/views/theme/ThemePreview.qml
 )
-target_link_libraries(niratan PRIVATE niratan_core Qt6::Quick Qt6::QuickControls2)
-target_include_directories(niratan PRIVATE src/views/theme)
+target_link_libraries(niratan PRIVATE niratan_core Qt6::Quick Qt6::QuickControls2 Qt6::WebEngineQuick)
+target_include_directories(niratan PRIVATE src/views/theme src/viewmodels/dictionary)
 target_compile_options(niratan PRIVATE -Wall -Wextra -Wpedantic -Werror)
 
 enable_testing()
