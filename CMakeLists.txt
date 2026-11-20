@@ -60,6 +60,8 @@ qt_add_executable(niratan
     src/main.cpp
     src/viewmodels/dictionary/dictionary_popup_model.cpp
     src/viewmodels/dictionary/dictionary_popup_model.h
+    src/views/dictionary/audio_scheme_handler.cpp
+    src/views/dictionary/audio_scheme_handler.h
     src/views/theme/theme_state.cpp
     src/views/theme/theme_state.h
 )

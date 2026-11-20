@@ -4,7 +4,10 @@
 #include <QQmlApplicationEngine>
 #include <QQuickStyle>
 #include <QStyleHints>
+#include <QWebEngineProfile>
 #include <QtWebEngineQuick/QtWebEngineQuick>
+
+#include "views/dictionary/audio_scheme_handler.h"
 
 namespace {
 
@@ -22,6 +25,7 @@ void apply_debug_color_scheme() {
 }  // namespace
 
 int main(int argc, char* argv[]) {
+    niratan::ui::register_popup_url_schemes();
     QtWebEngineQuick::initialize();
     QGuiApplication app(argc, argv);
     QGuiApplication::setApplicationName("Niratan");
@@ -33,6 +37,11 @@ int main(int argc, char* argv[]) {
     apply_debug_color_scheme();
 
     const bool theme_preview = qEnvironmentVariableIsSet("NIRATAN_THEME_PREVIEW");
+
+    QWebEngineProfile* profile = QWebEngineProfile::defaultProfile();
+    profile->installUrlSchemeHandler(
+        QByteArrayLiteral("audio"),
+        new niratan::ui::AudioSchemeHandler(profile));
 
     QQmlApplicationEngine engine;
     QObject::connect(
