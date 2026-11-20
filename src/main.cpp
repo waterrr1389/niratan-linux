@@ -28,6 +28,16 @@ void apply_debug_color_scheme() {
 }  // namespace
 
 int main(int argc, char* argv[]) {
+    // The video surface renders libmpv into a QQuickFramebufferObject, which
+    // needs the OpenGL RHI backend. Headless platforms have no GL context, so
+    // the choice only applies when a real windowing system is in use, and the
+    // user may override it.
+    const QByteArray platform = qgetenv("QT_QPA_PLATFORM");
+    const bool headless = platform == "offscreen" || platform == "minimal"
+        || platform == "vnc";
+    if (!headless && !qEnvironmentVariableIsSet("QSG_RHI_BACKEND")) {
+        qputenv("QSG_RHI_BACKEND", "opengl");
+    }
     niratan::ui::register_popup_url_schemes();
     niratan::ui::register_reader_url_schemes();
     QtWebEngineQuick::initialize();

@@ -82,9 +82,9 @@ Item {
         anchors.centerIn: parent
         standardButtons: Dialog.Yes | Dialog.No
         property string folder
-        property string title
+        property string bookTitle
         Label {
-            text: qsTr("Delete \"%1\"? This cannot be undone.").arg(deleteDialog.title)
+            text: qsTr("Delete \"%1\"? This cannot be undone.").arg(deleteDialog.bookTitle)
             color: Theme.textPrimary
         }
         onAccepted: library.deleteBook(deleteDialog.folder)
@@ -429,7 +429,7 @@ Item {
                         Menu {
                             id: bookMenu
                             property string folder
-                            property string title
+                            property string bookTitle
                             MenuItem {
                                 text: qsTr("Open")
                                 onClicked: library.openBook(bookMenu.folder)
@@ -467,7 +467,7 @@ Item {
                                 text: qsTr("Delete")
                                 onClicked: {
                                     deleteDialog.folder = bookMenu.folder
-                                    deleteDialog.title = bookMenu.title
+                                    deleteDialog.bookTitle = bookMenu.bookTitle
                                     deleteDialog.open()
                                 }
                             }

@@ -285,3 +285,51 @@ target_include_directories(tst_book_storage PRIVATE ${CMAKE_SOURCE_DIR}/src)
 target_link_libraries(tst_book_storage PRIVATE niratan_core Qt6::Test)
 target_compile_options(tst_book_storage PRIVATE -Wall -Wextra -Wpedantic -Werror)
 add_test(NAME book_storage COMMAND tst_book_storage)
+
+qt_add_executable(tst_statistics
+    statistics/tst_statistics.cpp
+)
+target_include_directories(tst_statistics PRIVATE ${CMAKE_SOURCE_DIR}/src)
+target_link_libraries(tst_statistics PRIVATE niratan_core Qt6::Test)
+target_compile_options(tst_statistics PRIVATE -Wall -Wextra -Wpedantic -Werror)
+add_test(NAME statistics COMMAND tst_statistics)
+
+qt_add_executable(tst_library_model
+    books/tst_library_model.cpp
+)
+target_include_directories(tst_library_model PRIVATE ${CMAKE_SOURCE_DIR}/src)
+target_link_libraries(tst_library_model PRIVATE niratan_core Qt6::Test)
+target_compile_options(tst_library_model PRIVATE -Wall -Wextra -Wpedantic -Werror)
+add_test(NAME library_model COMMAND tst_library_model)
+
+qt_add_executable(tst_dictionary_settings
+    profiles/tst_dictionary_settings.cpp
+)
+target_include_directories(tst_dictionary_settings PRIVATE ${CMAKE_SOURCE_DIR}/src)
+target_link_libraries(tst_dictionary_settings PRIVATE niratan_core Qt6::Test)
+target_compile_options(tst_dictionary_settings PRIVATE -Wall -Wextra -Wpedantic -Werror)
+add_test(NAME dictionary_settings COMMAND tst_dictionary_settings)
+
+qt_add_executable(tst_mining_history
+    player/tst_mining_history.cpp
+)
+target_include_directories(tst_mining_history PRIVATE ${CMAKE_SOURCE_DIR}/src)
+target_link_libraries(tst_mining_history PRIVATE niratan_core Qt6::Test)
+target_compile_options(tst_mining_history PRIVATE -Wall -Wextra -Wpedantic -Werror)
+add_test(NAME mining_history COMMAND tst_mining_history)
+
+qt_add_executable(tst_sasayaki
+    sasayaki/tst_sasayaki.cpp
+)
+target_include_directories(tst_sasayaki PRIVATE ${CMAKE_SOURCE_DIR}/src)
+target_link_libraries(tst_sasayaki PRIVATE niratan_core Qt6::Test)
+target_compile_options(tst_sasayaki PRIVATE -Wall -Wextra -Wpedantic -Werror)
+add_test(NAME sasayaki COMMAND tst_sasayaki)
+
+qt_add_executable(tst_statistics_storage
+    statistics/tst_statistics_storage.cpp
+)
+target_include_directories(tst_statistics_storage PRIVATE ${CMAKE_SOURCE_DIR}/src)
+target_link_libraries(tst_statistics_storage PRIVATE niratan_core Qt6::Test)
+target_compile_options(tst_statistics_storage PRIVATE -Wall -Wextra -Wpedantic -Werror)
+add_test(NAME statistics_storage COMMAND tst_statistics_storage)

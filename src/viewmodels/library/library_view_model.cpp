@@ -2,78 +2,108 @@
 
 #include "library_view_model.h"
 
-#include <QDir>
 #include <QFileInfo>
 #include <QUrl>
+#include <QVariantMap>
 
 #include <algorithm>
-#include <cctype>
 #include <filesystem>
-#include <map>
 #include <optional>
-#include <set>
 #include <string>
+#include <string_view>
 #include <utility>
 #include <vector>
 
+#include "models/books/library_model.h"
 #include "services/books/book_storage.h"
 #include "services/storage/app_paths.h"
 
 namespace niratan::viewmodels {
 namespace {
 
-using niratan::books::BookInfo;
 using niratan::books::BookMetadata;
 using niratan::books::BookShelf;
-using niratan::books::BookStorage;
 using niratan::books::Bookmark;
+using niratan::books::BookStorage;
+using niratan::books::Library;
+using niratan::books::LibraryBook;
+using niratan::books::LibraryShelf;
+using niratan::books::LibraryShelfSelection;
+using niratan::books::SortOption;
+using niratan::books::book_progress;
+using niratan::books::move_book_to_shelf;
+using niratan::books::normalized_order;
+using niratan::books::normalized_shelf_name;
+using niratan::books::normalized_shelves;
+using niratan::books::read_bookmark;
+using niratan::books::resolved_selection;
+using niratan::books::section_books;
+using niratan::books::shelf_name_available;
 
+// ShelfProgressStrip shows its finished check from this value up.
 constexpr double kFinished = 0.999;
 
-std::string trim(const std::string& text) {
-    const QString trimmed = QString::fromStdString(text).trimmed();
-    return trimmed.toStdString();
-}
-
-bool same_text(const std::string& left, const std::string& right) {
-    return QString::fromStdString(left).compare(QString::fromStdString(right),
-                                                Qt::CaseInsensitive) == 0;
-}
-
-// Code point order, which is stable across locales. Swift uses localized
-// standard ordering; the difference only shows for scripts whose collation
-// differs from code point order (Kana, case, accents).
-bool title_less(const BookMetadata& left, const BookMetadata& right) {
-    return left.display_title() < right.display_title();
-}
-
-// Drops unknown and duplicate ids, then appends the fallback ids that are
-// still missing.
-std::vector<std::string> normalized_order(const std::vector<std::string>& order,
-                                          const std::set<std::string>& valid,
-                                          const std::vector<std::string>& fallback) {
-    std::vector<std::string> result;
-    std::set<std::string> seen;
-    for (const std::string& id : order) {
-        if (valid.contains(id) && seen.insert(id).second) {
-            result.push_back(id);
-        }
+// The keys LibraryPage.qml assigns to selectedShelf. Anything else selects the
+// whole library, which is also where an unknown shelf lands.
+LibraryShelfSelection parse_selection(const std::string& value) {
+    if (value == "reading") {
+        return LibraryShelfSelection{LibraryShelf::reading, {}};
     }
-    for (const std::string& id : fallback) {
-        if (valid.contains(id) && seen.insert(id).second) {
-            result.push_back(id);
-        }
+    if (value == "unshelved") {
+        return LibraryShelfSelection{LibraryShelf::unshelved, {}};
     }
-    return result;
+    constexpr std::string_view kShelfPrefix = "shelf:";
+    if (value.starts_with(kShelfPrefix)) {
+        return LibraryShelfSelection{LibraryShelf::shelf, value.substr(kShelfPrefix.size())};
+    }
+    return LibraryShelfSelection{};
 }
 
-std::vector<std::string> book_ids(const std::vector<BookMetadata>& books) {
+std::string selection_text(const LibraryShelfSelection& selection) {
+    switch (selection.shelf) {
+        case LibraryShelf::all:
+            return "all";
+        case LibraryShelf::reading:
+            return "reading";
+        case LibraryShelf::unshelved:
+            return "unshelved";
+        case LibraryShelf::shelf:
+            return "shelf:" + selection.name;
+    }
+    return "all";
+}
+
+SortOption sort_option_of(int option) {
+    switch (option) {
+        case 1:
+            return SortOption::title;
+        case 2:
+            return SortOption::manual;
+        default:
+            return SortOption::recent;
+    }
+}
+
+std::vector<std::string> library_ids(const std::vector<LibraryBook>& books) {
     std::vector<std::string> ids;
     ids.reserve(books.size());
-    for (const BookMetadata& book : books) {
-        ids.push_back(book.id);
+    for (const LibraryBook& book : books) {
+        ids.push_back(book.metadata.id);
     }
     return ids;
+}
+
+std::vector<std::string> shelf_names(const std::vector<BookShelf>& shelves) {
+    std::vector<std::string> names;
+    names.reserve(shelves.size());
+    for (const BookShelf& shelf : shelves) {
+        names.push_back(shelf.name);
+    }
+    return names;
+}
+
+std::string trim(const std::string& text) {
+    return QString::fromStdString(text).trimmed().toStdString();
 }
 
 }  // namespace
@@ -82,10 +112,7 @@ struct LibraryViewModel::State {
     explicit State() : storage(storage::data_root()) {}
 
     BookStorage storage;
-    std::vector<BookMetadata> books;
-    std::map<std::string, double> progress;
-    std::vector<BookShelf> shelves;
-    std::vector<std::string> manual_order;
+    Library library;
     std::string selected = "all";
     int sort_option = 0;
     int cover_width = 160;
@@ -93,199 +120,75 @@ struct LibraryViewModel::State {
     QVariantList books_view;
     QVariantList shelves_view;
 
+    LibraryShelfSelection selection() const { return parse_selection(selected); }
+
     std::optional<std::size_t> find_book(const std::string& folder) const {
-        for (std::size_t index = 0; index < books.size(); ++index) {
-            if (books[index].folder == folder) {
+        for (std::size_t index = 0; index < library.books.size(); ++index) {
+            if (library.books[index].metadata.folder == folder) {
                 return index;
             }
         }
         return std::nullopt;
     }
 
-    std::optional<std::size_t> find_book_by_id(const std::string& id) const {
-        for (std::size_t index = 0; index < books.size(); ++index) {
-            if (books[index].id == id) {
-                return index;
-            }
+    // Reads every book with the two sidecars book_progress and read_bookmark
+    // use, then replaces the stored order and shelves with their normalized
+    // form. Only a changed value is written back.
+    void load() {
+        const std::vector<BookMetadata> metadata = storage.load_all_books();
+        library.books.clear();
+        library.books.reserve(metadata.size());
+        for (const BookMetadata& book : metadata) {
+            LibraryBook entry;
+            entry.metadata = book;
+            entry.bookmark = storage.load_bookmark(book.folder);
+            entry.book_info = storage.load_book_info(book.folder);
+            library.books.push_back(std::move(entry));
         }
-        return std::nullopt;
-    }
 
-    bool in_shelf(const BookShelf& shelf, const std::string& id) const {
-        return std::find(shelf.book_ids.begin(), shelf.book_ids.end(), id) != shelf.book_ids.end();
-    }
-
-    double book_progress(const BookMetadata& book) const {
-        const auto found = progress.find(book.id);
-        return found == progress.end() ? 0.0 : found->second;
-    }
-
-    void load_progress() {
-        progress.clear();
-        for (const BookMetadata& book : books) {
-            const std::optional<BookInfo> info = storage.load_book_info(book.folder);
-            const std::optional<Bookmark> bookmark = storage.load_bookmark(book.folder);
-            int total = book.character_count.value_or(0);
-            if (info.has_value() && info->character_count > 0) {
-                total = info->character_count;
-            }
-            if (bookmark.has_value() && total > 0) {
-                progress[book.id] =
-                    std::clamp(static_cast<double>(bookmark->character_count) / total, 0.0, 1.0);
-            } else {
-                progress[book.id] = 0.0;
-            }
+        const std::vector<std::string> ids = library_ids(library.books);
+        const std::vector<std::string> stored_order = storage.load_book_order();
+        library.manual_order = normalized_order(stored_order, ids, ids);
+        if (library.manual_order != stored_order) {
+            storage.save_book_order(library.manual_order);
         }
-    }
 
-    void load_order() {
-        manual_order = storage.load_book_order();
-        const std::vector<std::string> ids = book_ids(books);
-        manual_order = normalized_order(manual_order, std::set<std::string>(ids.begin(), ids.end()),
-                                        ids);
-        storage.save_book_order(manual_order);
-    }
-
-    void load_shelves() {
-        shelves = storage.load_shelves();
-        const std::vector<std::string> ids = book_ids(books);
-        const std::set<std::string> valid(ids.begin(), ids.end());
-        for (BookShelf& shelf : shelves) {
-            const std::vector<std::string> before = shelf.book_ids;
-            shelf.book_ids = normalized_order(shelf.book_ids, valid, shelf.book_ids);
-            if (shelf.book_ids != before) {
-                storage.save_shelves(shelves);
-            }
-        }
-    }
-
-    bool is_unshelved(const std::string& id) const {
-        for (const BookShelf& shelf : shelves) {
-            if (in_shelf(shelf, id)) {
-                return false;
-            }
-        }
-        return true;
-    }
-
-    std::vector<const BookMetadata*> section_books() const {
-        std::vector<const BookMetadata*> result;
-        if (selected == "all") {
-            for (const BookMetadata& book : books) {
-                result.push_back(&book);
-            }
-        } else if (selected == "reading") {
-            for (const BookMetadata& book : books) {
-                const double value = book_progress(book);
-                if (value > 0.0 && value < kFinished) {
-                    result.push_back(&book);
-                }
-            }
-        } else if (selected == "unshelved") {
-            for (const BookMetadata& book : books) {
-                if (is_unshelved(book.id)) {
-                    result.push_back(&book);
-                }
-            }
-        } else {
-            const std::string name = selected.substr(std::string("shelf:").size());
-            const auto shelf = std::find_if(shelves.begin(), shelves.end(),
-                                            [&name](const BookShelf& candidate) {
-                                                return candidate.name == name;
-                                            });
-            if (shelf == shelves.end()) {
-                for (const BookMetadata& book : books) {
-                    result.push_back(&book);
-                }
-            } else {
-                for (const BookMetadata& book : books) {
-                    if (in_shelf(*shelf, book.id)) {
-                        result.push_back(&book);
-                    }
-                }
-            }
-        }
-        return result;
-    }
-
-    std::vector<std::string> active_manual_order() const {
-        if (selected.starts_with("shelf:")) {
-            const std::string name = selected.substr(std::string("shelf:").size());
-            const auto shelf = std::find_if(shelves.begin(), shelves.end(),
-                                            [&name](const BookShelf& candidate) {
-                                                return candidate.name == name;
-                                            });
-            if (shelf != shelves.end()) {
-                return shelf->book_ids;
-            }
-        }
-        return manual_order;
-    }
-
-    void sort_section(std::vector<const BookMetadata*>& section) const {
-        if (sort_option == 0) {
-            std::stable_sort(section.begin(), section.end(),
-                             [](const BookMetadata* left, const BookMetadata* right) {
-                                 return left->last_access > right->last_access;
-                             });
-        } else if (sort_option == 1) {
-            std::stable_sort(section.begin(), section.end(),
-                             [](const BookMetadata* left, const BookMetadata* right) {
-                                 return title_less(*left, *right);
-                             });
-        } else {
-            const std::vector<std::string> order = active_manual_order();
-            std::map<std::string, int> rank;
-            for (std::size_t index = 0; index < order.size(); ++index) {
-                rank.emplace(order[index], static_cast<int>(index));
-            }
-            std::stable_sort(section.begin(), section.end(),
-                             [&rank](const BookMetadata* left, const BookMetadata* right) {
-                                 const auto left_rank = rank.find(left->id);
-                                 const auto right_rank = rank.find(right->id);
-                                 if (left_rank != rank.end() && right_rank != rank.end()) {
-                                     return left_rank->second < right_rank->second;
-                                 }
-                                 if (left_rank != rank.end()) {
-                                     return true;
-                                 }
-                                 if (right_rank != rank.end()) {
-                                     return false;
-                                 }
-                                 return title_less(*left, *right);
-                             });
+        const std::vector<BookShelf> stored_shelves = storage.load_shelves();
+        library.shelves = normalized_shelves(stored_shelves, library.books);
+        if (library.shelves != stored_shelves) {
+            storage.save_shelves(library.shelves);
         }
     }
 
     void rebuild_views() {
         books_view.clear();
-        std::vector<const BookMetadata*> section = section_books();
-        sort_section(section);
-        for (const BookMetadata* book : section) {
+        const std::vector<LibraryBook> section =
+            section_books(library, selection(), sort_option_of(sort_option));
+        for (const LibraryBook& book : section) {
+            const double value = book_progress(book);
             QVariantMap entry;
-            entry.insert(QStringLiteral("id"), QString::fromStdString(book->id));
-            entry.insert(QStringLiteral("folder"), QString::fromStdString(book->folder));
-            entry.insert(QStringLiteral("title"), QString::fromStdString(book->display_title()));
-            const double value = book_progress(*book);
+            entry.insert(QStringLiteral("id"), QString::fromStdString(book.metadata.id));
+            entry.insert(QStringLiteral("folder"), QString::fromStdString(book.metadata.folder));
+            entry.insert(QStringLiteral("title"),
+                         QString::fromStdString(book.metadata.display_title()));
             entry.insert(QStringLiteral("progress"), value);
             entry.insert(QStringLiteral("percent"), QString::number(value * 100.0, 'f', 1));
             entry.insert(QStringLiteral("finished"), value >= kFinished);
-            const auto cover = storage.cover_path(*book);
+            const std::optional<std::filesystem::path> cover = storage.cover_path(book.metadata);
             entry.insert(QStringLiteral("cover"),
-                         cover.has_value()
-                             ? QUrl::fromLocalFile(QString::fromStdString(cover->string())).toString()
-                             : QString());
+                         cover.has_value() ? QUrl::fromLocalFile(
+                                                 QString::fromStdString(cover->string()))
+                                                 .toString()
+                                           : QString());
             books_view.append(entry);
         }
 
         shelves_view.clear();
-        for (const BookShelf& shelf : shelves) {
-            const int count = static_cast<int>(std::count_if(
-                books.begin(), books.end(),
-                [this, &shelf](const BookMetadata& book) { return in_shelf(shelf, book.id); }));
-            shelves_view.append(QVariantMap{{QStringLiteral("name"),
-                                             QString::fromStdString(shelf.name)},
-                                            {QStringLiteral("count"), count}});
+        for (const BookShelf& shelf : library.shelves) {
+            const LibraryShelfSelection shelf_selection{LibraryShelf::shelf, shelf.name};
+            shelves_view.append(
+                QVariantMap{{QStringLiteral("name"), QString::fromStdString(shelf.name)},
+                            {QStringLiteral("count"), books::book_count(library, shelf_selection)}});
         }
     }
 };
@@ -306,11 +209,12 @@ QString LibraryViewModel::selected_shelf() const {
 }
 
 void LibraryViewModel::setSelectedShelf(const QString& shelf) {
-    const std::string value = shelf.toStdString();
-    if (state_->selected == value) {
+    const std::string resolved =
+        selection_text(resolved_selection(state_->library, parse_selection(shelf.toStdString())));
+    if (state_->selected == resolved) {
         return;
     }
-    state_->selected = value;
+    state_->selected = resolved;
     state_->rebuild_views();
     emit booksChanged();
     emit selectionChanged();
@@ -342,27 +246,22 @@ void LibraryViewModel::setCoverWidth(int width) {
 
 QString LibraryViewModel::error() const { return state_->error; }
 
-int LibraryViewModel::book_count() const { return state_->books_view.size(); }
+int LibraryViewModel::book_count() const {
+    return books::book_count(state_->library, state_->selection());
+}
 
 void LibraryViewModel::refresh() {
-    state_->books = state_->storage.load_all_books();
-    state_->load_progress();
-    state_->load_order();
-    state_->load_shelves();
+    state_->load();
 
-    if (state_->selected.starts_with("shelf:")) {
-        const std::string name = state_->selected.substr(std::string("shelf:").size());
-        const bool exists = std::any_of(state_->shelves.begin(), state_->shelves.end(),
-                                        [&name](const BookShelf& shelf) {
-                                            return shelf.name == name;
-                                        });
-        if (!exists) {
-            state_->selected = "all";
-            emit selectionChanged();
-        }
-    }
+    const std::string resolved =
+        selection_text(resolved_selection(state_->library, state_->selection()));
+    const bool selection_moved = resolved != state_->selected;
+    state_->selected = resolved;
 
     state_->rebuild_views();
+    if (selection_moved) {
+        emit selectionChanged();
+    }
     emit booksChanged();
     emit shelvesChanged();
 }
@@ -403,108 +302,106 @@ void LibraryViewModel::renameBook(const QString& folder, const QString& title) {
         return;
     }
     const std::string trimmed = trim(title.toStdString());
-    state_->books[*index].renamed_title =
-        trimmed.empty() ? std::nullopt : std::optional<std::string>(trimmed);
-    state_->storage.save_metadata(state_->books[*index]);
+    BookMetadata& book = state_->library.books[*index].metadata;
+    book.renamed_title = trimmed.empty() ? std::nullopt : std::optional<std::string>(trimmed);
+    state_->storage.save_metadata(book);
     refresh();
 }
 
 void LibraryViewModel::deleteBook(const QString& folder) {
-    const std::string folder_id = folder.toStdString();
-    const auto index = state_->find_book(folder_id);
+    const std::string folder_name = folder.toStdString();
+    const auto index = state_->find_book(folder_name);
     if (!index.has_value()) {
         return;
     }
-    const std::string id = state_->books[*index].id;
-    if (const auto directory = state_->storage.book_directory(folder_id)) {
+    const std::string id = state_->library.books[*index].metadata.id;
+    if (const auto directory = state_->storage.book_directory(folder_name)) {
         std::error_code error;
         std::filesystem::remove_all(*directory, error);
+        if (error) {
+            return;
+        }
     }
-    for (BookShelf& shelf : state_->shelves) {
-        shelf.book_ids.erase(std::remove(shelf.book_ids.begin(), shelf.book_ids.end(), id),
-                             shelf.book_ids.end());
-    }
-    state_->storage.save_shelves(state_->shelves);
-    state_->manual_order.erase(
-        std::remove(state_->manual_order.begin(), state_->manual_order.end(), id),
-        state_->manual_order.end());
-    state_->storage.save_book_order(state_->manual_order);
+    // A deleted book is off every shelf, and the model helper is what takes an
+    // ID out of all of them.
+    move_book_to_shelf(state_->library.shelves, id, std::nullopt);
+    state_->storage.save_shelves(state_->library.shelves);
+    std::erase(state_->library.manual_order, id);
+    state_->storage.save_book_order(state_->library.manual_order);
     refresh();
 }
 
 void LibraryViewModel::markRead(const QString& folder) {
-    const std::string folder_id = folder.toStdString();
-    const auto info = state_->storage.load_book_info(folder_id);
-    if (!info.has_value()) {
+    const auto index = state_->find_book(folder.toStdString());
+    if (!index.has_value()) {
         return;
     }
-    int chapter = 0;
-    for (const auto& [path, chapter_info] : info->chapter_info) {
-        (void)path;
-        if (chapter_info.spine_index.has_value()) {
-            chapter = std::max(chapter, *chapter_info.spine_index);
-        }
+    LibraryBook& book = state_->library.books[*index];
+    const std::optional<Bookmark> bookmark = read_bookmark(book, books::reference_now());
+    if (!bookmark.has_value()) {
+        return;
     }
-    Bookmark bookmark;
-    bookmark.chapter_index = chapter;
-    bookmark.progress = 1.0;
-    bookmark.character_count = info->character_count;
-    bookmark.last_modified = books::reference_now();
-    state_->storage.save_bookmark(folder_id, bookmark);
-    refresh();
+    if (!state_->storage.save_bookmark(book.metadata.folder, *bookmark)) {
+        return;
+    }
+    book.bookmark = bookmark;
+    state_->rebuild_views();
+    emit booksChanged();
 }
 
 QString LibraryViewModel::createShelf(const QString& name) {
-    const std::string trimmed = trim(name.toStdString());
-    if (trimmed.empty()) {
+    const std::optional<std::string> normalized = normalized_shelf_name(name.toStdString());
+    if (!normalized.has_value()) {
         return {};
     }
-    for (const BookShelf& shelf : state_->shelves) {
-        if (same_text(shelf.name, trimmed)) {
-            return {};
-        }
+    if (!shelf_name_available(*normalized, shelf_names(state_->library.shelves))) {
+        return {};
     }
-    state_->shelves.push_back(BookShelf{trimmed, {}});
-    state_->storage.save_shelves(state_->shelves);
+    state_->library.shelves.push_back(BookShelf{*normalized, {}});
+    state_->storage.save_shelves(state_->library.shelves);
     refresh();
-    return QString::fromStdString(trimmed);
+    return QString::fromStdString(*normalized);
 }
 
 bool LibraryViewModel::renameShelf(const QString& from, const QString& to) {
-    const std::string trimmed = trim(to.toStdString());
-    if (trimmed.empty()) {
+    const std::string old_name = from.toStdString();
+    const auto shelf = std::find_if(state_->library.shelves.begin(), state_->library.shelves.end(),
+                                    [&old_name](const BookShelf& candidate) {
+                                        return candidate.name == old_name;
+                                    });
+    if (shelf == state_->library.shelves.end()) {
         return false;
     }
-    for (const BookShelf& shelf : state_->shelves) {
-        if (shelf.name != from.toStdString() && same_text(shelf.name, trimmed)) {
-            return false;
-        }
+    const std::optional<std::string> normalized = normalized_shelf_name(to.toStdString());
+    if (!normalized.has_value()) {
+        return false;
     }
-    for (BookShelf& shelf : state_->shelves) {
-        if (shelf.name == from.toStdString()) {
-            shelf.name = trimmed;
-            state_->storage.save_shelves(state_->shelves);
-            if (state_->selected == "shelf:" + from.toStdString()) {
-                state_->selected = "shelf:" + trimmed;
-                emit selectionChanged();
-            }
-            refresh();
-            return true;
-        }
+    if (!shelf_name_available(*normalized, shelf_names(state_->library.shelves), old_name)) {
+        return false;
     }
-    return false;
+
+    shelf->name = *normalized;
+    state_->storage.save_shelves(state_->library.shelves);
+    const std::string old_key =
+        selection_text(LibraryShelfSelection{LibraryShelf::shelf, old_name});
+    if (state_->selected == old_key) {
+        state_->selected =
+            selection_text(LibraryShelfSelection{LibraryShelf::shelf, *normalized});
+        emit selectionChanged();
+    }
+    refresh();
+    return true;
 }
 
 void LibraryViewModel::deleteShelf(const QString& name) {
     const std::string target = name.toStdString();
-    state_->shelves.erase(std::remove_if(state_->shelves.begin(), state_->shelves.end(),
-                                         [&target](const BookShelf& shelf) {
-                                             return shelf.name == target;
-                                         }),
-                          state_->shelves.end());
-    state_->storage.save_shelves(state_->shelves);
-    if (state_->selected == "shelf:" + target) {
-        state_->selected = "all";
+    std::erase_if(state_->library.shelves, [&target](const BookShelf& shelf) {
+        return shelf.name == target;
+    });
+    state_->storage.save_shelves(state_->library.shelves);
+    if (state_->selected ==
+        selection_text(LibraryShelfSelection{LibraryShelf::shelf, target})) {
+        state_->selected = selection_text(LibraryShelfSelection{});
         emit selectionChanged();
     }
     refresh();
@@ -516,24 +413,19 @@ void LibraryViewModel::moveBookToShelf(const QString& folder, const QString& she
 
 void LibraryViewModel::moveBooksToShelf(const QStringList& folders, const QString& shelf) {
     const std::string target = shelf.toStdString();
+    // An empty name is the move menu's "None", which Swift spells as a nil
+    // destination: the book leaves every shelf and joins none.
+    const std::optional<std::string> destination =
+        target.empty() ? std::nullopt : std::optional<std::string>(target);
     for (const QString& folder : folders) {
         const auto index = state_->find_book(folder.toStdString());
         if (!index.has_value()) {
             continue;
         }
-        const std::string id = state_->books[*index].id;
-        for (BookShelf& candidate : state_->shelves) {
-            candidate.book_ids.erase(
-                std::remove(candidate.book_ids.begin(), candidate.book_ids.end(), id),
-                candidate.book_ids.end());
-        }
-        for (BookShelf& candidate : state_->shelves) {
-            if (!target.empty() && candidate.name == target) {
-                candidate.book_ids.push_back(id);
-            }
-        }
+        move_book_to_shelf(state_->library.shelves, state_->library.books[*index].metadata.id,
+                           destination);
     }
-    state_->storage.save_shelves(state_->shelves);
+    state_->storage.save_shelves(state_->library.shelves);
     refresh();
 }
 

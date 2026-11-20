@@ -1,0 +1,1136 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+//
+// The video player page: the mpv surface with Niratan's floating playback
+// chrome. Metrics and behavior follow Features/Video/VideoControlsView.swift
+// (floating controls 760 x 90, 24 corner radius, play button 42, resting
+// track 4, knob 13, speed presets 0.25...5 in 4 x 2 rows, slider step 0.1),
+// VideoPlayerScreen+OSD.swift (1.35 s on-screen display and the speed, delay
+// and volume value text), VideoPlayerScreen+Shortcuts.swift with
+// VideoShortcutActions.swift (the default key bindings), and
+// VideoPlayerScreen+Chrome.swift (one second auto-hide, chrome revealed by
+// pointer movement, visible while paused). Playback state comes only from
+// MpvItem; the page never reaches libmpv.
+//
+// The stage is black in both themes, as in VideoPlayerScreen.swift, so the
+// letterbox does not follow the window background. Every other surface,
+// border and text colour comes from Theme; the empty-state card, the OSD panel
+// and the chrome use floating tokens because their text sits over that black
+// stage and must stay legible in the light theme too.
+//
+// The chrome hides one second after the last pointer movement over the page,
+// but stays visible while paused, while the pointer is over the bar or the
+// speed panel, and while the timeline is being scrubbed.
+//
+// Deferred because MpvItem exposes no API for them: the chapter list, chapter
+// markers and chapter menu (only chapterChanged(int) exists), subtitle track
+// names and the engine's subtitle visibility, transcript, subtitle mining,
+// inspector and mining history, ambient backdrop, remote and media-server
+// sources, playlist navigation, screenshots, subtitle file loading,
+// drag-and-drop, remembered playback position, playback history and the full
+// subtitle appearance settings. Because the engine reports no subtitle
+// visibility or A-B state, the page tracks the values it requested locally;
+// they reset when a new file loads. The floating bar cannot be dragged, the
+// compact-bottom layout and the density switching are not reproduced, and the
+// pointer cursor is not hidden.
+
+pragma ComponentBehavior: Bound
+
+import QtQuick
+import QtQuick.Controls
+import QtQuick.Dialogs
+import QtQuick.Layouts
+import QtQuick.Window
+import Niratan
+
+Item {
+    id: page
+
+    signal backRequested()
+
+    // VideoControlsView.swift: chromeSize and metrics(for: .floating).
+    readonly property int chromeMaxWidth: 760
+    readonly property int chromeHeight: 90
+    readonly property int chromeSideInset: 16
+    // playbackChromeEdgeInset (16) plus metrics.bottomInset (24).
+    readonly property int chromeBottomInset: 40
+
+    // VideoMediaTypes.supportedExtensions, in the same order.
+    readonly property var supportedExtensions: [
+        "mkv", "webm", "avi", "m4v", "mp4", "mov", "qt",
+        "mpg", "mpeg", "ts", "m2ts", "mts", "3gp", "ogv",
+        "wmv", "asf", "flv",
+        "m4b", "m4a", "mp3", "flac", "opus", "ogg", "oga",
+        "weba", "wav", "aac", "aiff", "aif", "ape", "wv"
+    ]
+    readonly property string extensionList: page.supportedExtensions.join(", ")
+    readonly property string extensionPattern: page.supportedExtensions.map(
+        function (extension) {
+            return "*." + extension
+        }).join(" ")
+
+    readonly property real displayTime: page.scrubbing ? page.scrubTime : mpv.position
+    readonly property real displayRatio: mpv.duration > 0
+        ? Math.max(0, Math.min(1, page.displayTime / mpv.duration))
+        : 0
+
+    // The bar is shown while the video is loaded and any of these hold. The
+    // paused case follows the page requirement; the others keep the bar from
+    // disappearing under the pointer or during a scrub.
+    readonly property bool chromeShown: mpv.loaded
+        && (page.chromeVisible || mpv.paused || page.barHovered
+            || page.scrubbing || page.speedPanelOpen)
+    readonly property bool fullScreen: page.Window.window
+        ? page.Window.window.visibility === Window.FullScreen
+        : false
+
+    property bool chromeVisible: true
+    property bool barHovered: false
+    property bool scrubbing: false
+    property real scrubTime: 0
+    property bool speedPanelOpen: false
+    property bool speedPanelHovered: false
+    // Requested subtitle visibility; the engine has no readable property.
+    property bool subtitlesVisible: true
+    // Requested A-B points; the engine only exposes the commands.
+    property bool loopASet: false
+    property bool loopBSet: false
+    property string osdTitle: ""
+    property string osdValue: ""
+
+    focus: true
+    Keys.priority: Keys.BeforeItem
+    Keys.onPressed: function (event) {
+        page.handleKey(event)
+    }
+
+    // VideoTimeFormatter.string(from:): floor to seconds, h:mm:ss only when
+    // hours are present, otherwise m:ss.
+    function formatTime(seconds) {
+        if (!isFinite(seconds) || seconds <= 0)
+            return "0:00"
+        var total = Math.floor(seconds)
+        var hours = Math.floor(total / 3600)
+        var minutes = Math.floor((total % 3600) / 60)
+        var remainder = total % 60
+        var secondsText = remainder < 10 ? "0" + remainder : String(remainder)
+        if (hours > 0) {
+            var minutesText = minutes < 10 ? "0" + minutes : String(minutes)
+            return hours + ":" + minutesText + ":" + secondsText
+        }
+        return minutes + ":" + secondsText
+    }
+
+    // VideoPlaybackSpeed.normalized: 0.25...5 in 0.1 steps, with 0.25 kept
+    // as the floor for speeds at or below it.
+    function normalizedSpeed(value) {
+        if (!isFinite(value) || value <= 0.25)
+            return 0.25
+        var rounded = Math.round(value * 10) / 10
+        return Math.max(0.3, Math.min(5.0, rounded))
+    }
+
+    function formatSpeed(value) {
+        var speed = page.normalizedSpeed(value)
+        if (Math.abs(speed - 0.25) < 0.001)
+            return "0.25x"
+        return speed.toFixed(1) + "x"
+    }
+
+    function speedIs(value) {
+        return Math.abs(page.normalizedSpeed(mpv.speed) - page.normalizedSpeed(value)) < 0.001
+    }
+
+    // VideoPlayerScreen.delayOSDValue: zero within 5 ms, else %+.2fs.
+    function formatDelay(value) {
+        if (Math.abs(value) < 0.005)
+            return "0.00s"
+        return (value > 0 ? "+" : "-") + Math.abs(value).toFixed(2) + "s"
+    }
+
+    function showOSD(title, value) {
+        page.osdTitle = title
+        page.osdValue = value
+        osdTimer.restart()
+    }
+
+    // VideoPlayerScreen+Chrome.swift: reveal on pointer movement and schedule
+    // the hide one second later.
+    function notePointerMovement() {
+        if (!mpv.loaded)
+            return
+        page.chromeVisible = true
+        hideTimer.restart()
+    }
+
+    function scheduleHide() {
+        if (!mpv.loaded)
+            return
+        hideTimer.restart()
+    }
+
+    function handleHideTimeout() {
+        if (page.barHovered || page.speedPanelHovered || page.scrubbing || mpv.paused)
+            return
+        if (page.speedPanelOpen)
+            page.speedPanelOpen = false
+        page.chromeVisible = false
+    }
+
+    function timeAt(x) {
+        if (mpv.duration <= 0 || timeline.width <= 0)
+            return 0
+        return Math.max(0, Math.min(mpv.duration, mpv.duration * x / timeline.width))
+    }
+
+    function beginScrub(x) {
+        if (!mpv.loaded || mpv.duration <= 0)
+            return
+        hideTimer.stop()
+        page.scrubbing = true
+        page.scrubTime = page.timeAt(x)
+        page.chromeVisible = true
+    }
+
+    function updateScrub(x) {
+        if (page.scrubbing)
+            page.scrubTime = page.timeAt(x)
+    }
+
+    function endScrub() {
+        if (!page.scrubbing)
+            return
+        page.scrubbing = false
+        mpv.seek(page.scrubTime)
+        page.notePointerMovement()
+    }
+
+    function togglePause() {
+        if (!mpv.loaded)
+            return
+        mpv.togglePause()
+        page.notePointerMovement()
+    }
+
+    function skip(delta) {
+        if (!mpv.loaded || mpv.duration <= 0)
+            return
+        mpv.skip(delta)
+    }
+
+    function setVolume(value) {
+        if (!mpv.loaded)
+            return
+        var volume = Math.max(0, Math.min(100, value))
+        mpv.volume = volume
+        page.showOSD(qsTr("Volume"), String(Math.round(volume)))
+    }
+
+    function adjustVolume(delta) {
+        page.setVolume(mpv.volume + delta)
+    }
+
+    function toggleMute() {
+        if (!mpv.loaded)
+            return
+        mpv.muted = !mpv.muted
+        page.showOSD(qsTr("Volume"), mpv.muted ? qsTr("Muted") : qsTr("Unmuted"))
+    }
+
+    function setSpeed(value) {
+        if (!mpv.loaded)
+            return
+        var speed = page.normalizedSpeed(value)
+        mpv.speed = speed
+        page.showOSD(qsTr("Speed"), page.formatSpeed(speed))
+    }
+
+    function adjustSpeed(delta) {
+        page.setSpeed(mpv.speed + delta)
+    }
+
+    function resetSpeed() {
+        if (!mpv.loaded)
+            return
+        mpv.resetSpeed()
+        page.showOSD(qsTr("Speed"), page.formatSpeed(1.0))
+    }
+
+    function setSubtitleDelay(value) {
+        if (!mpv.loaded)
+            return
+        var delay = Math.max(-60, Math.min(60, value))
+        mpv.subtitleDelay = delay
+        page.showOSD(qsTr("Subtitle Delay"), page.formatDelay(delay))
+    }
+
+    function adjustSubtitleDelay(delta) {
+        page.setSubtitleDelay(mpv.subtitleDelay + delta)
+    }
+
+    function setAudioDelay(value) {
+        if (!mpv.loaded)
+            return
+        var delay = Math.max(-30, Math.min(30, value))
+        mpv.audioDelay = delay
+        page.showOSD(qsTr("Audio Delay"), page.formatDelay(delay))
+    }
+
+    function adjustAudioDelay(delta) {
+        page.setAudioDelay(mpv.audioDelay + delta)
+    }
+
+    function toggleSubtitles() {
+        if (!mpv.loaded)
+            return
+        mpv.toggleSubtitles()
+        page.subtitlesVisible = !page.subtitlesVisible
+        page.showOSD(qsTr("Subtitles"),
+                     page.subtitlesVisible ? qsTr("On") : qsTr("Off"))
+    }
+
+    function cycleSubtitles() {
+        if (!mpv.loaded)
+            return
+        mpv.cycleSubtitles()
+    }
+
+    function setLoopA() {
+        if (!mpv.loaded)
+            return
+        mpv.setABLoopStart()
+        page.loopASet = true
+        page.loopBSet = false
+        page.showOSD(qsTr("A-B Loop"), qsTr("A set"))
+    }
+
+    function setLoopB() {
+        if (!mpv.loaded)
+            return
+        if (!page.loopASet) {
+            page.showOSD(qsTr("A-B Loop"), qsTr("Set A first"))
+            return
+        }
+        mpv.setABLoopEnd()
+        page.loopBSet = true
+        page.showOSD(qsTr("A-B Loop"), qsTr("B set"))
+    }
+
+    function clearABLoop() {
+        if (!mpv.loaded)
+            return
+        mpv.clearABLoop()
+        page.loopASet = false
+        page.loopBSet = false
+        page.showOSD(qsTr("A-B Loop"), qsTr("Cleared"))
+    }
+
+    function toggleLooping() {
+        if (!mpv.loaded)
+            return
+        mpv.looping = !mpv.looping
+        page.showOSD(qsTr("Loop"), mpv.looping ? qsTr("On") : qsTr("Off"))
+    }
+
+    function rotateClockwise() {
+        if (mpv.loaded)
+            mpv.rotateClockwise()
+    }
+
+    function toggleFullScreen() {
+        var window = page.Window.window
+        if (!window)
+            return
+        if (window.visibility === Window.FullScreen)
+            window.visibility = Window.Windowed
+        else
+            window.visibility = Window.FullScreen
+        page.notePointerMovement()
+    }
+
+    function exitFullScreen() {
+        var window = page.Window.window
+        if (window && window.visibility === Window.FullScreen)
+            window.visibility = Window.Windowed
+    }
+
+    function closePlayer() {
+        // The player is a stack page here, unlike Niratan's own window, so a
+        // full screen left behind would also make the bookshelf full screen.
+        page.exitFullScreen()
+        mpv.paused = true
+        page.backRequested()
+    }
+
+    function openVideo(url) {
+        if (!url || url.toString().length === 0)
+            return
+        page.speedPanelOpen = false
+        page.speedPanelHovered = false
+        page.chromeVisible = true
+        page.osdTitle = ""
+        page.osdValue = ""
+        osdTimer.stop()
+        mpv.open(url)
+        page.forceActiveFocus()
+        page.notePointerMovement()
+    }
+
+    function textFieldFocused() {
+        var item = page.Window.activeFocusItem
+        while (item) {
+            if (item instanceof TextInput || item instanceof TextEdit
+                    || item instanceof TextField || item instanceof TextArea)
+                return true
+            item = item.parent
+        }
+        return false
+    }
+
+    function handleKey(event) {
+        if (event.key === Qt.Key_Escape) {
+            event.accepted = true
+            if (event.isAutoRepeat)
+                return
+            if (page.fullScreen)
+                page.exitFullScreen()
+            else
+                page.closePlayer()
+            return
+        }
+        if (!mpv.loaded || page.textFieldFocused())
+            return
+
+        var alt = (event.modifiers & Qt.AltModifier) !== 0
+        var shift = (event.modifiers & Qt.ShiftModifier) !== 0
+        var control = (event.modifiers & Qt.ControlModifier) !== 0
+        var meta = (event.modifiers & Qt.MetaModifier) !== 0
+        if (control || meta)
+            return
+
+        var handled = true
+        var plain = !alt && !shift
+        if (event.key === Qt.Key_Space && plain) {
+            if (!event.isAutoRepeat)
+                page.togglePause()
+        } else if (event.key === Qt.Key_Left && plain) {
+            page.skip(-10)
+        } else if (event.key === Qt.Key_Right && plain) {
+            page.skip(10)
+        } else if (event.key === Qt.Key_Up && plain) {
+            page.adjustVolume(5)
+        } else if (event.key === Qt.Key_Down && plain) {
+            page.adjustVolume(-5)
+        } else if (event.key === Qt.Key_BracketLeft && plain) {
+            page.adjustSpeed(-0.1)
+        } else if (event.key === Qt.Key_BracketRight && plain) {
+            page.adjustSpeed(0.1)
+        } else if (event.key === Qt.Key_Backslash && plain) {
+            page.resetSpeed()
+        } else if (event.key === Qt.Key_M && plain) {
+            if (!event.isAutoRepeat)
+                page.toggleMute()
+        } else if (event.key === Qt.Key_V && plain) {
+            if (!event.isAutoRepeat)
+                page.toggleSubtitles()
+        } else if (event.key === Qt.Key_S && plain) {
+            if (!event.isAutoRepeat)
+                page.cycleSubtitles()
+        } else if (event.key === Qt.Key_Comma && alt) {
+            if (shift)
+                page.adjustAudioDelay(-0.5)
+            else
+                page.adjustSubtitleDelay(-0.05)
+        } else if (event.key === Qt.Key_Period && alt) {
+            if (shift)
+                page.adjustAudioDelay(0.5)
+            else
+                page.adjustSubtitleDelay(0.05)
+        } else if (event.key === Qt.Key_F && plain) {
+            if (!event.isAutoRepeat)
+                page.toggleFullScreen()
+        } else if (event.key === Qt.Key_L && plain) {
+            if (!event.isAutoRepeat)
+                page.toggleLooping()
+        } else if (event.key === Qt.Key_A && alt && !shift) {
+            if (!event.isAutoRepeat)
+                page.setLoopA()
+        } else if (event.key === Qt.Key_B && alt && !shift) {
+            if (!event.isAutoRepeat)
+                page.setLoopB()
+        } else if (event.key === Qt.Key_R && plain) {
+            if (!event.isAutoRepeat)
+                page.rotateClockwise()
+        } else {
+            handled = false
+        }
+        if (handled)
+            event.accepted = true
+    }
+
+    Component.onCompleted: {
+        // UserConfig defaults: 36 pt, 0.9 vertical position, weight 700, no
+        // background. Applying them explicitly keeps the engine defaults from
+        // drifting from the macOS client.
+        mpv.applySubtitleStyle(36, 90, 700, 0.0)
+        page.forceActiveFocus()
+    }
+
+    Timer {
+        id: hideTimer
+        interval: 1000
+        onTriggered: page.handleHideTimeout()
+    }
+
+    Timer {
+        id: osdTimer
+        interval: 1350
+        onTriggered: {
+            page.osdTitle = ""
+            page.osdValue = ""
+        }
+    }
+
+    // The player stage is black in both themes: Niratan draws the video
+    // surface on black (VideoPlayerScreen.swift), and letterboxing must not
+    // follow the window background. This is the only colour literal outside
+    // the theme module.
+    Rectangle {
+        id: stage
+        anchors.fill: parent
+        color: "#000000"
+
+        MpvItem {
+            id: mpv
+            anchors.fill: parent
+
+            onLoadedChanged: {
+                if (!mpv.loaded)
+                    return
+                page.subtitlesVisible = true
+                page.loopASet = false
+                page.loopBSet = false
+                page.speedPanelOpen = false
+                page.speedPanelHovered = false
+                page.chromeVisible = true
+                page.forceActiveFocus()
+                page.notePointerMovement()
+            }
+            onPausedChanged: {
+                if (!mpv.paused)
+                    page.scheduleHide()
+            }
+            onEnded: {
+                page.chromeVisible = true
+                page.forceActiveFocus()
+            }
+        }
+    }
+
+    // Hover only: clicks are not part of the player surface in this port, and
+    // the bar and the empty state sit above this layer.
+    MouseArea {
+        anchors.fill: parent
+        acceptedButtons: Qt.NoButton
+        hoverEnabled: true
+        onPositionChanged: page.notePointerMovement()
+        onExited: page.scheduleHide()
+    }
+
+    Rectangle {
+        id: emptyState
+        anchors.centerIn: parent
+        width: Math.min(440, Math.max(0, page.width - 64))
+        height: emptyColumn.implicitHeight + 40
+        visible: !mpv.loaded
+        radius: Theme.cardRadius
+        color: Theme.floatingBackground
+        border.width: Theme.cardBorderWidth
+        border.color: Theme.floatingStroke
+
+        Column {
+            id: emptyColumn
+            anchors.centerIn: parent
+            width: parent.width - 32
+            spacing: 10
+
+            Label {
+                width: parent.width
+                text: qsTr("No Video Open")
+                color: Theme.textPrimary
+                font.pixelSize: 18
+                font.bold: true
+                horizontalAlignment: Text.AlignHCenter
+            }
+
+            Button {
+                width: parent.width
+                text: qsTr("Open a video")
+                onClicked: openDialog.open()
+            }
+
+            Label {
+                width: parent.width
+                text: qsTr("Supported files: %1").arg(page.extensionList)
+                color: Theme.textSecondary
+                font.pixelSize: 11
+                wrapMode: Text.WordWrap
+                horizontalAlignment: Text.AlignHCenter
+            }
+
+            Label {
+                width: parent.width
+                visible: mpv.error.length > 0
+                text: mpv.error
+                color: Theme.popupDanger
+                font.pixelSize: 12
+                wrapMode: Text.WordWrap
+                horizontalAlignment: Text.AlignHCenter
+            }
+        }
+    }
+
+    // VideoPlayerScreen+OSD.swift places the OSD 30 from the top and 28 from
+    // the leading edge; the panel is added so the text stays readable on both
+    // themes over the black stage.
+    Rectangle {
+        id: osd
+        anchors.top: parent.top
+        anchors.left: parent.left
+        anchors.topMargin: 30
+        anchors.leftMargin: 28
+        width: osdRow.implicitWidth + 24
+        height: 34
+        radius: 10
+        color: Theme.floatingBackground
+        border.width: Theme.cardBorderWidth
+        border.color: Theme.floatingStroke
+        opacity: page.osdTitle.length > 0 ? 1 : 0
+        visible: page.osdTitle.length > 0 || opacity > 0
+
+        Behavior on opacity {
+            NumberAnimation {
+                duration: 120
+            }
+        }
+
+        Row {
+            id: osdRow
+            anchors.centerIn: parent
+            spacing: 8
+
+            Label {
+                text: page.osdTitle
+                color: Theme.textPrimary
+                font.pixelSize: 13
+                font.bold: true
+            }
+
+            Label {
+                text: page.osdValue
+                color: Theme.textSecondary
+                font.pixelSize: 13
+            }
+        }
+    }
+
+    Rectangle {
+        id: bar
+        anchors.horizontalCenter: parent.horizontalCenter
+        anchors.bottom: parent.bottom
+        anchors.bottomMargin: page.chromeBottomInset
+        width: Math.min(page.chromeMaxWidth,
+                        Math.max(0, page.width - page.chromeSideInset * 2))
+        height: page.chromeHeight
+        radius: 24
+        color: Theme.floatingBackground
+        border.width: Theme.cardBorderWidth
+        border.color: Theme.floatingStroke
+        opacity: page.chromeShown ? 1 : 0
+        visible: page.chromeShown || opacity > 0
+
+        Behavior on opacity {
+            NumberAnimation {
+                duration: 180
+                easing.type: Easing.OutCubic
+            }
+        }
+
+        HoverHandler {
+            id: barHover
+            onHoveredChanged: {
+                page.barHovered = barHover.hovered
+                if (barHover.hovered)
+                    page.notePointerMovement()
+                else
+                    page.scheduleHide()
+            }
+        }
+
+        Column {
+            id: barColumn
+            anchors.fill: parent
+            anchors.margins: 12
+            spacing: 6
+
+            // Timeline: 4 pt resting track, 13 pt knob, scrub preview on
+            // drag, seek only on release (VideoTimelineTrack and
+            // scrub/endScrubbing in VideoControlsView.swift).
+            Item {
+                id: timeline
+                width: parent.width
+                height: 18
+
+                Rectangle {
+                    anchors.verticalCenter: parent.verticalCenter
+                    width: parent.width
+                    height: 4
+                    radius: 2
+                    color: Theme.cardStroke
+                }
+
+                Rectangle {
+                    anchors.verticalCenter: parent.verticalCenter
+                    anchors.left: parent.left
+                    width: timeline.width * page.displayRatio
+                    height: 4
+                    radius: 2
+                    color: Theme.textPrimary
+                    opacity: 0.85
+                }
+
+                Rectangle {
+                    id: knob
+                    x: Math.max(0, Math.min(timeline.width - width,
+                                            timeline.width * page.displayRatio - width / 2))
+                    anchors.verticalCenter: parent.verticalCenter
+                    width: 13
+                    height: 13
+                    radius: 6.5
+                    color: Theme.textPrimary
+                    visible: timelineMouse.containsMouse || page.scrubbing
+                }
+
+                Rectangle {
+                    id: scrubBubble
+                    x: Math.max(0, Math.min(timeline.width - width,
+                                            timeline.width * page.displayRatio - width / 2))
+                    y: -height - 6
+                    width: scrubBubbleText.implicitWidth + 16
+                    height: 22
+                    radius: 6
+                    color: Theme.popupBackground
+                    border.width: Theme.cardBorderWidth
+                    border.color: Theme.popupDivider
+                    visible: page.scrubbing
+
+                    Label {
+                        id: scrubBubbleText
+                        anchors.centerIn: parent
+                        text: page.formatTime(page.scrubTime)
+                        color: Theme.popupText
+                        font.pixelSize: 11
+                    }
+                }
+
+                MouseArea {
+                    id: timelineMouse
+                    anchors.fill: parent
+                    hoverEnabled: true
+                    cursorShape: Qt.PointingHandCursor
+                    onPressed: function (mouse) {
+                        page.beginScrub(mouse.x)
+                    }
+                    onPositionChanged: function (mouse) {
+                        if (timelineMouse.pressed)
+                            page.updateScrub(mouse.x)
+                    }
+                    onReleased: page.endScrub()
+                    onCanceled: page.endScrub()
+                }
+            }
+
+            RowLayout {
+                width: parent.width
+                height: 42
+                spacing: 2
+
+                BarButton {
+                    glyph: "\u2039"
+                    tip: qsTr("Close Player")
+                    glyphSize: 18
+                    buttonWidth: 30
+                    onClicked: page.closePlayer()
+                }
+
+                BarButton {
+                    glyph: mpv.paused ? "\u25B6" : "II"
+                    tip: mpv.paused ? qsTr("Play (Space)") : qsTr("Pause (Space)")
+                    glyphSize: 15
+                    buttonWidth: 42
+                    buttonHeight: 42
+                    onClicked: page.togglePause()
+                }
+
+                BarButton {
+                    glyph: "\u221210"
+                    tip: qsTr("Back 10 s (Left)")
+                    buttonWidth: 30
+                    onClicked: page.skip(-10)
+                }
+
+                BarButton {
+                    glyph: "+10"
+                    tip: qsTr("Forward 10 s (Right)")
+                    buttonWidth: 30
+                    onClicked: page.skip(10)
+                }
+
+                Label {
+                    Layout.preferredWidth: 48
+                    Layout.minimumWidth: 48
+                    Layout.maximumWidth: 48
+                    Layout.alignment: Qt.AlignVCenter
+                    text: page.formatTime(page.displayTime)
+                    color: Theme.textSecondary
+                    font.pixelSize: 11
+                    horizontalAlignment: Text.AlignRight
+                }
+
+                Label {
+                    Layout.preferredWidth: 8
+                    Layout.alignment: Qt.AlignVCenter
+                    text: "/"
+                    color: Theme.textSecondary
+                    font.pixelSize: 11
+                    horizontalAlignment: Text.AlignHCenter
+                }
+
+                Label {
+                    Layout.preferredWidth: 48
+                    Layout.minimumWidth: 48
+                    Layout.maximumWidth: 48
+                    Layout.alignment: Qt.AlignVCenter
+                    text: page.formatTime(mpv.duration)
+                    color: Theme.textSecondary
+                    font.pixelSize: 11
+                    horizontalAlignment: Text.AlignLeft
+                }
+
+                BarButton {
+                    glyph: "M"
+                    tip: mpv.muted ? qsTr("Unmute (M)") : qsTr("Mute (M)")
+                    active: mpv.muted
+                    onClicked: page.toggleMute()
+                }
+
+                Slider {
+                    id: volumeSlider
+                    Layout.preferredWidth: 56
+                    Layout.minimumWidth: 56
+                    Layout.maximumWidth: 56
+                    Layout.preferredHeight: 24
+                    Layout.minimumHeight: 24
+                    Layout.maximumHeight: 24
+                    Layout.alignment: Qt.AlignVCenter
+                    from: 0
+                    to: 100
+                    stepSize: 1
+                    focusPolicy: Qt.NoFocus
+                    // The slider is pushed from the engine instead of bound,
+                    // so dragging it does not break the value binding and the
+                    // volume keys keep moving the handle afterwards.
+                    Component.onCompleted: volumeSlider.value = mpv.volume
+                    onMoved: page.setVolume(volumeSlider.value)
+
+                    Connections {
+                        target: mpv
+                        function onVolumeChanged() {
+                            volumeSlider.value = Math.max(0, Math.min(100, mpv.volume))
+                        }
+                    }
+                }
+
+                Button {
+                    id: speedPill
+                    Layout.alignment: Qt.AlignVCenter
+                    implicitWidth: 46
+                    implicitHeight: 24
+                    padding: 0
+                    focusPolicy: Qt.NoFocus
+                    text: page.formatSpeed(mpv.speed)
+                    onClicked: {
+                        page.speedPanelOpen = !page.speedPanelOpen
+                        page.notePointerMovement()
+                    }
+
+                    ToolTip.visible: speedPill.hovered
+                    ToolTip.text: qsTr("Playback Speed")
+
+                    contentItem: Text {
+                        text: speedPill.text
+                        color: Theme.textPrimary
+                        font.pixelSize: 11
+                        font.bold: true
+                        horizontalAlignment: Text.AlignHCenter
+                        verticalAlignment: Text.AlignVCenter
+                    }
+
+                    background: Rectangle {
+                        radius: 12
+                        color: page.speedPanelOpen ? Theme.cardStroke
+                                                   : Theme.floatingBackground
+                        border.width: Theme.cardBorderWidth
+                        border.color: Theme.cardStroke
+                    }
+                }
+
+                BarButton {
+                    glyph: "CC"
+                    tip: qsTr("Cycle Subtitle Track (S)")
+                    onClicked: page.cycleSubtitles()
+                }
+
+                BarButton {
+                    glyph: "S\u2212"
+                    tip: qsTr("Subtitle Delay -0.05 s (Alt+,)")
+                    buttonWidth: 28
+                    onClicked: page.adjustSubtitleDelay(-0.05)
+                }
+
+                BarButton {
+                    glyph: "S+"
+                    tip: qsTr("Subtitle Delay +0.05 s (Alt+.)")
+                    buttonWidth: 28
+                    onClicked: page.adjustSubtitleDelay(0.05)
+                }
+
+                BarButton {
+                    glyph: "a\u2212"
+                    tip: qsTr("Audio Delay -0.5 s (Alt+Shift+,)")
+                    buttonWidth: 28
+                    onClicked: page.adjustAudioDelay(-0.5)
+                }
+
+                BarButton {
+                    glyph: "a+"
+                    tip: qsTr("Audio Delay +0.5 s (Alt+Shift+.)")
+                    buttonWidth: 28
+                    onClicked: page.adjustAudioDelay(0.5)
+                }
+
+                BarButton {
+                    glyph: "A"
+                    tip: qsTr("Set A-B Loop Start (Alt+A)")
+                    active: page.loopASet
+                    onClicked: page.setLoopA()
+                }
+
+                BarButton {
+                    glyph: "B"
+                    tip: qsTr("Set A-B Loop End (Alt+B)")
+                    active: page.loopBSet
+                    onClicked: page.setLoopB()
+                }
+
+                BarButton {
+                    glyph: "AB"
+                    tip: qsTr("Clear A-B Loop")
+                    buttonWidth: 30
+                    onClicked: page.clearABLoop()
+                }
+
+                BarButton {
+                    glyph: "\u21BB"
+                    tip: qsTr("Rotate Clockwise (R)")
+                    glyphSize: 14
+                    onClicked: page.rotateClockwise()
+                }
+
+                BarButton {
+                    glyph: page.fullScreen ? "][" : "[]"
+                    tip: page.fullScreen ? qsTr("Leave Full Screen (F)")
+                                        : qsTr("Full Screen (F)")
+                    onClicked: page.toggleFullScreen()
+                }
+
+                BarButton {
+                    glyph: qsTr("Open")
+                    tip: qsTr("Open a Video")
+                    buttonWidth: 38
+                    onClicked: openDialog.open()
+                }
+            }
+        }
+
+        // VideoControlsView.speedControlPanel: 264 wide, 4 x 2 presets and the
+        // 0.25...5 slider. It is a popup surface, so it uses the popup tokens.
+        Rectangle {
+            id: speedPanel
+            anchors.right: parent.right
+            anchors.rightMargin: 8
+            anchors.bottom: parent.top
+            anchors.bottomMargin: 8
+            width: 264
+            height: speedColumn.implicitHeight + 28
+            visible: page.speedPanelOpen
+            radius: 20
+            color: Theme.popupBackground
+            border.width: Theme.cardBorderWidth
+            border.color: Theme.popupDivider
+
+            HoverHandler {
+                id: speedPanelHover
+                onHoveredChanged: {
+                    page.speedPanelHovered = speedPanelHover.hovered
+                    if (!speedPanelHover.hovered)
+                        page.scheduleHide()
+                }
+            }
+
+            Column {
+                id: speedColumn
+                anchors.fill: parent
+                anchors.margins: 14
+                spacing: 10
+
+                RowLayout {
+                    width: parent.width
+                    spacing: 8
+
+                    Label {
+                        Layout.fillWidth: true
+                        text: qsTr("Playback Speed")
+                        color: Theme.popupText
+                        font.pixelSize: 13
+                        font.bold: true
+                    }
+
+                    Label {
+                        text: page.formatSpeed(mpv.speed)
+                        color: Theme.popupTextSecondary
+                        font.pixelSize: 13
+                    }
+                }
+
+                GridLayout {
+                    width: parent.width
+                    columns: 4
+                    columnSpacing: 6
+                    rowSpacing: 6
+
+                    Repeater {
+                        model: [0.25, 0.5, 1.0, 1.5, 2.0, 3.0, 4.0, 5.0]
+
+                        delegate: Button {
+                            id: speedPreset
+                            required property var modelData
+                            Layout.fillWidth: true
+                            Layout.preferredHeight: 26
+                            focusPolicy: Qt.NoFocus
+                            text: page.formatSpeed(speedPreset.modelData)
+                            onClicked: page.setSpeed(speedPreset.modelData)
+
+                            contentItem: Text {
+                                text: speedPreset.text
+                                color: page.speedIs(speedPreset.modelData)
+                                    ? Theme.windowBackground : Theme.popupText
+                                font.pixelSize: 11
+                                font.bold: true
+                                horizontalAlignment: Text.AlignHCenter
+                                verticalAlignment: Text.AlignVCenter
+                            }
+
+                            background: Rectangle {
+                                radius: 6
+                                color: page.speedIs(speedPreset.modelData)
+                                    ? Theme.accent : Theme.popupDivider
+                            }
+                        }
+                    }
+                }
+
+                RowLayout {
+                    width: parent.width
+                    spacing: 8
+
+                    Slider {
+                        id: speedSlider
+                        Layout.fillWidth: true
+                        focusPolicy: Qt.NoFocus
+                        from: 0.25
+                        to: 5.0
+                        stepSize: 0.1
+                        Component.onCompleted: speedSlider.value = mpv.speed
+                        onMoved: page.setSpeed(speedSlider.value)
+
+                        Connections {
+                            target: mpv
+                            function onSpeedChanged() {
+                                speedSlider.value = mpv.speed
+                            }
+                        }
+                    }
+
+                    Label {
+                        Layout.preferredWidth: 40
+                        text: page.formatSpeed(mpv.speed)
+                        color: Theme.popupTextSecondary
+                        font.pixelSize: 11
+                        horizontalAlignment: Text.AlignRight
+                    }
+                }
+            }
+        }
+    }
+
+    FileDialog {
+        id: openDialog
+        title: qsTr("Open Video")
+        nameFilters: [
+            qsTr("Video and audio files (%1)").arg(page.extensionPattern),
+            qsTr("All files (*)")
+        ]
+        fileMode: FileDialog.OpenFile
+        onAccepted: page.openVideo(openDialog.selectedFile)
+        onRejected: page.forceActiveFocus()
+    }
+
+    component BarButton: Button {
+        id: barButton
+
+        property string glyph
+        property string tip
+        property bool active: false
+        property int glyphSize: 11
+        property int buttonWidth: 28
+        property int buttonHeight: 28
+
+        implicitWidth: barButton.buttonWidth
+        implicitHeight: barButton.buttonHeight
+        padding: 0
+        focusPolicy: Qt.NoFocus
+        Layout.alignment: Qt.AlignVCenter
+        text: barButton.glyph
+
+        ToolTip.visible: barButton.hovered && barButton.tip.length > 0
+        ToolTip.text: barButton.tip
+        ToolTip.delay: 700
+
+        contentItem: Text {
+            text: barButton.glyph
+            color: barButton.active ? Theme.accent : Theme.textPrimary
+            font.pixelSize: barButton.glyphSize
+            font.bold: barButton.active
+            horizontalAlignment: Text.AlignHCenter
+            verticalAlignment: Text.AlignVCenter
+        }
+
+        background: Rectangle {
+            radius: barButton.buttonHeight / 2
+            color: barButton.active || barButton.down || barButton.hovered
+                ? Theme.cardStroke : Theme.floatingBackground
+            border.width: barButton.active ? Theme.cardBorderWidth : 0
+            border.color: Theme.cardStroke
+        }
+    }
+}

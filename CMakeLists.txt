@@ -46,14 +46,21 @@ qt_add_library(niratan_core STATIC
     src/services/reader/reader_css.cpp
     src/services/reader/reader_shell.cpp
     src/models/books/book.cpp
+    src/models/books/library_model.cpp
     src/services/books/book_storage.cpp
     src/models/books/book.h
     src/models/profiles/content_language.cpp
+    src/models/profiles/dictionary_settings.cpp
     src/models/profiles/profile_index.cpp
     src/models/profiles/profile_index_json.cpp
     src/models/profiles/profile_ops.cpp
     src/models/profiles/reader_settings.cpp
+    src/models/sasayaki/sasayaki.cpp
+    src/models/statistics/statistics.cpp
+    src/services/sasayaki/srt_parser.cpp
+    src/services/statistics/statistics_storage.cpp
     src/services/novels/epub_book.cpp
+    src/services/player/mining_history.cpp
     src/services/profiles/profile_repository.cpp
     src/services/storage/app_paths.cpp
     src/services/storage/json_file.cpp

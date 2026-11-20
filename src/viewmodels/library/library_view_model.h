@@ -7,15 +7,18 @@
 //
 // The model lists the books under Books/ with their cover, progress and shelf
 // membership. Progress is the bookmark's character count over bookinfo.json's
-// total, so a book without bookinfo reads as 0. The reading section is exactly
+// total, or over the metadata character count when there is no bookinfo; a
+// non-positive total reads as 0. The reading section is exactly
 // 0 < progress < 0.999; finished books stay in All Books.
 //
-// Sorting is Recent (last access descending, never-read last), Title (display
-// title ascending) or Manual (book_order.json, unknown ids after it by title).
-// A user shelf uses its own id order for Manual; the reading section and
-// unshelved use the global order.
+// The rules are the ones in models/books/library_model.h: this class only
+// reads BookStorage into Library values, keeps the Library state, calls the
+// model for selection, ordering, shelves, progress and mark-read, and projects
+// the result into QVariantList. Sorting is Recent, Title or Manual, a user
+// shelf uses its own id order for Manual, and an unknown shelf selection falls
+// back to all.
 //
-// The model never touches QML types beyond QVariantList, and never opens the
+// The class never exposes QML types beyond QVariantList, and never opens the
 // reader: it emits bookOpened(folder) and the window decides.
 
 #pragma once
