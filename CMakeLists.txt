@@ -16,6 +16,7 @@ set(CMAKE_CXX_FLAGS ${HOSHI_WARNINGS})
 find_package(Qt6 6.12 REQUIRED COMPONENTS Quick QuickControls2 Test Network WebEngineQuick)
 qt_standard_project_setup(REQUIRES 6.12)
 find_package(SQLite3 REQUIRED)
+find_package(libzip REQUIRED)
 
 qt_add_library(niratan_core STATIC
     src/models/dictionary/audio_source.cpp
@@ -44,6 +45,7 @@ qt_add_library(niratan_core STATIC
     src/models/profiles/profile_index.cpp
     src/models/profiles/profile_index_json.cpp
     src/models/profiles/profile_ops.cpp
+    src/services/novels/epub_book.cpp
     src/services/profiles/profile_repository.cpp
     src/services/storage/app_paths.cpp
     src/services/storage/json_file.cpp
@@ -56,7 +58,7 @@ qt_add_resources(niratan_core "dictionary_popup_assets"
         src/web/dictionary_popup/popup.js
 )
 target_include_directories(niratan_core PUBLIC src)
-target_link_libraries(niratan_core PUBLIC hoshidicts Qt6::Core Qt6::Network SQLite3::SQLite3)
+target_link_libraries(niratan_core PUBLIC hoshidicts Qt6::Core Qt6::Network SQLite3::SQLite3 libzip::zip)
 target_compile_options(niratan_core PRIVATE -Wall -Wextra -Wpedantic -Werror)
 
 qt_add_executable(niratan

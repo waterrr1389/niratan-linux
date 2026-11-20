@@ -221,3 +221,11 @@ target_include_directories(tst_profile_repository PRIVATE ${CMAKE_SOURCE_DIR}/sr
 target_link_libraries(tst_profile_repository PRIVATE niratan_core Qt6::Test)
 target_compile_options(tst_profile_repository PRIVATE -Wall -Wextra -Wpedantic -Werror)
 add_test(NAME profile_repository COMMAND tst_profile_repository)
+
+qt_add_executable(tst_epub_book
+    novels/tst_epub_book.cpp
+)
+target_include_directories(tst_epub_book PRIVATE ${CMAKE_SOURCE_DIR}/src)
+target_link_libraries(tst_epub_book PRIVATE niratan_core Qt6::Test)
+target_compile_options(tst_epub_book PRIVATE -Wall -Wextra -Wpedantic -Werror)
+add_test(NAME epub_book COMMAND tst_epub_book)
