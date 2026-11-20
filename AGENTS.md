@@ -45,7 +45,13 @@ Directory names follow Niratan-win (`Services/Dictionary` becomes
    instead of aborting.
 5. Implement, then check the implementation against the Swift source, not
    only against the tests. Where tests and Swift disagree, Swift wins and the
-   test is fixed.
+   test is fixed. Match Swift exactly for anything that reaches a card, a
+   query, a file name or a stored value: defaults, branch order, ranges and
+   the text produced, including ordinary Unicode input such as U+3000 and
+   multibyte characters counted per scalar. Behavior that exists only in
+   Swift's runtime and does not occur in normal input (grapheme clusters,
+   canonical equivalence, rare line separators, integer traps) need not be
+   reproduced; record the difference in the header comment instead.
 6. Commit the header, tests and implementation together.
 
 Conventions in existing code: `// SPDX-License-Identifier: GPL-3.0-or-later`
