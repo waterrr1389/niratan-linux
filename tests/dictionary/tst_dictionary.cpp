@@ -55,7 +55,18 @@ void DictionaryTest::imports_and_looks_up() {
     const auto found = service.lookup("decide", 8, 16);
     QVERIFY2(found.ok, found.error.c_str());
     QCOMPARE(found.entries.size(), 1u);
-    QCOMPARE(found.entries.front().expression, std::string("decide"));
+    const niratan::dictionary::LookupEntry& entry = found.entries.front();
+    QCOMPARE(entry.expression, std::string("decide"));
+    QCOMPARE(entry.reading, std::string("decide"));
+    QCOMPARE(entry.rules, std::string("v"));
+    QCOMPARE(entry.glossaries.size(), 1u);
+    QCOMPARE(entry.glossaries.front().dictionary, std::string("Probe"));
+    const std::string expected_glossary = "[\"to make up one's mind\"]";
+    QCOMPARE(entry.glossaries.front().content, expected_glossary);
+    QCOMPARE(entry.glossaries.front().definition_tags, std::string(""));
+    QCOMPARE(entry.glossaries.front().term_tags, std::string(""));
+    QVERIFY(entry.frequencies.empty());
+    QVERIFY(entry.pitches.empty());
 }
 
 void DictionaryTest::deinflects_inside_the_library() {
@@ -73,7 +84,19 @@ void DictionaryTest::deinflects_inside_the_library() {
     const auto found = service.lookup("decided", 8, 16);
     QVERIFY2(found.ok, found.error.c_str());
     QCOMPARE(found.entries.size(), 1u);
-    QCOMPARE(found.entries.front().expression, std::string("decide"));
+    const niratan::dictionary::LookupEntry& entry = found.entries.front();
+    QCOMPARE(entry.expression, std::string("decide"));
+    QVERIFY(!entry.traces.empty());
+
+    bool has_past_step = false;
+    for (const auto& trace : entry.traces) {
+        for (const auto& step : trace) {
+            if (step.name == "past" && step.description == "Simple past tense of a verb") {
+                has_past_step = true;
+            }
+        }
+    }
+    QVERIFY(has_past_step);
 }
 
 void DictionaryTest::rejects_zip_without_index() {
