@@ -4,85 +4,123 @@
 
 #include <QtTest>
 
+#include <optional>
+#include <string>
+
 using niratan::reader::ResolvedTheme;
 using niratan::reader::Theme;
 using niratan::reader::ThemeInput;
 using niratan::reader::resolve_theme;
 
-// Cases follow NativeReaderView.readerBackgroundColor and readerTextColor,
-// with the decision order from UserConfig.usesDarkSepia.
+// Cases follow NativeReaderView.readerBackgroundColor, readerTextColor and
+// effectiveReaderColorScheme, with the forced appearance from
+// UserConfig.preferredColorScheme and Themes.colorScheme.
 class ThemeTest : public QObject {
     Q_OBJECT
 
    private slots:
-    void system_follows_the_platform();
-    void light_and_dark_force_the_platform_palette();
+    void system_follows_the_system_appearance();
+    void light_and_dark_force_the_appearance();
     void sepia_follows_the_system_appearance();
     void system_light_sepia_only_applies_while_light();
+    void system_light_sepia_does_not_touch_forced_themes();
     void dark_sepia_wins_over_system_light_sepia();
-    void custom_uses_its_own_colors();
+    void custom_takes_the_appearance_from_ui_theme();
+    void custom_colors_win_over_system_light_sepia();
 };
 
-ThemeInput base() {
+namespace {
+
+const std::string kLight = "#ECECEC";
+const std::string kDark = "#1E1E1E";
+const std::string kCustomBackground = "#123456";
+const std::string kCustomText = "#ABCDEF";
+
+ThemeInput base(Theme theme, bool system_dark) {
     ThemeInput input;
-    input.system_background = "#system-bg";
-    input.system_text = "#system-text";
-    input.custom_background = "#custom-bg";
-    input.custom_text = "#custom-text";
+    input.theme = theme;
+    input.system_dark = system_dark;
+    input.light_window_background = kLight;
+    input.dark_window_background = kDark;
+    input.custom_background = kCustomBackground;
+    input.custom_text = kCustomText;
     return input;
 }
 
-void ThemeTest::system_follows_the_platform() {
-    auto input = base();
-    input.theme = Theme::system;
-    QCOMPARE(resolve_theme(input), (ResolvedTheme{"#system-bg", "#system-text"}));
+ResolvedTheme window(bool dark) { return {dark, dark ? kDark : kLight, std::nullopt}; }
 
-    input.system_dark = true;
-    QCOMPARE(resolve_theme(input), (ResolvedTheme{"#system-bg", "#system-text"}));
+ResolvedTheme custom(bool dark) { return {dark, kCustomBackground, kCustomText}; }
+
+const ResolvedTheme kSepiaLight{false, "#F2E2C9", "#332A1B"};
+const ResolvedTheme kSepiaDark{true, "#18150C", "#F2E2C9"};
+
+}  // namespace
+
+void ThemeTest::system_follows_the_system_appearance() {
+    QCOMPARE(resolve_theme(base(Theme::system, false)), window(false));
+    QCOMPARE(resolve_theme(base(Theme::system, true)), window(true));
 }
 
-void ThemeTest::light_and_dark_force_the_platform_palette() {
-    auto input = base();
-    input.theme = Theme::light;
-    input.system_dark = true;
-    QCOMPARE(resolve_theme(input), (ResolvedTheme{"#system-bg", "#system-text"}));
-
-    input.theme = Theme::dark;
-    QCOMPARE(resolve_theme(input), (ResolvedTheme{"#system-bg", "#system-text"}));
+void ThemeTest::light_and_dark_force_the_appearance() {
+    QCOMPARE(resolve_theme(base(Theme::light, true)), window(false));
+    QCOMPARE(resolve_theme(base(Theme::light, false)), window(false));
+    QCOMPARE(resolve_theme(base(Theme::dark, false)), window(true));
+    QCOMPARE(resolve_theme(base(Theme::dark, true)), window(true));
 }
 
 void ThemeTest::sepia_follows_the_system_appearance() {
-    auto input = base();
-    input.theme = Theme::sepia;
-    QCOMPARE(resolve_theme(input), (ResolvedTheme{"#F2E2C9", "#332A1B"}));
-
-    input.system_dark = true;
-    QCOMPARE(resolve_theme(input), (ResolvedTheme{"#18150C", "#F2E2C9"}));
+    QCOMPARE(resolve_theme(base(Theme::sepia, false)), kSepiaLight);
+    QCOMPARE(resolve_theme(base(Theme::sepia, true)), kSepiaDark);
 }
 
 void ThemeTest::system_light_sepia_only_applies_while_light() {
-    auto input = base();
-    input.theme = Theme::system;
+    auto input = base(Theme::system, false);
     input.system_light_sepia = true;
-    QCOMPARE(resolve_theme(input), (ResolvedTheme{"#F2E2C9", "#332A1B"}));
+    QCOMPARE(resolve_theme(input), kSepiaLight);
 
     input.system_dark = true;
-    QCOMPARE(resolve_theme(input), (ResolvedTheme{"#system-bg", "#system-text"}));
+    QCOMPARE(resolve_theme(input), window(true));
+}
+
+void ThemeTest::system_light_sepia_does_not_touch_forced_themes() {
+    auto light = base(Theme::light, false);
+    light.system_light_sepia = true;
+    QCOMPARE(resolve_theme(light), window(false));
+
+    auto dark = base(Theme::dark, false);
+    dark.system_light_sepia = true;
+    QCOMPARE(resolve_theme(dark), window(true));
 }
 
 void ThemeTest::dark_sepia_wins_over_system_light_sepia() {
-    auto input = base();
-    input.theme = Theme::sepia;
-    input.system_dark = true;
+    auto input = base(Theme::sepia, true);
     input.system_light_sepia = true;
-    QCOMPARE(resolve_theme(input), (ResolvedTheme{"#18150C", "#F2E2C9"}));
+    QCOMPARE(resolve_theme(input), kSepiaDark);
 }
 
-void ThemeTest::custom_uses_its_own_colors() {
-    auto input = base();
-    input.theme = Theme::custom;
-    input.system_dark = true;
-    QCOMPARE(resolve_theme(input), (ResolvedTheme{"#custom-bg", "#custom-text"}));
+void ThemeTest::custom_takes_the_appearance_from_ui_theme() {
+    auto input = base(Theme::custom, true);
+    input.ui_theme = Theme::light;
+    QCOMPARE(resolve_theme(input), custom(false));
+
+    input = base(Theme::custom, false);
+    input.ui_theme = Theme::dark;
+    QCOMPARE(resolve_theme(input), custom(true));
+
+    // Themes.colorScheme is nil for anything but Light and Dark.
+    for (const auto ui : {Theme::system, Theme::sepia, Theme::custom}) {
+        input = base(Theme::custom, true);
+        input.ui_theme = ui;
+        QCOMPARE(resolve_theme(input), custom(true));
+        input.system_dark = false;
+        QCOMPARE(resolve_theme(input), custom(false));
+    }
+}
+
+void ThemeTest::custom_colors_win_over_system_light_sepia() {
+    auto input = base(Theme::custom, false);
+    input.system_light_sepia = true;
+    QCOMPARE(resolve_theme(input), custom(false));
 }
 
 QTEST_APPLESS_MAIN(ThemeTest)
