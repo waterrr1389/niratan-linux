@@ -20,6 +20,7 @@ qt_add_library(niratan_core STATIC
     src/services/dictionary/dictionary_store.cpp
     src/services/dictionary/dictionary_query.cpp
     src/services/dictionary/text_selection.cpp
+    src/services/reader/theme.cpp
 )
 target_include_directories(niratan_core PUBLIC src)
 target_link_libraries(niratan_core PUBLIC hoshidicts)

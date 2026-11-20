@@ -13,3 +13,11 @@ target_include_directories(tst_text_selection PRIVATE ${CMAKE_SOURCE_DIR}/src)
 target_link_libraries(tst_text_selection PRIVATE niratan_core Qt6::Test)
 target_compile_options(tst_text_selection PRIVATE -Wall -Wextra -Wpedantic -Werror)
 add_test(NAME text_selection COMMAND tst_text_selection)
+
+qt_add_executable(tst_theme
+    reader/tst_theme.cpp
+)
+target_include_directories(tst_theme PRIVATE ${CMAKE_SOURCE_DIR}/src)
+target_link_libraries(tst_theme PRIVATE niratan_core Qt6::Test)
+target_compile_options(tst_theme PRIVATE -Wall -Wextra -Wpedantic -Werror)
+add_test(NAME theme COMMAND tst_theme)
