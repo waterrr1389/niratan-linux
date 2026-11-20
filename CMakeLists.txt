@@ -19,6 +19,7 @@ qt_standard_project_setup(REQUIRES 6.12)
 qt_add_library(niratan_core STATIC
     src/services/anki/field_mapping.cpp
     src/services/anki/duplicate_scope.cpp
+    src/services/anki/duplicate_query.cpp
     src/services/dictionary/dictionary_store.cpp
     src/services/dictionary/dictionary_query.cpp
     src/services/dictionary/frequency_rank.cpp
@@ -27,7 +28,7 @@ qt_add_library(niratan_core STATIC
     src/services/reader/layout.cpp
 )
 target_include_directories(niratan_core PUBLIC src)
-target_link_libraries(niratan_core PUBLIC hoshidicts)
+target_link_libraries(niratan_core PUBLIC hoshidicts Qt6::Core)
 target_compile_options(niratan_core PRIVATE -Wall -Wextra -Wpedantic -Werror)
 
 qt_add_executable(niratan src/main.cpp)
