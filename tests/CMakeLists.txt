@@ -157,3 +157,11 @@ target_include_directories(tst_profile_index PRIVATE ${CMAKE_SOURCE_DIR}/src)
 target_link_libraries(tst_profile_index PRIVATE niratan_core Qt6::Test)
 target_compile_options(tst_profile_index PRIVATE -Wall -Wextra -Wpedantic -Werror)
 add_test(NAME profile_index COMMAND tst_profile_index)
+
+qt_add_executable(tst_popup_entries
+    dictionary/tst_popup_entries.cpp
+)
+target_include_directories(tst_popup_entries PRIVATE ${CMAKE_SOURCE_DIR}/src)
+target_link_libraries(tst_popup_entries PRIVATE niratan_core Qt6::Test)
+target_compile_options(tst_popup_entries PRIVATE -Wall -Wextra -Wpedantic -Werror)
+add_test(NAME popup_entries COMMAND tst_popup_entries)
