@@ -205,3 +205,11 @@ target_include_directories(tst_profile_ops PRIVATE ${CMAKE_SOURCE_DIR}/src)
 target_link_libraries(tst_profile_ops PRIVATE niratan_core Qt6::Test)
 target_compile_options(tst_profile_ops PRIVATE -Wall -Wextra -Wpedantic -Werror)
 add_test(NAME profile_ops COMMAND tst_profile_ops)
+
+qt_add_executable(tst_profile_index_json
+    profiles/tst_profile_index_json.cpp
+)
+target_include_directories(tst_profile_index_json PRIVATE ${CMAKE_SOURCE_DIR}/src)
+target_link_libraries(tst_profile_index_json PRIVATE niratan_core Qt6::Test)
+target_compile_options(tst_profile_index_json PRIVATE -Wall -Wextra -Wpedantic -Werror)
+add_test(NAME profile_index_json COMMAND tst_profile_index_json)

@@ -42,6 +42,7 @@ qt_add_library(niratan_core STATIC
     src/services/reader/layout.cpp
     src/models/profiles/content_language.cpp
     src/models/profiles/profile_index.cpp
+    src/models/profiles/profile_index_json.cpp
     src/models/profiles/profile_ops.cpp
     src/services/storage/app_paths.cpp
     src/services/storage/json_file.cpp
