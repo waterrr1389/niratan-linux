@@ -141,3 +141,11 @@ target_include_directories(tst_json_file PRIVATE ${CMAKE_SOURCE_DIR}/src)
 target_link_libraries(tst_json_file PRIVATE niratan_core Qt6::Test)
 target_compile_options(tst_json_file PRIVATE -Wall -Wextra -Wpedantic -Werror)
 add_test(NAME json_file COMMAND tst_json_file)
+
+qt_add_executable(tst_content_language
+    profiles/tst_content_language.cpp
+)
+target_include_directories(tst_content_language PRIVATE ${CMAKE_SOURCE_DIR}/src)
+target_link_libraries(tst_content_language PRIVATE niratan_core Qt6::Test)
+target_compile_options(tst_content_language PRIVATE -Wall -Wextra -Wpedantic -Werror)
+add_test(NAME content_language COMMAND tst_content_language)

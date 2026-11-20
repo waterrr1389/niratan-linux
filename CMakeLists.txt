@@ -35,6 +35,7 @@ qt_add_library(niratan_core STATIC
     src/services/dictionary/text_selection.cpp
     src/services/reader/theme.cpp
     src/services/reader/layout.cpp
+    src/models/profiles/content_language.cpp
     src/services/storage/app_paths.cpp
     src/services/storage/json_file.cpp
 )
