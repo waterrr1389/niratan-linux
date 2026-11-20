@@ -1,0 +1,36 @@
+cmake_minimum_required(VERSION 3.28)
+
+project(niratan LANGUAGES CXX)
+
+set(CMAKE_CXX_STANDARD 23)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_EXTENSIONS OFF)
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+
+# The dictionary library is consumed as-is. Its own warnings must not fail
+# this build, and its sources are never patched from here.
+set(HOSHI_WARNINGS ${CMAKE_CXX_FLAGS})
+add_subdirectory(third_party/hoshidicts EXCLUDE_FROM_ALL)
+set(CMAKE_CXX_FLAGS ${HOSHI_WARNINGS})
+
+find_package(Qt6 6.12 REQUIRED COMPONENTS Quick QuickControls2 Test)
+qt_standard_project_setup(REQUIRES 6.12)
+
+qt_add_library(niratan_core STATIC
+    src/services/dictionary/dictionary_store.cpp
+    src/services/dictionary/dictionary_query.cpp
+)
+target_include_directories(niratan_core PUBLIC src)
+target_link_libraries(niratan_core PUBLIC hoshidicts)
+target_compile_options(niratan_core PRIVATE -Wall -Wextra -Wpedantic -Werror)
+
+qt_add_executable(niratan src/main.cpp)
+qt_add_qml_module(niratan
+    URI Niratan
+    QML_FILES src/views/MainWindow.qml
+)
+target_link_libraries(niratan PRIVATE niratan_core Qt6::Quick Qt6::QuickControls2)
+target_compile_options(niratan PRIVATE -Wall -Wextra -Wpedantic -Werror)
+
+enable_testing()
+add_subdirectory(tests)
