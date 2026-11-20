@@ -19,6 +19,7 @@ qt_standard_project_setup(REQUIRES 6.12)
 qt_add_library(niratan_core STATIC
     src/services/dictionary/dictionary_store.cpp
     src/services/dictionary/dictionary_query.cpp
+    src/services/dictionary/frequency_rank.cpp
     src/services/dictionary/text_selection.cpp
     src/services/reader/theme.cpp
     src/services/reader/layout.cpp
