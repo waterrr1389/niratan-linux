@@ -125,3 +125,19 @@ target_include_directories(tst_audio_source PRIVATE ${CMAKE_SOURCE_DIR}/src)
 target_link_libraries(tst_audio_source PRIVATE niratan_core Qt6::Test)
 target_compile_options(tst_audio_source PRIVATE -Wall -Wextra -Wpedantic -Werror)
 add_test(NAME audio_source COMMAND tst_audio_source)
+
+qt_add_executable(tst_app_paths
+    storage/tst_app_paths.cpp
+)
+target_include_directories(tst_app_paths PRIVATE ${CMAKE_SOURCE_DIR}/src)
+target_link_libraries(tst_app_paths PRIVATE niratan_core Qt6::Test)
+target_compile_options(tst_app_paths PRIVATE -Wall -Wextra -Wpedantic -Werror)
+add_test(NAME app_paths COMMAND tst_app_paths)
+
+qt_add_executable(tst_json_file
+    storage/tst_json_file.cpp
+)
+target_include_directories(tst_json_file PRIVATE ${CMAKE_SOURCE_DIR}/src)
+target_link_libraries(tst_json_file PRIVATE niratan_core Qt6::Test)
+target_compile_options(tst_json_file PRIVATE -Wall -Wextra -Wpedantic -Werror)
+add_test(NAME json_file COMMAND tst_json_file)
