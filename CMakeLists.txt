@@ -57,6 +57,9 @@ qt_add_qml_module(niratan
         src/views/MainWindow.qml
         src/views/theme/Theme.qml
         src/views/theme/ThemePreview.qml
+    RESOURCES
+        src/web/dictionary_popup/popup.css
+        src/web/dictionary_popup/popup.js
 )
 target_link_libraries(niratan PRIVATE niratan_core Qt6::Quick Qt6::QuickControls2)
 target_include_directories(niratan PRIVATE src/views/theme)
