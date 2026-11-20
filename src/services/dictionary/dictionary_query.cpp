@@ -98,4 +98,22 @@ LookupOutcome DictionaryQueryService::lookup(std::string_view text, int max_resu
     return outcome;
 }
 
+std::string DictionaryQueryService::media_file(std::string_view dictionary,
+                                               std::string_view path) const {
+    const ::MediaFileView view = state_->query.get_media_file_view(std::string(dictionary),
+                                                                   std::string(path));
+    if (view.size == 0 || view.data == nullptr) {
+        return {};
+    }
+    return std::string(view.data, view.size);
+}
+
+std::vector<std::pair<std::string, std::string>> DictionaryQueryService::dictionary_styles() const {
+    std::vector<std::pair<std::string, std::string>> result;
+    for (const ::DictionaryStyle& style : state_->query.get_styles()) {
+        result.emplace_back(style.dict_name, style.styles);
+    }
+    return result;
+}
+
 }  // namespace niratan::dictionary

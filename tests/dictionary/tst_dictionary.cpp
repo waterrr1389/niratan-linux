@@ -25,6 +25,7 @@ class DictionaryTest : public QObject {
     void imports_and_looks_up();
     void deinflects_inside_the_library();
     void rejects_zip_without_index();
+    void media_and_styles_are_available();
 };
 
 void DictionaryTest::language_falls_back_to_japanese() {
@@ -112,6 +113,30 @@ void DictionaryTest::rejects_zip_without_index() {
     QVERIFY(!imported.ok);
     QVERIFY(!imported.error.empty());
     QVERIFY(store.installed().empty());
+}
+
+void DictionaryTest::media_and_styles_are_available() {
+    QTemporaryDir root;
+    QVERIFY(root.isValid());
+    const auto zip = std::filesystem::path(root.path().toStdString()) / "dict.zip";
+    write_stored_zip(zip, {{"index.json", minimal_index("Probe")},
+                           {"term_bank_1.json", minimal_term_bank()},
+                           {"media.png", QByteArray("PNG")},
+                           {"styles.css", QByteArray(".probe { color: red; }")}});
+
+    DictionaryStore store(std::filesystem::path(root.path().toStdString()) / "installed");
+    const auto imported = store.import_zip(zip);
+    QVERIFY2(imported.ok, imported.error.c_str());
+
+    DictionaryQueryService service("en", {imported.directory});
+    QCOMPARE(service.media_file("Probe", "media.png"), std::string("PNG"));
+    QVERIFY(service.media_file("Probe", "missing.png").empty());
+    QVERIFY(service.media_file("Other", "media.png").empty());
+
+    const auto styles = service.dictionary_styles();
+    QCOMPARE(styles.size(), 1u);
+    QCOMPARE(styles.front().first, std::string("Probe"));
+    QVERIFY(styles.front().second.find(".probe { color: red; }") != std::string::npos);
 }
 
 QTEST_APPLESS_MAIN(DictionaryTest)
