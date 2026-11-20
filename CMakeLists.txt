@@ -13,7 +13,7 @@ set(HOSHI_WARNINGS ${CMAKE_CXX_FLAGS})
 add_subdirectory(third_party/hoshidicts EXCLUDE_FROM_ALL)
 set(CMAKE_CXX_FLAGS ${HOSHI_WARNINGS})
 
-find_package(Qt6 6.12 REQUIRED COMPONENTS Quick QuickControls2 Test)
+find_package(Qt6 6.12 REQUIRED COMPONENTS Quick QuickControls2 Test Network)
 qt_standard_project_setup(REQUIRES 6.12)
 find_package(SQLite3 REQUIRED)
 
@@ -27,6 +27,7 @@ qt_add_library(niratan_core STATIC
     src/services/anki/field_content.cpp
     src/services/anki/mining_gate.cpp
     src/services/audio/local_audio.cpp
+    src/services/audio/local_file_server.cpp
     src/services/dictionary/dictionary_store.cpp
     src/services/dictionary/dictionary_query.cpp
     src/services/dictionary/frequency_rank.cpp
@@ -35,7 +36,7 @@ qt_add_library(niratan_core STATIC
     src/services/reader/layout.cpp
 )
 target_include_directories(niratan_core PUBLIC src)
-target_link_libraries(niratan_core PUBLIC hoshidicts Qt6::Core SQLite3::SQLite3)
+target_link_libraries(niratan_core PUBLIC hoshidicts Qt6::Core Qt6::Network SQLite3::SQLite3)
 target_compile_options(niratan_core PRIVATE -Wall -Wextra -Wpedantic -Werror)
 
 qt_add_executable(niratan

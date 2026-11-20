@@ -6,6 +6,14 @@ target_link_libraries(tst_local_audio PRIVATE niratan_core Qt6::Test)
 target_compile_options(tst_local_audio PRIVATE -Wall -Wextra -Wpedantic -Werror)
 add_test(NAME local_audio COMMAND tst_local_audio)
 
+qt_add_executable(tst_local_file_server
+    audio/tst_local_file_server.cpp
+)
+target_include_directories(tst_local_file_server PRIVATE ${CMAKE_SOURCE_DIR}/src)
+target_link_libraries(tst_local_file_server PRIVATE niratan_core Qt6::Test)
+target_compile_options(tst_local_file_server PRIVATE -Wall -Wextra -Wpedantic -Werror)
+add_test(NAME local_file_server COMMAND tst_local_file_server)
+
 qt_add_executable(tst_dictionary
     dictionary/tst_dictionary.cpp
 )
