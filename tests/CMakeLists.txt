@@ -69,3 +69,11 @@ target_include_directories(tst_glossary_markup PRIVATE ${CMAKE_SOURCE_DIR}/src)
 target_link_libraries(tst_glossary_markup PRIVATE niratan_core Qt6::Test)
 target_compile_options(tst_glossary_markup PRIVATE -Wall -Wextra -Wpedantic -Werror)
 add_test(NAME glossary_markup COMMAND tst_glossary_markup)
+
+qt_add_executable(tst_media_naming
+    anki/tst_media_naming.cpp
+)
+target_include_directories(tst_media_naming PRIVATE ${CMAKE_SOURCE_DIR}/src)
+target_link_libraries(tst_media_naming PRIVATE niratan_core Qt6::Test)
+target_compile_options(tst_media_naming PRIVATE -Wall -Wextra -Wpedantic -Werror)
+add_test(NAME media_naming COMMAND tst_media_naming)
