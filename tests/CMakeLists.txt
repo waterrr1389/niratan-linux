@@ -77,3 +77,11 @@ target_include_directories(tst_media_naming PRIVATE ${CMAKE_SOURCE_DIR}/src)
 target_link_libraries(tst_media_naming PRIVATE niratan_core Qt6::Test)
 target_compile_options(tst_media_naming PRIVATE -Wall -Wextra -Wpedantic -Werror)
 add_test(NAME media_naming COMMAND tst_media_naming)
+
+qt_add_executable(tst_field_content
+    anki/tst_field_content.cpp
+)
+target_include_directories(tst_field_content PRIVATE ${CMAKE_SOURCE_DIR}/src)
+target_link_libraries(tst_field_content PRIVATE niratan_core Qt6::Test)
+target_compile_options(tst_field_content PRIVATE -Wall -Wextra -Wpedantic -Werror)
+add_test(NAME field_content COMMAND tst_field_content)
