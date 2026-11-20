@@ -21,3 +21,11 @@ target_include_directories(tst_theme PRIVATE ${CMAKE_SOURCE_DIR}/src)
 target_link_libraries(tst_theme PRIVATE niratan_core Qt6::Test)
 target_compile_options(tst_theme PRIVATE -Wall -Wextra -Wpedantic -Werror)
 add_test(NAME theme COMMAND tst_theme)
+
+qt_add_executable(tst_layout
+    reader/tst_layout.cpp
+)
+target_include_directories(tst_layout PRIVATE ${CMAKE_SOURCE_DIR}/src)
+target_link_libraries(tst_layout PRIVATE niratan_core Qt6::Test)
+target_compile_options(tst_layout PRIVATE -Wall -Wextra -Wpedantic -Werror)
+add_test(NAME layout COMMAND tst_layout)
