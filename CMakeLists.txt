@@ -34,6 +34,7 @@ qt_add_library(niratan_core STATIC
     src/services/dictionary/frequency_rank.cpp
     src/services/dictionary/popup_entries.cpp
     src/services/dictionary/popup_html.cpp
+    src/services/dictionary/popup_assets.cpp
     src/services/dictionary/text_selection.cpp
     src/services/reader/theme.cpp
     src/services/reader/layout.cpp
@@ -41,6 +42,13 @@ qt_add_library(niratan_core STATIC
     src/models/profiles/profile_index.cpp
     src/services/storage/app_paths.cpp
     src/services/storage/json_file.cpp
+)
+qt_add_resources(niratan_core "dictionary_popup_assets"
+    PREFIX "/niratan/dictionary_popup"
+    BASE "src/web/dictionary_popup"
+    FILES
+        src/web/dictionary_popup/popup.css
+        src/web/dictionary_popup/popup.js
 )
 target_include_directories(niratan_core PUBLIC src)
 target_link_libraries(niratan_core PUBLIC hoshidicts Qt6::Core Qt6::Network SQLite3::SQLite3)
@@ -58,9 +66,6 @@ qt_add_qml_module(niratan
         src/views/MainWindow.qml
         src/views/theme/Theme.qml
         src/views/theme/ThemePreview.qml
-    RESOURCES
-        src/web/dictionary_popup/popup.css
-        src/web/dictionary_popup/popup.js
 )
 target_link_libraries(niratan PRIVATE niratan_core Qt6::Quick Qt6::QuickControls2)
 target_include_directories(niratan PRIVATE src/views/theme)
