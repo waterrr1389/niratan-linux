@@ -55,6 +55,7 @@ void FrequencyRankTest::longer_match_wins_over_frequency() {
 
 void FrequencyRankTest::shorter_trace_wins_over_frequency() {
     auto plain = result("ab", "ab", 50);
+    plain.traces.push_back(TraceCandidate{0, 0, "ab"});
     auto inflected = result("ab", "ab", 1);
     inflected.traces.push_back(TraceCandidate{0, 2, "ab"});
     const auto ranked =
