@@ -42,6 +42,8 @@ enum class ProfileError {
     blank_name,
     cannot_delete_default_profile,
     language_mismatch,
+    // The index could not be written; the in-memory change was rolled back.
+    storage_error,
 };
 
 // Exactly the identifiers that may name a profile directory.
