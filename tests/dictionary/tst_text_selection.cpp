@@ -18,6 +18,7 @@ class TextSelectionTest : public QObject {
     void japanese_trims_and_shifts_the_start();
     void english_walks_back_to_the_word_start();
     void english_keeps_internal_delimiters();
+    void english_window_runs_past_the_word_end();
     void english_breaks_on_shared_delimiters();
     void highlight_uses_the_shorter_length();
 };
@@ -34,6 +35,12 @@ void TextSelectionTest::japanese_starts_at_the_click() {
     QVERIFY(candidate);
     QCOMPARE(candidate->text, std::string("本語で"));
     QCOMPARE(candidate->utf16_start, 1);
+
+    // An emoji is a surrogate pair and takes two code units.
+    const auto after_emoji = lookup_candidate("😀語", 2, 1, "ja");
+    QVERIFY(after_emoji);
+    QCOMPARE(after_emoji->text, std::string("語"));
+    QCOMPARE(after_emoji->utf16_start, 2);
 }
 
 void TextSelectionTest::japanese_trims_and_shifts_the_start() {
@@ -51,18 +58,28 @@ void TextSelectionTest::english_walks_back_to_the_word_start() {
 }
 
 void TextSelectionTest::english_keeps_internal_delimiters() {
-    const auto hyphen = lookup_candidate("a well-known case", 9, 12, "en");
+    const auto hyphen = lookup_candidate("a well-known case", 9, 10, "en");
     QVERIFY(hyphen);
     QCOMPARE(hyphen->text, std::string("well-known"));
+    QCOMPARE(hyphen->utf16_start, 2);
 
-    const auto apostrophe = lookup_candidate("it's fine", 3, 6, "en");
+    const auto apostrophe = lookup_candidate("it's fine", 3, 4, "en");
     QVERIFY(apostrophe);
     QCOMPARE(apostrophe->text, std::string("it's"));
+    QCOMPARE(apostrophe->utf16_start, 0);
 
-    // A trailing hyphen is a boundary, not part of the word.
-    const auto trailing = lookup_candidate("go- home", 1, 6, "en");
-    QVERIFY(trailing);
-    QCOMPARE(trailing->text, std::string("go"));
+    // A doubled hyphen has a hyphen neighbour, so the walk back stops there.
+    const auto doubled = lookup_candidate("well--known", 8, 5, "en");
+    QVERIFY(doubled);
+    QCOMPARE(doubled->text, std::string("known"));
+    QCOMPARE(doubled->utf16_start, 6);
+}
+
+void TextSelectionTest::english_window_runs_past_the_word_end() {
+    const auto candidate = lookup_candidate("a well-known case", 9, 12, "en");
+    QVERIFY(candidate);
+    QCOMPARE(candidate->text, std::string("well-known c"));
+    QCOMPARE(candidate->utf16_start, 2);
 }
 
 void TextSelectionTest::english_breaks_on_shared_delimiters() {

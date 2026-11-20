@@ -26,7 +26,10 @@ struct HighlightRange {
 
 // Japanese starts at the click. English walks back to the word start, where
 // ' ’ ` - and the hyphen variants stay inside a word only when both
-// neighbours are ASCII alphanumeric. Empty after trimming returns nullopt.
+// neighbours are ASCII alphanumeric. Either way the window is scan_length
+// code units from that start and is not cut at the word end: the
+// dictionary's longest-prefix match decides where the term stops. Empty
+// after trimming returns nullopt.
 std::optional<TextLookupCandidate> lookup_candidate(std::string_view sentence, int utf16_offset,
                                                      int scan_length, std::string_view language_id);
 
