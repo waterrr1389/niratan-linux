@@ -20,6 +20,7 @@ qt_add_library(niratan_core STATIC
     src/services/anki/field_mapping.cpp
     src/services/anki/duplicate_scope.cpp
     src/services/anki/duplicate_query.cpp
+    src/services/anki/glossary_markup.cpp
     src/services/dictionary/dictionary_store.cpp
     src/services/dictionary/dictionary_query.cpp
     src/services/dictionary/frequency_rank.cpp

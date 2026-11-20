@@ -61,3 +61,11 @@ target_include_directories(tst_duplicate_query PRIVATE ${CMAKE_SOURCE_DIR}/src)
 target_link_libraries(tst_duplicate_query PRIVATE niratan_core Qt6::Test)
 target_compile_options(tst_duplicate_query PRIVATE -Wall -Wextra -Wpedantic -Werror)
 add_test(NAME duplicate_query COMMAND tst_duplicate_query)
+
+qt_add_executable(tst_glossary_markup
+    anki/tst_glossary_markup.cpp
+)
+target_include_directories(tst_glossary_markup PRIVATE ${CMAKE_SOURCE_DIR}/src)
+target_link_libraries(tst_glossary_markup PRIVATE niratan_core Qt6::Test)
+target_compile_options(tst_glossary_markup PRIVATE -Wall -Wextra -Wpedantic -Werror)
+add_test(NAME glossary_markup COMMAND tst_glossary_markup)
