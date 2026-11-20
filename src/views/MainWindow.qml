@@ -16,7 +16,7 @@ ApplicationWindow {
     title: "Niratan"
     color: Theme.windowBackground
 
-    DictionaryPage {
+    ReaderPage {
         anchors.fill: parent
     }
 }

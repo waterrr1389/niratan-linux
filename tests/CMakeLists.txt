@@ -237,3 +237,51 @@ target_include_directories(tst_reader_settings PRIVATE ${CMAKE_SOURCE_DIR}/src)
 target_link_libraries(tst_reader_settings PRIVATE niratan_core Qt6::Test)
 target_compile_options(tst_reader_settings PRIVATE -Wall -Wextra -Wpedantic -Werror)
 add_test(NAME reader_settings COMMAND tst_reader_settings)
+
+qt_add_executable(tst_book_model
+    books/tst_book_model.cpp
+)
+target_include_directories(tst_book_model PRIVATE ${CMAKE_SOURCE_DIR}/src)
+target_link_libraries(tst_book_model PRIVATE niratan_core Qt6::Test)
+target_compile_options(tst_book_model PRIVATE -Wall -Wextra -Wpedantic -Werror)
+add_test(NAME book_model COMMAND tst_book_model)
+
+qt_add_executable(tst_reader_css
+    reader/tst_reader_css.cpp
+)
+target_include_directories(tst_reader_css PRIVATE ${CMAKE_SOURCE_DIR}/src)
+target_link_libraries(tst_reader_css PRIVATE niratan_core Qt6::Test)
+target_compile_options(tst_reader_css PRIVATE -Wall -Wextra -Wpedantic -Werror)
+add_test(NAME reader_css COMMAND tst_reader_css)
+
+qt_add_executable(tst_character_normalizer
+    reader/tst_character_normalizer.cpp
+)
+target_include_directories(tst_character_normalizer PRIVATE ${CMAKE_SOURCE_DIR}/src)
+target_link_libraries(tst_character_normalizer PRIVATE niratan_core Qt6::Test)
+target_compile_options(tst_character_normalizer PRIVATE -Wall -Wextra -Wpedantic -Werror)
+add_test(NAME character_normalizer COMMAND tst_character_normalizer)
+
+qt_add_executable(tst_reader_shell
+    reader/tst_reader_shell.cpp
+)
+target_include_directories(tst_reader_shell PRIVATE ${CMAKE_SOURCE_DIR}/src)
+target_link_libraries(tst_reader_shell PRIVATE niratan_core Qt6::Test)
+target_compile_options(tst_reader_shell PRIVATE -Wall -Wextra -Wpedantic -Werror)
+add_test(NAME reader_shell COMMAND tst_reader_shell)
+
+qt_add_executable(tst_book_session
+    reader/tst_book_session.cpp
+)
+target_include_directories(tst_book_session PRIVATE ${CMAKE_SOURCE_DIR}/src)
+target_link_libraries(tst_book_session PRIVATE niratan_core Qt6::Test)
+target_compile_options(tst_book_session PRIVATE -Wall -Wextra -Wpedantic -Werror)
+add_test(NAME book_session COMMAND tst_book_session)
+
+qt_add_executable(tst_book_storage
+    books/tst_book_storage.cpp
+)
+target_include_directories(tst_book_storage PRIVATE ${CMAKE_SOURCE_DIR}/src)
+target_link_libraries(tst_book_storage PRIVATE niratan_core Qt6::Test)
+target_compile_options(tst_book_storage PRIVATE -Wall -Wextra -Wpedantic -Werror)
+add_test(NAME book_storage COMMAND tst_book_storage)

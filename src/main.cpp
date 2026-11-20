@@ -2,12 +2,15 @@
 
 #include <QGuiApplication>
 #include <QQmlApplicationEngine>
+#include <QQmlContext>
 #include <QQuickStyle>
 #include <QStyleHints>
 #include <QWebEngineProfile>
 #include <QtWebEngineQuick/QtWebEngineQuick>
 
+#include "viewmodels/reader/reader_view_model.h"
 #include "views/dictionary/audio_scheme_handler.h"
+#include "views/reader/reader_scheme_handler.h"
 
 namespace {
 
@@ -26,6 +29,7 @@ void apply_debug_color_scheme() {
 
 int main(int argc, char* argv[]) {
     niratan::ui::register_popup_url_schemes();
+    niratan::ui::register_reader_url_schemes();
     QtWebEngineQuick::initialize();
     QGuiApplication app(argc, argv);
     QGuiApplication::setApplicationName("Niratan");
@@ -42,6 +46,10 @@ int main(int argc, char* argv[]) {
     profile->installUrlSchemeHandler(
         QByteArrayLiteral("audio"),
         new niratan::ui::AudioSchemeHandler(profile));
+    auto* reader_model = niratan::viewmodels::ReaderViewModel::instance();
+    auto* reader_handler = new niratan::ui::ReaderSchemeHandler(profile);
+    reader_handler->set_view_model(reader_model);
+    profile->installUrlSchemeHandler(QByteArrayLiteral("reader"), reader_handler);
 
     QQmlApplicationEngine engine;
     QObject::connect(

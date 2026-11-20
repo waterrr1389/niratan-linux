@@ -93,6 +93,7 @@ std::string epub3_opf() {
            "unique-identifier=\"id\">"
            "<metadata xmlns:dc=\"http://purl.org/dc/elements/1.1/\">"
            "<dc:title>Test Book</dc:title><dc:creator>Author Name</dc:creator>"
+           "<dc:language>ja</dc:language>"
            "<meta name=\"cover\" content=\"cover-image\"/>"
            "</metadata><manifest>"
            "<item id=\"chapter2\" href=\"text/chapter2.xhtml\" "
@@ -175,6 +176,7 @@ void EpubBookTest::metadata_and_cover_are_read() {
     const std::optional<std::string> expected_cover = std::string("OEBPS/images/cover.jpg");
     QCOMPARE(book->metadata().title, std::string("Test Book"));
     QCOMPARE(book->metadata().author, expected_author);
+    QCOMPARE(book->metadata().language, std::optional<std::string>{std::string("ja")});
     QCOMPARE(book->metadata().cover_href, expected_cover);
 }
 

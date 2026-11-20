@@ -34,6 +34,8 @@ namespace niratan::novels {
 struct EpubMetadata {
     std::string title;
     std::optional<std::string> author;
+    // dc:language, as written; the library stores it on the book.
+    std::optional<std::string> language;
     std::optional<std::string> cover_href;
 
     bool operator==(const EpubMetadata&) const = default;

@@ -369,16 +369,21 @@ bool parse_opf(zip_t* zip, const std::string& xml, const std::string& package_di
                 const bool in_metadata =
                     !stack.isEmpty() && stack.last() == QLatin1String("metadata");
 
-                if (in_metadata &&
-                    (name == QLatin1String("title") || name == QLatin1String("creator"))) {
+                if (in_metadata && (name == QLatin1String("title") ||
+                                    name == QLatin1String("creator") ||
+                                    name == QLatin1String("language"))) {
                     const QString text =
                         reader.readElementText(QXmlStreamReader::IncludeChildElements);
                     if (name == QLatin1String("title")) {
                         if (package->metadata.title.empty() && !text.isEmpty()) {
                             package->metadata.title = text.toStdString();
                         }
-                    } else if (!package->metadata.author.has_value() && !text.isEmpty()) {
-                        package->metadata.author = text.toStdString();
+                    } else if (name == QLatin1String("creator")) {
+                        if (!package->metadata.author.has_value() && !text.isEmpty()) {
+                            package->metadata.author = text.toStdString();
+                        }
+                    } else if (!package->metadata.language.has_value() && !text.isEmpty()) {
+                        package->metadata.language = text.toStdString();
                     }
                     continue;
                 }
