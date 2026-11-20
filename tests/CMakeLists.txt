@@ -149,3 +149,11 @@ target_include_directories(tst_content_language PRIVATE ${CMAKE_SOURCE_DIR}/src)
 target_link_libraries(tst_content_language PRIVATE niratan_core Qt6::Test)
 target_compile_options(tst_content_language PRIVATE -Wall -Wextra -Wpedantic -Werror)
 add_test(NAME content_language COMMAND tst_content_language)
+
+qt_add_executable(tst_profile_index
+    profiles/tst_profile_index.cpp
+)
+target_include_directories(tst_profile_index PRIVATE ${CMAKE_SOURCE_DIR}/src)
+target_link_libraries(tst_profile_index PRIVATE niratan_core Qt6::Test)
+target_compile_options(tst_profile_index PRIVATE -Wall -Wextra -Wpedantic -Werror)
+add_test(NAME profile_index COMMAND tst_profile_index)
