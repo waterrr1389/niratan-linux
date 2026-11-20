@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
-// What card field rendering reads from the mining session, matching
-// MiningContext and VideoMiningContext in Models/Anki.swift and
-// DictionaryInfo and DictionaryCategory in Models/Dictionary.swift. Only the
-// members rendering uses are kept.
+// What card field rendering and the mining gate read from the mining
+// session, matching MiningContext and VideoMiningContext in Models/Anki.swift
+// and DictionaryInfo and DictionaryCategory in Models/Dictionary.swift. Only
+// the members those two use are kept.
 //
 // Swift serves the book cover and the Sasayaki audio from LocalFileServer
 // while it renders. That side effect belongs to the caller: it passes the
@@ -37,6 +37,10 @@ struct VideoMiningContext {
     // Paths of the files when no file name was set, as URL.path.
     std::optional<std::string> screenshot_path;
     std::optional<std::string> audio_clip_path;
+    // Why the capture failed, shown by the mining gate instead of its own
+    // message. Empty when the capture did not report a reason.
+    std::optional<std::string> screenshot_error_message;
+    std::optional<std::string> audio_clip_error_message;
 };
 
 struct MiningContext {
