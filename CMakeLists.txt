@@ -38,12 +38,21 @@ target_include_directories(niratan_core PUBLIC src)
 target_link_libraries(niratan_core PUBLIC hoshidicts Qt6::Core SQLite3::SQLite3)
 target_compile_options(niratan_core PRIVATE -Wall -Wextra -Wpedantic -Werror)
 
-qt_add_executable(niratan src/main.cpp)
+qt_add_executable(niratan
+    src/main.cpp
+    src/views/theme/theme_state.cpp
+    src/views/theme/theme_state.h
+)
+set_source_files_properties(src/views/theme/Theme.qml PROPERTIES QT_QML_SINGLETON_TYPE TRUE)
 qt_add_qml_module(niratan
     URI Niratan
-    QML_FILES src/views/MainWindow.qml
+    QML_FILES
+        src/views/MainWindow.qml
+        src/views/theme/Theme.qml
+        src/views/theme/ThemePreview.qml
 )
 target_link_libraries(niratan PRIVATE niratan_core Qt6::Quick Qt6::QuickControls2)
+target_include_directories(niratan PRIVATE src/views/theme)
 target_compile_options(niratan PRIVATE -Wall -Wextra -Wpedantic -Werror)
 
 enable_testing()
