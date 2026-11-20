@@ -14,6 +14,8 @@ import Niratan
 Item {
     id: page
 
+    signal backRequested()
+
     DictionaryPopupModel {
         id: model
         dark: Theme.dark
@@ -25,14 +27,28 @@ Item {
         anchors.fill: parent
         spacing: 0
 
-        TextField {
-            id: search
+        Row {
             width: parent.width
-            placeholderText: qsTr("Look up a word")
-            selectByMouse: true
-            onAccepted: model.lookup(text)
+            height: 48
+            spacing: 4
 
-            Component.onCompleted: forceActiveFocus()
+            Button {
+                width: 40
+                height: parent.height
+                text: "\u2039"
+                onClicked: page.backRequested()
+            }
+
+            TextField {
+                id: search
+                width: parent.width - 44
+                height: parent.height
+                placeholderText: qsTr("Look up a word")
+                selectByMouse: true
+                onAccepted: model.lookup(text)
+
+                Component.onCompleted: forceActiveFocus()
+            }
         }
 
         Item {

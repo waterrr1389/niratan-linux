@@ -73,6 +73,8 @@ qt_add_executable(niratan
     src/main.cpp
     src/viewmodels/dictionary/dictionary_popup_model.cpp
     src/viewmodels/dictionary/dictionary_popup_model.h
+    src/viewmodels/library/library_view_model.cpp
+    src/viewmodels/library/library_view_model.h
     src/viewmodels/reader/reader_view_model.cpp
     src/viewmodels/reader/reader_view_model.h
     src/views/reader/reader_scheme_handler.cpp
@@ -98,6 +100,7 @@ qt_add_qml_module(niratan
     QML_FILES
         src/views/MainWindow.qml
         src/views/pages/DictionaryPage.qml
+        src/views/pages/LibraryPage.qml
         src/views/pages/ReaderPage.qml
         src/views/theme/Theme.qml
         src/views/theme/ThemePreview.qml
@@ -105,7 +108,7 @@ qt_add_qml_module(niratan
 target_link_libraries(niratan PRIVATE niratan_core Qt6::Quick Qt6::QuickControls2
     Qt6::WebEngineQuick Qt6::WebChannelQuick Qt6::QuickDialogs2)
 target_include_directories(niratan PRIVATE src/views/theme src/viewmodels/dictionary
-    src/viewmodels/reader src/views/reader)
+    src/viewmodels/reader src/views/reader src/viewmodels/library)
 target_compile_options(niratan PRIVATE -Wall -Wextra -Wpedantic -Werror)
 
 enable_testing()

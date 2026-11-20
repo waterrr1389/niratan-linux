@@ -56,6 +56,11 @@ QtObject {
     readonly property color menuText: popupText
     readonly property color menuDivider: popupDivider
 
+    // The platform accent, the Linux analogue of SwiftUI's accentColor and
+    // Niratan-win's SystemAccentColor. Injected from the system palette so the
+    // desktop's chosen accent is kept instead of a hard-coded blue.
+    readonly property color accent: ThemeState.accent
+
     readonly property color textPrimary: popupText
     readonly property color textSecondary: popupTextSecondary
 }

@@ -7,6 +7,7 @@
 
 #pragma once
 
+#include <QColor>
 #include <QObject>
 #include <QtQml/qqmlregistration.h>
 
@@ -17,14 +18,21 @@ class ThemeState : public QObject {
     QML_ELEMENT
     QML_SINGLETON
     Q_PROPERTY(bool dark READ isDark NOTIFY darkChanged)
+    // The platform accent, from the system palette's Highlight role.
+    Q_PROPERTY(QColor accent READ accent NOTIFY accentChanged)
 
    public:
     explicit ThemeState(QObject* parent = nullptr);
 
     bool isDark() const;
+    QColor accent() const;
+
+   protected:
+    bool eventFilter(QObject* watched, QEvent* event) override;
 
    signals:
     void darkChanged();
+    void accentChanged();
 };
 
 }  // namespace niratan::ui
