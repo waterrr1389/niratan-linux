@@ -25,6 +25,7 @@ qt_add_library(niratan_core STATIC
     src/services/anki/glossary_markup.cpp
     src/services/anki/media_naming.cpp
     src/services/anki/field_content.cpp
+    src/services/anki/anki_connect.cpp
     src/services/anki/mining_gate.cpp
     src/services/audio/local_audio.cpp
     src/services/audio/local_file_server.cpp
