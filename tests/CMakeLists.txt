@@ -197,3 +197,11 @@ target_include_directories(tst_audio_request PRIVATE ${CMAKE_SOURCE_DIR}/src)
 target_link_libraries(tst_audio_request PRIVATE niratan_core Qt6::Test)
 target_compile_options(tst_audio_request PRIVATE -Wall -Wextra -Wpedantic -Werror)
 add_test(NAME audio_request COMMAND tst_audio_request)
+
+qt_add_executable(tst_profile_ops
+    profiles/tst_profile_ops.cpp
+)
+target_include_directories(tst_profile_ops PRIVATE ${CMAKE_SOURCE_DIR}/src)
+target_link_libraries(tst_profile_ops PRIVATE niratan_core Qt6::Test)
+target_compile_options(tst_profile_ops PRIVATE -Wall -Wextra -Wpedantic -Werror)
+add_test(NAME profile_ops COMMAND tst_profile_ops)
