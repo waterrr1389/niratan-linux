@@ -181,3 +181,19 @@ target_include_directories(tst_popup_assets PRIVATE ${CMAKE_SOURCE_DIR}/src)
 target_link_libraries(tst_popup_assets PRIVATE niratan_core Qt6::Test)
 target_compile_options(tst_popup_assets PRIVATE -Wall -Wextra -Wpedantic -Werror)
 add_test(NAME popup_assets COMMAND tst_popup_assets)
+
+qt_add_executable(tst_media_type
+    dictionary/tst_media_type.cpp
+)
+target_include_directories(tst_media_type PRIVATE ${CMAKE_SOURCE_DIR}/src)
+target_link_libraries(tst_media_type PRIVATE niratan_core Qt6::Test)
+target_compile_options(tst_media_type PRIVATE -Wall -Wextra -Wpedantic -Werror)
+add_test(NAME media_type COMMAND tst_media_type)
+
+qt_add_executable(tst_audio_request
+    audio/tst_audio_request.cpp
+)
+target_include_directories(tst_audio_request PRIVATE ${CMAKE_SOURCE_DIR}/src)
+target_link_libraries(tst_audio_request PRIVATE niratan_core Qt6::Test)
+target_compile_options(tst_audio_request PRIVATE -Wall -Wextra -Wpedantic -Werror)
+add_test(NAME audio_request COMMAND tst_audio_request)

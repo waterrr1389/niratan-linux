@@ -27,9 +27,11 @@ qt_add_library(niratan_core STATIC
     src/services/anki/field_content.cpp
     src/services/anki/anki_connect.cpp
     src/services/anki/mining_gate.cpp
+    src/services/audio/audio_request.cpp
     src/services/audio/local_audio.cpp
     src/services/audio/local_file_server.cpp
     src/services/dictionary/dictionary_store.cpp
+    src/services/dictionary/media_type.cpp
     src/services/dictionary/dictionary_query.cpp
     src/services/dictionary/frequency_rank.cpp
     src/services/dictionary/popup_entries.cpp
