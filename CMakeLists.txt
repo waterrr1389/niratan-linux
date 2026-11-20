@@ -45,6 +45,7 @@ qt_add_library(niratan_core STATIC
     src/models/profiles/profile_index.cpp
     src/models/profiles/profile_index_json.cpp
     src/models/profiles/profile_ops.cpp
+    src/models/profiles/reader_settings.cpp
     src/services/novels/epub_book.cpp
     src/services/profiles/profile_repository.cpp
     src/services/storage/app_paths.cpp

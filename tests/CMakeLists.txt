@@ -229,3 +229,11 @@ target_include_directories(tst_epub_book PRIVATE ${CMAKE_SOURCE_DIR}/src)
 target_link_libraries(tst_epub_book PRIVATE niratan_core Qt6::Test)
 target_compile_options(tst_epub_book PRIVATE -Wall -Wextra -Wpedantic -Werror)
 add_test(NAME epub_book COMMAND tst_epub_book)
+
+qt_add_executable(tst_reader_settings
+    profiles/tst_reader_settings.cpp
+)
+target_include_directories(tst_reader_settings PRIVATE ${CMAKE_SOURCE_DIR}/src)
+target_link_libraries(tst_reader_settings PRIVATE niratan_core Qt6::Test)
+target_compile_options(tst_reader_settings PRIVATE -Wall -Wextra -Wpedantic -Werror)
+add_test(NAME reader_settings COMMAND tst_reader_settings)
