@@ -2,6 +2,8 @@
 
 #include "layout.h"
 
+#include <array>
+#include <charconv>
 #include <string>
 
 namespace niratan::reader {
@@ -10,33 +12,50 @@ namespace {
 // NativeReaderView.injectReader, horizontalSpreadColumnGap.
 constexpr int kSpreadColumnGap = 32;
 
-std::string px(int value) { return std::to_string(value) + "px"; }
+// injectReader converts the paddings to Double before dividing, so halves keep
+// their fraction. CSS reads "5" and "5.0" alike, so the shortest round-trip
+// form is enough.
+std::string number(double value) {
+    std::array<char, 32> buffer{};
+    const std::to_chars_result result =
+        std::to_chars(buffer.data(), buffer.data() + buffer.size(), value);
+    return std::string(buffer.data(), result.ptr);
+}
 
-std::string vw(int value) { return std::to_string(value) + "vw"; }
+std::string px(double value) { return number(value) + "px"; }
 
-std::string vh(int value) { return std::to_string(value) + "vh"; }
+std::string vw(double value) { return number(value) + "vw"; }
+
+std::string vh(double value) { return number(value) + "vh"; }
+
+// Vertical cap shared by paged and continuous vertical writing: the full page
+// height minus the overlap share that the block-end padding also reserves.
+std::string vertical_image_height(int vertical_padding, int overlap) {
+    const double remaining = 100.0 - vertical_padding;
+    return "calc(" + vh(remaining) + " - " + px(overlap * remaining / 100.0) + ")";
+}
 
 }  // namespace
 
 PageLayout page_layout(const LayoutInput& input) {
     PageLayout layout;
-    layout.page_padding = vh(input.vertical_padding / 2) + " " + vw(input.horizontal_padding / 2);
+    layout.page_padding =
+        vh(input.vertical_padding / 2.0) + " " + vw(input.horizontal_padding / 2.0);
 
     // bottomOverlap is the font size while writing vertically and zero
     // otherwise, so the vertical gap and the block-end padding share it.
     const int overlap = input.vertical_writing ? input.font_size : 0;
     if (input.vertical_writing && overlap > 0) {
         layout.block_end_padding =
-            "calc(" + vh(input.vertical_padding / 2) + " + " + px(overlap) + ")";
+            "calc(" + vh(input.vertical_padding / 2.0) + " + " + px(overlap) + ")";
     }
 
-    // imgWidth / imgHeight. Continuous horizontal reading caps the width only;
-    // continuous vertical reading caps the height only.
+    // imgWidth / imgHeight. Continuous reading caps one axis only: a
+    // horizontal flow has no width boundary, a vertical one has no height
+    // boundary.
     if (input.vertical_writing) {
-        layout.image_max_width = vw(100 - input.horizontal_padding);
-        layout.image_max_height =
-            "calc(" + vh(100 - input.vertical_padding) + " - " +
-            std::to_string(overlap * (100 - input.vertical_padding) / 100) + "px)";
+        layout.image_max_width = input.continuous ? "none" : vw(100 - input.horizontal_padding);
+        layout.image_max_height = vertical_image_height(input.vertical_padding, overlap);
     } else if (input.continuous) {
         layout.image_max_width = vw(100 - input.horizontal_padding);
         layout.image_max_height = "none";

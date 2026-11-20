@@ -9,6 +9,19 @@
 // continuous scrolling and paragraph mode all force a single column, matching
 // the horizontalPageColumns condition. The vertical column width is the page
 // height, not the page width: a vertical column runs down the page.
+//
+// injectReader converts the paddings to Double before dividing, so halves
+// keep their fraction: a padding of 5 gives 2.5vw. Numbers are printed in the
+// shortest decimal form that round-trips (std::to_chars), so 5 prints as "5"
+// where Swift prints "5.0"; CSS reads both the same. The vertical image
+// height subtracts overlap * (100 - vertical_padding) / 100 pixels, computed
+// in double in that order.
+//
+// Image caps per mode (imgWidth, imgHeight):
+//   paged horizontal       width = column width     height = (100 - vp)vh
+//   paged vertical         width = (100 - hp)vw     height = vertical cap
+//   continuous horizontal  width = (100 - hp)vw     height = none
+//   continuous vertical    width = none             height = vertical cap
 
 #pragma once
 

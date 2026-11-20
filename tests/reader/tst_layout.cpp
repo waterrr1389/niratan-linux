@@ -17,6 +17,7 @@ class LayoutTest : public QObject {
     void two_columns_only_when_paging_horizontally();
     void vertical_column_runs_down_the_page();
     void continuous_reading_does_not_paginate();
+    void continuous_vertical_caps_height_only();
     void padding_splits_evenly();
 };
 
@@ -67,7 +68,20 @@ void LayoutTest::vertical_column_runs_down_the_page() {
     QCOMPARE(layout.column_gap, std::string("calc(4vh + 22px)"));
     QCOMPARE(layout.block_end_padding, std::string("calc(2vh + 22px)"));
     QCOMPARE(layout.image_max_width, std::string("95vw"));
-    QCOMPARE(layout.image_max_height, std::string("calc(96vh - 21px)"));
+    QCOMPARE(layout.image_max_height, std::string("calc(96vh - 21.12px)"));
+
+    input.vertical_padding = 3;
+    QCOMPARE(page_layout(input).block_end_padding, std::string("calc(1.5vh + 22px)"));
+}
+
+void LayoutTest::continuous_vertical_caps_height_only() {
+    auto input = base();
+    input.vertical_writing = true;
+    input.continuous = true;
+    const auto layout = page_layout(input);
+    QCOMPARE(layout.column_width, std::string(""));
+    QCOMPARE(layout.image_max_width, std::string("none"));
+    QCOMPARE(layout.image_max_height, std::string("calc(96vh - 21.12px)"));
 }
 
 void LayoutTest::continuous_reading_does_not_paginate() {
@@ -84,7 +98,11 @@ void LayoutTest::padding_splits_evenly() {
     auto input = base();
     input.horizontal_padding = 5;
     input.vertical_padding = 3;
-    QCOMPARE(page_layout(input).page_padding, std::string("1vh 2vw"));
+    QCOMPARE(page_layout(input).page_padding, std::string("1.5vh 2.5vw"));
+
+    input.horizontal_padding = 4;
+    input.vertical_padding = 0;
+    QCOMPARE(page_layout(input).page_padding, std::string("0vh 2vw"));
 }
 
 QTEST_APPLESS_MAIN(LayoutTest)
