@@ -117,8 +117,10 @@ class MpvItem : public QQuickFramebufferObject {
     Q_INVOKABLE bool screenshot(const QUrl& file);
     Q_INVOKABLE void cycleSubtitles();
     Q_INVOKABLE void toggleSubtitles();
-    Q_INVOKABLE void setABLoopStart();
-    Q_INVOKABLE void setABLoopEnd();
+    // false when the current position cannot start or end a range; the
+    // caller must not show the range as set in that case.
+    Q_INVOKABLE bool setABLoopStart();
+    Q_INVOKABLE bool setABLoopEnd();
     Q_INVOKABLE void clearABLoop();
     Q_INVOKABLE void rotateClockwise();
     Q_INVOKABLE void stepSpeed(int direction);

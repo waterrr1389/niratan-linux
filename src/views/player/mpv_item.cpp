@@ -536,11 +536,9 @@ void MpvItem::unload() {
 void MpvItem::replace_file(const QUrl& file) {
     const QString next_path = file.isLocalFile() && !file.toLocalFile().isEmpty()
         ? QFileInfo(file.toLocalFile()).absoluteFilePath() : QString{};
-    if (!file.isEmpty() && next_path != local_video_path_) {
-        clear_playback_position();
-    } else {
-        save_playback_position();
-    }
+    // Persist the outgoing file before the path changes; only reaching the end
+    // of a file clears its record.
+    save_playback_position();
     local_video_path_ = next_path;
     set_resume_position(0.0);
     resume_save_timer_.invalidate();
@@ -950,20 +948,22 @@ void MpvItem::toggleSubtitles() {
     setSubtitlesVisible(!subtitles_visible_);
 }
 
-void MpvItem::setABLoopStart() {
+bool MpvItem::setABLoopStart() {
     if (handle_ == nullptr) {
-        return;
+        return false;
     }
     ab_loop_start_ = position_;
     set_property("ab-loop-b", QStringLiteral("no"));
     set_property("ab-loop-a", static_cast<double>(ab_loop_start_));
+    return true;
 }
 
-void MpvItem::setABLoopEnd() {
+bool MpvItem::setABLoopEnd() {
     if (handle_ == nullptr || ab_loop_start_ < 0.0 || position_ <= ab_loop_start_) {
-        return;
+        return false;
     }
     set_property("ab-loop-b", static_cast<double>(position_));
+    return true;
 }
 
 void MpvItem::clearABLoop() {

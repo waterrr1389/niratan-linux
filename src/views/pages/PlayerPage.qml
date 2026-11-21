@@ -291,7 +291,10 @@ Item {
     function setLoopA() {
         if (!mpv.loaded)
             return
-        mpv.setABLoopStart()
+        if (!mpv.setABLoopStart()) {
+            page.showOSD(qsTr("A-B Loop"), qsTr("Cannot set A here"))
+            return
+        }
         page.loopASet = true
         page.loopBSet = false
         page.showOSD(qsTr("A-B Loop"), qsTr("A set"))
@@ -304,7 +307,10 @@ Item {
             page.showOSD(qsTr("A-B Loop"), qsTr("Set A first"))
             return
         }
-        mpv.setABLoopEnd()
+        if (!mpv.setABLoopEnd()) {
+            page.showOSD(qsTr("A-B Loop"), qsTr("B must come after A"))
+            return
+        }
         page.loopBSet = true
         page.showOSD(qsTr("A-B Loop"), qsTr("B set"))
     }
