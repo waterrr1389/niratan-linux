@@ -44,6 +44,7 @@ qt_add_library(niratan_core STATIC
     src/services/audio/local_audio.cpp
     src/services/audio/local_file_server.cpp
     src/services/audio/web_audio_download.cpp
+    src/services/audiobook/audiobook_metadata.cpp
     src/services/dictionary/dictionary_store.cpp
     src/services/dictionary/dictionary_media.cpp
     src/services/dictionary/media_type.cpp
@@ -129,6 +130,7 @@ qt_add_library(niratan_app STATIC
     src/viewmodels/profiles/profiles_view_model.cpp
     src/viewmodels/profiles/profiles_view_model.h
     src/viewmodels/sasayaki/sasayaki_view_model.cpp
+    src/viewmodels/sasayaki/sasayaki_view_model_audiobook.cpp
     src/viewmodels/sasayaki/sasayaki_view_model.h
     src/viewmodels/statistics/statistics_view_model.cpp
     src/viewmodels/statistics/statistics_view_model.h

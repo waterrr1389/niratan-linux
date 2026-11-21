@@ -37,11 +37,14 @@
 // audio path is written when an audio file is opened. A damaged sidecar is
 // left untouched and its defaults are used.
 //
-// Audiobook chapters are not read: chapters is always empty, and the embedded
-// title, artist and artwork of an m4b are not available, so the panel shows
-// the file name and the reader's book title instead. Auto-scroll, auto-pause
-// on lookup, sentence audio mining and transcription are not part of this
-// class.
+// Audiobook metadata and chapters come from services/audiobook when an audio
+// file becomes the source, following SasayakiPlayer.loadAudiobookMetadata:
+// the previous values are cleared, then the embedded title, artist and artwork
+// and the chpl chapter list replace them, with isLoadingAudiobookChapters true
+// while reading and chapters exposed as maps of id, title, startTime and
+// endTime (null when unknown). currentAudiobookChapterId follows
+// SasayakiPlayer.currentAudiobookChapterID. Auto-scroll, auto-pause on lookup,
+// sentence audio mining and transcription are not part of this class.
 //
 // The reader side is driven from ReaderPage, which owns this model: the page
 // passes applyCuesJson() to window.hoshiReader.applySasayakiCues after each
@@ -52,6 +55,7 @@
 
 #pragma once
 
+#include <QByteArray>
 #include <QObject>
 #include <QString>
 #include <QUrl>
@@ -93,6 +97,13 @@ class SasayakiViewModel : public QObject {
     Q_PROPERTY(QString matchError READ match_error NOTIFY matchErrorChanged)
     Q_PROPERTY(int matchSearchWindow READ match_search_window WRITE set_match_search_window
                    RESET reset_match_search_window NOTIFY matchSearchWindowChanged)
+    Q_PROPERTY(QString audiobookTitle READ audiobook_title NOTIFY audiobookMetadataChanged)
+    Q_PROPERTY(QString audiobookArtist READ audiobook_artist NOTIFY audiobookMetadataChanged)
+    Q_PROPERTY(QByteArray audiobookArtwork READ audiobook_artwork NOTIFY audiobookMetadataChanged)
+    Q_PROPERTY(int currentAudiobookChapterId READ current_audiobook_chapter_id NOTIFY
+                   audiobookChaptersChanged)
+    Q_PROPERTY(bool isLoadingAudiobookChapters READ is_loading_audiobook_chapters NOTIFY
+                   audiobookChaptersChanged)
 
    public:
     explicit SasayakiViewModel(QObject* parent = nullptr);
@@ -123,6 +134,14 @@ class SasayakiViewModel : public QObject {
     int match_search_window() const;
     void set_match_search_window(int value);
     void reset_match_search_window();
+
+    // Embedded metadata of the current audio file; empty values when absent.
+    QString audiobook_title() const;
+    QString audiobook_artist() const;
+    QByteArray audiobook_artwork() const;
+    // Index into chapters(), or -1 when no chapter contains the position.
+    int current_audiobook_chapter_id() const;
+    bool is_loading_audiobook_chapters() const;
 
     // Sets the audio source and stores its absolute path as the bookmark.
     // Keeps the current cue state when the file cannot be opened.
@@ -171,6 +190,8 @@ class SasayakiViewModel : public QObject {
     void matchDataChanged();
     void matchErrorChanged();
     void matchSearchWindowChanged();
+    void audiobookMetadataChanged();
+    void audiobookChaptersChanged();
     void matchApplied();
     // The cue to highlight, or an empty id to clear the highlight.
     void activeCueChanged(const QString& id);

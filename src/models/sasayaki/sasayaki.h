@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
 // Audiobook data, following Models/Sasayaki.swift (SasayakiCue, SasayakiMatch,
-// SasayakiMatchData, SasayakiPlaybackData) and the files Core/BookStorage.swift
+// SasayakiMatchData, SasayakiPlaybackData, SasayakiAudiobookChapter,
+// SasayakiAudiobookMetadata) and the files Core/BookStorage.swift
 // reads and writes next to a book: sasayaki_match.json holds SasayakiMatchData
 // and sasayaki_playback.json holds SasayakiPlaybackData.
 //
@@ -75,6 +76,27 @@ struct SasayakiPlaybackData {
     std::optional<QByteArray> audio_bookmark;
 
     bool operator==(const SasayakiPlaybackData&) const = default;
+};
+
+// SasayakiAudiobookChapter: endTime is optional in Swift, so a chapter whose
+// end is unknown has no value instead of a sentinel.
+struct SasayakiAudiobookChapter {
+    int id = 0;
+    std::string title;
+    double start_time = 0.0;
+    std::optional<double> end_time;
+
+    bool operator==(const SasayakiAudiobookChapter&) const = default;
+};
+
+// SasayakiAudiobookMetadata: every value is optional, and artworkData is the
+// item payload exactly as stored (no image decoding).
+struct SasayakiAudiobookMetadata {
+    std::optional<std::string> title;
+    std::optional<std::string> artist;
+    std::optional<QByteArray> artwork_data;
+
+    bool operator==(const SasayakiAudiobookMetadata&) const = default;
 };
 
 // sasayaki_match.json

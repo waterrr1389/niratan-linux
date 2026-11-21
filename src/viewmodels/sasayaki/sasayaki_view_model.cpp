@@ -22,6 +22,8 @@
 #include <vector>
 
 #include "models/sasayaki/sasayaki.h"
+#include "sasayaki_view_model_state.h"
+#include "services/audiobook/audiobook_metadata.h"
 #include "services/books/book_storage.h"
 #include "services/reader/book_session.h"
 #include "services/reader/character_normalizer.h"
@@ -76,49 +78,12 @@ QVariantMap cue_entry(const SasayakiCue& cue) {
     return entry;
 }
 
+int audiobook_chapter_at(const std::vector<sasayaki::SasayakiAudiobookChapter>& chapters,
+                         double position) {
+    return audiobook::current_audiobook_chapter_id(chapters, position).value_or(-1);
+}
+
 }  // namespace
-
-struct SasayakiViewModel::State {
-    QMediaPlayer* player = nullptr;
-    QAudioOutput* output = nullptr;
-    QTimer* seek_timer = nullptr;
-
-    // The open book's folder under Books, set while has_root.
-    std::string folder;
-    bool has_root = false;
-
-    SasayakiPlaybackData playback;
-    std::optional<SasayakiMatchData> match;
-    std::vector<SasayakiCue> match_cues;
-    std::vector<SasayakiCue> subtitle_cues;
-    CueTimeline timeline;
-
-    QString audio_path;
-    QString audio_name;
-    QString subtitle_name;
-    QString match_error;
-    QString error;
-    QString current_cue_id;
-    QString current_cue_text;
-    QVariantList cue_list;
-
-    double position = 0.0;
-    double duration = 0.0;
-    double rate = 1.0;
-    double delay = 0.0;
-    double match_progress = 0.0;
-    int match_search_window = kDefaultSearchWindow;
-    std::optional<int> pending_match_window;
-    std::jthread match_worker;
-
-    bool has_audio = false;
-    bool has_match = false;
-    bool playing = false;
-    bool reloading = false;
-    bool needs_initial_seek = false;
-    std::optional<double> pending_seek;
-    int last_second = -1;
-};
 
 SasayakiViewModel::SasayakiViewModel(QObject* parent)
     : QObject(parent), state_(std::make_unique<State>()) {
@@ -246,8 +211,6 @@ QString SasayakiViewModel::current_cue_id() const { return state_->current_cue_i
 QString SasayakiViewModel::current_cue_text() const { return state_->current_cue_text; }
 
 QVariantList SasayakiViewModel::cues() const { return state_->cue_list; }
-
-QVariantList SasayakiViewModel::chapters() const { return {}; }
 
 QString SasayakiViewModel::error() const { return state_->error; }
 
@@ -662,6 +625,10 @@ void SasayakiViewModel::reload_book() {
     state_->needs_initial_seek = false;
     state_->pending_seek.reset();
     state_->last_second = -1;
+    state_->audiobook_metadata = {};
+    state_->audiobook_chapters.clear();
+    state_->loading_audiobook_chapters = false;
+    state_->last_audiobook_chapter_id = -1;
     state_->error.clear();
 
     std::optional<std::string> folder = resolve_book_folder();
@@ -694,6 +661,8 @@ void SasayakiViewModel::reload_book() {
     emit currentCueChanged();
     emit cuesChanged();
     emit chaptersChanged();
+    emit audiobookMetadataChanged();
+    emit audiobookChaptersChanged();
     emit audioNameChanged();
     emit errorChanged();
     update_cue();
@@ -750,12 +719,6 @@ void SasayakiViewModel::restore_audio() {
     open_audio_source();
     emit hasAudioChanged();
     emit audioNameChanged();
-}
-
-void SasayakiViewModel::open_audio_source() {
-    state_->needs_initial_seek = true;
-    state_->player->setSource(QUrl::fromLocalFile(state_->audio_path));
-    state_->player->setPlaybackRate(state_->rate);
 }
 
 void SasayakiViewModel::rebuild_timeline(bool refresh_highlight) {
@@ -819,6 +782,11 @@ void SasayakiViewModel::apply_position(double seconds, bool persist) {
     }
     state_->position = std::max(0.0, seconds);
     emit positionChanged();
+    const int chapter = audiobook_chapter_at(state_->audiobook_chapters, state_->position);
+    if (chapter != state_->last_audiobook_chapter_id) {
+        state_->last_audiobook_chapter_id = chapter;
+        emit audiobookChaptersChanged();
+    }
     const int second = static_cast<int>(std::floor(state_->position));
     if (persist && second != state_->last_second) {
         state_->last_second = second;
@@ -834,6 +802,11 @@ void SasayakiViewModel::persist_position(double seconds) {
     state_->position = std::max(0.0, seconds);
     state_->last_second = static_cast<int>(std::floor(state_->position));
     emit positionChanged();
+    const int chapter = audiobook_chapter_at(state_->audiobook_chapters, state_->position);
+    if (chapter != state_->last_audiobook_chapter_id) {
+        state_->last_audiobook_chapter_id = chapter;
+        emit audiobookChaptersChanged();
+    }
     save_playback();
     update_cue();
 }

@@ -467,6 +467,14 @@ target_link_libraries(tst_sasayaki PRIVATE niratan_core Qt6::Test)
 target_compile_options(tst_sasayaki PRIVATE -Wall -Wextra -Wpedantic -Werror)
 add_test(NAME sasayaki COMMAND tst_sasayaki)
 
+qt_add_executable(tst_audiobook_metadata
+    audiobook/tst_audiobook_metadata.cpp
+)
+target_include_directories(tst_audiobook_metadata PRIVATE ${CMAKE_SOURCE_DIR}/src)
+target_link_libraries(tst_audiobook_metadata PRIVATE niratan_core Qt6::Test)
+target_compile_options(tst_audiobook_metadata PRIVATE -Wall -Wextra -Wpedantic -Werror)
+add_test(NAME audiobook_metadata COMMAND tst_audiobook_metadata)
+
 qt_add_executable(tst_statistics_storage
     statistics/tst_statistics_storage.cpp
 )
