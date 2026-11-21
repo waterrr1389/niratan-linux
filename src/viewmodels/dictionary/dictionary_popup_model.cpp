@@ -3,52 +3,23 @@
 #include "dictionary_popup_model.h"
 
 #include <QColor>
-#include <QFileInfo>
-#include <QFileSystemWatcher>
 #include <QJsonArray>
 #include <QJsonObject>
-#include <QStringList>
 
-#include <filesystem>
 #include <memory>
 #include <string>
 #include <string_view>
-#include <utility>
-#include <vector>
 
 #include "models/dictionary/audio_source.h"
-#include "models/profiles/dictionary_settings.h"
-#include "models/profiles/profile_index_json.h"
-#include "models/profiles/profile_ops.h"
 #include "services/dictionary/dictionary_query.h"
 #include "services/dictionary/dictionary_store.h"
 #include "services/dictionary/popup_assets.h"
 #include "services/dictionary/popup_entries.h"
 #include "services/dictionary/popup_html.h"
+#include "services/settings/dictionary_settings_watch.h"
 #include "services/storage/app_paths.h"
-#include "services/storage/json_file.h"
 
 namespace niratan::viewmodels {
-namespace {
-
-// A directory watch survives atomic replacement of files and detects creation
-// when the file (or its containing directory) does not exist yet.
-QString existing_directory(std::filesystem::path directory) {
-    while (!directory.empty()) {
-        const auto name = QString::fromStdString(directory.string());
-        if (QFileInfo(name).isDir()) {
-            return name;
-        }
-        const auto parent = directory.parent_path();
-        if (parent == directory) {
-            break;
-        }
-        directory = parent;
-    }
-    return {};
-}
-
-}  // namespace
 
 using niratan::dictionary::DictionaryQueryService;
 using niratan::dictionary::DictionaryStore;
@@ -60,13 +31,11 @@ using niratan::dictionary::lookup_entries_json;
 using niratan::dictionary::popup_shell_html;
 
 struct DictionaryPopupModel::State {
-    std::vector<std::filesystem::path> dictionaries;
+    DictionaryStore store{storage::dictionaries_root()};
     PopupAssets assets;
     std::unique_ptr<DictionaryQueryService> query;
-    QFileSystemWatcher profile_watcher;
-    std::filesystem::path settings_path;
-    profiles::DictionaryProfileSettings settings = profiles::default_dictionary_settings();
-    std::string_view language_id = "ja";
+    settings::DictionarySettingsWatch settings_watch;
+    std::string language_id;
     QString last_query;
     QString html;
     QString error;
@@ -78,16 +47,12 @@ struct DictionaryPopupModel::State {
 DictionaryPopupModel::DictionaryPopupModel(QObject* parent)
     : QObject(parent), state_(std::make_unique<State>()) {
     state_->assets = load_popup_assets();
-    const DictionaryStore store(storage::dictionaries_root());
-    state_->dictionaries = store.installed();
-    const auto reload = [this] {
-        if (reload_profile_settings() && !state_->last_query.isEmpty()) {
+    connect(&state_->settings_watch, &settings::DictionarySettingsWatch::changed, this, [this] {
+        if (!state_->last_query.isEmpty()) {
             run_lookup();
         }
-    };
-    connect(&state_->profile_watcher, &QFileSystemWatcher::fileChanged, this, reload);
-    connect(&state_->profile_watcher, &QFileSystemWatcher::directoryChanged, this, reload);
-    reload_profile_settings();
+    });
+    state_->settings_watch.reload();
 }
 
 DictionaryPopupModel::~DictionaryPopupModel() = default;
@@ -140,85 +105,25 @@ void DictionaryPopupModel::setTextColor(QColor text_color) {
     emit themeChanged();
 }
 
-bool DictionaryPopupModel::reload_profile_settings() {
-    const auto root = storage::data_root();
-    if (root.empty()) {
-        return false;
-    }
-
-    auto& watcher = state_->profile_watcher;
-    const QStringList previous = watcher.files() + watcher.directories();
-    QStringList watched;
-    const auto watch = [&](const QString& path) {
-        if (!path.isEmpty() && !watched.contains(path)) {
-            watched.append(path);
-            if (!previous.contains(path) && QFileInfo::exists(path)) {
-                watcher.addPath(path);
-            }
-        }
-    };
-
-    // Resolve the same index as ProfileRepository without constructing it:
-    // construction can rewrite the index, which would notify this watcher.
-    const auto profiles_dir = root / "Profiles";
-    const auto index_path = profiles_dir / "profiles.json";
-    watch(existing_directory(profiles_dir));
-    watch(QString::fromStdString(index_path.string()));
-    const auto index_file = storage::read_json_file(index_path);
-    const auto index = profiles::profile_index_from_json(index_file.document);
-    const auto profile = profiles::resolve_profile(
-        index ? profiles::normalize_profile_index(*index) : profiles::ProfileIndex::initial());
-    const auto language = profiles::language_id(profile.language());
-
-    std::filesystem::path settings_path;
-    auto settings = profiles::default_dictionary_settings();
-    if (profiles::is_safe_profile_id(profile.id)) {
-        const auto profile_dir = profiles_dir / profile.id;
-        settings_path = profile_dir / "dictionary_settings.json";
-        watch(existing_directory(profile_dir));
-        watch(QString::fromStdString(settings_path.string()));
-        const auto read = storage::read_json_file(settings_path);
-        if (const auto decoded = profiles::dictionary_settings_from_json(read.document)) {
-            settings = profiles::resolved_dictionary_settings(*decoded);
-        } else if (read.status != storage::JsonReadStatus::missing &&
-                   settings_path == state_->settings_path) {
-            settings = state_->settings;
-        }
-    }
-    for (const auto& path : previous) {
-        if (!watched.contains(path)) {
-            watcher.removePath(path);
-        }
-    }
-
-    const bool changed = settings_path != state_->settings_path || settings != state_->settings ||
-                         language != state_->language_id;
-    if (language != state_->language_id) {
-        state_->query.reset();
-        state_->language_id = language;
-    }
-    state_->settings_path = std::move(settings_path);
-    state_->settings = std::move(settings);
-    return changed;
-}
-
 void DictionaryPopupModel::lookup(const QString& text) {
     state_->last_query = text.trimmed();
     if (state_->last_query.isEmpty()) {
         clear();
         return;
     }
-    reload_profile_settings();
+    state_->settings_watch.reload();
     run_lookup();
 }
 
 void DictionaryPopupModel::run_lookup() {
-    if (!state_->query) {
+    const std::string_view language = state_->settings_watch.language_id();
+    if (!state_->query || state_->language_id != language) {
+        state_->language_id = std::string(language);
         state_->query =
-            std::make_unique<DictionaryQueryService>(state_->language_id, state_->dictionaries);
+            std::make_unique<DictionaryQueryService>(language, state_->store.installed());
     }
 
-    const auto& settings = state_->settings;
+    const auto& settings = state_->settings_watch.settings();
     const LookupOutcome outcome = state_->query->lookup(
         state_->last_query.toStdString(), settings.max_results, settings.scan_length);
     if (!outcome.ok) {

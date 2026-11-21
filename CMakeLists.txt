@@ -75,6 +75,8 @@ qt_add_library(niratan_core STATIC
     src/services/player/transcript_extractor.h
     src/services/player/video_settings.cpp
     src/services/profiles/profile_repository.cpp
+    src/services/settings/dictionary_settings_watch.cpp
+    src/services/settings/dictionary_settings_watch.h
     src/services/settings/global_settings.cpp
     src/services/settings/settings_store.cpp
     src/services/storage/app_paths.cpp

@@ -16,10 +16,10 @@
 // typed-lookup parameter. dictionaryTabDefault, frequencySortOrder,
 // frequencySortDictionary and searchTextSize have no runtime consumer here.
 //
-// A file watcher invalidates the profile settings; file reads and dictionary
-// queries go through services. An invalid live edit retains the last good
-// settings for the same profile; a missing file or an invalid initial file
-// uses defaults.
+// settings::DictionarySettingsWatch supplies the active profile's language
+// and settings and reports edits from other windows, which rerun the last
+// lookup. An invalid live edit retains the last good settings for the same
+// profile; a missing file or an invalid initial file uses defaults.
 //
 // The theme properties are pushed from QML's Theme singleton, because colors
 // outside src/views/theme are not allowed.
@@ -70,7 +70,6 @@ class DictionaryPopupModel : public QObject {
     void themeChanged();
 
    private:
-    bool reload_profile_settings();
     void run_lookup();
     void clear_results();
 
