@@ -6,6 +6,7 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Dialogs
 import QtQuick.Layouts
+import QtQuick.Window
 import QtWebChannel
 import QtWebEngine
 import Niratan
@@ -19,11 +20,35 @@ Item {
     focus: true
 
     signal backRequested()
+    readonly property bool readerWindowActive: Window.window ? Window.window.active : true
+    readonly property bool statisticsContextActive: visible && readerWindowActive
+        && (statisticsPanel.visible || (!toc.visible && !sasayakiPanel.visible))
+
+    function formatReadingTime(value) {
+        const seconds = Math.max(0, Math.floor(value))
+        return String(Math.floor(seconds / 3600)).padStart(2, "0") + ":"
+               + String(Math.floor(seconds / 60) % 60).padStart(2, "0") + ":"
+               + String(seconds % 60).padStart(2, "0")
+    }
+
+    function dismissLookup() {
+        lookupModel.clear()
+        web.runJavaScript("window.hoshiSelection?.clearSelection()")
+    }
+
+    function createHighlight(color) {
+        const url = ReaderViewModel.chapterUrl
+        const script = ReaderViewModel.highlightScript(color)
+        if (script.length)
+            web.runJavaScript(script, result => ReaderViewModel.addHighlight(url, color, result))
+    }
 
     function turnPage(forward) {
         const script = ReaderViewModel.pageTurnScript(forward)
         if (script.length === 0)
             return
+        if (lookupModel.hasResults)
+            dismissLookup()
         const url = ReaderViewModel.chapterUrl
         web.runJavaScript(script, function (result) {
             if (url !== ReaderViewModel.chapterUrl)
@@ -80,12 +105,26 @@ Item {
 
     Component.onCompleted: {
         ReaderViewModel.setPageSize(Math.round(width), Math.round(height))
-        ReaderViewModel.setReaderActive(true)
+        ReaderViewModel.setReaderActive(statisticsContextActive)
+        ReaderViewModel.setDark(Theme.dark)
     }
     onWidthChanged: ReaderViewModel.setPageSize(Math.round(width), Math.round(height))
     onHeightChanged: ReaderViewModel.setPageSize(Math.round(width), Math.round(height))
-    // A hidden reader page pauses reading time; becoming visible resumes it.
-    onVisibleChanged: ReaderViewModel.setReaderActive(visible)
+    onStatisticsContextActiveChanged: ReaderViewModel.setReaderActive(statisticsContextActive)
+
+    Connections {
+        target: Theme
+        function onDarkChanged() {
+            ReaderViewModel.setDark(Theme.dark)
+        }
+    }
+
+    Timer {
+        interval: 1000
+        repeat: true
+        running: page.statisticsContextActive && ReaderViewModel.tracking
+        onTriggered: ReaderViewModel.tickTracking()
+    }
 
     Keys.onPressed: function (event) {
         var forward = false
@@ -96,7 +135,17 @@ Item {
         } else if (event.key === Qt.Key_Left || event.key === Qt.Key_Up
                    || event.key === Qt.Key_PageUp) {
             forward = false
+        } else if (event.key === Qt.Key_T && event.modifiers === Qt.NoModifier
+                   && ReaderViewModel.statisticsEnabled) {
+            ReaderViewModel.toggleTracking()
+            event.accepted = true
+            return
         } else if (event.key === Qt.Key_Escape) {
+            if (lookupModel.hasResults) {
+                dismissLookup()
+                event.accepted = true
+                return
+            }
             ReaderViewModel.setReaderActive(false)
             backRequested()
             event.accepted = true
@@ -117,6 +166,29 @@ Item {
         }
         function onDocumentRestored(revealCue) {
             page.applySasayakiCues(revealCue)
+        }
+        function onLookupRequested(text, anchor) {
+            lookupSurface.selectionAnchor = anchor
+            lookupModel.lookup(text)
+        }
+        function onReaderTappedOutside() {
+            if (lookupModel.hasResults)
+                page.dismissLookup()
+        }
+        function onChapterUrlChanged() {
+            lookupModel.clear()
+        }
+    }
+
+    DictionaryPopupModel {
+        id: lookupModel
+        dark: Theme.dark
+        background: Theme.popupBackground
+        textColor: Theme.popupText
+
+        onHtmlChanged: {
+            if (hasResults)
+                lookupSurface.loadHtml(html, "about:blank")
         }
     }
 
@@ -174,10 +246,19 @@ Item {
                 onClicked: ReaderViewModel.verticalWriting = !ReaderViewModel.verticalWriting
             }
             ToolButton {
-                text: qsTr("Contents")
+                text: qsTr("Go to")
                 font.pixelSize: 12
                 enabled: ReaderViewModel.hasBook
+                ToolTip.visible: hovered
+                ToolTip.text: text
                 onClicked: toc.open()
+            }
+            ToolButton {
+                text: qsTr("Statistics")
+                visible: ReaderViewModel.statisticsEnabled
+                ToolTip.visible: hovered
+                ToolTip.text: text
+                onClicked: statisticsPanel.open()
             }
             ToolButton {
                 text: qsTr("Sasayaki")
@@ -187,19 +268,84 @@ Item {
             }
         }
 
-        Item {
+        Rectangle {
             Layout.fillWidth: true
             Layout.fillHeight: true
+            color: ReaderViewModel.hasBook ? ReaderViewModel.pageBackground : Theme.windowBackground
 
             WebEngineView {
                 id: web
                 anchors.fill: parent
                 visible: ReaderViewModel.hasBook
+                opacity: ReaderViewModel.restoring ? 0 : 1
                 url: ReaderViewModel.chapterUrl
-                backgroundColor: Theme.windowBackground
+                backgroundColor: ReaderViewModel.pageBackground
+                onLoadingChanged: function(request) {
+                    if (request.status === WebEngineView.LoadFailedStatus)
+                        ReaderViewModel.revealAfterLoadFailure(request.url.toString())
+                }
+                onContextMenuRequested: function(request) {
+                    if (request.selectedText.length > 0) {
+                        request.accepted = true
+                        selectionMenu.popup()
+                    }
+                }
                 webChannel: WebChannel {
                     id: channel
                     registeredObjects: [readerBridge]
+                }
+            }
+
+            Menu {
+                id: selectionMenu
+                MenuItem {
+                    text: qsTr("Copy")
+                    onTriggered: web.triggerWebAction(WebEngineView.Copy)
+                }
+                Menu {
+                    title: qsTr("Highlights")
+                    MenuItem { text: qsTr("Yellow"); onTriggered: page.createHighlight("yellow") }
+                    MenuItem { text: qsTr("Green"); onTriggered: page.createHighlight("green") }
+                    MenuItem { text: qsTr("Blue"); onTriggered: page.createHighlight("blue") }
+                    MenuItem { text: qsTr("Pink"); onTriggered: page.createHighlight("pink") }
+                    MenuItem { text: qsTr("Purple"); onTriggered: page.createHighlight("purple") }
+                }
+            }
+
+            WebEngineView {
+                id: lookupSurface
+                z: 1
+                visible: ReaderViewModel.hasBook && lookupModel.hasResults
+                backgroundColor: Theme.popupBackground
+                property rect selectionAnchor
+                readonly property int gap: 4
+                readonly property int borderInset: 6
+                readonly property real leftSpace: selectionAnchor.x - gap
+                readonly property real anchorRight: selectionAnchor.x + selectionAnchor.width
+                readonly property real anchorBottom: selectionAnchor.y + selectionAnchor.height
+                readonly property real rightSpace: web.width - anchorRight - gap
+                readonly property real aboveSpace: selectionAnchor.y - gap
+                readonly property real belowSpace: web.height - anchorBottom - gap
+                readonly property bool placeRight: rightSpace >= leftSpace || rightSpace >= 320
+                readonly property bool placeBelow: belowSpace >= aboveSpace || belowSpace >= 250
+
+                width: Math.max(1, Math.min(320, ReaderViewModel.verticalWriting
+                                ? Math.max(leftSpace, rightSpace) - borderInset
+                                : web.width - 2 * borderInset))
+                height: Math.max(1, Math.min(250, ReaderViewModel.verticalWriting
+                                 ? web.height - 2 * borderInset
+                                 : (placeBelow ? belowSpace : aboveSpace) - borderInset))
+                x: ReaderViewModel.verticalWriting
+                   ? Math.max(0, Math.min(web.width - width, placeRight
+                              ? anchorRight + gap : selectionAnchor.x - gap - width))
+                   : Math.max(borderInset, Math.min(web.width - width - borderInset, selectionAnchor.x))
+                y: Math.max(borderInset, Math.min(web.height - height - borderInset,
+                            ReaderViewModel.verticalWriting ? selectionAnchor.y : placeBelow
+                            ? anchorBottom + gap : selectionAnchor.y - gap - height))
+
+                onLoadingChanged: function(loadRequest) {
+                    if (loadRequest.status === WebEngineView.LoadSucceededStatus && visible)
+                        runJavaScript("window.renderPopup();")
                 }
             }
 
@@ -231,7 +377,7 @@ Item {
         Rectangle {
             Layout.fillWidth: true
             Layout.preferredHeight: 30
-            color: Theme.cardBackground
+            color: ReaderViewModel.pageBackground
             border.width: 1
             border.color: Theme.cardStroke
             visible: ReaderViewModel.hasBook
@@ -253,19 +399,103 @@ Item {
                          ? qsTr("%1 / %2").arg(ReaderViewModel.pageIndex).arg(ReaderViewModel.chapterPageCount)
                          : "")
                       : Math.round(ReaderViewModel.progress * 100) + "%"
-                color: Theme.textSecondary
+                color: ReaderViewModel.infoColor
                 font.pixelSize: 11
             }
         }
     }
 
     Drawer {
-        id: toc
+        id: statisticsPanel
         edge: Qt.RightEdge
         width: Math.min(380, page.width * 0.65)
         height: page.height
         modal: true
+        padding: Theme.spacingLg
+
+        ColumnLayout {
+            anchors.fill: parent
+            spacing: Theme.spacingMd
+            RowLayout {
+                Layout.fillWidth: true
+                Label {
+                    text: qsTr("Statistics")
+                    font.bold: true
+                    Layout.fillWidth: true
+                }
+                ToolButton {
+                    text: ReaderViewModel.tracking ? qsTr("Pause Tracking") : qsTr("Start Tracking")
+                    ToolTip.visible: hovered
+                    ToolTip.text: text
+                    onClicked: ReaderViewModel.toggleTracking()
+                }
+                ToolButton {
+                    text: "\u00d7"
+                    Accessible.name: qsTr("Close")
+                    ToolTip.visible: hovered
+                    ToolTip.text: qsTr("Close")
+                    onClicked: statisticsPanel.close()
+                }
+            }
+            Label {
+                text: ReaderViewModel.tracking ? qsTr("Tracking") : qsTr("Paused")
+                color: ReaderViewModel.tracking ? Theme.accent : Theme.textSecondary
+            }
+            Label { text: qsTr("Book Progress") }
+            ProgressBar {
+                Layout.fillWidth: true
+                from: 0
+                to: 1
+                value: ReaderViewModel.progress
+            }
+            Label {
+                text: qsTr("%1%").arg((ReaderViewModel.progress * 100).toFixed(1))
+            }
+            Repeater {
+                model: [
+                    { label: qsTr("Session"), total: ReaderViewModel.readingStatistics.session },
+                    { label: qsTr("Today"), total: ReaderViewModel.readingStatistics.today },
+                    { label: qsTr("All Time"), total: ReaderViewModel.readingStatistics.allTime }
+                ]
+                delegate: ColumnLayout {
+                    id: statisticRow
+                    required property var modelData
+                    visible: modelData.total !== undefined
+                    Label {
+                        text: statisticRow.modelData.label
+                        font.bold: true
+                    }
+                    Label {
+                        text: {
+                            const total = statisticRow.modelData.total
+                            if (!total)
+                                return ""
+                            const count = Number(total.count).toLocaleString(Qt.locale(), "f", 0)
+                            return (ReaderViewModel.readingStatistics.english
+                                    ? qsTr("%1 approximate words").arg(count)
+                                    : qsTr("%1 characters").arg(count))
+                                   + " · " + qsTr("%1/h").arg(total.speed)
+                                   + " · " + page.formatReadingTime(total.time)
+                        }
+                    }
+                }
+            }
+            Item { Layout.fillHeight: true }
+        }
+    }
+
+    Drawer {
+        id: toc
+        edge: Qt.LeftEdge
+        width: Math.min(380, page.width * 0.65)
+        height: page.height
+        modal: true
         padding: 0
+        onAboutToShow: navigationTabs.currentIndex = 0
+        onClosed: {
+            bookSearch.text = ""
+            ReaderViewModel.clearBookSearch()
+        }
 
         background: Rectangle {
             color: Theme.cardBackground
@@ -277,18 +507,37 @@ Item {
             anchors.fill: parent
             spacing: 0
 
-            Label {
+            RowLayout {
                 Layout.fillWidth: true
                 Layout.margins: 16
-                text: qsTr("Contents")
-                color: Theme.textPrimary
-                font.pixelSize: 16
-                font.bold: true
+                Label {
+                    Layout.fillWidth: true
+                    text: qsTr("Go to")
+                    color: Theme.textPrimary
+                    font.pixelSize: 16
+                    font.bold: true
+                }
+                ToolButton {
+                    text: "\u00d7"
+                    Accessible.name: qsTr("Close")
+                    ToolTip.visible: hovered
+                    ToolTip.text: qsTr("Close")
+                    onClicked: toc.close()
+                }
+            }
+
+            TabBar {
+                id: navigationTabs
+                Layout.fillWidth: true
+                TabButton { text: qsTr("Chapters") }
+                TabButton { text: qsTr("Search") }
+                TabButton { text: qsTr("Highlights") }
             }
 
             ListView {
                 Layout.fillWidth: true
                 Layout.fillHeight: true
+                visible: navigationTabs.currentIndex === 0
                 clip: true
                 model: ReaderViewModel.chapters
                 currentIndex: ReaderViewModel.chapters.findIndex(
@@ -304,6 +553,144 @@ Item {
                         ReaderViewModel.goToContentsEntry(chapterItem.modelData.index,
                                                           chapterItem.modelData.fragment)
                         toc.close()
+                    }
+                }
+            }
+
+            ColumnLayout {
+                visible: navigationTabs.currentIndex === 1
+                Layout.fillWidth: true
+                Layout.fillHeight: true
+
+                RowLayout {
+                    Layout.fillWidth: true
+                    Layout.margins: Theme.spacingSm
+                    TextField {
+                        id: bookSearch
+                        Layout.fillWidth: true
+                        placeholderText: qsTr("Search in this book")
+                        onAccepted: ReaderViewModel.searchBook(text)
+                        onTextChanged: {
+                            if (!ReaderViewModel.hasSearchableText(text))
+                                ReaderViewModel.clearBookSearch()
+                        }
+                    }
+                    ToolButton {
+                        text: qsTr("Search")
+                        enabled: ReaderViewModel.hasSearchableText(bookSearch.text)
+                                 && ReaderViewModel.searchState !== 1
+                        ToolTip.visible: hovered
+                        ToolTip.text: text
+                        onClicked: ReaderViewModel.searchBook(bookSearch.text)
+                    }
+                }
+
+                Item {
+                    Layout.fillWidth: true
+                    Layout.fillHeight: true
+                    BusyIndicator {
+                        anchors.horizontalCenter: parent.horizontalCenter
+                        anchors.bottom: searchStatus.top
+                        running: ReaderViewModel.searchState === 1
+                    }
+                    Label {
+                        id: searchStatus
+                        anchors.centerIn: parent
+                        visible: ReaderViewModel.searchResults.length === 0
+                        color: Theme.textSecondary
+                        text: {
+                            switch (ReaderViewModel.searchState) {
+                            case 1: return qsTr("Searching…")
+                            case 2: return qsTr("No matches")
+                            case 3: return qsTr("Could not search this book")
+                            default: return qsTr("Enter text to search this book")
+                            }
+                        }
+                    }
+                    ListView {
+                        anchors.fill: parent
+                        clip: true
+                        visible: ReaderViewModel.searchResults.length > 0
+                        model: ReaderViewModel.searchResults
+                        delegate: Column {
+                            id: hitGroup
+                            required property var modelData
+                            width: ListView.view.width
+                            Label {
+                                visible: hitGroup.modelData.groupCount > 0
+                                padding: Theme.spacingSm
+                                color: Theme.textSecondary
+                                text: (hitGroup.modelData.label || qsTr("Untitled Chapter"))
+                                      + " · " + qsTr("%n result(s)", "", hitGroup.modelData.groupCount)
+                            }
+                            ItemDelegate {
+                                width: hitGroup.width
+                                contentItem: Label {
+                                    wrapMode: Text.Wrap
+                                    maximumLineCount: 3
+                                    textFormat: Text.RichText
+                                    text: hitGroup.modelData.before
+                                          + "<span style=\"background-color:" + Theme.accent + "\">"
+                                          + hitGroup.modelData.match + "</span>" + hitGroup.modelData.after
+                                    color: Theme.textPrimary
+                                }
+                                onClicked: {
+                                    ReaderViewModel.jumpToCharacter(hitGroup.modelData.character)
+                                    toc.close()
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            Item {
+                visible: navigationTabs.currentIndex === 2
+                Layout.fillWidth: true
+                Layout.fillHeight: true
+                Label {
+                    anchors.centerIn: parent
+                    visible: ReaderViewModel.highlights.length === 0
+                    text: qsTr("No Highlights")
+                    color: Theme.textSecondary
+                }
+                ListView {
+                    anchors.fill: parent
+                    clip: true
+                    model: ReaderViewModel.highlights
+                    section.property: "label"
+                    section.delegate: Label {
+                        required property string section
+                        text: section
+                        padding: Theme.spacingSm
+                        color: Theme.textSecondary
+                    }
+                    delegate: ItemDelegate {
+                        id: highlightRow
+                        required property var modelData
+                        width: ListView.view.width
+                        contentItem: Label {
+                            text: highlightRow.modelData.text
+                            textFormat: Text.PlainText
+                            color: Theme.textPrimary
+                            wrapMode: Text.Wrap
+                            maximumLineCount: 4
+                        }
+                        onClicked: {
+                            ReaderViewModel.jumpToCharacter(modelData.character)
+                            toc.close()
+                        }
+                        TapHandler {
+                            acceptedButtons: Qt.RightButton
+                            onTapped: highlightMenu.popup()
+                        }
+                        Menu {
+                            id: highlightMenu
+                            MenuItem {
+                                text: qsTr("Delete")
+                                onTriggered: ReaderViewModel.removeHighlight(highlightRow.modelData.id)
+                            }
+                        }
                     }
                 }
             }

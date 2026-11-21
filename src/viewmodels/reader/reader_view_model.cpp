@@ -4,8 +4,12 @@
 
 #include <QDateTime>
 #include <QFile>
+#include <QFutureWatcher>
 #include <QJsonArray>
 #include <QJsonObject>
+#include <QPromise>
+#include <QThreadPool>
+#include <QUuid>
 
 #include <algorithm>
 #include <cmath>
@@ -16,6 +20,8 @@
 #include "models/statistics/statistics.h"
 #include "services/books/book_storage.h"
 #include "services/reader/reading_tracker.h"
+#include "services/reader/book_search.h"
+#include "services/reader/theme.h"
 #include "services/storage/app_paths.h"
 #include "services/storage/json_file.h"
 
@@ -102,6 +108,14 @@ std::string resolve_furigana(const ReaderProfileSettings& settings) {
     return settings.hide_furigana ? "Hidden" : "Off";
 }
 
+QColor qcolor_from_css(const std::string& css) {
+    QString color = QString::fromStdString(css);
+    if (color.size() == 9) {
+        color = QLatin1Char('#') + color.right(2) + color.mid(1, 6);
+    }
+    return QColor::fromString(color);
+}
+
 }  // namespace
 
 struct ReaderViewModel::State {
@@ -126,7 +140,15 @@ struct ReaderViewModel::State {
     ReaderScripts assets;
     ReaderProfileSettings settings = profiles::default_reader_settings();
     std::optional<ReaderProfileSettings> loaded_settings;
+    std::string content_language = "ja";
+    int scan_length = 16;
+    bool scan_non_japanese = true;
     std::optional<BookSession> session;
+    std::filesystem::path epub_path;
+    std::size_t search_revision = 0;
+    QVariantList search_results;
+    int search_state = 0;
+    std::vector<books::Highlight> highlights;
     books::BookMetadata book;
     bool has_book = false;
 
@@ -134,6 +156,8 @@ struct ReaderViewModel::State {
     std::unique_ptr<BookStatisticsStore> statistics_store;
     std::unique_ptr<ReadingTracker> tracker;
     bool statistics_enabled = false;
+    bool reader_active = false;
+    bool jump_pending = false;
     int statistics_today_characters = 0;
     int statistics_today_seconds = 0;
     int statistics_session_speed = 0;
@@ -150,8 +174,10 @@ struct ReaderViewModel::State {
     QString error;
     QString chapter_url;
     bool dark = false;
+    bool system_dark = false;
     std::string background;
     std::string text;
+    std::string info_color;
 };
 
 ReaderViewModel* ReaderViewModel::instance() {
@@ -169,6 +195,7 @@ ReaderViewModel* ReaderViewModel::create(QQmlEngine*, QJSEngine*) {
 ReaderViewModel::ReaderViewModel()
     : state_(std::make_unique<State>([this] { reload_settings(true); })) {
     reload_settings(false);
+    update_palette();
 }
 
 ReaderViewModel::~ReaderViewModel() = default;
@@ -203,7 +230,7 @@ double ReaderViewModel::progress() const {
     }
     const int characters =
         state_->session->character_offset(state_->chapter_index, state_->chapter_progress);
-    return static_cast<double>(characters) / state_->session->info().character_count;
+    return clamp_progress(static_cast<double>(characters) / state_->session->info().character_count);
 }
 
 double ReaderViewModel::chapter_progress() const { return state_->chapter_progress; }
@@ -232,6 +259,161 @@ QVariantList ReaderViewModel::chapters() const {
     return result;
 }
 
+QVariantList ReaderViewModel::search_results() const { return state_->search_results; }
+
+int ReaderViewModel::search_state() const { return state_->search_state; }
+
+bool ReaderViewModel::hasSearchableText(const QString& query) const {
+    return reader::has_searchable_text(query);
+}
+
+void ReaderViewModel::clearBookSearch() {
+    ++state_->search_revision;
+    state_->search_results.clear();
+    state_->search_state = 0;
+    emit searchChanged();
+}
+
+void ReaderViewModel::searchBook(const QString& query) {
+    if (!state_->session || !hasSearchableText(query)) {
+        clearBookSearch();
+        return;
+    }
+    using Results = std::optional<std::vector<reader::SearchHit>>;
+    const auto revision = ++state_->search_revision;
+    const auto path = state_->epub_path;
+    state_->search_results.clear();
+    state_->search_state = 1;
+    emit searchChanged();
+    auto* watcher = new QFutureWatcher<Results>(this);
+    connect(watcher, &QFutureWatcher<Results>::finished, this, [this, watcher, revision] {
+        watcher->deleteLater();
+        if (revision != state_->search_revision) {
+            return;
+        }
+        const auto hits = watcher->result();
+        state_->search_state = hits ? 2 : 3;
+        if (hits) {
+            std::size_t group_end = 0;
+            for (std::size_t i = 0; i < hits->size(); ++i) {
+                const auto& hit = hits->at(i);
+                int group_count = 0;
+                if (i == group_end) {
+                    do {
+                        ++group_end;
+                    } while (group_end < hits->size() && hits->at(group_end).spine_index == hit.spine_index);
+                    group_count = static_cast<int>(group_end - i);
+                }
+                state_->search_results.append(QVariantMap{
+                    {QStringLiteral("groupCount"), group_count},
+                    {QStringLiteral("character"), hit.character},
+                    {QStringLiteral("label"), hit.label},
+                    {QStringLiteral("before"), hit.snippet.left(hit.match_start).toHtmlEscaped()},
+                    {QStringLiteral("match"), hit.snippet.mid(hit.match_start, hit.match_end - hit.match_start).toHtmlEscaped()},
+                    {QStringLiteral("after"), hit.snippet.mid(hit.match_end).toHtmlEscaped()},
+                });
+            }
+        }
+        emit searchChanged();
+    });
+    QPromise<Results> promise;
+    watcher->setFuture(promise.future());
+    QThreadPool::globalInstance()->start([work = std::move(promise), path, query]() mutable {
+        work.start();
+        work.addResult(reader::search_epub(path, query));
+        work.finish();
+    });
+}
+
+void ReaderViewModel::jumpToCharacter(int character) {
+    if (!state_->session) {
+        return;
+    }
+    if (const auto position = state_->session->position_for_character(character)) {
+        persist_bookmark();
+        save_statistics();
+        state_->jump_pending = true;
+        load_chapter(position->first, position->second);
+    }
+}
+
+QVariantList ReaderViewModel::highlights() const {
+    QVariantList rows;
+    if (!state_->session) {
+        return rows;
+    }
+    const auto entries = books::highlights_in_range(
+        state_->highlights, 0, state_->session->info().character_count);
+    for (const auto& hit : entries) {
+        const auto position = state_->session->position_for_character(hit.character);
+        if (!position) {
+            continue;
+        }
+        rows.append(QVariantMap{
+            {QStringLiteral("id"), QString::fromStdString(hit.id)},
+            {QStringLiteral("spine"), position->first},
+            {QStringLiteral("label"), QString::fromStdString(state_->session->chapter_title(position->first))},
+            {QStringLiteral("text"), QString::fromStdString(hit.text).trimmed()},
+            {QStringLiteral("character"), hit.character},
+            {QStringLiteral("color"), QString::fromStdString(hit.color)},
+        });
+    }
+    return rows;
+}
+
+QString ReaderViewModel::highlightScript(const QString& color) const {
+    if (!state_->session || state_->restoring || !books::is_highlight_color(color.toStdString())) {
+        return {};
+    }
+    const auto id = QUuid::createUuid().toString(QUuid::WithoutBraces);
+    return QStringLiteral("(function() { const id = '%1';"
+                          "const mark = window.hoshiHighlights?.createHighlight('%2', id);"
+                          "return mark ? { ...mark, id } : null; })()").arg(id, color);
+}
+
+void ReaderViewModel::addHighlight(const QString& script_url, const QString& color,
+                                   const QVariant& creation) {
+    if (!state_->session || script_url != chapter_url() || !books::is_highlight_color(color.toStdString())) {
+        return;
+    }
+    const auto data = creation.toMap();
+    bool valid_start = false;
+    bool valid_offset = false;
+    const int start = data.value(QStringLiteral("start")).toInt(&valid_start);
+    const int offset = data.value(QStringLiteral("offset")).toInt(&valid_offset);
+    const auto id = data.value(QStringLiteral("id")).toString();
+    const auto text = data.value(QStringLiteral("text")).toString();
+    const int chapter_start = state_->session->character_offset(state_->chapter_index, 0);
+    const int chapter_end = state_->session->character_offset(state_->chapter_index, 1);
+    if (!valid_start || !valid_offset || start < 0 || start >= chapter_end - chapter_start ||
+        offset < 0 || QUuid(id).isNull() || text.isEmpty()) {
+        return;
+    }
+    auto highlights = state_->highlights;
+    highlights.push_back({id.toStdString(), chapter_start + start, offset, text.toStdString(),
+                          color.toStdString(), books::reference_now()});
+    if (state_->storage.save_highlights(state_->book.folder, highlights)) {
+        state_->highlights = std::move(highlights);
+        emit highlightsChanged();
+    } else {
+        reload_document();
+    }
+}
+
+void ReaderViewModel::removeHighlight(const QString& id) {
+    if (!state_->session) {
+        return;
+    }
+    auto highlights = state_->highlights;
+    if (std::erase_if(highlights, [&id](const auto& entry) {
+            return QString::fromStdString(entry.id) == id;
+        }) != 0 && state_->storage.save_highlights(state_->book.folder, highlights)) {
+        state_->highlights = std::move(highlights);
+        emit highlightsChanged();
+        reload_document();
+    }
+}
+
 QString ReaderViewModel::error() const { return state_->error; }
 
 bool ReaderViewModel::has_book() const { return state_->has_book; }
@@ -239,18 +421,54 @@ bool ReaderViewModel::has_book() const { return state_->has_book; }
 bool ReaderViewModel::dark() const { return state_->dark; }
 
 void ReaderViewModel::setDark(bool dark) {
-    if (state_->dark == dark) {
+    if (state_->system_dark == dark) {
         return;
     }
-    state_->dark = dark;
-    emit paletteChanged();
+    state_->system_dark = dark;
+    update_palette();
     reload_document();
 }
 
 void ReaderViewModel::setReaderColors(const QString& background, const QString& text) {
-    state_->background = background.toStdString();
-    state_->text = text.toStdString();
+    state_->background = reader::profile_color(background.toStdString());
+    state_->text = reader::profile_color(text.toStdString());
+    emit paletteChanged();
     reload_document();
+}
+
+QColor ReaderViewModel::page_background() const { return qcolor_from_css(state_->background); }
+
+QColor ReaderViewModel::info_color() const { return qcolor_from_css(state_->info_color); }
+
+void ReaderViewModel::update_palette() {
+    const auto& settings = state_->settings;
+    reader::ThemeInput input;
+    input.theme = reader::theme_from_id(settings.theme);
+    input.ui_theme = reader::theme_from_id(settings.ui_theme);
+    input.system_dark = state_->system_dark;
+    input.system_light_sepia = settings.system_light_sepia;
+    input.custom_background = reader::profile_color(settings.custom_background_color);
+    input.custom_text = reader::profile_color(settings.custom_text_color);
+    const auto palette = reader::resolve_theme(input);
+    state_->dark = palette.dark;
+    state_->background = palette.background;
+    state_->text = palette.text && !palette.text->empty() ? *palette.text
+                                                        : reader::default_reader_text(palette.dark);
+    state_->info_color = input.theme == reader::Theme::custom
+                             ? reader::profile_color(settings.custom_info_color) : state_->text;
+    emit paletteChanged();
+}
+
+bool ReaderViewModel::restoring() const { return state_->restoring; }
+
+void ReaderViewModel::revealAfterLoadFailure(const QString& url) {
+    if (url != chapter_url() || !state_->restoring) {
+        return;
+    }
+    state_->restoring = false;
+    state_->jump_pending = false;
+    state_->reveal_cue_after_restore = false;
+    emit restoreStateChanged();
 }
 
 bool ReaderViewModel::vertical_writing() const { return state_->settings.vertical_writing; }
@@ -312,7 +530,59 @@ int ReaderViewModel::statistics_session_speed() const {
 
 bool ReaderViewModel::statistics_enabled() const { return state_->statistics_enabled; }
 
+bool ReaderViewModel::tracking() const {
+    return state_->tracker && state_->tracker->is_tracking();
+}
+
+QVariantMap ReaderViewModel::reading_statistics() const {
+    if (!state_->tracker || !state_->session) {
+        return {};
+    }
+    const auto now = now_milliseconds();
+    const auto session = state_->tracker->session_total();
+    const auto today = state_->tracker->today_total(now);
+    const auto all_time = state_->tracker->all_time_total();
+    const bool english = state_->content_language == "en";
+    const auto present = [english](const ReadingTotal& total) {
+        const auto count = [english](int raw) {
+            return english ? static_cast<int>(std::ceil(raw / 5.0)) : raw;
+        };
+        return QVariantMap{{QStringLiteral("count"), count(total.characters_read)},
+                           {QStringLiteral("speed"), count(total.reading_speed())},
+                           {QStringLiteral("time"), total.reading_time}};
+    };
+    return {{QStringLiteral("session"), present(session)},
+            {QStringLiteral("today"), present(today)},
+            {QStringLiteral("allTime"), present(all_time)},
+            {QStringLiteral("english"), english}};
+}
+
+void ReaderViewModel::toggleTracking() {
+    if (!state_->tracker) {
+        return;
+    }
+    const auto now = now_milliseconds();
+    state_->tracker->toggle(now);
+    if (state_->tracker->is_tracking()) {
+        state_->tracker->reset_position(
+            state_->session->character_offset(state_->chapter_index, state_->chapter_progress), now);
+    } else {
+        save_statistics();
+    }
+    refresh_statistics();
+    emit statisticsChanged();
+}
+
+void ReaderViewModel::tickTracking() {
+    if (tracking()) {
+        state_->tracker->flush(now_milliseconds());
+        refresh_statistics();
+        emit statisticsChanged();
+    }
+}
+
 void ReaderViewModel::setReaderActive(bool active) {
+    state_->reader_active = active;
     if (state_->tracker) {
         state_->tracker->set_context_active(active, now_milliseconds());
     }
@@ -356,6 +626,10 @@ bool ReaderViewModel::openBook(const QString& folder) {
     }
 
     state_->book = *metadata;
+    state_->highlights = state_->storage.load_highlights(state_->book.folder)
+                             .value_or(std::vector<books::Highlight>{});
+    clearBookSearch();
+    state_->epub_path = *epub;
     state_->session = std::move(session);
     state_->has_book = true;
     state_->error.clear();
@@ -382,6 +656,7 @@ bool ReaderViewModel::openBook(const QString& folder) {
         if (statistics_settings.autostart_mode == StatisticsAutostartMode::on) {
             state_->tracker->start(now_milliseconds());
         }
+        state_->tracker->set_context_active(state_->reader_active, now_milliseconds());
     }
 
     int chapter = 0;
@@ -397,6 +672,7 @@ bool ReaderViewModel::openBook(const QString& folder) {
     reload_settings(false);
 
     emit bookChanged();
+    emit highlightsChanged();
     reload_document();
     emit chapterChanged();
     emit progressChanged();
@@ -409,6 +685,7 @@ void ReaderViewModel::closeBook() {
         return;
     }
     persist_bookmark();
+    clearBookSearch();
     if (state_->tracker) {
         const std::int64_t now = now_milliseconds();
         state_->tracker->stop(now);
@@ -418,15 +695,19 @@ void ReaderViewModel::closeBook() {
     state_->statistics_store.reset();
     state_->statistics_enabled = false;
     state_->session.reset();
+    state_->highlights.clear();
     state_->book = books::BookMetadata{};
     state_->has_book = false;
     state_->chapter_index = 0;
     state_->chapter_progress = 0.0;
     state_->restoring = false;
+    state_->jump_pending = false;
+    emit restoreStateChanged();
     state_->fragment.clear();
     state_->chapter_url.clear();
     set_pagination(0, 0);
     emit bookChanged();
+    emit highlightsChanged();
     emit chapterChanged();
     emit progressChanged();
     emit chapterUrlChanged();
@@ -462,6 +743,7 @@ void ReaderViewModel::goToContentsEntry(int index, const QString& fragment) {
     }
     persist_bookmark();
     save_statistics();
+    state_->jump_pending = true;
     load_chapter(index, 0.0, fragment);
 }
 
@@ -469,15 +751,8 @@ void ReaderViewModel::goToProgress(double progress) {
     if (!state_->session.has_value()) {
         return;
     }
-    const auto position =
-        state_->session->position_for_character(static_cast<int>(
-            clamp_progress(progress) * state_->session->info().character_count));
-    if (!position.has_value()) {
-        return;
-    }
-    persist_bookmark();
-    save_statistics();
-    load_chapter(position->first, position->second);
+    jumpToCharacter(static_cast<int>(clamp_progress(progress) *
+                                     state_->session->info().character_count));
 }
 
 QString ReaderViewModel::pageTurnScript(bool forward) const {
@@ -562,7 +837,19 @@ void ReaderViewModel::message(const QString& name, const QString& payload) {
     if (data.value(QStringLiteral("token")).toString() != QString::number(state_->revision)) {
         return;
     }
-    if (name == QStringLiteral("wheelNavigation")) {
+    if (name == QStringLiteral("textSelected") && !state_->restoring) {
+        const QString text = data.value(QStringLiteral("text")).toString();
+        const auto rect = data.value(QStringLiteral("rect")).toObject();
+        const double x = rect.value(QStringLiteral("x")).toDouble();
+        const double y = rect.value(QStringLiteral("y")).toDouble();
+        const double width = rect.value(QStringLiteral("width")).toDouble();
+        const double height = rect.value(QStringLiteral("height")).toDouble();
+        if (!text.trimmed().isEmpty() && width > 0 && height > 0) {
+            emit lookupRequested(text, QRectF(x, y, width, height));
+        }
+    } else if (name == QStringLiteral("tapOutside") && !state_->restoring) {
+        emit readerTappedOutside();
+    } else if (name == QStringLiteral("wheelNavigation")) {
         const QString direction = data.value(QStringLiteral("direction")).toString();
         if (state_->restoring ||
             (direction != QStringLiteral("forward") && direction != QStringLiteral("backward"))) {
@@ -576,13 +863,21 @@ void ReaderViewModel::message(const QString& name, const QString& payload) {
         emit pageTurnRequested(direction);
     } else if (name == QStringLiteral("restoreCompleted") && state_->restoring) {
         state_->restoring = false;
+        emit restoreStateChanged();
         if (!state_->fragment.isEmpty()) {
             state_->fragment.clear();
             // An explicit jump records the destination without counting it as read.
             state_->chapter_progress =
                 clamp_progress(data.value(QStringLiteral("fragmentProgress")).toDouble());
             emit progressChanged();
+        }
+        if (std::exchange(state_->jump_pending, false)) {
             persist_bookmark();
+            if (state_->tracker) {
+                state_->tracker->reset_position(
+                    state_->session->character_offset(state_->chapter_index, state_->chapter_progress),
+                    now_milliseconds());
+            }
         }
         const bool reveal = std::exchange(state_->reveal_cue_after_restore, false);
         emit documentRestored(reveal);
@@ -643,21 +938,30 @@ void ReaderViewModel::reload_document() {
     url.setQuery(QStringLiteral("v=%1").arg(state_->revision));
     state_->chapter_url = QString::fromUtf8(url.toEncoded());
     set_pagination(0, 0);
+    emit restoreStateChanged();
     emit chapterUrlChanged();
 }
 
 void ReaderViewModel::reload_settings(bool reflow) {
     const auto settings = state_->settings_watch.read();
-    if (!settings || (reflow && settings == state_->loaded_settings)) {
-        return;
+    const auto& lookup = state_->settings_watch.lookup_settings;
+    const bool lookup_changed = state_->content_language != state_->settings_watch.content_language ||
+                                state_->scan_length != lookup.scan_length ||
+                                state_->scan_non_japanese != lookup.scan_non_japanese_text;
+    state_->content_language = state_->settings_watch.content_language;
+    state_->scan_length = lookup.scan_length;
+    state_->scan_non_japanese = lookup.scan_non_japanese_text;
+    bool reader_changed = false;
+    if (settings && (!reflow || settings != state_->loaded_settings)) {
+        state_->loaded_settings = settings;
+        reader_changed = *settings != state_->settings;
+        if (reader_changed) {
+            state_->settings = *settings;
+            update_palette();
+            emit settingsChanged();
+        }
     }
-    state_->loaded_settings = settings;
-    if (*settings == state_->settings) {
-        return;
-    }
-    state_->settings = *settings;
-    emit settingsChanged();
-    if (reflow) {
+    if (reflow && (reader_changed || lookup_changed)) {
         state_->reveal_cue_after_restore = false;
         reload_document();
     }
@@ -748,13 +1052,25 @@ std::string ReaderViewModel::shell_document(const std::string& path) {
     input.appearance.character_spacing = state_->settings.character_spacing;
     input.appearance.paragraph_spacing = state_->settings.paragraph_spacing;
     input.appearance.furigana_mode = resolve_furigana(state_->settings);
+    input.scan_length = state_->scan_length;
+    input.scan_non_japanese_text = state_->scan_non_japanese;
+    input.content_language = state_->content_language;
+    input.hover_delay_ms = 45;
 
     input.page = PageSize{state_->page_width, state_->page_height};
     input.colors.text = state_->text;
-    input.colors.background = state_->background.empty() ? "#FFFFFF" : state_->background;
+    input.colors.background = state_->background;
     input.colors.sasayaki_text = state_->text;
     input.colors.sasayaki_background = "#00000000";
     input.restore_token = std::to_string(state_->revision);
+    const auto highlights = books::highlights_in_range(
+        state_->highlights, state_->session->character_offset(state_->chapter_index, 0),
+        state_->session->character_offset(state_->chapter_index, 1));
+    if (!highlights.empty()) {
+        auto json = books::highlights_to_json(highlights).toJson(QJsonDocument::Compact);
+        json.replace("<", "\\u003c");
+        input.highlights_json = json.toStdString();
+    }
     if (!state_->fragment.isEmpty()) {
         input.initial_restore_expression =
             "window.hoshiReader.jumpToFragment(" + script_string(state_->fragment) + ")";

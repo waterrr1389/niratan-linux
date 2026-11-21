@@ -111,12 +111,19 @@ window.hoshiSend = function(name, payload) {
 };
 window.webkit = {
     messageHandlers: {
-        textSelected: { postMessage: function(payload) { window.hoshiSend('textSelected', JSON.stringify(payload)); } },
+        textSelected: { postMessage: function(payload) {
+            window.hoshiSend('textSelected', JSON.stringify({ ...payload, token: window.hoshiReaderRestoreToken }));
+        } },
         selectionState: { postMessage: function(payload) { window.hoshiSend('selectionState', JSON.stringify(payload)); } },
         pageChanged: { postMessage: function(payload) { window.hoshiSend('pageChanged', JSON.stringify(payload)); } },
-        restoreCompleted: { postMessage: function(payload) { window.hoshiSend('restoreCompleted', JSON.stringify(payload)); } },
+        restoreCompleted: { postMessage: function(payload) {
+            clearTimeout(window.hoshiRestoreTimeout);
+            window.hoshiSend('restoreCompleted', JSON.stringify(payload));
+        } },
         wheelNavigation: { postMessage: function(payload) { window.hoshiSend('wheelNavigation', JSON.stringify(payload)); } },
-        tapOutside: { postMessage: function(payload) { window.hoshiSend('tapOutside', JSON.stringify(payload)); } },
+        tapOutside: { postMessage: function() {
+            window.hoshiSend('tapOutside', JSON.stringify({ token: window.hoshiReaderRestoreToken }));
+        } },
         imageTapped: { postMessage: function(payload) { window.hoshiSend('imageTapped', JSON.stringify(payload)); } },
         spineMeasured: { postMessage: function(payload) { window.hoshiSend('spineMeasured', JSON.stringify(payload)); } },
         progressChanged: { postMessage: function(payload) { window.hoshiSend('progressChanged', JSON.stringify(payload)); } }
@@ -285,6 +292,23 @@ std::string reader_script_block(const ShellInput& input, const ReaderScripts& sc
     }
 
     script += "    const lookupScanLength = " + std::to_string(input.scan_length) + ";\n";
+    script += R"js(    document.addEventListener('click', event => {
+        if (event.button !== 0 ||
+            event.target?.closest?.('a, button, input, textarea, select, [contenteditable="true"]')) {
+            return;
+        }
+        if (window.hoshiParagraph?.finishTextAnimation()) {
+            event.preventDefault();
+            event.stopPropagation();
+            return;
+        }
+        const selection = window.getSelection();
+        if (selection && !selection.isCollapsed) { return; }
+        if (!window.hoshiSelection.selectText(event.clientX, event.clientY, lookupScanLength)) {
+            window.webkit.messageHandlers.tapOutside.postMessage();
+        }
+    }, true);
+)js";
     script += "    window.hoshiSelection.registerModifierTracking();\n";
     script += "    window.hoshiSelection.registerShiftHoverLookup(" +
               std::to_string(input.scan_length) + ", " + std::to_string(input.hover_delay_ms) +
@@ -304,8 +328,23 @@ std::string reader_script_block(const ShellInput& input, const ReaderScripts& sc
     }
 
     if (!input.initial_restore_expression.empty()) {
-        script += "    document.fonts.ready.then(() => " + input.initial_restore_expression +
-                  ");\n";
+        script += R"js(    let timedOut = false;
+    const revealFallback = () => {
+        timedOut = true;
+        window.hoshiReader.notifyRestoreComplete();
+    };
+    window.hoshiRestoreTimeout = setTimeout(revealFallback, 2500);
+    const readyImages = Array.from(document.images, image =>
+        image.complete ? Promise.resolve() : image.decode().catch(() => {}));
+    Promise.all([document.fonts.ready, ...readyImages]).then(() => {
+        if (timedOut) { return; }
+)js";
+        if (!input.highlights_json.empty()) {
+            script += "        window.hoshiHighlights.applyHighlights(" + input.highlights_json +
+                      ");\n";
+        }
+        script += "        return " + input.initial_restore_expression + ";\n";
+        script += "    }).catch(revealFallback);\n";
     }
 
     script += "})();\n";

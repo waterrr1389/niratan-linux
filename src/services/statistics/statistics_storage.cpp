@@ -479,6 +479,12 @@ StatisticsReadResult load_statistics(const std::filesystem::path& book_root, int
 
 std::vector<Statistics> read_daily_statistics(const std::filesystem::path& book_root,
                                               int reset_minutes, const QTimeZone& zone) {
+    return read_dashboard_statistics(book_root, reset_minutes, zone).value_or(
+        std::vector<Statistics>{});
+}
+
+std::optional<std::vector<Statistics>> read_dashboard_statistics(
+    const std::filesystem::path& book_root, int reset_minutes, const QTimeZone& zone) {
     const std::optional<std::vector<Statistics>> daily_rows = load_daily(book_root);
     const std::optional<SessionsFile> sessions_file = load_sessions_file(book_root);
     if (sessions_file.has_value()) {
@@ -488,7 +494,10 @@ std::vector<Statistics> read_daily_statistics(const std::filesystem::path& book_
     if (daily_rows.has_value()) {
         return visible_statistics(*daily_rows);
     }
-    return {};
+    if (has_statistics(book_root)) {
+        return std::nullopt;
+    }
+    return std::vector<Statistics>{};
 }
 
 bool save_statistics(const std::filesystem::path& book_root,

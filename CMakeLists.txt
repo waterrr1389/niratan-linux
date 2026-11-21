@@ -44,6 +44,7 @@ qt_add_library(niratan_core STATIC
     src/services/dictionary/text_selection.cpp
     src/services/reader/theme.cpp
     src/services/reader/book_session.cpp
+    src/services/reader/book_search.cpp
     src/services/reader/character_normalizer.cpp
     src/services/reader/layout.cpp
     src/services/reader/reader_css.cpp
@@ -68,6 +69,8 @@ qt_add_library(niratan_core STATIC
     src/services/statistics/statistics_storage.cpp
     src/services/novels/epub_book.cpp
     src/services/player/mining_history.cpp
+    src/services/player/playback_controls.cpp
+    src/services/player/video_settings.cpp
     src/services/profiles/profile_repository.cpp
     src/services/storage/app_paths.cpp
     src/services/storage/json_file.cpp
@@ -134,6 +137,7 @@ qt_add_qml_module(niratan
         src/views/pages/SettingsPage.qml
         src/views/reader/SasayakiPanel.qml
         src/views/player/StudySidebar.qml
+        src/views/player/VideoSettingsPanel.qml
         src/views/pages/ReaderPage.qml
         src/views/theme/Theme.qml
         src/views/theme/ThemePreview.qml

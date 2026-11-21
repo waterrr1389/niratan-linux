@@ -33,6 +33,10 @@ QtObject {
 
     readonly property color windowBackground: dark ? "#1E1E1E" : "#ECECEC"
 
+    // The video stage stays black in both themes: letterboxing must not follow
+    // the window surface.
+    readonly property color videoBackground: "#000000"
+
     readonly property color cardBackground: dark ? "#262626" : "#F1F1F1"
     readonly property color cardStroke: dark ? "#21FFFFFF" : "#17000000"
     readonly property int cardRadius: 18

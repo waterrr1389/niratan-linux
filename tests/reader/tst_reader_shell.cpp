@@ -137,11 +137,16 @@ void ReaderShellTest::paragraph_script_is_only_included_in_paragraph_mode() {
 
 void ReaderShellTest::the_restore_runs_after_the_fonts_are_ready() {
     const std::string block = reader_script_block(input(), scripts());
-    QVERIFY(has(block, "document.fonts.ready.then(() => window.hoshiReader.restoreProgress(0.25))"));
+    const auto ready = block.find("Promise.all([document.fonts.ready, ...readyImages])");
+    const auto restore = block.find("return window.hoshiReader.restoreProgress(0.25)");
+    QVERIFY(ready != std::string::npos);
+    QVERIFY(restore != std::string::npos);
+    QVERIFY(ready < restore);
+    QVERIFY(has(block, "setTimeout(revealFallback, 2500)"));
 
     ShellInput empty = input();
     empty.initial_restore_expression.clear();
-    QVERIFY(!has(reader_script_block(empty, scripts()), "document.fonts.ready.then(() => window.hoshiReader"));
+    QVERIFY(!has(reader_script_block(empty, scripts()), "setTimeout(revealFallback"));
 }
 
 void ReaderShellTest::the_bridge_shim_is_installed_before_the_scripts() {

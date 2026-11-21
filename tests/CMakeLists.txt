@@ -270,6 +270,14 @@ target_link_libraries(tst_reader_shell PRIVATE niratan_core Qt6::Test)
 target_compile_options(tst_reader_shell PRIVATE -Wall -Wextra -Wpedantic -Werror)
 add_test(NAME reader_shell COMMAND tst_reader_shell)
 
+qt_add_executable(tst_book_search
+    reader/tst_book_search.cpp
+)
+target_include_directories(tst_book_search PRIVATE ${CMAKE_SOURCE_DIR}/src)
+target_link_libraries(tst_book_search PRIVATE niratan_core Qt6::Test)
+target_compile_options(tst_book_search PRIVATE -Wall -Wextra -Wpedantic -Werror)
+add_test(NAME book_search COMMAND tst_book_search)
+
 qt_add_executable(tst_book_session
     reader/tst_book_session.cpp
 )
@@ -317,6 +325,22 @@ target_include_directories(tst_mining_history PRIVATE ${CMAKE_SOURCE_DIR}/src)
 target_link_libraries(tst_mining_history PRIVATE niratan_core Qt6::Test)
 target_compile_options(tst_mining_history PRIVATE -Wall -Wextra -Wpedantic -Werror)
 add_test(NAME mining_history COMMAND tst_mining_history)
+
+qt_add_executable(tst_playback_controls
+    player/tst_playback_controls.cpp
+)
+target_include_directories(tst_playback_controls PRIVATE ${CMAKE_SOURCE_DIR}/src)
+target_link_libraries(tst_playback_controls PRIVATE niratan_core Qt6::Test)
+target_compile_options(tst_playback_controls PRIVATE -Wall -Wextra -Wpedantic -Werror)
+add_test(NAME playback_controls COMMAND tst_playback_controls)
+
+qt_add_executable(tst_video_settings
+    player/tst_video_settings.cpp
+)
+target_include_directories(tst_video_settings PRIVATE ${CMAKE_SOURCE_DIR}/src)
+target_link_libraries(tst_video_settings PRIVATE niratan_core Qt6::Test)
+target_compile_options(tst_video_settings PRIVATE -Wall -Wextra -Wpedantic -Werror)
+add_test(NAME video_settings COMMAND tst_video_settings)
 
 qt_add_executable(tst_sasayaki
     sasayaki/tst_sasayaki.cpp

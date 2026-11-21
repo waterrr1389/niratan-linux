@@ -24,10 +24,8 @@
 // Chapters, subtitle transcripts and mining history live in the docked study
 // sidebar. The timeline also shows chapter markers. An inspector, an ambient backdrop,
 // remote and media-server sources, playlist navigation, screenshot UI,
-// drag-and-drop and full subtitle styling are not included.
-// The page tracks its requested A-B state. The floating bar cannot be dragged, the
-// compact-bottom layout and the density switching are not reproduced, and the
-// pointer cursor is not hidden.
+// drag-and-drop and interactive subtitle rendering are not included.
+// Both the playback bar and the study dock project the same A-B state.
 
 pragma ComponentBehavior: Bound
 
@@ -45,10 +43,12 @@ Item {
 
     // VideoControlsView.swift: chromeSize and metrics(for: .floating).
     readonly property int chromeMaxWidth: 760
-    readonly property int chromeHeight: 90
+    readonly property bool compactChrome: mpv.videoSettings.videoControlBarLayout === "compactBottom"
+    readonly property int chromeHeight: page.compactChrome ? 84 : 90
+    readonly property int seekInterval: Math.floor(mpv.videoSettings.videoSeekInterval)
     readonly property int chromeSideInset: 16
     // playbackChromeEdgeInset (16) plus metrics.bottomInset (24).
-    readonly property int chromeBottomInset: 40
+    readonly property int chromeBottomInset: page.compactChrome ? 0 : 40
 
     // VideoMediaTypes.supportedExtensions, in the same order.
     readonly property var supportedExtensions: [
@@ -86,11 +86,9 @@ Item {
     property bool speedPanelOpen: false
     property bool speedPanelHovered: false
     property bool studyOpen: false
-    // Requested A-B points; the engine only exposes the commands.
-    property bool loopASet: false
-    property bool loopBSet: false
     property string osdTitle: ""
     property string osdValue: ""
+    property real osdMeter: -1
 
     focus: true
     Keys.priority: Keys.BeforeItem
@@ -117,22 +115,12 @@ Item {
 
     // VideoPlaybackSpeed.normalized: 0.25...5 in 0.1 steps, with 0.25 kept
     // as the floor for speeds at or below it.
-    function normalizedSpeed(value) {
-        if (!isFinite(value) || value <= 0.25)
-            return 0.25
-        var rounded = Math.round(value * 10) / 10
-        return Math.max(0.3, Math.min(5.0, rounded))
-    }
-
     function formatSpeed(value) {
-        var speed = page.normalizedSpeed(value)
-        if (Math.abs(speed - 0.25) < 0.001)
-            return "0.25x"
-        return speed.toFixed(1) + "x"
+        return mpv.speedLabel(value) + "x"
     }
 
     function speedIs(value) {
-        return Math.abs(page.normalizedSpeed(mpv.speed) - page.normalizedSpeed(value)) < 0.001
+        return mpv.speedLabel(mpv.speed) === mpv.speedLabel(value)
     }
 
     // VideoPlayerScreen.delayOSDValue: zero within 5 ms, else %+.2fs.
@@ -142,9 +130,10 @@ Item {
         return (value > 0 ? "+" : "-") + Math.abs(value).toFixed(2) + "s"
     }
 
-    function showOSD(title, value) {
+    function showOSD(title, value, meter) {
         page.osdTitle = title
         page.osdValue = value
+        page.osdMeter = meter === undefined ? -1 : meter
         osdTimer.restart()
     }
 
@@ -164,7 +153,8 @@ Item {
     }
 
     function handleHideTimeout() {
-        if (page.barHovered || page.speedPanelHovered || page.scrubbing || mpv.paused)
+        if (page.barHovered || page.speedPanelHovered || page.scrubbing || mpv.paused
+                || (page.speedPanelOpen && speedInput.activeFocus))
             return
         if (page.speedPanelOpen)
             page.speedPanelOpen = false
@@ -217,7 +207,7 @@ Item {
             return
         var volume = Math.max(0, Math.min(100, value))
         mpv.volume = volume
-        page.showOSD(qsTr("Volume"), String(Math.round(volume)))
+        page.showOSD(qsTr("Volume"), String(Math.round(volume)), volume / 100)
     }
 
     function adjustVolume(delta) {
@@ -228,15 +218,15 @@ Item {
         if (!mpv.loaded)
             return
         mpv.muted = !mpv.muted
-        page.showOSD(qsTr("Volume"), mpv.muted ? qsTr("Muted") : qsTr("Unmuted"))
+        page.showOSD(qsTr("Volume"), mpv.muted ? qsTr("Muted") : qsTr("Unmuted"),
+                     mpv.muted ? 0 : mpv.volume / 100)
     }
 
     function setSpeed(value) {
         if (!mpv.loaded)
             return
-        var speed = page.normalizedSpeed(value)
-        mpv.speed = speed
-        page.showOSD(qsTr("Speed"), page.formatSpeed(speed))
+        mpv.speed = value
+        page.showOSD(qsTr("Speed"), page.formatSpeed(mpv.speed))
     }
 
     function adjustSpeed(delta) {
@@ -288,30 +278,27 @@ Item {
         mpv.cycleSubtitles()
     }
 
-    function setLoopA() {
+    function setLoopA(time) {
         if (!mpv.loaded)
             return
-        if (!mpv.setABLoopStart()) {
+        if (!mpv.setABLoopStartAt(time)) {
             page.showOSD(qsTr("A-B Loop"), qsTr("Cannot set A here"))
             return
         }
-        page.loopASet = true
-        page.loopBSet = false
         page.showOSD(qsTr("A-B Loop"), qsTr("A set"))
     }
 
-    function setLoopB() {
+    function setLoopB(time) {
         if (!mpv.loaded)
             return
-        if (!page.loopASet) {
+        if (mpv.loopStart < 0) {
             page.showOSD(qsTr("A-B Loop"), qsTr("Set A first"))
             return
         }
-        if (!mpv.setABLoopEnd()) {
+        if (!mpv.setABLoopEndAt(time)) {
             page.showOSD(qsTr("A-B Loop"), qsTr("B must come after A"))
             return
         }
-        page.loopBSet = true
         page.showOSD(qsTr("A-B Loop"), qsTr("B set"))
     }
 
@@ -319,8 +306,6 @@ Item {
         if (!mpv.loaded)
             return
         mpv.clearABLoop()
-        page.loopASet = false
-        page.loopBSet = false
         page.showOSD(qsTr("A-B Loop"), qsTr("Cleared"))
     }
 
@@ -405,14 +390,11 @@ Item {
     }
 
     function handleKey(event) {
-        if (event.key === Qt.Key_Escape) {
+        if (event.key === Qt.Key_Escape && page.fullScreen) {
             event.accepted = true
             if (event.isAutoRepeat)
                 return
-            if (page.fullScreen)
-                page.exitFullScreen()
-            else
-                page.closePlayer()
+            page.exitFullScreen()
             return
         }
         if (!mpv.loaded || page.textFieldFocused())
@@ -439,9 +421,9 @@ Item {
             if (!event.isAutoRepeat)
                 page.togglePause()
         } else if (event.key === Qt.Key_Left && plain) {
-            page.skip(-10)
+            page.skip(-page.seekInterval)
         } else if (event.key === Qt.Key_Right && plain) {
-            page.skip(10)
+            page.skip(page.seekInterval)
         } else if (event.key === Qt.Key_Up && plain) {
             page.adjustVolume(5)
         } else if (event.key === Qt.Key_Down && plain) {
@@ -474,6 +456,8 @@ Item {
                 page.adjustAudioDelay(0.5)
             else
                 page.adjustSubtitleDelay(0.05)
+        } else if (event.key === Qt.Key_Slash && alt && !shift) {
+            page.setSubtitleDelay(0)
         } else if (event.key === Qt.Key_F && plain) {
             if (!event.isAutoRepeat)
                 page.toggleFullScreen()
@@ -482,10 +466,10 @@ Item {
                 page.toggleLooping()
         } else if (event.key === Qt.Key_A && alt && !shift) {
             if (!event.isAutoRepeat)
-                page.setLoopA()
+                page.setLoopA(mpv.position)
         } else if (event.key === Qt.Key_B && alt && !shift) {
             if (!event.isAutoRepeat)
-                page.setLoopB()
+                page.setLoopB(mpv.position)
         } else if (event.key === Qt.Key_R && plain) {
             if (!event.isAutoRepeat)
                 page.rotateClockwise()
@@ -525,6 +509,10 @@ Item {
         playbackReady: mpv.loaded
         subtitleTracks: mpv.tracks.filter(track => track.type === "sub")
         extractingTranscript: mpv.extractingTranscript
+        loopStart: mpv.loopStart
+        loopEnd: mpv.loopEnd
+        onLoopStartRequested: function(time) { page.setLoopA(time) }
+        onLoopEndRequested: function(time) { page.setLoopB(time) }
         onSubtitleFileRequested: function(file) { page.loadSubtitle(file) }
         onSubtitleTrackRequested: function(trackId, extract) {
             if (trackId > 0) {
@@ -542,13 +530,7 @@ Item {
         }
     }
 
-    Component.onCompleted: {
-        // UserConfig defaults: 36 pt, 0.9 vertical position, weight 700, no
-        // background. Applying them explicitly keeps the engine defaults from
-        // drifting from the macOS client.
-        mpv.applySubtitleStyle(36, 90, 700, 0.0)
-        page.forceActiveFocus()
-    }
+    Component.onCompleted: page.forceActiveFocus()
 
     Timer {
         id: hideTimer
@@ -567,15 +549,14 @@ Item {
 
     // The player stage is black in both themes: Niratan draws the video
     // surface on black (VideoPlayerScreen.swift), and letterboxing must not
-    // follow the window background. This is the only colour literal outside
-    // the theme module.
+    // follow the window background.
     Rectangle {
         id: stage
         anchors.top: parent.top
         anchors.bottom: parent.bottom
         anchors.left: parent.left
         anchors.right: page.studyOpen ? studySidebar.left : parent.right
-        color: "#000000"
+        color: Theme.videoBackground
 
         MpvItem {
             id: mpv
@@ -585,8 +566,6 @@ Item {
                 studyModel.setPlaybackReady(mpv.loaded)
                 if (!mpv.loaded)
                     return
-                page.loopASet = false
-                page.loopBSet = false
                 page.speedPanelOpen = false
                 page.speedPanelHovered = false
                 page.chromeVisible = true
@@ -596,6 +575,7 @@ Item {
             onPositionChanged: studyModel.updatePlayback(mpv.position, mpv.subtitleDelay)
             onSubtitleDelayChanged: studyModel.updatePlayback(mpv.position, mpv.subtitleDelay)
             onTracksChanged: studyModel.setTracks(mpv.tracks)
+            onVideoSettingsChanged: studyModel.refreshHistory()
             onSubtitlesVisibleChanged: studyModel.setSubtitlesVisible(mpv.subtitlesVisible)
             onSubtitleCueChanged: studyModel.updateNativeCue(mpv.subtitleText, mpv.subtitleStart,
                                                              mpv.subtitleEnd)
@@ -620,14 +600,20 @@ Item {
         }
     }
 
-    // Hover only: clicks are not part of the player surface in this port, and
-    // the bar and the empty state sit above this layer.
     MouseArea {
         anchors.fill: stage
         acceptedButtons: Qt.NoButton
         hoverEnabled: true
         onPositionChanged: page.notePointerMovement()
         onExited: page.scheduleHide()
+    }
+
+    TapHandler {
+        parent: stage
+        enabled: mpv.loaded
+        exclusiveSignals: TapHandler.SingleTap | TapHandler.DoubleTap
+        onSingleTapped: page.togglePause()
+        onDoubleTapped: page.toggleFullScreen()
     }
 
     Rectangle {
@@ -662,6 +648,12 @@ Item {
                 onClicked: openDialog.open()
             }
 
+            Button {
+                width: parent.width
+                text: qsTr("Video Settings")
+                onClicked: videoSettings.open()
+            }
+
             Label {
                 width: parent.width
                 text: qsTr("Supported files: %1").arg(page.extensionList)
@@ -692,8 +684,8 @@ Item {
         anchors.left: stage.left
         anchors.topMargin: 30
         anchors.leftMargin: 28
-        width: osdRow.implicitWidth + 24
-        height: 34
+        width: Math.max(osdRow.implicitWidth, meter.visible ? meter.width : 0) + 24
+        height: meter.visible ? 46 : 34
         radius: 10
         color: Theme.floatingBackground
         border.width: Theme.cardBorderWidth
@@ -709,7 +701,10 @@ Item {
 
         Row {
             id: osdRow
-            anchors.centerIn: parent
+            anchors.top: parent.top
+            anchors.left: parent.left
+            anchors.topMargin: 8
+            anchors.leftMargin: 12
             spacing: 8
 
             Label {
@@ -725,6 +720,25 @@ Item {
                 font.pixelSize: 13
             }
         }
+
+        Rectangle {
+            id: meter
+            visible: page.osdMeter >= 0
+            anchors.left: osdRow.left
+            anchors.top: osdRow.bottom
+            anchors.topMargin: 7
+            width: 210
+            height: 5
+            radius: height / 2
+            color: Theme.floatingStroke
+
+            Rectangle {
+                width: parent.width * Math.max(0, page.osdMeter)
+                height: parent.height
+                radius: parent.radius
+                color: Theme.accent
+            }
+        }
     }
 
     Rectangle {
@@ -732,10 +746,10 @@ Item {
         anchors.horizontalCenter: stage.horizontalCenter
         anchors.bottom: stage.bottom
         anchors.bottomMargin: page.chromeBottomInset
-        width: Math.min(page.chromeMaxWidth,
+        width: page.compactChrome ? stage.width : Math.min(page.chromeMaxWidth,
                         Math.max(0, stage.width - page.chromeSideInset * 2))
         height: page.chromeHeight
-        radius: 24
+        radius: page.compactChrome ? 0 : 24
         color: Theme.floatingBackground
         border.width: Theme.cardBorderWidth
         border.color: Theme.floatingStroke
@@ -969,17 +983,17 @@ Item {
                 }
 
                 BarButton {
-                    glyph: "\u221210"
-                    tip: qsTr("Back 10 s (Left)")
+                    glyph: "\u2212" + page.seekInterval
+                    tip: qsTr("Back %1 s (Left)").arg(page.seekInterval)
                     buttonWidth: 30
-                    onClicked: page.skip(-10)
+                    onClicked: page.skip(-page.seekInterval)
                 }
 
                 BarButton {
-                    glyph: "+10"
-                    tip: qsTr("Forward 10 s (Right)")
+                    glyph: "+" + page.seekInterval
+                    tip: qsTr("Forward %1 s (Right)").arg(page.seekInterval)
                     buttonWidth: 30
-                    onClicked: page.skip(10)
+                    onClicked: page.skip(page.seekInterval)
                 }
 
                 Label {
@@ -1118,15 +1132,15 @@ Item {
                 BarButton {
                     glyph: "A"
                     tip: qsTr("Set A-B Loop Start (Alt+A)")
-                    active: page.loopASet
-                    onClicked: page.setLoopA()
+                    active: mpv.loopStart >= 0
+                    onClicked: page.setLoopA(mpv.position)
                 }
 
                 BarButton {
                     glyph: "B"
                     tip: qsTr("Set A-B Loop End (Alt+B)")
-                    active: page.loopBSet
-                    onClicked: page.setLoopB()
+                    active: mpv.loopEnd >= 0
+                    onClicked: page.setLoopB(mpv.position)
                 }
 
                 BarButton {
@@ -1156,6 +1170,12 @@ Item {
                     buttonWidth: 38
                     onClicked: openDialog.open()
                 }
+                BarButton {
+                    glyph: "\u2699"
+                    tip: qsTr("Video Settings")
+                    Accessible.name: tip
+                    onClicked: videoSettings.open()
+                }
             }
         }
 
@@ -1170,6 +1190,10 @@ Item {
             width: 264
             height: speedColumn.implicitHeight + 28
             visible: page.speedPanelOpen
+            onVisibleChanged: {
+                if (visible)
+                    speedInput.text = mpv.speedLabel(mpv.speed)
+            }
             radius: 20
             color: Theme.popupBackground
             border.width: Theme.cardBorderWidth
@@ -1254,7 +1278,7 @@ Item {
                         id: speedSlider
                         Layout.fillWidth: true
                         focusPolicy: Qt.NoFocus
-                        from: 0.25
+                        from: 0.3
                         to: 5.0
                         stepSize: 0.1
                         Component.onCompleted: speedSlider.value = mpv.speed
@@ -1268,12 +1292,31 @@ Item {
                         }
                     }
 
-                    Label {
-                        Layout.preferredWidth: 40
-                        text: page.formatSpeed(mpv.speed)
+                    TextField {
+                        id: speedInput
+                        Layout.preferredWidth: 62
+                        placeholderText: qsTr("Custom")
+                        Accessible.name: qsTr("Custom playback speed")
                         color: Theme.popupTextSecondary
                         font.pixelSize: 11
-                        horizontalAlignment: Text.AlignRight
+                        horizontalAlignment: TextInput.AlignRight
+                        onAccepted: {
+                            if (mpv.acceptSpeedInput(text))
+                                page.showOSD(qsTr("Speed"), page.formatSpeed(mpv.speed))
+                            text = mpv.speedLabel(mpv.speed)
+                        }
+
+                        Connections {
+                            target: mpv
+                            function onSpeedChanged() {
+                                speedInput.text = mpv.speedLabel(mpv.speed)
+                            }
+                        }
+                    }
+
+                    Label {
+                        text: "x"
+                        color: Theme.popupTextSecondary
                     }
                 }
             }
@@ -1294,6 +1337,15 @@ Item {
             page.forceActiveFocus()
             page.notePointerMovement()
         }
+    }
+
+    VideoSettingsPanel {
+        id: videoSettings
+        engine: mpv
+        anchors.centerIn: parent
+        width: Math.min(560, page.width)
+        height: Math.min(690, page.height)
+        onClosed: page.forceActiveFocus()
     }
 
     FileDialog {

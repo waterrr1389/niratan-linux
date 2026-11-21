@@ -69,6 +69,9 @@ class BookStorage {
 
     std::optional<Bookmark> load_bookmark(std::string_view folder) const;
     bool save_bookmark(std::string_view folder, const Bookmark& bookmark) const;
+    // A missing sidecar is empty. A damaged sidecar is not writable.
+    std::optional<std::vector<Highlight>> load_highlights(std::string_view folder) const;
+    bool save_highlights(std::string_view folder, const std::vector<Highlight>& highlights) const;
 
     std::optional<BookInfo> load_book_info(std::string_view folder) const;
     bool save_book_info(std::string_view folder, const BookInfo& info) const;

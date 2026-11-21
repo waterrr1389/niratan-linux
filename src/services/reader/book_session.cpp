@@ -396,7 +396,9 @@ std::optional<profiles::ReaderProfileSettings> ReaderSettingsWatch::read() {
                      : profiles::profile_index_from_json(index_read.document);
     auto path = settings_path_;
     if (index) {
-        const std::string id = profiles::resolve_profile(profiles::normalize_profile_index(*index)).id;
+        const auto profile = profiles::resolve_profile(profiles::normalize_profile_index(*index));
+        const std::string& id = profile.id;
+        content_language = profiles::language_id(profile.language());
         if (profiles::is_safe_profile_id(id)) {
             path = profiles_dir / id / "reader_settings.json";
         }
@@ -406,8 +408,16 @@ std::optional<profiles::ReaderProfileSettings> ReaderSettingsWatch::read() {
 
     QStringList wanted{QFile(profiles_dir).fileName(), QFile(index_path).fileName()};
     if (!path.empty()) {
+        const auto lookup_path = path.parent_path() / "dictionary_settings.json";
         wanted.append(QFile(path.parent_path()).fileName());
         wanted.append(QFile(path).fileName());
+        wanted.append(QFile(lookup_path).fileName());
+        const auto lookup = storage::read_json_file(lookup_path);
+        if (auto decoded = profiles::dictionary_settings_from_json(lookup.document)) {
+            lookup_settings = profiles::resolved_dictionary_settings(*decoded);
+        } else if (profile_changed || lookup.status == storage::JsonReadStatus::missing) {
+            lookup_settings = profiles::default_dictionary_settings();
+        }
     }
     const auto watched = watcher_.files() + watcher_.directories();
     for (const QString& old_path : watched) {

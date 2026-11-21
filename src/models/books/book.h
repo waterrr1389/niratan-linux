@@ -71,6 +71,24 @@ struct Bookmark {
     bool operator==(const Bookmark&) const = default;
 };
 
+// Models/Highlight.swift (Highlight): character is book-global; offset is
+// chapter-local raw DOM text. They use different counting rules.
+struct Highlight {
+    std::string id;
+    int character;
+    int offset;
+    std::string text;
+    std::string color;
+    double created_at;
+    bool operator==(const Highlight&) const = default;
+};
+
+bool is_highlight_color(std::string_view color);
+QJsonDocument highlights_to_json(const std::vector<Highlight>& highlights);
+std::optional<std::vector<Highlight>> highlights_from_json(const QJsonDocument& document);
+std::vector<Highlight> highlights_in_range(const std::vector<Highlight>& highlights,
+                                           int start, int end);
+
 struct ChapterInfo {
     std::optional<int> spine_index;
     int current_total = 0;

@@ -17,8 +17,8 @@
 // and bookinfo character total, plus the daily rows derived by
 // services/statistics/statistics_storage read_daily_statistics. A book without
 // statistics still contributes its record, so an empty library is
-// distinguishable from a library without reading records. Nothing is cached
-// and no placeholder data is shown.
+// distinguishable from a library without reading records. Loading retains
+// the last completed snapshot until the replacement is available.
 //
 // `today` and session-derived daily rows use the same local zone and
 // reporting-day reset minute. The global statisticsResetTime setting is read
@@ -53,11 +53,7 @@
 //
 // Deviations from the Swift view
 // ------------------------------
-// * No snapshot cache and no loading placeholder: refresh() is synchronous.
-// * The trend chart style and the book-ranking metric selector are not state
-//   here. The ranking is ordered by characters; the page draws bars.
-// * The corrupt-book warning has no input: build_snapshot() reports no skipped
-//   books.
+// * Snapshot caching is in memory only.
 // * The unshelved comparison row is named with tr("Unshelved"); every other
 //   user-visible string is the page's.
 
@@ -73,6 +69,9 @@
 #include <QtQml/qqmlregistration.h>
 
 #include <memory>
+#include <optional>
+
+#include "models/statistics/statistics.h"
 
 namespace niratan::viewmodels {
 
@@ -82,11 +81,15 @@ class StatisticsViewModel : public QObject {
     QML_SINGLETON
     Q_PROPERTY(bool hasBooks READ has_books NOTIFY dataChanged)
     Q_PROPERTY(bool hasStatistics READ has_statistics NOTIFY dataChanged)
+    Q_PROPERTY(bool loading READ loading NOTIFY viewChanged)
+    Q_PROPERTY(bool hasLoaded READ has_loaded NOTIFY viewChanged)
+    Q_PROPERTY(bool hasCorruptStatistics READ has_corrupt_statistics NOTIFY dataChanged)
     Q_PROPERTY(QVariantMap today READ today NOTIFY dataChanged)
     Q_PROPERTY(QVariantMap week READ week NOTIFY dataChanged)
     Q_PROPERTY(QVariantMap selectedRange READ selected_range NOTIFY dataChanged)
     Q_PROPERTY(QVariantMap speed READ speed NOTIFY dataChanged)
     Q_PROPERTY(QVariantList calendarDays READ calendar_days NOTIFY dataChanged)
+    Q_PROPERTY(QVariantMap selectedCalendarDay READ selected_calendar_day NOTIFY viewChanged)
     Q_PROPERTY(QVariantList trend READ trend NOTIFY dataChanged)
     Q_PROPERTY(QVariantList ranking READ ranking NOTIFY dataChanged)
     Q_PROPERTY(bool hasMoreBooks READ has_more_books NOTIFY dataChanged)
@@ -96,6 +99,7 @@ class StatisticsViewModel : public QObject {
     Q_PROPERTY(int rangeMode READ range_mode WRITE setRangeMode NOTIFY viewChanged)
     Q_PROPERTY(int trendGrain READ trend_grain WRITE setTrendGrain NOTIFY viewChanged)
     Q_PROPERTY(int trendMetric READ trend_metric WRITE setTrendMetric NOTIFY viewChanged)
+    Q_PROPERTY(int rankingMetric READ ranking_metric WRITE setRankingMetric NOTIFY viewChanged)
     Q_PROPERTY(QDate anchorDate READ anchor_date WRITE setAnchorDate NOTIFY viewChanged)
     Q_PROPERTY(QDate selectedDate READ selected_date WRITE setSelectedDate NOTIFY viewChanged)
     Q_PROPERTY(int targetType READ target_type WRITE setTargetType NOTIFY settingsChanged)
@@ -106,6 +110,8 @@ class StatisticsViewModel : public QObject {
     Q_PROPERTY(int weeklyTargetDays READ weekly_target_days WRITE setWeeklyTargetDays NOTIFY
                    settingsChanged)
     Q_PROPERTY(QVariantMap targetLimits READ target_limits CONSTANT)
+    Q_PROPERTY(QVariantList bookDays READ book_days NOTIFY detailChanged)
+    Q_PROPERTY(QString detailError READ detail_error NOTIFY detailChanged)
 
    public:
     explicit StatisticsViewModel(QObject* parent = nullptr);
@@ -118,11 +124,15 @@ class StatisticsViewModel : public QObject {
 
     bool has_books() const;
     bool has_statistics() const;
+    bool loading() const;
+    bool has_loaded() const;
+    bool has_corrupt_statistics() const;
     QVariantMap today() const;
     QVariantMap week() const;
     QVariantMap selected_range() const;
     QVariantMap speed() const;
     QVariantList calendar_days() const;
+    QVariantMap selected_calendar_day() const;
     QVariantList trend() const;
     QVariantList ranking() const;
     bool has_more_books() const;
@@ -136,6 +146,8 @@ class StatisticsViewModel : public QObject {
     void setTrendGrain(int grain);
     int trend_metric() const;
     void setTrendMetric(int metric);
+    int ranking_metric() const;
+    void setRankingMetric(int metric);
     QDate anchor_date() const;
     void setAnchorDate(QDate date);
     QDate selected_date() const;
@@ -150,6 +162,11 @@ class StatisticsViewModel : public QObject {
     int weekly_target_days() const;
     void setWeeklyTargetDays(int days);
     QVariantMap target_limits() const;
+    QVariantList book_days() const;
+    QString detail_error() const;
+    Q_INVOKABLE bool openBookDetails(const QString& bookId);
+    Q_INVOKABLE bool saveBookSession(const QString& id, int characters, int hours, int minutes);
+    Q_INVOKABLE bool deleteBookSessions(const QString& id, const QString& day);
 
     // Reads every book and rebuilds the snapshot. The page calls this when it
     // is shown, so a reading session started elsewhere is picked up.
@@ -166,6 +183,7 @@ class StatisticsViewModel : public QObject {
     void dataChanged();
     void viewChanged();
     void settingsChanged();
+    void detailChanged();
 
    private:
     struct State;
@@ -175,6 +193,10 @@ class StatisticsViewModel : public QObject {
     void reset_selection();
     int load_reset_minutes() const;
     void persist_settings();
+    void project_details(const statistics::ReadingSessionRecords& records, int reset_minutes,
+                         const QTimeZone& zone);
+    bool change_book_sessions(const QString& id, const QString& day,
+                              std::optional<int> characters, int hours, int minutes);
 };
 
 }  // namespace niratan::viewmodels

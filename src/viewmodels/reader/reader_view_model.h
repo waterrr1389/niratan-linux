@@ -70,10 +70,12 @@
 
 #include <QJSEngine>
 #include <QObject>
+#include <QColor>
 #include <QQmlEngine>
 #include <QString>
 #include <QUrl>
 #include <QVariantList>
+#include <QRectF>
 #include <QtQml/qqmlregistration.h>
 
 #include <memory>
@@ -101,9 +103,15 @@ class ReaderViewModel : public QObject {
     Q_PROPERTY(bool showsPageCount READ shows_page_count NOTIFY settingsChanged)
     Q_PROPERTY(QString chapterUrl READ chapter_url NOTIFY chapterUrlChanged)
     Q_PROPERTY(QVariantList chapters READ chapters NOTIFY bookChanged)
+    Q_PROPERTY(QVariantList searchResults READ search_results NOTIFY searchChanged)
+    Q_PROPERTY(int searchState READ search_state NOTIFY searchChanged)
+    Q_PROPERTY(QVariantList highlights READ highlights NOTIFY highlightsChanged)
     Q_PROPERTY(QString error READ error NOTIFY errorChanged)
     Q_PROPERTY(bool hasBook READ has_book NOTIFY bookChanged)
     Q_PROPERTY(bool dark READ dark WRITE setDark NOTIFY paletteChanged)
+    Q_PROPERTY(QColor pageBackground READ page_background NOTIFY paletteChanged)
+    Q_PROPERTY(QColor infoColor READ info_color NOTIFY paletteChanged)
+    Q_PROPERTY(bool restoring READ restoring NOTIFY restoreStateChanged)
     Q_PROPERTY(bool verticalWriting READ vertical_writing WRITE setVerticalWriting NOTIFY
                    settingsChanged)
     Q_PROPERTY(int fontSize READ font_size WRITE setFontSize NOTIFY settingsChanged)
@@ -116,6 +124,8 @@ class ReaderViewModel : public QObject {
     Q_PROPERTY(int statisticsTodaySeconds READ statistics_today_seconds NOTIFY statisticsChanged)
     Q_PROPERTY(int statisticsSessionSpeed READ statistics_session_speed NOTIFY statisticsChanged)
     Q_PROPERTY(bool statisticsEnabled READ statistics_enabled NOTIFY statisticsChanged)
+    Q_PROPERTY(bool tracking READ tracking NOTIFY statisticsChanged)
+    Q_PROPERTY(QVariantMap readingStatistics READ reading_statistics NOTIFY statisticsChanged)
 
    public:
     ~ReaderViewModel() override;
@@ -137,13 +147,28 @@ class ReaderViewModel : public QObject {
     bool shows_page_count() const;
     QString chapter_url() const;
     QVariantList chapters() const;
+    QVariantList search_results() const;
+    int search_state() const;
+    Q_INVOKABLE bool hasSearchableText(const QString& query) const;
+    Q_INVOKABLE void searchBook(const QString& query);
+    Q_INVOKABLE void clearBookSearch();
+    Q_INVOKABLE void jumpToCharacter(int character);
+    QVariantList highlights() const;
+    Q_INVOKABLE QString highlightScript(const QString& color) const;
+    Q_INVOKABLE void addHighlight(const QString& script_url, const QString& color,
+                                 const QVariant& creation);
+    Q_INVOKABLE void removeHighlight(const QString& id);
     QString error() const;
     bool has_book() const;
 
     // Pushed from QML's Theme singleton: the window appearance and the two
     // reader colours the stylesheet uses.
     bool dark() const;
-    void setDark(bool dark);
+    Q_INVOKABLE void setDark(bool dark);
+    QColor page_background() const;
+    QColor info_color() const;
+    bool restoring() const;
+    Q_INVOKABLE void revealAfterLoadFailure(const QString& url);
     Q_INVOKABLE void setReaderColors(const QString& background, const QString& text);
 
     bool vertical_writing() const;
@@ -161,6 +186,10 @@ class ReaderViewModel : public QObject {
     int statistics_today_seconds() const;
     int statistics_session_speed() const;
     bool statistics_enabled() const;
+    bool tracking() const;
+    QVariantMap reading_statistics() const;
+    Q_INVOKABLE void toggleTracking();
+    Q_INVOKABLE void tickTracking();
 
     // Imports the EPUB into Books and opens it. The title names the folder.
     Q_INVOKABLE bool importAndOpen(const QUrl& file);
@@ -205,6 +234,7 @@ class ReaderViewModel : public QObject {
     void chapterChanged();
     void progressChanged();
     void chapterUrlChanged();
+    void restoreStateChanged();
     void errorChanged();
     void settingsChanged();
     void paletteChanged();
@@ -212,6 +242,10 @@ class ReaderViewModel : public QObject {
     void paginationChanged();
     void pageChanged(int index);
     void documentRestored(bool revealCue);
+    void lookupRequested(const QString& text, const QRectF& anchor);
+    void readerTappedOutside();
+    void searchChanged();
+    void highlightsChanged();
     // The page should run navigation for this direction ("forward"/"backward").
     void pageTurnRequested(const QString& direction);
 
@@ -225,6 +259,7 @@ class ReaderViewModel : public QObject {
     void load_chapter(int index, double progress, const QString& fragment = {});
     void reload_document();
     void reload_settings(bool reflow);
+    void update_palette();
     void set_pagination(int index, int count);
     void persist_bookmark();
     // Credits the elapsed time without characters and writes the live

@@ -91,6 +91,8 @@ class ReadingTrackerTest : public QObject {
    private slots:
     void disabled_never_starts();
     void autostart_off_never_starts();
+    void manual_control_overrides_autostart_but_not_disabled_tracking();
+    void seeks_establish_a_baseline_without_crediting_the_jump();
     void autostart_on_starts_at_start();
     void autostart_on_starts_paused_without_context();
     void autostart_page_turn_waits_for_navigation();
@@ -150,6 +152,36 @@ void ReadingTrackerTest::autostart_off_never_starts() {
 
     tracker.update_position(100, t0 + 2000);
     QCOMPARE(tracker.session_total().characters_read, 0);
+}
+
+// NativeReaderView.swift (startTracking, stopTracking, jumpToCharacter).
+void ReadingTrackerTest::manual_control_overrides_autostart_but_not_disabled_tracking() {
+    MemoryStore store;
+    ReadingTracker tracker(store, utc_zone());
+    const auto now = ms_at(2026, 3, 10, 12, 0);
+    tracker.configure(false, StatisticsAutostartMode::off, 0);
+    tracker.toggle(now);
+    QVERIFY(!tracker.is_tracking());
+    tracker.configure(true, StatisticsAutostartMode::off, 0);
+    tracker.set_context_active(true, now);
+    tracker.toggle(now);
+    QVERIFY(tracker.is_tracking());
+    tracker.toggle(now + 2000);
+    QVERIFY(!tracker.is_tracking());
+    QCOMPARE(tracker.session_total().reading_time, 2.0);
+}
+
+void ReadingTrackerTest::seeks_establish_a_baseline_without_crediting_the_jump() {
+    MemoryStore store;
+    ReadingTracker tracker(store, utc_zone());
+    const auto now = ms_at(2026, 3, 10, 12, 0);
+    tracker.configure(true, StatisticsAutostartMode::on, 0);
+    tracker.set_context_active(true, now);
+    tracker.start(now);
+    tracker.update_position(10, now + 1000);
+    tracker.reset_position(900, now + 2000);
+    tracker.update_position(920, now + 3000);
+    QCOMPARE(tracker.session_total().characters_read, 20);
 }
 
 void ReadingTrackerTest::autostart_on_starts_at_start() {

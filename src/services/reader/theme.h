@@ -22,6 +22,7 @@
 
 #include <optional>
 #include <string>
+#include <string_view>
 
 namespace niratan::reader {
 
@@ -60,5 +61,10 @@ struct ResolvedTheme {
 // readerBackgroundColor checks dark sepia before the theme, then light sepia,
 // then Custom, then the window background.
 ResolvedTheme resolve_theme(const ThemeInput& input);
+Theme theme_from_id(std::string_view id);
+// Profile colors use CSS order (#RRGGBBAA). Only a hex value is safe to
+// interpolate into the reader stylesheet; invalid stored values are ignored.
+std::string profile_color(std::string_view color);
+std::string default_reader_text(bool dark);
 
 }  // namespace niratan::reader

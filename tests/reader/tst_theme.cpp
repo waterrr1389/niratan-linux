@@ -10,7 +10,9 @@
 using niratan::reader::ResolvedTheme;
 using niratan::reader::Theme;
 using niratan::reader::ThemeInput;
+using niratan::reader::profile_color;
 using niratan::reader::resolve_theme;
+using niratan::reader::theme_from_id;
 
 // Cases follow NativeReaderView.readerBackgroundColor, readerTextColor and
 // effectiveReaderColorScheme, with the forced appearance from
@@ -27,6 +29,7 @@ class ThemeTest : public QObject {
     void dark_sepia_wins_over_system_light_sepia();
     void custom_takes_the_appearance_from_ui_theme();
     void custom_colors_win_over_system_light_sepia();
+    void stored_custom_palette_applies_css_colors();
 };
 
 namespace {
@@ -59,6 +62,19 @@ const ResolvedTheme kSepiaDark{true, "#18150C", "#F2E2C9"};
 void ThemeTest::system_follows_the_system_appearance() {
     QCOMPARE(resolve_theme(base(Theme::system, false)), window(false));
     QCOMPARE(resolve_theme(base(Theme::system, true)), window(true));
+}
+
+// UserConfig.swift (theme, customBackgroundColor, customTextColor).
+void ThemeTest::stored_custom_palette_applies_css_colors() {
+    ThemeInput input;
+    input.theme = theme_from_id("Custom");
+    input.custom_background = profile_color("#123456ab");
+    input.custom_text = profile_color("#abcdef");
+    const auto palette = resolve_theme(input);
+    QCOMPARE(palette.background, std::string("#123456ab"));
+    QCOMPARE(palette.text, std::optional<std::string>("#abcdef"));
+    QVERIFY(profile_color("#123456;").empty());
+    QCOMPARE(theme_from_id("unknown"), Theme::system);
 }
 
 void ThemeTest::light_and_dark_force_the_appearance() {

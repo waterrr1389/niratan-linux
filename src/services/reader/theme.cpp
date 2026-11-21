@@ -2,6 +2,8 @@
 
 #include "theme.h"
 
+#include <algorithm>
+
 namespace niratan::reader {
 namespace {
 
@@ -59,8 +61,32 @@ ResolvedTheme resolve_theme(const ThemeInput& input) {
     }
     // The window background resolves against the reader's own appearance, so
     // Light in a dark system still gets the light one.
-    return {dark, dark ? input.dark_window_background : input.light_window_background,
-            std::nullopt};
+    const auto& background = dark ? input.dark_window_background : input.light_window_background;
+    return {dark, background.empty() ? (dark ? "#1E1E1E" : "#ECECEC") : background, std::nullopt};
+}
+
+Theme theme_from_id(std::string_view id) {
+    if (id == "Light") return Theme::light;
+    if (id == "Dark") return Theme::dark;
+    if (id == "Sepia") return Theme::sepia;
+    if (id == "Custom") return Theme::custom;
+    return Theme::system;
+}
+
+std::string profile_color(std::string_view color) {
+    const auto hex = [](char ch) {
+        return (ch >= '0' && ch <= '9') || (ch >= 'a' && ch <= 'f') ||
+               (ch >= 'A' && ch <= 'F');
+    };
+    if ((color.size() == 7 || color.size() == 9) && color.front() == '#' &&
+        std::ranges::all_of(color.substr(1), hex)) {
+        return std::string(color);
+    }
+    return {};
+}
+
+std::string default_reader_text(bool dark) {
+    return dark ? "#FFFFFF" : "#000000";
 }
 
 }  // namespace niratan::reader

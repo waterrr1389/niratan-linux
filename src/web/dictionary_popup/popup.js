@@ -1369,8 +1369,12 @@ function playWordAudio(audioUrl) {
 }
 
 function syncButtonFrames() {
+    const buttonFrames = window.webkit?.messageHandlers?.buttonFrames;
+    if (!buttonFrames) {
+        return;
+    }
     if (window.hoshiUseInlineActionButtons) {
-        webkit.messageHandlers.buttonFrames?.postMessage([]);
+        buttonFrames.postMessage([]);
         return;
     }
 
@@ -1388,7 +1392,7 @@ function syncButtonFrames() {
             enabled: slot.dataset.enabled !== 'false'
         };
     });
-    webkit.messageHandlers.buttonFrames.postMessage(frames);
+    buttonFrames.postMessage(frames);
 }
 
 window.addEventListener('scroll', () => requestAnimationFrame(syncButtonFrames), { passive: true });
@@ -1652,9 +1656,12 @@ function createEntryHeader(entry, idx) {
     const viewNoteSlot = createButtonSlot('viewNote', idx, false);
     viewNoteSlot.hidden = true;
     buttonsContainer.appendChild(viewNoteSlot);
-    webkit.messageHandlers.duplicateCheck.postMessage(expression).then(duplicateLookup => {
-        applyAnkiDuplicateLookup(idx, duplicateLookup, { mine: mineSlot, viewNote: viewNoteSlot });
-    });
+    const duplicateCheck = window.webkit?.messageHandlers?.duplicateCheck;
+    if (duplicateCheck) {
+        Promise.resolve().then(() => duplicateCheck.postMessage(expression)).then(duplicateLookup => {
+            applyAnkiDuplicateLookup(idx, duplicateLookup, { mine: mineSlot, viewNote: viewNoteSlot });
+        }).catch(() => {});
+    }
 
     header.appendChild(buttonsContainer);
 
@@ -2316,7 +2323,7 @@ window.renderPopup = function() {
 
     function handlePopupLookupAtPoint(target, x, y) {
         if (!isPopupLookupTarget(target)) {
-            webkit.messageHandlers.tapOutside.postMessage(null);
+            window.webkit?.messageHandlers?.tapOutside?.postMessage(null);
             return false;
         }
         const querySource = target?.closest('.dictionary-query-source');
@@ -2339,7 +2346,7 @@ window.renderPopup = function() {
             )
             : window.hoshiSelection?.selectText(x, y, window.scanLength || 16);
         if (!selected) {
-            webkit.messageHandlers.tapOutside.postMessage(null);
+            window.webkit?.messageHandlers?.tapOutside?.postMessage(null);
             return false;
         }
         return true;

@@ -400,6 +400,46 @@ std::vector<ReadingSessionDay> session_days(const ReadingSessionRecords& records
     return result;
 }
 
+std::vector<ReadingSessionDay> detail_days(const ReadingSessionRecords& records,
+                                          int reset_minutes, const QTimeZone& zone) {
+    auto days = session_days(records, reset_minutes, zone);
+    std::erase_if(days, [](const auto& day) { return !day.total().has_activity(); });
+    return days;
+}
+
+bool edit_detail_session(ReadingSessionRecords& records, std::string_view id, int characters,
+                         int hours, int minutes, std::int64_t modified) {
+    const auto entry = records.find(id);
+    if (entry == records.end() || !entry->second.value) {
+        return false;
+    }
+    auto session = *entry->second.value;
+    const auto duration_minutes = static_cast<std::int64_t>(std::max(0, hours)) * 60 +
+                                  std::clamp(minutes, 0, 59);
+    if (static_cast<double>(duration_minutes) != std::round(session.reading_time / 60.0)) {
+        session.reading_time = static_cast<double>(duration_minutes) * 60.0;
+    }
+    session.characters_read = std::max(0, characters);
+    if (session == *entry->second.value) {
+        return false;
+    }
+    entry->second = {modified, session};
+    return true;
+}
+
+bool delete_detail_sessions(ReadingSessionRecords& records, const std::vector<std::string>& ids,
+                            std::int64_t modified) {
+    bool changed = false;
+    for (const auto& id : ids) {
+        const auto entry = records.find(id);
+        if (entry != records.end() && entry->second.value) {
+            entry->second = {modified, std::nullopt};
+            changed = true;
+        }
+    }
+    return changed;
+}
+
 std::vector<Statistics> daily_statistics(const ReadingSessionRecords& records,
                                          std::string_view title, int reset_minutes,
                                          const QTimeZone& zone) {

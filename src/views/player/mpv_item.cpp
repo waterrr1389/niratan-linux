@@ -15,6 +15,7 @@
 
 #include "mpv_item.h"
 
+#include "services/player/video_settings.h"
 #include "services/storage/app_paths.h"
 #include "services/storage/json_file.h"
 
@@ -56,14 +57,8 @@ constexpr int kPollIntervalMs = 100;
 constexpr int kLoadRetryMs = 100;
 constexpr double kPositionEpsilon = 0.02;
 constexpr double kValueEpsilon = 1e-6;
-constexpr double kMinSpeed = 0.25;
-constexpr double kMaxSpeed = 5.0;
 constexpr double kSpeedStep = 0.1;
 constexpr double kMaxDelaySeconds = 60.0;
-constexpr int kMinSubtitleSize = 12;
-constexpr int kMaxSubtitleSize = 72;
-constexpr int kMinSubtitleWeight = 100;
-constexpr int kMaxSubtitleWeight = 900;
 constexpr quint64 kChaptersObservation = 1;
 constexpr quint64 kTracksObservation = 2;
 constexpr quint64 kDurationObservation = 3;
@@ -307,7 +302,8 @@ void MpvRenderer::report_update(void* data) {
 
 }  // namespace
 
-MpvItem::MpvItem(QQuickItem* parent) : QQuickFramebufferObject(parent) {
+MpvItem::MpvItem(QQuickItem* parent) : QQuickFramebufferObject(parent),
+    video_settings_(niratan::player::load_video_settings(niratan::storage::data_root())) {
     {
         QMutexLocker locker(&g_links_mutex);
         g_links[this] = SharedLink{};
@@ -344,6 +340,7 @@ MpvItem::MpvItem(QQuickItem* parent) : QQuickFramebufferObject(parent) {
     set_property("pause", false);
     set_property("volume", 100.0);
     set_property("speed", 1.0);
+    apply_video_settings();
     mpv_observe_property(handle_, kChaptersObservation, "chapter-list", MPV_FORMAT_NONE);
     mpv_observe_property(handle_, kTracksObservation, "track-list", MPV_FORMAT_NONE);
     mpv_observe_property(handle_, kDurationObservation, "duration", MPV_FORMAT_NONE);
@@ -440,14 +437,17 @@ qreal MpvItem::speed() const {
 }
 
 void MpvItem::setSpeed(qreal speed) {
-    const qreal clamped = std::clamp(speed, kMinSpeed, kMaxSpeed);
-    if (speed_ == clamped) {
+    const qreal normalized = niratan::player::normalized_speed(speed);
+    if (speed_ == normalized) {
         return;
     }
-    speed_ = clamped;
+    speed_ = normalized;
     set_property("speed", static_cast<double>(speed_));
     emit speedChanged();
 }
+
+qreal MpvItem::loopStart() const { return ab_loop_.start().value_or(-1.0); }
+qreal MpvItem::loopEnd() const { return ab_loop_.end().value_or(-1.0); }
 
 qreal MpvItem::subtitleDelay() const {
     return subtitle_delay_;
@@ -547,7 +547,7 @@ void MpvItem::replace_file(const QUrl& file) {
 
     // A-B loop and chapter belong to the previous file until mpv reports the
     // new ones, and a stale loop would immediately cut the new file.
-    ab_loop_start_ = -1.0;
+    clearABLoop();
     ended_ = false;
     chapter_index_ = -1;
     file_ready_ = false;
@@ -568,8 +568,7 @@ void MpvItem::replace_file(const QUrl& file) {
         emit subtitleDocumentChanged({}, {}, false);
     }
     set_subtitle_cue({}, -1.0, -1.0);
-    set_property("ab-loop-a", QStringLiteral("no"));
-    set_property("ab-loop-b", QStringLiteral("no"));
+    set_property("video-rotate", 0);
     set_property("sid", QStringLiteral("no"));
     setSubtitlesVisible(true);
 
@@ -628,7 +627,8 @@ void MpvItem::open_when_ready(const QUrl& file, quint64 generation) {
 }
 
 void MpvItem::save_playback_position() {
-    if (!file_ready_ || ended_ || local_video_path_.isEmpty()) {
+    if (!video_settings_.value("videoRememberPlaybackPosition").toBool()
+        || !file_ready_ || ended_ || local_video_path_.isEmpty()) {
         return;
     }
     if (get_bool("eof-reached", false)) {
@@ -663,7 +663,8 @@ void MpvItem::set_resume_position(double position) {
 
 void MpvItem::restore_playback_position() {
     const auto path = playback_history_path();
-    if (local_video_path_.isEmpty() || path.empty()) {
+    if (!video_settings_.value("videoRememberPlaybackPosition").toBool()
+        || local_video_path_.isEmpty() || path.empty()) {
         return;
     }
     const auto records = niratan::storage::read_json_file(path).document.object();
@@ -949,30 +950,44 @@ void MpvItem::toggleSubtitles() {
 }
 
 bool MpvItem::setABLoopStart() {
-    if (handle_ == nullptr) {
-        return false;
-    }
-    ab_loop_start_ = position_;
-    set_property("ab-loop-b", QStringLiteral("no"));
-    set_property("ab-loop-a", static_cast<double>(ab_loop_start_));
-    return true;
+    return setABLoopStartAt(position_);
 }
 
 bool MpvItem::setABLoopEnd() {
-    if (handle_ == nullptr || ab_loop_start_ < 0.0 || position_ <= ab_loop_start_) {
+    return setABLoopEndAt(position_);
+}
+
+bool MpvItem::setABLoopStartAt(qreal time) {
+    const bool was_active = ab_loop_.end().has_value();
+    if (!loaded_ || !ab_loop_.set_start(time, duration_)) {
         return false;
     }
-    set_property("ab-loop-b", static_cast<double>(position_));
+    if (was_active) {
+        set_property("ab-loop-a", QStringLiteral("no"));
+        set_property("ab-loop-b", QStringLiteral("no"));
+    }
+    emit abLoopChanged();
+    return true;
+}
+
+bool MpvItem::setABLoopEndAt(qreal time) {
+    if (!loaded_ || !ab_loop_.set_end(time, duration_)) {
+        return false;
+    }
+    set_property("ab-loop-a", static_cast<double>(loopStart()));
+    set_property("ab-loop-b", static_cast<double>(loopEnd()));
+    emit abLoopChanged();
     return true;
 }
 
 void MpvItem::clearABLoop() {
-    if (handle_ == nullptr) {
+    if (!ab_loop_.start()) {
         return;
     }
-    ab_loop_start_ = -1.0;
+    ab_loop_.clear();
     set_property("ab-loop-a", QStringLiteral("no"));
     set_property("ab-loop-b", QStringLiteral("no"));
+    emit abLoopChanged();
 }
 
 void MpvItem::rotateClockwise() {
@@ -989,48 +1004,87 @@ void MpvItem::stepSpeed(int direction) {
         return;
     }
     const double step = direction > 0 ? kSpeedStep : -kSpeedStep;
-    const double stepped =
-        std::round((static_cast<double>(speed_) + step) * 10.0) / 10.0;
-    setSpeed(std::clamp(stepped, kMinSpeed, kMaxSpeed));
+    setSpeed(speed_ + step);
 }
 
 void MpvItem::resetSpeed() {
     setSpeed(1.0);
 }
 
-void MpvItem::applySubtitleStyle(int font_size, int position_percent, int weight,
-                                 double background_opacity) {
-    if (handle_ == nullptr) {
-        return;
+QString MpvItem::speedLabel(qreal value) const {
+    return niratan::player::speed_label(value);
+}
+
+bool MpvItem::acceptSpeedInput(const QString& input) {
+    const auto value = niratan::player::parse_speed(input);
+    if (!loaded_ || !value) {
+        return false;
     }
+    setSpeed(*value);
+    return true;
+}
 
-    const int size = std::clamp(font_size, kMinSubtitleSize, kMaxSubtitleSize);
-    const int position = std::clamp(position_percent, 0, 100);
-    const int font_weight =
-        std::clamp(weight, kMinSubtitleWeight, kMaxSubtitleWeight);
-    const double opacity = std::clamp(background_opacity, 0.0, 1.0);
-    const int alpha = static_cast<int>(std::lround(opacity * 255.0));
+QVariantMap MpvItem::videoSettings() const {
+    return video_settings_.toVariantMap();
+}
 
+bool MpvItem::changeVideoSetting(const QString& key, const QVariant& value) {
+    return save_video_settings({{key, QJsonValue::fromVariant(value)}});
+}
+
+bool MpvItem::resetSubtitleAppearance() {
+    return save_video_settings(niratan::player::subtitle_appearance_defaults());
+}
+
+bool MpvItem::save_video_settings(const QJsonObject& changes) {
+    const auto root = niratan::storage::data_root();
+    if (!niratan::player::store_video_settings(root, changes)) {
+        return false;
+    }
+    video_settings_ = niratan::player::load_video_settings(root);
+    apply_video_settings();
+    if (!video_settings_.value("videoRememberPlaybackPosition").toBool()) {
+        set_resume_position(0.0);
+    }
+    emit videoSettingsChanged();
+    return true;
+}
+
+void MpvItem::apply_video_settings() {
+    const auto& settings = video_settings_;
+    set_property("hwdec", settings.value("videoHardwareDecodingEnabled").toBool()
+        ? QStringLiteral("auto-safe") : QStringLiteral("no"));
+    set_property("deinterlace", settings.value("videoDeinterlacingEnabled").toBool());
+    set_property("hdr-compute-peak", settings.value("videoHDREnhancementEnabled").toBool()
+        ? QStringLiteral("yes") : QStringLiteral("no"));
+    set_property("tone-mapping", QStringLiteral("auto"));
+    for (const auto& [option, key] : {std::pair{"brightness", "videoBrightness"},
+                                     {"contrast", "videoContrast"}, {"saturation", "videoSaturation"},
+                                     {"gamma", "videoGamma"}, {"hue", "videoHue"}}) {
+        set_property(option, settings.value(QLatin1StringView(key)).toDouble());
+    }
+    const auto family = settings.value("videoSubtitleFontFamily").toString();
+    set_property("sub-font", family.isEmpty() ? QStringLiteral("sans-serif") : family);
+    const double size = settings.value("videoSubtitleFontSize").toDouble();
     set_property("sub-font-size", size);
-    set_property("sub-pos", position);
-    // Subtitle weight exists only in builds that provide sub-font-weight; an
-    // unknown property name costs one failed call and changes nothing.
-    set_property("sub-font-weight", font_weight);
-
-    // mpv colors are #AARRGGBB; the box is black with the configured alpha.
-    QString background = QStringLiteral("#");
-    background += QString::number(alpha, 16).rightJustified(2, QLatin1Char('0'));
-    background += QStringLiteral("000000");
-    set_property("sub-back-color", background);
-
-    // sub-back-color is only a background in the box styles; the high contrast
-    // default is a tight box around the text.
-    set_property("sub-border-style", QStringLiteral("background-box"));
-    set_property("sub-border-size", 2.5);
-    set_property("sub-shadow-offset", 0.0);
-
-    // The configured size is a constant pixel size, while mpv scales
-    // sub-font-size with the window by default.
+    set_property("sub-pos", 100.0 * settings.value("videoSubtitleVerticalPositionFraction").toDouble());
+    const int weight = settings.value("videoSubtitleFontWeight").toInt();
+    set_property("sub-bold", weight >= 700);
+    set_property("sub-font-weight", weight);
+    set_property("sub-color", niratan::player::mpv_color(settings.value("videoSubtitleColor").toString()));
+    set_property("sub-ass-override", settings.value("videoRespectASSStyle").toBool()
+        ? QStringLiteral("no") : QStringLiteral("strip"));
+    const double opacity = settings.value("videoSubtitleBackgroundDisabled").toBool()
+        ? 0.0 : settings.value("videoSubtitleBackgroundOpacity").toDouble();
+    const auto alpha = QString::number(std::lround(opacity * 255), 16)
+        .rightJustified(2, QLatin1Char('0'));
+    set_property("sub-back-color", u'#' + alpha + QStringLiteral("000000"));
+    set_property("sub-border-style", opacity > 0
+        ? QStringLiteral("background-box") : QStringLiteral("outline-and-shadow"));
+    const auto edges = niratan::player::subtitle_edges(settings.value("videoSubtitleEdgeStyle").toString(),
+        settings.value("videoSubtitleEdgeStrength").toDouble(), size);
+    set_property("sub-border-size", edges.outline);
+    set_property("sub-shadow-offset", edges.shadow);
     set_property("sub-scale-by-window", false);
 }
 

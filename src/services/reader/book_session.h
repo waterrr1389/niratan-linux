@@ -37,6 +37,7 @@
 #include <vector>
 
 #include "models/books/book.h"
+#include "models/profiles/dictionary_settings.h"
 #include "models/profiles/reader_settings.h"
 #include "services/novels/epub_book.h"
 #include "services/reader/reader_shell.h"
@@ -103,6 +104,8 @@ class ReaderSettingsWatch {
    public:
     ReaderSettingsWatch(std::filesystem::path root, std::function<void()> changed);
     std::optional<profiles::ReaderProfileSettings> read();
+    std::string content_language = "ja";
+    profiles::DictionaryProfileSettings lookup_settings = profiles::default_dictionary_settings();
 
    private:
     std::filesystem::path root_;

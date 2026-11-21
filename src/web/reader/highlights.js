@@ -11,7 +11,15 @@ window.hoshiHighlights = {
     
     createHighlight(color, id) {
         const selection = window.getSelection();
+        if (!selection || selection.isCollapsed || selection.rangeCount === 0) {
+            return null;
+        }
         const range = selection.getRangeAt(0);
+        window.hoshiReader.buildNodeOffsets();
+        if (!window.hoshiReader.nodeStartRawOffsets.has(range.startContainer) ||
+            !window.hoshiReader.nodeStartRawOffsets.has(range.endContainer)) {
+            return null;
+        }
         
         const startPrefix = range.startContainer.textContent.substring(0, range.startOffset);
         const endPrefix = range.endContainer.textContent.substring(0, range.endOffset);

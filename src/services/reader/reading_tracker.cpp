@@ -112,6 +112,25 @@ void ReadingTracker::on_manual_navigation(std::int64_t now_ms) {
     begin_tracking(now_ms);
 }
 
+void ReadingTracker::toggle(std::int64_t now_ms) {
+    if (!enabled_) {
+        return;
+    }
+    if (tracking_) {
+        stop(now_ms);
+    } else {
+        begin_tracking(now_ms);
+    }
+}
+
+void ReadingTracker::reset_position(int character, std::int64_t now_ms) {
+    if (enabled_ && tracking_ && !paused_) {
+        flush(now_ms);
+        last_count_ = character;
+        position_known_ = true;
+    }
+}
+
 void ReadingTracker::update_position(int character, std::int64_t now_ms) {
     if (!enabled_ || !tracking_ || paused_) {
         return;

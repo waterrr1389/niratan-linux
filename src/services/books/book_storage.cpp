@@ -207,6 +207,25 @@ bool BookStorage::save_bookmark(std::string_view folder, const Bookmark& bookmar
     return storage::write_json_file(*directory / kBookmarkFile, bookmark_to_json(bookmark));
 }
 
+std::optional<std::vector<Highlight>> BookStorage::load_highlights(std::string_view folder) const {
+    const auto directory = book_directory(folder);
+    if (!directory) {
+        return std::nullopt;
+    }
+    const auto data = storage::read_json_file(*directory / "highlights.json");
+    if (data.status == storage::JsonReadStatus::missing) {
+        return std::vector<Highlight>{};
+    }
+    return highlights_from_json(data.document);
+}
+
+bool BookStorage::save_highlights(std::string_view folder,
+                                   const std::vector<Highlight>& highlights) const {
+    const auto directory = book_directory(folder);
+    return directory && load_highlights(folder) &&
+           storage::write_json_file(*directory / "highlights.json", highlights_to_json(highlights));
+}
+
 std::optional<BookInfo> BookStorage::load_book_info(std::string_view folder) const {
     const std::optional<std::filesystem::path> directory = book_directory(folder);
     if (!directory.has_value()) {

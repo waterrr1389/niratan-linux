@@ -262,6 +262,16 @@ std::string session_date_key(const ReadingSession& session, int reset_minutes,
 std::vector<ReadingSessionDay> session_days(const ReadingSessionRecords& records,
                                             int reset_minutes, const QTimeZone& zone);
 
+// StatisticsBookDetailPanel and ReadingSessionLog.editing/deleting. Empty
+// days are hidden. Editing only the count preserves fractional seconds;
+// deleting retains tombstones and never restamps an existing tombstone.
+std::vector<ReadingSessionDay> detail_days(const ReadingSessionRecords& records,
+                                          int reset_minutes, const QTimeZone& zone);
+bool edit_detail_session(ReadingSessionRecords& records, std::string_view id, int characters,
+                         int hours, int minutes, std::int64_t modified);
+bool delete_detail_sessions(ReadingSessionRecords& records, const std::vector<std::string>& ids,
+                            std::int64_t modified);
+
 // ReadingSessionLog.dailyStatistics: one row per day with activity, carrying
 // the day totals, the day's speed in all four speed fields and the newest
 // session modification. Days without activity produce no row. Rows are sorted

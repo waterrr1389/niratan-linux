@@ -332,6 +332,66 @@ std::string BookMetadata::display_title() const {
     return renamed_title.value_or(title);
 }
 
+bool is_highlight_color(std::string_view color) {
+    return color == "yellow" || color == "green" || color == "blue" || color == "pink" ||
+           color == "purple";
+}
+
+QJsonDocument highlights_to_json(const std::vector<Highlight>& highlights) {
+    QJsonArray result;
+    for (const auto& entry : highlights) {
+        result.append(QJsonObject{
+            {QStringLiteral("id"), QString::fromStdString(entry.id)},
+            {QStringLiteral("character"), entry.character},
+            {QStringLiteral("offset"), entry.offset},
+            {QStringLiteral("text"), QString::fromStdString(entry.text)},
+            {QStringLiteral("color"), QString::fromStdString(entry.color)},
+            {QStringLiteral("createdAt"), entry.created_at},
+        });
+    }
+    return QJsonDocument(result);
+}
+
+std::optional<std::vector<Highlight>> highlights_from_json(const QJsonDocument& document) {
+    if (!document.isArray()) {
+        return std::nullopt;
+    }
+    std::vector<Highlight> result;
+    for (const auto& value : document.array()) {
+        if (!value.isObject()) {
+            return std::nullopt;
+        }
+        const auto object = value.toObject();
+        Highlight entry{};
+        if (!required_string(object, QLatin1StringView("id"), &entry.id) || entry.id.empty() ||
+            !required_string(object, QLatin1StringView("text"), &entry.text) ||
+            !required_string(object, QLatin1StringView("color"), &entry.color) ||
+            !is_highlight_color(entry.color) ||
+            !required_number(object, QLatin1StringView("createdAt"), &entry.created_at)) {
+            return std::nullopt;
+        }
+        entry.character = object.value(QStringLiteral("character")).toInt(-1);
+        entry.offset = object.value(QStringLiteral("offset")).toInt(-1);
+        if (entry.character < 0 || entry.offset < 0) {
+            return std::nullopt;
+        }
+        result.push_back(std::move(entry));
+    }
+    return result;
+}
+
+std::vector<Highlight> highlights_in_range(const std::vector<Highlight>& highlights, int start,
+                                           int end) {
+    std::vector<Highlight> result;
+    for (const auto& entry : highlights) {
+        if (entry.character >= start && entry.character < end) {
+            result.push_back(entry);
+        }
+    }
+    std::ranges::stable_sort(result, {}, &Highlight::character);
+    return result;
+}
+
 std::optional<std::pair<int, double>> BookInfo::resolve_character_position(int characters) const {
     if (character_count <= 0) {
         return std::nullopt;

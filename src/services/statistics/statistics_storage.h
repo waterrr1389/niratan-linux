@@ -136,6 +136,11 @@ std::vector<Statistics> read_daily_statistics(
     const std::filesystem::path& book_root, int reset_minutes,
     const QTimeZone& zone = QTimeZone(QTimeZone::LocalTime));
 
+// Dashboard read: absent or empty data is an empty vector; an existing
+// book with no decodable statistics file returns nullopt.
+std::optional<std::vector<Statistics>> read_dashboard_statistics(
+    const std::filesystem::path& book_root, int reset_minutes, const QTimeZone& zone);
+
 // Writes both files from `records`: the sessions with exportedDaily set to
 // each derived row's lastStatisticModified (the greater one on a duplicate
 // date key), then the derived rows sorted by date key. Returns false, with a

@@ -4,10 +4,8 @@
 // and HSMpvClient.mm: one libmpv handle, the render API drawn into the Quick
 // framebuffer object, and the property set the player UI needs.
 //
-// mpv itself draws the video and the subtitles: subtitle appearance is mapped
-// onto mpv's sub-* options (font size 36 by default, the configured vertical
-// position, the edge style as an outline/shadow strength), so the same cue
-// timing, delay and track selection rules as the macOS client apply.
+// mpv draws the video and subtitles. Native sub-* options approximate the
+// Swift typography, placement and edges; they do not expose interactive text.
 //
 // All commands are marshalled to the main thread; the render context lives on
 // the render thread and reports frames through the update callback. Property
@@ -22,14 +20,17 @@
 //
 // The handle is created with the same safety options as HSMpvClient:
 // config=no, osc=no, input-default-bindings=no, keep-open=yes, vo=libmpv.
-// Hardware decoding is auto-safe; if the render context cannot be created the
-// item reports an error and stays black.
+// Hardware decoding defaults to auto-safe; if the render context cannot be
+// created the item reports an error and stays black.
 
 #pragma once
+
+#include "services/player/playback_controls.h"
 
 #include <QQuickFramebufferObject>
 #include <QByteArray>
 #include <QElapsedTimer>
+#include <QJsonObject>
 #include <QSize>
 #include <QString>
 #include <QTimer>
@@ -51,6 +52,8 @@ class MpvItem : public QQuickFramebufferObject {
     Q_PROPERTY(bool muted READ muted WRITE setMuted NOTIFY mutedChanged)
     Q_PROPERTY(qreal volume READ volume WRITE setVolume NOTIFY volumeChanged)
     Q_PROPERTY(qreal speed READ speed WRITE setSpeed NOTIFY speedChanged)
+    Q_PROPERTY(qreal loopStart READ loopStart NOTIFY abLoopChanged)
+    Q_PROPERTY(qreal loopEnd READ loopEnd NOTIFY abLoopChanged)
     Q_PROPERTY(qreal subtitleDelay READ subtitleDelay WRITE setSubtitleDelay NOTIFY
                    subtitleDelayChanged)
     Q_PROPERTY(qreal audioDelay READ audioDelay WRITE setAudioDelay NOTIFY audioDelayChanged)
@@ -58,6 +61,7 @@ class MpvItem : public QQuickFramebufferObject {
     Q_PROPERTY(QString error READ error NOTIFY errorChanged)
     Q_PROPERTY(QVariantList chapters READ chapters NOTIFY chaptersChanged)
     Q_PROPERTY(QVariantList tracks READ tracks NOTIFY tracksChanged)
+    Q_PROPERTY(QVariantMap videoSettings READ videoSettings NOTIFY videoSettingsChanged)
     Q_PROPERTY(bool resumeAvailable READ resumeAvailable NOTIFY resumeChanged)
     Q_PROPERTY(qreal resumePosition READ resumePosition NOTIFY resumeChanged)
     Q_PROPERTY(bool extractingTranscript READ extractingTranscript NOTIFY extractingTranscriptChanged)
@@ -84,6 +88,8 @@ class MpvItem : public QQuickFramebufferObject {
     void setVolume(qreal volume);
     qreal speed() const;
     void setSpeed(qreal speed);
+    qreal loopStart() const;
+    qreal loopEnd() const;
     qreal subtitleDelay() const;
     void setSubtitleDelay(qreal delay);
     qreal audioDelay() const;
@@ -121,14 +127,18 @@ class MpvItem : public QQuickFramebufferObject {
     // caller must not show the range as set in that case.
     Q_INVOKABLE bool setABLoopStart();
     Q_INVOKABLE bool setABLoopEnd();
+    Q_INVOKABLE bool setABLoopStartAt(qreal time);
+    Q_INVOKABLE bool setABLoopEndAt(qreal time);
     Q_INVOKABLE void clearABLoop();
     Q_INVOKABLE void rotateClockwise();
     Q_INVOKABLE void stepSpeed(int direction);
     Q_INVOKABLE void resetSpeed();
+    Q_INVOKABLE QString speedLabel(qreal value) const;
+    Q_INVOKABLE bool acceptSpeedInput(const QString& input);
 
-    // Subtitle appearance, applied to mpv's subtitle renderer.
-    Q_INVOKABLE void applySubtitleStyle(int font_size, int position_percent, int weight,
-                                        double background_opacity);
+    QVariantMap videoSettings() const;
+    Q_INVOKABLE bool changeVideoSetting(const QString& key, const QVariant& value);
+    Q_INVOKABLE bool resetSubtitleAppearance();
 
     // The mpv handle is shared with the renderer, which is created on the
     // scene graph thread.
@@ -144,6 +154,8 @@ class MpvItem : public QQuickFramebufferObject {
     void mutedChanged();
     void volumeChanged();
     void speedChanged();
+    void abLoopChanged();
+    void videoSettingsChanged();
     void subtitleDelayChanged();
     void audioDelayChanged();
     void loopingChanged();
@@ -179,7 +191,10 @@ class MpvItem : public QQuickFramebufferObject {
     double get_double(const char* name, double fallback) const;
     bool get_bool(const char* name, bool fallback) const;
     QString get_string(const char* name) const;
+    bool save_video_settings(const QJsonObject& changes);
+    void apply_video_settings();
 
+    QJsonObject video_settings_;
     mpv_handle* handle_ = nullptr;
     void* render_context_ = nullptr;
     QTimer poll_timer_;
@@ -194,7 +209,7 @@ class MpvItem : public QQuickFramebufferObject {
     qreal audio_delay_ = 0.0;
     bool looping_ = false;
     QString error_;
-    qreal ab_loop_start_ = -1.0;
+    niratan::player::ABLoop ab_loop_;
     int chapter_index_ = -1;
     quint64 load_generation_ = 0;
     bool waiting_for_context_ = false;

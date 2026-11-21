@@ -19,6 +19,8 @@ Rectangle {
     property bool playbackReady: false
     property var subtitleTracks: []
     property bool extractingTranscript: false
+    property real loopStart: -1
+    property real loopEnd: -1
     property int preferredWidth: 340
     property int selectedTab: 0
     readonly property int minimumWidth: 320
@@ -28,6 +30,8 @@ Rectangle {
     signal subtitleFileRequested(url file)
     signal subtitleTrackRequested(int trackId, bool extract)
     signal transcriptRequested()
+    signal loopStartRequested(real time)
+    signal loopEndRequested(real time)
 
     implicitWidth: preferredWidth
     color: Theme.windowBackground
@@ -288,14 +292,50 @@ Rectangle {
                     boundsBehavior: Flickable.StopAtBounds
                     ScrollBar.vertical: ScrollBar {}
 
-                    delegate: TimelineRow {
+                    delegate: RowLayout {
                         id: cue
                         required property var modelData
+                        readonly property bool marksStart: sidebar.loopStart >= modelData.start
+                            && sidebar.loopStart <= modelData.end
+                        readonly property bool marksEnd: sidebar.loopEnd >= modelData.start
+                            && sidebar.loopEnd <= modelData.end
+                        readonly property bool showMarkers: cueHover.hovered || marksStart || marksEnd
+                            || cueRow.activeFocus || markA.activeFocus || markB.activeFocus
                         width: transcript.width - Theme.spacingMd
-                        marker: sidebar.timeLabel(cue.modelData.start)
-                        title: cue.modelData.text
-                        selected: cue.modelData.index === sidebar.study.currentRow
-                        onClicked: sidebar.study.seekToRow(cue.modelData.index)
+                        spacing: Theme.spacingXs
+
+                        HoverHandler { id: cueHover }
+
+                        TimelineRow {
+                            id: cueRow
+                            Layout.fillWidth: true
+                            marker: sidebar.timeLabel(cue.modelData.start)
+                            title: cue.modelData.text
+                            selected: cue.modelData.index === sidebar.study.currentRow
+                            onClicked: sidebar.study.seekToRow(cue.modelData.index)
+                        }
+
+                        LoopMarker {
+                            id: markA
+                            opacity: cue.showMarkers ? 1 : 0
+                            enabled: sidebar.playbackReady
+                            selected: cue.marksStart
+                            text: "A"
+                            Accessible.name: qsTr("Set A Point")
+                            ToolTip.text: qsTr("Set A Point")
+                            onClicked: sidebar.loopStartRequested(cue.modelData.start)
+                        }
+
+                        LoopMarker {
+                            id: markB
+                            opacity: cue.showMarkers ? 1 : 0
+                            enabled: sidebar.playbackReady && sidebar.loopStart >= 0
+                            selected: cue.marksEnd
+                            text: "B"
+                            Accessible.name: qsTr("Set B Point")
+                            ToolTip.text: qsTr("Set B Point")
+                            onClicked: sidebar.loopEndRequested(cue.modelData.end)
+                        }
                     }
                 }
 
@@ -443,6 +483,30 @@ Rectangle {
                 ? Theme.cardBackground : Theme.windowBackground
             border.width: Theme.cardBorderWidth
             border.color: button.selected || button.activeFocus ? Theme.accent : Theme.cardStroke
+        }
+    }
+
+    component LoopMarker: Button {
+        id: loopMarker
+        property bool selected: false
+        implicitWidth: 20
+        implicitHeight: 20
+        padding: 0
+        focusPolicy: Qt.TabFocus
+        ToolTip.visible: hovered
+        contentItem: Text {
+            text: loopMarker.text
+            color: loopMarker.selected ? Theme.windowBackground : Theme.textSecondary
+            font.pixelSize: Theme.fontCaption
+            font.bold: true
+            horizontalAlignment: Text.AlignHCenter
+            verticalAlignment: Text.AlignVCenter
+        }
+        background: Rectangle {
+            radius: width / 2
+            color: loopMarker.selected ? Theme.accent : Theme.cardBackground
+            border.width: loopMarker.activeFocus ? Theme.cardBorderWidth : 0
+            border.color: Theme.accent
         }
     }
 

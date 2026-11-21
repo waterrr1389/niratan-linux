@@ -43,7 +43,225 @@ Item {
     readonly property real trendMaxValue: page.trendMaximum()
     readonly property real rankingMaxValue: page.rankingMaximum()
 
-    property bool calendarScrollPending: true
+    property int chartStyle: 0
+
+    Dialog {
+        id: bookDetails
+        parent: Overlay.overlay
+        anchors.centerIn: parent
+        width: Math.min(page.width - 24, 780)
+        height: Math.min(page.height - 24, 560)
+        modal: true
+        standardButtons: Dialog.Close
+        property var book: ({})
+        property string dateKey: ""
+        property string sessionId: ""
+        readonly property var day: StatisticsViewModel.bookDays.find(
+            item => item.dateKey === dateKey)
+
+        function chooseSession(session) {
+            sessionId = session ? session.id : ""
+            countField.text = session ? String(session.characters) : ""
+            hoursField.text = session ? String(session.hours) : ""
+            minutesField.text = session ? String(session.minutes) : ""
+        }
+
+        function selectDay(item, preferred) {
+            dateKey = item ? item.dateKey : ""
+            var sessions = item ? item.sessions : []
+            chooseSession(sessions.find(session => session.id === preferred)
+                ?? (sessions.length === 1 ? sessions[0] : null))
+        }
+
+        function restoreSelection(date, session) {
+            var days = StatisticsViewModel.bookDays
+            selectDay(days.find(item => item.dateKey === date) ?? days[days.length - 1], session)
+        }
+
+        function showBook(item) {
+            book = item
+            StatisticsViewModel.openBookDetails(item.id)
+            restoreSelection("", "")
+            open()
+        }
+
+        title: qsTr("Statistics")
+        contentItem: ColumnLayout {
+            RowLayout {
+                Layout.fillWidth: true
+                Image {
+                    Layout.preferredWidth: 48
+                    Layout.preferredHeight: 64
+                    source: bookDetails.book.cover ?? ""
+                    fillMode: Image.PreserveAspectFit
+                }
+                Label {
+                    Layout.fillWidth: true
+                    text: bookDetails.book.title ?? ""
+                    color: Theme.textPrimary
+                    font.bold: true
+                    elide: Text.ElideRight
+                }
+            }
+            Label {
+                Layout.fillWidth: true
+                visible: StatisticsViewModel.detailError.length > 0
+                text: StatisticsViewModel.detailError
+                color: Theme.popupDanger
+                wrapMode: Text.WordWrap
+                Accessible.role: Accessible.AlertMessage
+            }
+            GridLayout {
+                Layout.fillWidth: true
+                Layout.fillHeight: true
+                columns: bookDetails.width >= 620 ? 2 : 1
+                ListView {
+                    Layout.fillWidth: true
+                    Layout.fillHeight: true
+                    Layout.preferredWidth: 270
+                    Layout.preferredHeight: 160
+                    clip: true
+                    model: StatisticsViewModel.bookDays
+                    ScrollBar.vertical: ScrollBar {}
+                    delegate: ItemDelegate {
+                        id: detailDay
+                        required property var modelData
+                        width: ListView.view.width
+                        highlighted: detailDay.modelData.dateKey === bookDetails.dateKey
+                        text: qsTr("%1\n%2 · %3 · %n session(s)", "", detailDay.modelData.sessions.length)
+                            .arg(page.fullDate(detailDay.modelData.dateKey))
+                            .arg(page.formatCharacters(detailDay.modelData.characters))
+                            .arg(page.formatDuration(detailDay.modelData.duration))
+                        onClicked: bookDetails.selectDay(detailDay.modelData, "")
+                    }
+                    Label {
+                        anchors.centerIn: parent
+                        visible: StatisticsViewModel.bookDays.length === 0
+                        text: qsTr("No reading records")
+                        color: Theme.textSecondary
+                    }
+                }
+                ColumnLayout {
+                    Layout.fillWidth: true
+                    Layout.fillHeight: true
+                    Label {
+                        Layout.fillWidth: true
+                        text: bookDetails.day ? page.fullDate(bookDetails.dateKey)
+                            : qsTr("Select a day to edit its reading sessions.")
+                        color: Theme.textPrimary
+                        wrapMode: Text.WordWrap
+                    }
+                    ListView {
+                        Layout.fillWidth: true
+                        Layout.fillHeight: true
+                        Layout.preferredHeight: 120
+                        clip: true
+                        model: bookDetails.day?.sessions ?? []
+                        ScrollBar.vertical: ScrollBar {}
+                        delegate: ItemDelegate {
+                            id: detailSession
+                            required property var modelData
+                            width: ListView.view.width
+                            highlighted: detailSession.modelData.id === bookDetails.sessionId
+                            text: qsTr("%1–%2\n%3 · %4 · %5")
+                                .arg(Qt.formatTime(detailSession.modelData.start, Qt.locale().timeFormat(Locale.ShortFormat)))
+                                .arg(Qt.formatTime(detailSession.modelData.end, Qt.locale().timeFormat(Locale.ShortFormat)))
+                                .arg(page.formatCharacters(detailSession.modelData.characters))
+                                .arg(page.formatDuration(detailSession.modelData.duration))
+                                .arg(page.formatSpeed(detailSession.modelData.speed))
+                            onClicked: bookDetails.chooseSession(detailSession.modelData)
+                        }
+                    }
+                    Flow {
+                        Layout.fillWidth: true
+                        spacing: Theme.spacingSm
+                        visible: bookDetails.sessionId.length > 0
+                        TextField {
+                            id: countField
+                            width: 120
+                            placeholderText: qsTr("Characters read")
+                            Accessible.name: placeholderText
+                            validator: IntValidator { bottom: 0 }
+                        }
+                        TextField {
+                            id: hoursField
+                            width: 62
+                            placeholderText: qsTr("Hours")
+                            Accessible.name: placeholderText
+                            validator: IntValidator { bottom: 0 }
+                        }
+                        TextField {
+                            id: minutesField
+                            width: 70
+                            placeholderText: qsTr("Minutes")
+                            Accessible.name: placeholderText
+                            validator: IntValidator { bottom: 0; top: 59 }
+                        }
+                        Button {
+                            text: qsTr("Save")
+                            enabled: countField.acceptableInput && hoursField.acceptableInput
+                                && minutesField.acceptableInput
+                            onClicked: {
+                                if (StatisticsViewModel.saveBookSession(bookDetails.sessionId,
+                                    Number(countField.text), Number(hoursField.text),
+                                    Number(minutesField.text))) {
+                                    bookDetails.restoreSelection(bookDetails.dateKey, bookDetails.sessionId)
+                                }
+                            }
+                        }
+                    }
+                    Flow {
+                        Layout.fillWidth: true
+                        spacing: Theme.spacingSm
+                        Button {
+                            visible: bookDetails.sessionId.length > 0
+                            text: qsTr("Delete Session")
+                            onClicked: deleteStats.ask(0)
+                        }
+                        Button {
+                            visible: !!bookDetails.day
+                            text: qsTr("Delete This Day")
+                            onClicked: deleteStats.ask(1)
+                        }
+                        Button {
+                            visible: StatisticsViewModel.bookDays.length > 0
+                            text: qsTr("Delete All Statistics")
+                            onClicked: deleteStats.ask(2)
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    Dialog {
+        id: deleteStats
+        parent: Overlay.overlay
+        anchors.centerIn: parent
+        modal: true
+        standardButtons: Dialog.Cancel | Dialog.Ok
+        property int scope: 0
+        function ask(value) {
+            scope = value
+            open()
+        }
+        title: scope === 0 ? qsTr("Delete This Session") : scope === 1
+            ? qsTr("Delete This Day") : qsTr("Delete All Statistics")
+        contentItem: Label {
+            text: deleteStats.scope === 0 ? qsTr("Delete the selected reading session? This cannot be undone.")
+                : deleteStats.scope === 1 ? qsTr("Delete the selected day's statistics? This cannot be undone.")
+                : qsTr("Delete all statistics for this book? This cannot be undone.")
+            wrapMode: Text.WordWrap
+        }
+        onAccepted: {
+            var id = scope === 0 ? bookDetails.sessionId : ""
+            var date = scope === 1 ? bookDetails.dateKey : ""
+            if ((scope === 0 && !id) || (scope === 1 && !date))
+                return
+            if (StatisticsViewModel.deleteBookSessions(id, date))
+                bookDetails.restoreSelection(scope === 0 ? bookDetails.dateKey : "", "")
+        }
+    }
 
     component Card: Rectangle {
         default property alias content: body.data
@@ -386,8 +604,37 @@ Item {
         var rows = StatisticsViewModel.ranking
         var maximum = 1
         for (var index = 0; index < rows.length; ++index)
-            maximum = Math.max(maximum, rows[index].characters)
+            maximum = Math.max(maximum, rows[index].value)
         return maximum
+    }
+
+    function rankingValueText(row) {
+        if (StatisticsViewModel.rankingMetric === 1)
+            return page.formatDuration(row.time)
+        if (StatisticsViewModel.rankingMetric === 2)
+            return page.formatSpeed(row.speed)
+        return page.formatCharacters(row.characters)
+    }
+
+    function fullDate(key) {
+        return Qt.formatDate(new Date(key + "T12:00:00"), Qt.locale().dateFormat(Locale.LongFormat))
+    }
+
+    function trendDescription(point) {
+        var value = page.trendValue(point)
+        var metric = value === null ? "—" : page.formatAxis(value)
+        var description = [point.id, qsTr("Metric: %1").arg(metric),
+            qsTr("Characters: %1").arg(page.formatCharacters(point.characters)),
+            qsTr("Duration: %1").arg(page.formatDuration(point.time)),
+            qsTr("Speed: %1").arg(page.formatSpeed(point.speed))]
+        if (point.books.length > 0) {
+            description.push(qsTr("Books"))
+            for (var i = 0; i < point.books.length; ++i) {
+                description.push(qsTr("%1: %2").arg(point.books[i].title)
+                    .arg(page.formatCharacters(point.books[i].characters)))
+            }
+        }
+        return description.join("\n")
     }
 
     function barWidth() {
@@ -450,21 +697,28 @@ Item {
         return StatisticsViewModel.calendarDays.slice(weekIndex * 7, weekIndex * 7 + 7)
     }
 
-    function scrollCalendarToEnd() {
-        if (!calendarScroll.visible || calendarScroll.contentWidth <= calendarScroll.width)
-            return
-        calendarScroll.contentX = calendarScroll.contentWidth - calendarScroll.width
+    function scrollCalendarToSelection() {
+        var index = StatisticsViewModel.calendarDays.findIndex(
+            day => day.dateKey === page.selectedKey)
+        if (index >= 0) {
+            var x = Math.floor(index / 7) * (12 + weeksRow.spacing)
+            calendarScroll.contentX = Math.min(
+                Math.max(0, calendarScroll.contentWidth - calendarScroll.width),
+                Math.max(0, x - calendarScroll.width / 2))
+        }
     }
 
+    onSelectedKeyChanged: Qt.callLater(page.scrollCalendarToSelection)
     Component.onCompleted: StatisticsViewModel.refresh()
 
     Connections {
         target: StatisticsViewModel
         function onDataChanged() {
-            if (page.calendarScrollPending && StatisticsViewModel.calendarDays.length > 0) {
-                page.calendarScrollPending = false
-                Qt.callLater(page.scrollCalendarToEnd)
-            }
+            Qt.callLater(page.scrollCalendarToSelection)
+            trendLine.requestPaint()
+        }
+        function onViewChanged() {
+            trendLine.requestPaint()
         }
     }
 
@@ -497,28 +751,42 @@ Item {
 
             Card {
                 Layout.fillWidth: true
-                visible: !StatisticsViewModel.hasBooks
-
+                visible: StatisticsViewModel.hasCorruptStatistics
                 Label {
                     Layout.fillWidth: true
-                    text: qsTr("No Books")
+                    text: qsTr("Some statistics are temporarily unavailable.")
                     color: Theme.textPrimary
-                    font.pixelSize: 18
-                    font.bold: true
-                }
-                Label {
-                    Layout.fillWidth: true
-                    text: qsTr("Import a book to see reading statistics.")
-                    color: Theme.textSecondary
-                    font.pixelSize: 13
                     wrapMode: Text.WordWrap
+                }
+            }
+
+            Card {
+                Layout.fillWidth: true
+                visible: StatisticsViewModel.loading
+                RowLayout {
+                    Layout.fillWidth: true
+                    Label {
+                        Layout.fillWidth: true
+                        text: qsTr("Loading Statistics")
+                        color: Theme.textSecondary
+                    }
+                    BusyIndicator { running: StatisticsViewModel.loading }
+                }
+                Repeater {
+                    model: StatisticsViewModel.hasLoaded ? 0 : 3
+                    delegate: Rectangle {
+                        Layout.fillWidth: true
+                        Layout.preferredHeight: 46
+                        radius: 6
+                        color: Theme.cardStroke
+                    }
                 }
             }
 
             ColumnLayout {
                 Layout.fillWidth: true
                 spacing: page.cardSpacing
-                visible: StatisticsViewModel.hasBooks
+                visible: StatisticsViewModel.hasLoaded
 
                 GridLayout {
                     Layout.fillWidth: true
@@ -754,7 +1022,7 @@ Item {
 
                 Card {
                     Layout.fillWidth: true
-                    visible: StatisticsViewModel.hasBooks && !StatisticsViewModel.hasStatistics
+                    visible: !StatisticsViewModel.hasStatistics
 
                     Label {
                         Layout.fillWidth: true
@@ -828,9 +1096,21 @@ Item {
                                                 page.rangeHighlight
                                                 && dayCell.modelData.dateKey >= page.rangeStartKey
                                                 && dayCell.modelData.dateKey <= page.rangeEndKey
+                                            readonly property string summary: qsTr("%1: %2")
+                                                .arg(page.fullDate(dayCell.modelData.dateKey))
+                                                .arg(page.formatCharacters(dayCell.modelData.characters))
+                                            Accessible.role: Accessible.Button
+                                            Accessible.name: dayCell.summary
+                                            Accessible.onPressAction: StatisticsViewModel.selectCalendarDay(
+                                                dayCell.modelData.dateKey)
+                                            ToolTip.visible: dayMouse.containsMouse
+                                            ToolTip.delay: 400
+                                            ToolTip.text: dayCell.summary
 
                                             MouseArea {
+                                                id: dayMouse
                                                 anchors.fill: parent
+                                                hoverEnabled: true
                                                 onClicked: StatisticsViewModel.selectCalendarDay(
                                                     dayCell.modelData.dateKey)
                                             }
@@ -838,6 +1118,40 @@ Item {
                                     }
                                 }
                             }
+                        }
+                    }
+
+                    RowLayout {
+                        Layout.fillWidth: true
+                        Label {
+                            Layout.fillWidth: true
+                            text: qsTr("Selected: %1").arg(page.fullDate(page.selectedKey))
+                            color: Theme.accent
+                            font.bold: true
+                        }
+                        Label {
+                            visible: !StatisticsViewModel.selectedCalendarDay.hasRecords
+                            text: qsTr("No reading records")
+                            color: Theme.textSecondary
+                        }
+                    }
+
+                    RowLayout {
+                        Layout.fillWidth: true
+                        MetricTile {
+                            label: qsTr("Characters")
+                            value: page.formatCharacters(StatisticsViewModel.selectedCalendarDay.characters)
+                            Layout.fillWidth: true
+                        }
+                        MetricTile {
+                            label: qsTr("Duration")
+                            value: page.formatDuration(StatisticsViewModel.selectedCalendarDay.duration)
+                            Layout.fillWidth: true
+                        }
+                        MetricTile {
+                            label: qsTr("Books")
+                            value: page.formatCharacters(StatisticsViewModel.selectedCalendarDay.books)
+                            Layout.fillWidth: true
                         }
                     }
                 }
@@ -940,6 +1254,19 @@ Item {
                                 }
                             }
                         }
+                        Column {
+                            spacing: 4
+                            Label {
+                                text: qsTr("Style")
+                                color: Theme.textSecondary
+                                font.pixelSize: 11
+                            }
+                            Segments {
+                                labels: [qsTr("Bar"), qsTr("Line")]
+                                currentIndex: page.chartStyle
+                                onActivated: function (index) { page.chartStyle = index }
+                            }
+                        }
                     }
 
                     Label {
@@ -1006,6 +1333,44 @@ Item {
                                 policy: ScrollBar.AsNeeded
                             }
 
+                                Canvas {
+                                    id: trendLine
+                                    anchors.fill: trendRow
+                                    visible: page.chartStyle === 1
+                                    readonly property color accent: Theme.accent
+                                    onAccentChanged: requestPaint()
+                                    onVisibleChanged: requestPaint()
+                                    onWidthChanged: requestPaint()
+                                    onHeightChanged: requestPaint()
+                                    onPaint: {
+                                        var ctx = getContext("2d")
+                                        ctx.clearRect(0, 0, width, height)
+                                        ctx.strokeStyle = accent
+                                        ctx.fillStyle = accent
+                                        ctx.lineWidth = 2
+                                        var points = StatisticsViewModel.trend
+                                        var slot = page.barWidth() + page.barSpacing()
+                                        var connected = false
+                                        ctx.beginPath()
+                                        for (var i = 0; i < points.length; ++i) {
+                                            var value = page.trendValue(points[i])
+                                            if (value === null) {
+                                                connected = false
+                                                continue
+                                            }
+                                            var x = (i + 0.5) * slot
+                                            var y = Math.min(height - 2, height * (1 - value / page.trendMaxValue))
+                                            if (connected)
+                                                ctx.lineTo(x, y)
+                                            else
+                                                ctx.moveTo(x, y)
+                                            ctx.fillRect(x - 2, y - 2, 4, 4)
+                                            connected = true
+                                        }
+                                        ctx.stroke()
+                                    }
+                                }
+
                             Row {
                                 id: trendRow
                                 x: page.labelWidth() / 2
@@ -1021,7 +1386,7 @@ Item {
                                         width: page.barWidth() + page.barSpacing()
                                         height: trendRow.height
 
-                                        readonly property real value: page.trendValue(barColumn.modelData)
+                                        readonly property var value: page.trendValue(barColumn.modelData)
                                         readonly property real barHeight:
                                             barColumn.value === null || barColumn.value <= 0
                                             ? 2
@@ -1029,6 +1394,7 @@ Item {
                                                        / page.trendMaxValue, 6)
 
                                         Rectangle {
+                                            visible: page.chartStyle === 0
                                             width: page.barWidth()
                                             height: barColumn.barHeight
                                             anchors.horizontalCenter: parent.horizontalCenter
@@ -1037,10 +1403,11 @@ Item {
                                             color: page.tint(Theme.accent,
                                                              barHover.hovered ? 1 : 0.86)
 
-                                            HoverHandler {
-                                                id: barHover
-                                            }
                                         }
+                                        HoverHandler { id: barHover }
+                                        ToolTip.visible: barHover.hovered
+                                        ToolTip.delay: 350
+                                        ToolTip.text: page.trendDescription(barColumn.modelData)
                                     }
                                 }
                             }
@@ -1157,6 +1524,12 @@ Item {
                             detail: page.rangeTitle()
                         }
 
+                        Segments {
+                            labels: [qsTr("Characters"), qsTr("Duration"), qsTr("Speed")]
+                            currentIndex: StatisticsViewModel.rankingMetric
+                            onActivated: function (index) { StatisticsViewModel.rankingMetric = index }
+                        }
+
                         Label {
                             Layout.fillWidth: true
                             Layout.preferredHeight: 100
@@ -1175,6 +1548,20 @@ Item {
                                 required property var modelData
                                 Layout.fillWidth: true
                                 implicitHeight: 54
+                                Accessible.role: Accessible.Button
+                                Accessible.name: rankRow.modelData.title
+                                Accessible.onPressAction: bookDetails.showBook(rankRow.modelData)
+                                activeFocusOnTab: true
+                                Keys.onReturnPressed: bookDetails.showBook(rankRow.modelData)
+                                Keys.onSpacePressed: bookDetails.showBook(rankRow.modelData)
+                                Rectangle {
+                                    anchors.fill: parent
+                                    radius: 4
+                                    color: page.tint(Theme.accent, 0.12)
+                                    visible: rankRow.activeFocus || rankTap.hovered
+                                }
+                                HoverHandler { id: rankTap }
+                                TapHandler { onTapped: bookDetails.showBook(rankRow.modelData) }
 
                                 RowLayout {
                                     anchors.fill: parent
@@ -1221,9 +1608,9 @@ Item {
                                         }
                                         Rectangle {
                                             width: Math.max(parent.width
-                                                            * rankRow.modelData.characters
+                                                            * rankRow.modelData.value
                                                             / page.rankingMaxValue,
-                                                            rankRow.modelData.characters > 0
+                                                            rankRow.modelData.value > 0
                                                             ? 2 : 0)
                                             height: parent.height
                                             radius: 4.5
@@ -1233,7 +1620,7 @@ Item {
 
                                     Label {
                                         Layout.preferredWidth: 84
-                                        text: page.formatCharacters(rankRow.modelData.characters)
+                                        text: page.rankingValueText(rankRow.modelData)
                                         color: Theme.textSecondary
                                         font.pixelSize: 12
                                         horizontalAlignment: Text.AlignRight

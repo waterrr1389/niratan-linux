@@ -3,9 +3,9 @@
 #include "player_study_view_model.h"
 
 #include "services/player/mining_history.h"
+#include "services/player/video_settings.h"
 #include "services/sasayaki/srt_parser.h"
 #include "services/storage/app_paths.h"
-#include "services/storage/json_file.h"
 
 #include <QClipboard>
 #include <QDateTime>
@@ -180,15 +180,6 @@ QUrl local_url(const std::string& path) {
 QString search_key(const QString& text) {
     static const QRegularExpression marks(QStringLiteral(R"(\p{M}+)"));
     return text.normalized(QString::NormalizationForm_KD).toCaseFolded().remove(marks);
-}
-
-int read_history_limit(const std::filesystem::path& root) {
-    if (root.empty()) {
-        return kHistoryDefaultLimit;
-    }
-    const auto read = storage::read_json_file(root / "settings.json");
-    const auto value = read.document.object().value(QStringLiteral("videoMiningHistoryLimit"));
-    return std::max(0, value.toInt(kHistoryDefaultLimit));
 }
 
 }  // namespace
@@ -648,7 +639,8 @@ void PlayerStudyViewModel::clearHistory() {
 }
 
 void PlayerStudyViewModel::refreshHistory() {
-    const int limit = read_history_limit(state_->data_root);
+    const int limit = player::load_video_settings(state_->data_root)
+        .value("videoMiningHistoryLimit").toInt();
     auto items = state_->data_root.empty() ? std::vector<MiningHistoryItem>{}
         : player::pruned_items(player::load(state_->data_root), limit);
     QVariantList history;

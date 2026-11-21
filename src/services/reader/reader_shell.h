@@ -54,6 +54,8 @@ struct ShellInput {
     // A JavaScript expression evaluated once fonts are ready, such as
     // "window.hoshiReader.restoreProgress(0.25)". Empty does nothing.
     std::string initial_restore_expression;
+    // Serialized current-spine highlights, with HTML delimiters escaped.
+    std::string highlights_json;
 };
 
 struct ReaderScripts {

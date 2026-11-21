@@ -17,6 +17,10 @@ using niratan::books::BookMetadata;
 using niratan::books::BookShelf;
 using niratan::books::Bookmark;
 using niratan::books::ChapterInfo;
+using niratan::books::Highlight;
+using niratan::books::highlights_from_json;
+using niratan::books::highlights_in_range;
+using niratan::books::highlights_to_json;
 using niratan::books::book_info_from_json;
 using niratan::books::book_info_to_json;
 using niratan::books::book_metadata_from_json;
@@ -69,6 +73,7 @@ class BookModelTest : public QObject {
     void display_title_prefers_the_renamed_title();
     void bookmark_round_trips();
     void bookmark_requires_its_keys();
+    void highlights_use_half_open_chapter_ranges();
     void book_info_round_trips();
     void chapter_info_round_trips_the_optional_fields();
     void resolving_a_character_position_uses_chapter_ranges();
@@ -157,6 +162,22 @@ void BookModelTest::bookmark_requires_its_keys() {
         "{\"chapterIndex\":0,\"progress\":0.5,\"characterCount\":10}"));
     QVERIFY(bookmark.has_value());
     QVERIFY(!bookmark->last_modified.has_value());
+}
+
+// NativeReaderView.swift (addHighlight, chapterHighlightsJSON).
+void BookModelTest::highlights_use_half_open_chapter_ranges() {
+    const std::vector<Highlight> entries{
+        {"end", 20, 0, "end", "purple", 1.0},
+        {"inside", 12, 42, "本文", "green", 2.0},
+        {"start", 10, 3, "start", "yellow", 3.0},
+        {"before", 9, 8, "before", "pink", 4.0},
+    };
+    const auto restored = highlights_from_json(highlights_to_json(entries));
+    QVERIFY(restored.has_value());
+    QCOMPARE(*restored, entries);
+    QCOMPARE(highlights_in_range(*restored, 10, 20),
+             (std::vector<Highlight>{entries[2], entries[1]}));
+    QVERIFY(highlights_in_range(*restored, 20, 20).empty());
 }
 
 void BookModelTest::book_info_round_trips() {

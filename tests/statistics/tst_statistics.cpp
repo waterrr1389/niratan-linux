@@ -173,6 +173,8 @@ class StatisticsTest : public QObject {
 
     void entries_drop_tombstones_and_sort_by_start_then_id();
     void days_group_sessions_by_start_day();
+    void detail_days_filter_empty_totals();
+    void detail_edits_preserve_precision_and_tombstones();
 
     void legacy_ids_are_stable_and_key_specific();
     void legacy_session_uses_the_last_modified_heuristic();
@@ -813,6 +815,44 @@ void StatisticsTest::persistence_policy_compares_the_persisted_bookmark() {
     backwards.character_count = 79736;
     const std::optional<ReaderStatisticsBookmarkSnapshot> earlier_page = backwards;
     QVERIFY(should_persist_statistics(17, 79736, earlier_page));
+}
+
+// StatisticsBookDetailPanel in Features/Bookshelf/StatisticsDashboardView.swift.
+void StatisticsTest::detail_days_filter_empty_totals() {
+    using niratan::statistics::detail_days;
+    const auto zone = fixed_zone();
+    const ReadingSessionRecords records{
+        {"early", timestamped(1, make_session(at(zone, 2026, 2, 2, 0, 30), 150, 75.5))},
+        {"previous", timestamped(1, make_session(at(zone, 2026, 2, 1, 22), 250, 120))},
+        {"empty", timestamped(1, make_session(at(zone, 2026, 2, 2, 6), 0, 0))},
+    };
+    const auto days = detail_days(records, 60, zone);
+    QCOMPARE(days.size(), 1U);
+    QCOMPARE(days.front().date_key, "2026-02-01");
+    QCOMPARE(days.front().sessions.size(), 2U);
+    QCOMPARE(days.front().total(), (ReadingTotal{400, 195.5}));
+}
+
+// ReadingSessionLog.editing/deleting in Models/Statistics.swift.
+void StatisticsTest::detail_edits_preserve_precision_and_tombstones() {
+    using niratan::statistics::delete_detail_sessions;
+    using niratan::statistics::edit_detail_session;
+    const auto zone = fixed_zone();
+    ReadingSessionRecords records{
+        {"live", timestamped(1, make_session(at(zone, 2026, 2, 1, 22), 10, 75.5))},
+        {"deleted", timestamped(2, std::nullopt)},
+    };
+    QVERIFY(!edit_detail_session(records, "live", 10, 0, 1, 3));
+    QVERIFY(edit_detail_session(records, "live", 25, 0, 1, 4));
+    QVERIFY(records.at("live").value.has_value());
+    QCOMPARE(records.at("live").value->reading_time, 75.5);
+    QVERIFY(edit_detail_session(records, "live", -1, 0, 61, 5));
+    QCOMPARE(records.at("live").value->reading_time, 3540.0);
+    QCOMPARE(records.at("live").value->characters_read, 0);
+    QVERIFY(delete_detail_sessions(records, {"live", "deleted", "missing"}, 6));
+    QCOMPARE(records.at("live"), (TimestampedSession{6, std::nullopt}));
+    QCOMPARE(records.at("deleted"), (TimestampedSession{2, std::nullopt}));
+    QVERIFY(!delete_detail_sessions(records, {"live"}, 7));
 }
 
 QTEST_APPLESS_MAIN(StatisticsTest)

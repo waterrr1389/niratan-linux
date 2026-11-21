@@ -168,6 +168,9 @@ class ReadingTracker {
     // Enables tracking when enabled and autostart is On; see the lifecycle
     // rules above. Does nothing while already tracking.
     void start(std::int64_t now_ms);
+    // The explicit reader control can start even when autostart is Off.
+    void toggle(std::int64_t now_ms);
+    void reset_position(int character, std::int64_t now_ms);
 
     // Flushes when not paused, then leaves tracking; does nothing when not
     // tracking.
