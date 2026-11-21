@@ -34,9 +34,12 @@
 // starts. Starting while already tracking does nothing. The live session is
 // kept when it already has activity (a stop/start on the same day continues
 // it); otherwise it starts at the given instant. Tracking starts paused when
-// the context is inactive, and the first update_position() after start or
-// resume establishes the character baseline and credits the elapsed time
-// without characters.
+// the context is inactive. A position reported before tracking starts or while
+// paused is retained without being credited; start() and a resume anchor the
+// character baseline there, as startTracking and reconcileStatisticsFocus call
+// resetTrackingBaseline, which reads the current character. When no position
+// has been reported, the first update_position() after start or resume
+// establishes the baseline and credits the elapsed time without characters.
 //
 // set_context_active() receives the result of the model's predicate
 //     statistics_sheet_active || (reader_window_active && !reader_content_covered)
@@ -51,7 +54,9 @@
 // form, then moves the baseline to the given position. A non-positive time
 // delta credits nothing and leaves the baseline alone. A forward jump is
 // credited in full; a backward jump can only take the session down to zero.
-// While paused, not tracking or disabled, the position is ignored. The caller
+// While paused, not tracking or disabled, nothing is credited, but the
+// reported position is retained as the baseline for the next start or resume.
+// The caller
 // must not report a position while a synced bookmark is being restored, as
 // Swift's updateStats does not apply a position during that restore. flush()
 // credits the time since the last baseline with no characters (the last known
@@ -74,7 +79,13 @@
 // replaces the live values once; a tombstone starts a fresh session with a new
 // id), and then writes only when the live session has activity and its stored
 // value differs. It does nothing when statistics is disabled. The record's
-// modification time is max(now_ms, last_saved_modified + 1). The caller's
+// modification time is max(now_ms, last_saved_modified + 1). A reload that
+// replaces the live session (a newer external value or a tombstone)
+// re-anchors the tracking baseline at the retained position and the call
+// instant, as reloadStatisticsAfterExternalMutation does after
+// loadStatistics; a reload that keeps the live session leaves the baseline
+// alone, as saveStats does, so the interval before a plain save is still
+// credited by the next update. The caller's
 // title is used for the derived daily rows and retained so a day-rotation save
 // can write without one; an empty title keeps the retained one. A failed write
 // does not add the live record to the in-memory history, so a later save
@@ -93,18 +104,19 @@
 // * The stale-bookmark guard of ReaderStatisticsPersistencePolicy is not
 //   applied: save() receives no bookmark or position snapshot. The caller must
 //   not call save() on behalf of a model whose position is known to be stale.
-// * statistics_storage's load never writes, so a legacy migration stays pending
-//   on disk until the next save with activity. Swift's load writes it
-//   immediately.
 // * The day rotation resets the tracking baseline before crediting, so no
 //   interval is split across the boundary. Swift's updateStats credits the
 //   interval since the last update to the new session.
+// * A synced bookmark restore is not applied: bookmark sync does not exist in
+//   this port, and it has no sync coordinates, so Swift's
+//   statisticsCharacterPosition preference for
+//   sharedCoordinates.canonicalCharacter is not reproduced. Swift's
+//   applyingSyncedBookmark path calls resetTrackingBaseline when the restored
+//   position settles; here a jump or manual restore uses reset_position
+//   instead and always anchors at the reader's own character offset.
 // * configure() applies a reset-minute change without first crediting and
 //   saving the live session under the old boundary, because it has no instant.
 //   Swift's updateStatisticsResetTime does both.
-// * The first position after start or resume establishes the character
-//   baseline and credits only the elapsed time. Swift's resetTrackingBaseline
-//   reads the current character at that moment.
 // * save() receives its title from the caller and keeps the retained title for
 //   an empty argument; Swift derives it from the stored daily rows and
 //   metadata.

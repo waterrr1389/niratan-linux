@@ -612,4 +612,4 @@ set_tests_properties(reader_selection PROPERTIES
 # a user action to its result with fixtures (EPUB, dictionary, AnkiConnect).
 # Put them under tests/flows and add them here; scripts/check-wired.sh treats
 # that directory as wiring roots.
-# add_subdirectory(flows)
+add_subdirectory(flows)

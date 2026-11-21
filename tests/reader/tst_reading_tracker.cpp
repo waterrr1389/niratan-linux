@@ -93,6 +93,10 @@ class ReadingTrackerTest : public QObject {
     void autostart_off_never_starts();
     void manual_control_overrides_autostart_but_not_disabled_tracking();
     void seeks_establish_a_baseline_without_crediting_the_jump();
+    void opening_anchors_the_baseline_at_the_open_position();
+    void resume_anchors_the_baseline_at_the_resume_position();
+    void reload_after_an_external_mutation_anchors_the_baseline();
+    void reset_time_change_keeps_the_baseline_and_the_live_session();
     void autostart_on_starts_at_start();
     void autostart_on_starts_paused_without_context();
     void autostart_page_turn_waits_for_navigation();
@@ -182,6 +186,121 @@ void ReadingTrackerTest::seeks_establish_a_baseline_without_crediting_the_jump()
     tracker.reset_position(900, now + 2000);
     tracker.update_position(920, now + 3000);
     QCOMPARE(tracker.session_total().characters_read, 20);
+}
+
+// B1: NativeReaderView.swift startTracking calls resetTrackingBaseline, which
+// sets lastCount to statisticsCharacterPosition, so updateStats credits the
+// jump from the open position on its first report.
+void ReadingTrackerTest::opening_anchors_the_baseline_at_the_open_position() {
+    const std::int64_t t0 = ms_at(2026, 3, 10, 12, 0);
+
+    // The restored position is reported while tracking starts paused, and
+    // resuming keeps it as the baseline.
+    {
+        MemoryStore store;
+        ReadingTracker tracker(store, utc_zone());
+        tracker.configure(true, StatisticsAutostartMode::on, 0);
+        tracker.update_position(40, t0);
+        tracker.start(t0);
+        tracker.set_context_active(true, t0);
+        tracker.update_position(42, t0 + 1000);
+        QCOMPARE(tracker.session().characters_read, 2);
+        QCOMPARE(tracker.session().reading_time, 1.0);
+    }
+
+    // Already active at open: start anchors at the reported position.
+    {
+        MemoryStore store;
+        ReadingTracker tracker(store, utc_zone());
+        tracker.configure(true, StatisticsAutostartMode::on, 0);
+        tracker.set_context_active(true, t0);
+        tracker.update_position(40, t0);
+        tracker.start(t0);
+        tracker.update_position(42, t0 + 1000);
+        QCOMPARE(tracker.session().characters_read, 2);
+        QCOMPARE(tracker.session().reading_time, 1.0);
+    }
+}
+
+// B2: NativeReaderView.swift reconcileStatisticsFocus resumes by calling
+// resetTrackingBaseline, which anchors at the position the reader reached
+// while paused.
+void ReadingTrackerTest::resume_anchors_the_baseline_at_the_resume_position() {
+    MemoryStore store;
+    ReadingTracker tracker(store, utc_zone());
+    const std::int64_t t0 = ms_at(2026, 3, 10, 12, 0);
+    begin_tracking(tracker, t0);
+
+    tracker.update_position(100, t0);
+    tracker.update_position(140, t0 + 1000);
+    QCOMPARE(tracker.session().characters_read, 40);
+
+    tracker.set_context_active(false, t0 + 2000);
+    QVERIFY(tracker.is_paused());
+    tracker.update_position(500, t0 + 9000);
+    QCOMPARE(tracker.session().characters_read, 40);
+
+    tracker.set_context_active(true, t0 + 10000);
+    QVERIFY(!tracker.is_paused());
+    tracker.update_position(540, t0 + 11000);
+    QCOMPARE(tracker.session().characters_read, 80);
+}
+
+// B3: reloadStatisticsAfterExternalMutation reloads the stored records and
+// calls resetTrackingBaseline, so an external edit re-anchors both the instant
+// and the character baseline at the reload.
+void ReadingTrackerTest::reload_after_an_external_mutation_anchors_the_baseline() {
+    MemoryStore store;
+    ReadingTracker tracker(store, utc_zone());
+    const std::int64_t t0 = ms_at(2026, 3, 10, 12, 0);
+    begin_tracking(tracker, t0);
+
+    tracker.update_position(100, t0);
+    tracker.update_position(140, t0 + 1000);
+    QCOMPARE(tracker.session().characters_read, 40);
+    QCOMPARE(tracker.session().reading_time, 1.0);
+
+    // The save reloads the records, and another writer replaces this session.
+    QVERIFY(tracker.save(t0 + 2000, "Book"));
+    QCOMPARE(store.records.size(), std::size_t(1));
+    const std::string id = store.records.begin()->first;
+    store.records[id] = stored_session(t0 + 3000, t0, 900, 1.0);
+
+    // The next save adopts the external session; the reload anchors the
+    // baseline there, so the interval before it is not credited afterwards.
+    QVERIFY(!tracker.save(t0 + 4000, "Book"));
+    QCOMPARE(tracker.session().characters_read, 900);
+    QCOMPARE(tracker.session().reading_time, 1.0);
+
+    tracker.update_position(140, t0 + 10000);
+    QCOMPARE(tracker.session().characters_read, 900);
+    QCOMPARE(tracker.session().reading_time, 7.0);
+
+    tracker.update_position(160, t0 + 11000);
+    QCOMPARE(tracker.session().characters_read, 920);
+}
+
+// B4: updateStatisticsResetTime regroups the history and resets the tracking
+// baseline, so a reset-minute change keeps the live session and credits only
+// the movement after the last position, without duplicating totals.
+void ReadingTrackerTest::reset_time_change_keeps_the_baseline_and_the_live_session() {
+    MemoryStore store;
+    ReadingTracker tracker(store, utc_zone());
+    const std::int64_t t0 = ms_at(2026, 3, 10, 12, 0);
+    begin_tracking(tracker, t0);
+
+    tracker.update_position(100, t0);
+    tracker.update_position(140, t0 + 1000);
+    QCOMPARE(tracker.session().characters_read, 40);
+
+    tracker.configure(true, StatisticsAutostartMode::on, 60);
+    QCOMPARE(tracker.session().characters_read, 40);
+    QCOMPARE(tracker.all_time_total().characters_read, 40);
+
+    tracker.update_position(160, t0 + 2000);
+    QCOMPARE(tracker.session().characters_read, 60);
+    QCOMPARE(tracker.session_total().characters_read, 60);
+    QCOMPARE(tracker.all_time_total().characters_read, 60);
 }
 
 void ReadingTrackerTest::autostart_on_starts_at_start() {
@@ -584,6 +703,9 @@ void ReadingTrackerTest::save_starts_a_fresh_session_after_a_tombstone() {
     QCOMPARE(store.records.size(), static_cast<std::size_t>(1));
     QVERIFY(!store.records.begin()->second.value.has_value());
     QCOMPARE(store.save_count, 1);
+    tracker.update_position(160, later + 1000);
+    QCOMPARE(tracker.session().characters_read, 20);
+    QCOMPARE(tracker.session().reading_time, 1.0);
 }
 
 void ReadingTrackerTest::totals_add_the_live_session_once() {

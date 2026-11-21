@@ -516,6 +516,11 @@ bool ReaderViewModel::openBook(const QString& folder) {
     }
     state_->chapter_index = std::min(std::max(chapter, 0), state_->session->spine_count() - 1);
     state_->chapter_progress = clamp_progress(progress);
+    if (state_->tracker) {
+        // startTracking's resetTrackingBaseline anchors at the position the
+        // book opens at, so the first report credits the jump from it.
+        state_->tracker->update_position(character_offset(), now_milliseconds());
+    }
     state_->fragment.clear();
     state_->reveal_cue_after_restore = true;
     reload_settings(false);

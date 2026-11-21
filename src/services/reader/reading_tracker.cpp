@@ -87,12 +87,12 @@ void ReadingTracker::set_context_active(bool active, std::int64_t now_ms) {
     context_active_ = active;
     if (active) {
         // Resuming restarts the time baseline without crediting the paused
-        // interval; the character baseline is re-established by the view.
+        // interval. A position reported while paused is the resume anchor; the
+        // first report establishes one when no position arrived.
         if (!tracking_ || !paused_) {
             return;
         }
         last_timestamp_ms_ = now_ms;
-        position_known_ = false;
         paused_ = false;
         return;
     }
@@ -124,15 +124,18 @@ void ReadingTracker::toggle(std::int64_t now_ms) {
 }
 
 void ReadingTracker::reset_position(int character, std::int64_t now_ms) {
-    if (enabled_ && tracking_ && !paused_) {
-        flush(now_ms);
-        last_count_ = character;
-        position_known_ = true;
-    }
+    flush(now_ms);
+    last_timestamp_ms_ = now_ms;
+    last_count_ = character;
+    position_known_ = true;
 }
 
 void ReadingTracker::update_position(int character, std::int64_t now_ms) {
+    // A position reported while paused, not tracking or disabled is the anchor
+    // the next start or resume uses; it credits nothing.
     if (!enabled_ || !tracking_ || paused_) {
+        last_count_ = character;
+        position_known_ = true;
         return;
     }
 
@@ -189,7 +192,16 @@ bool ReadingTracker::save(std::int64_t now_ms, std::string_view title) {
     }
 
     reload_history();
+    const statistics::ReadingSession previous_session = current_session_;
+    const std::string previous_id = session_id_;
     apply_history(history_, now_ms);
+    if (session_id_ != previous_id || !(current_session_ == previous_session)) {
+        // reloadStatisticsAfterExternalMutation calls resetTrackingBaseline
+        // after loadStatistics: the replaced session re-anchors at the retained
+        // position and this instant. A reload that keeps the live session, as
+        // saveStats does, leaves the baseline alone.
+        last_timestamp_ms_ = now_ms;
+    }
 
     if (!current_session_.has_activity()) {
         return false;
@@ -255,9 +267,10 @@ void ReadingTracker::begin_tracking(std::int64_t now_ms) {
 
     tracking_ = true;
     paused_ = !context_active_;
+    // resetTrackingBaseline keeps the position the reader already reported,
+    // so the first active report credits the jump from it; without one the
+    // first report establishes the baseline.
     last_timestamp_ms_ = now_ms;
-    last_count_ = 0;
-    position_known_ = false;
 }
 
 void ReadingTracker::reload_history() {
