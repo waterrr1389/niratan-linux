@@ -72,6 +72,24 @@
 // bookFolder is the open book's folder name under Books/, exposed so a model
 // that reads sidecar files (Sasayaki) can resolve them without matching the
 // display title. It is empty when no book is open.
+//
+// Reader mining follows selection.js (selectTextAtPoint and getSentence),
+// NativeReaderView.swift (NativeReaderWebView.Coordinator's textSelected,
+// NativeReaderModel.title and coverURL, and popupLayer), and PopupView.swift
+// (mineEntry). The JavaScript sentence is required and relayed verbatim, not
+// re-extracted from the lookup text or the context sheet's sentence list.
+// Linux retains its guards against blank text and nonpositive rect sizes;
+// accepted lookup text is not trimmed. Mining metadata uses the EPUB title
+// (falling back to the library title if missing or empty) and the opened
+// book's cover reference. The reader's existing gallery server also serves the
+// cover on Swift's fixed port 18765. If that port is unavailable, the gallery
+// uses an ephemeral port and coverUrl is empty, but the local attachment path
+// remains. No cover means both cover values are empty. Nested popup selections
+// have their own context. The cover bytes are installed on the server when
+// coverUrl is read, where Swift installs them while building the card; the
+// URL is the same either way. Rect fields must be JSON numbers: a boolean,
+// which Swift's cgFloatValue reads as 0 or 1, is rejected, as no reader
+// script sends one.
 
 #pragma once
 
@@ -98,6 +116,9 @@ class ReaderViewModel : public QObject {
     QML_ELEMENT
     QML_SINGLETON
     Q_PROPERTY(QString title READ title NOTIFY bookChanged)
+    Q_PROPERTY(QString documentTitle READ document_title NOTIFY bookChanged)
+    Q_PROPERTY(QString coverPath READ cover_path NOTIFY bookChanged)
+    Q_PROPERTY(QString coverUrl READ cover_url NOTIFY bookChanged)
     Q_PROPERTY(QString chapterTitle READ chapter_title NOTIFY chapterChanged)
     Q_PROPERTY(int chapterIndex READ chapter_index NOTIFY chapterChanged)
     Q_PROPERTY(int chapterCount READ chapter_count NOTIFY bookChanged)
@@ -171,6 +192,9 @@ class ReaderViewModel : public QObject {
     static ReaderViewModel* create(QQmlEngine* engine, QJSEngine* js_engine);
 
     QString title() const;
+    QString document_title() const;
+    QString cover_path() const;
+    QString cover_url() const;
     QString chapter_title() const;
     int chapter_index() const;
     int chapter_count() const;
@@ -307,7 +331,7 @@ class ReaderViewModel : public QObject {
     void paginationChanged();
     void pageChanged(int index);
     void documentRestored(bool revealCue);
-    void lookupRequested(const QString& text, const QRectF& anchor);
+    void lookupRequested(const QString& text, const QString& sentence, const QRectF& anchor);
     void readerTappedOutside();
     void searchChanged();
     void highlightsChanged();
@@ -322,6 +346,7 @@ class ReaderViewModel : public QObject {
     struct State;
     std::unique_ptr<State> state_;
 
+    void handle_text_selected(const QJsonObject& data);
     void load_chapter(int index, double progress, const QString& fragment = {});
     void clear_gallery();
     void scan_gallery_chapter(int index, std::size_t revision, const QString& route);

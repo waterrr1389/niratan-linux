@@ -56,6 +56,7 @@ qt_add_library(niratan_core STATIC
     src/services/reader/toc_target.cpp
     src/services/reader/book_search.cpp
     src/services/reader/character_normalizer.cpp
+    src/services/reader/document_context.cpp
     src/services/reader/layout.cpp
     src/services/reader/reader_css.cpp
     src/services/reader/reader_shell.cpp
@@ -131,6 +132,7 @@ qt_add_library(niratan_app STATIC
     src/viewmodels/reader/reader_view_model.cpp
     src/viewmodels/reader/reader_view_model_gallery.cpp
     src/viewmodels/reader/reader_view_model.h
+    src/viewmodels/reader/reader_view_model_mining.cpp
     src/viewmodels/reader/reader_view_model_pagination.cpp
     src/viewmodels/reader/reader_view_model_state.h
     src/viewmodels/reader/reader_view_model_statistics.cpp

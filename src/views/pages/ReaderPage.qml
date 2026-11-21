@@ -156,8 +156,9 @@ Item {
         function onDocumentRestored(revealCue) {
             page.applySasayakiCues(revealCue)
         }
-        function onLookupRequested(text, anchor) {
+        function onLookupRequested(text, sentence, anchor) {
             lookupSurface.selectionAnchor = anchor
+            mining.setContext(sentence, ReaderViewModel.documentTitle, ReaderViewModel.coverUrl, ReaderViewModel.coverPath)
             lookupModel.lookup(text)
         }
         function onReaderTappedOutside() {

@@ -693,15 +693,7 @@ void ReaderViewModel::message(const QString& name, const QString& payload) {
         return;
     }
     if (name == QStringLiteral("textSelected") && !state_->restoring) {
-        const QString text = data.value(QStringLiteral("text")).toString();
-        const auto rect = data.value(QStringLiteral("rect")).toObject();
-        const double x = rect.value(QStringLiteral("x")).toDouble();
-        const double y = rect.value(QStringLiteral("y")).toDouble();
-        const double width = rect.value(QStringLiteral("width")).toDouble();
-        const double height = rect.value(QStringLiteral("height")).toDouble();
-        if (!text.trimmed().isEmpty() && width > 0 && height > 0) {
-            emit lookupRequested(text, QRectF(x, y, width, height));
-        }
+        handle_text_selected(data);
     } else if (name == QStringLiteral("tapOutside") && !state_->restoring) {
         emit readerTappedOutside();
     } else if (name == QStringLiteral("wheelNavigation")) {

@@ -310,6 +310,13 @@ target_link_libraries(tst_reader_shell PRIVATE niratan_core Qt6::Test)
 target_compile_options(tst_reader_shell PRIVATE -Wall -Wextra -Wpedantic -Werror)
 add_test(NAME reader_shell COMMAND tst_reader_shell)
 
+qt_add_executable(tst_document_context
+    reader/tst_document_context.cpp
+)
+target_link_libraries(tst_document_context PRIVATE niratan_core Qt6::Test)
+target_compile_options(tst_document_context PRIVATE -Wall -Wextra -Wpedantic -Werror)
+add_test(NAME document_context COMMAND tst_document_context)
+
 qt_add_executable(tst_book_search
     reader/tst_book_search.cpp
 )
@@ -523,6 +530,13 @@ add_test(NAME dictionary_popup_model COMMAND tst_dictionary_popup_model)
 set_tests_properties(dictionary_popup_model PROPERTIES
     ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QTWEBENGINE_CHROMIUM_FLAGS=--disable-gpu")
 
+qt_add_executable(tst_reader_mining_context
+    viewmodels/tst_reader_mining_context.cpp
+)
+target_link_libraries(tst_reader_mining_context PRIVATE niratan_app Qt6::Test)
+target_compile_options(tst_reader_mining_context PRIVATE -Wall -Wextra -Wpedantic -Werror)
+add_test(NAME reader_mining_context COMMAND tst_reader_mining_context)
+
 qt_add_executable(tst_qml_load
     qml/tst_qml_load.cpp
 )
@@ -543,6 +557,15 @@ target_link_libraries(tst_popup_bridge PRIVATE niratan_core Qt6::Test Qt6::WebEn
 target_compile_options(tst_popup_bridge PRIVATE -Wall -Wextra -Wpedantic -Werror)
 add_test(NAME popup_bridge COMMAND tst_popup_bridge)
 set_tests_properties(popup_bridge PROPERTIES
+    ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QTWEBENGINE_CHROMIUM_FLAGS=--disable-gpu")
+
+qt_add_executable(tst_reader_selection
+    web/tst_reader_selection.cpp
+)
+target_link_libraries(tst_reader_selection PRIVATE niratan_app Qt6::Test)
+target_compile_options(tst_reader_selection PRIVATE -Wall -Wextra -Wpedantic -Werror)
+add_test(NAME reader_selection COMMAND tst_reader_selection)
+set_tests_properties(reader_selection PROPERTIES
     ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QTWEBENGINE_CHROMIUM_FLAGS=--disable-gpu")
 
 # Flow tests: one per first-release flow, driving view models and services from

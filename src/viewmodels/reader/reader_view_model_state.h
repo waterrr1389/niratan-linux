@@ -7,11 +7,15 @@
 #include <QDateTime>
 
 #include <functional>
+#include <optional>
 #include <set>
+#include <string>
+#include <string_view>
 #include <utility>
 #include <vector>
 
 #include "models/profiles/reader_settings.h"
+#include "services/audio/local_audio.h"
 #include "services/audio/local_file_server.h"
 #include "services/books/book_storage.h"
 #include "services/reader/reading_tracker.h"
@@ -22,6 +26,21 @@ namespace niratan::viewmodels {
 inline std::int64_t now_milliseconds() { return QDateTime::currentMSecsSinceEpoch(); }
 
 struct ReaderViewModel::State {
+    class BookMediaServer {
+       public:
+        using ImageLookup =
+            std::function<std::optional<audio::LocalFileServer::BookImage>(std::string_view)>;
+
+        // An empty lookup marks the end of a book and clears both media routes.
+        void set_book_images(std::string route, ImageLookup lookup);
+        quint16 port() const;
+        bool serve_cover(std::optional<QByteArray> bytes);
+
+       private:
+        audio::LocalFileServer fixed_{{}, audio::kLocalAudioPort};
+        std::optional<audio::LocalFileServer> gallery_fallback_;
+    };
+
     explicit State(std::function<void()> on_settings_changed)
         : storage(storage::data_root()),
           settings_watch(storage.app_directory(), std::move(on_settings_changed)),
@@ -44,7 +63,7 @@ struct ReaderViewModel::State {
     std::set<std::string, std::less<>> gallery_paths;
     bool gallery_loading = false;
     std::size_t gallery_revision = 0;
-    audio::LocalFileServer gallery_server{{}, 0};
+    BookMediaServer gallery_server;
     std::vector<books::Highlight> highlights;
     books::BookMetadata book;
     bool has_book = false;
