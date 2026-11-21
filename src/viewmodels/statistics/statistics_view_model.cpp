@@ -3,7 +3,6 @@
 #include "statistics_view_model.h"
 
 #include <QDateTime>
-#include <QFileSystemWatcher>
 #include <QTimeZone>
 #include <QThread>
 #include <QUrl>
@@ -11,7 +10,6 @@
 
 #include <algorithm>
 #include <cmath>
-#include <filesystem>
 #include <limits>
 #include <map>
 #include <optional>
@@ -23,6 +21,7 @@
 #include "models/statistics/dashboard_models.h"
 #include "models/statistics/statistics.h"
 #include "services/books/book_storage.h"
+#include "services/books/library_watch.h"
 #include "services/settings/global_settings.h"
 #include "services/statistics/statistics_storage.h"
 #include "services/storage/app_paths.h"
@@ -34,6 +33,7 @@ using niratan::books::BookInfo;
 using niratan::books::BookMetadata;
 using niratan::books::BookShelf;
 using niratan::books::BookStorage;
+using niratan::books::LibraryWatch;
 using niratan::statistics::DailyTargetType;
 using niratan::statistics::Statistics;
 using niratan::statistics::StatisticsBookRankingMetric;
@@ -94,15 +94,16 @@ QString cover_url(const std::optional<std::string>& path) {
 }  // namespace
 
 struct StatisticsViewModel::State {
-    explicit State(std::filesystem::path data_root)
-        : storage(data_root), global(std::move(data_root) / "settings.json") {}
+    State()
+        : storage(storage::data_root()), global(settings::GlobalSettings::at_data_root()),
+          library_watch(LibraryWatch::at_data_root()) {}
 
     BookStorage storage;
     settings::GlobalSettings global;
     StatisticsTargetSettings settings;
     StatisticsDashboardSnapshot snapshot;
     std::vector<BookShelf> shelves;
-    QFileSystemWatcher library_watch;
+    LibraryWatch library_watch;
     std::uint64_t load_generation = 0;
     bool loading = false;
     bool has_loaded = false;
@@ -149,13 +150,13 @@ StatisticsViewModel* StatisticsViewModel::create(QQmlEngine*, QJSEngine*) {
 }
 
 StatisticsViewModel::StatisticsViewModel(QObject* parent)
-    : QObject(parent), state_(std::make_unique<State>(storage::data_root())) {
+    : QObject(parent), state_(std::make_unique<State>()) {
     state_->settings = state_->global.statistics_targets();
     state_->today = statistics::local_day(QDateTime::currentDateTime(), load_reset_minutes(),
                                           QTimeZone::systemTimeZone());
     reset_selection();
     project();
-    connect(&state_->library_watch, &QFileSystemWatcher::directoryChanged, this,
+    connect(&state_->library_watch, &LibraryWatch::changed, this,
             [this] { refresh(); });
 }
 
@@ -483,10 +484,6 @@ void StatisticsViewModel::refresh() {
     const QTimeZone zone = QTimeZone::systemTimeZone();
     const QDate today = statistics::local_day(QDateTime::currentDateTime(), reset_minutes, zone);
     const BookStorage storage = state_->storage;
-    const auto books_directory = QString::fromStdString(storage.books_directory().string());
-    if (!state_->library_watch.directories().contains(books_directory)) {
-        state_->library_watch.addPath(books_directory);
-    }
     const auto generation = ++state_->load_generation;
     const auto result = std::make_shared<SnapshotLoad>();
     state_->loading = true;

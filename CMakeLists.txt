@@ -57,6 +57,8 @@ qt_add_library(niratan_core STATIC
     src/models/books/book.cpp
     src/models/books/library_model.cpp
     src/services/books/book_storage.cpp
+    src/services/books/library_watch.cpp
+    src/services/books/library_watch.h
     src/models/books/book.h
     src/models/profiles/content_language.cpp
     src/models/profiles/dictionary_settings.cpp

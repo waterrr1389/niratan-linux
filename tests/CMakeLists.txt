@@ -294,6 +294,14 @@ target_link_libraries(tst_book_storage PRIVATE niratan_core Qt6::Test)
 target_compile_options(tst_book_storage PRIVATE -Wall -Wextra -Wpedantic -Werror)
 add_test(NAME book_storage COMMAND tst_book_storage)
 
+qt_add_executable(tst_library_watch
+    books/tst_library_watch.cpp
+)
+target_include_directories(tst_library_watch PRIVATE ${CMAKE_SOURCE_DIR}/src)
+target_link_libraries(tst_library_watch PRIVATE niratan_core Qt6::Test)
+target_compile_options(tst_library_watch PRIVATE -Wall -Wextra -Wpedantic -Werror)
+add_test(NAME library_watch COMMAND tst_library_watch)
+
 qt_add_executable(tst_statistics
     statistics/tst_statistics.cpp
 )
