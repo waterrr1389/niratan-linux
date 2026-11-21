@@ -26,10 +26,11 @@
 // The dictionary page has no document context. The reader supplies its
 // available context: until the reader mining context is wired, the sentence
 // and cover are empty and the title is the library display title rather than
-// the EPUB title. The ordered term dictionaries remain empty
-// until the dictionary settings supply them, so glossary fallback fields
-// that depend on dictionary categories differ. The cover URL is for rendered
-// text; an attachment needs a separate local cover path.
+// the EPUB title. The ordered term dictionaries come from the active profile's
+// dictionary_config.json and the installed scan; they are reloaded before the
+// popup options are computed and at the start of an add, then captured in the
+// attempt so the card build does not read them again. The cover URL is for
+// rendered text; an attachment needs a separate local cover path.
 
 #pragma once
 

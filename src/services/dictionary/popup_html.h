@@ -64,7 +64,7 @@ struct PopupAudioSettings {
 struct PopupMiningSettings {
     bool needs_audio = false;
     bool allow_dupes = false;
-    bool use_anki_connect = false;
+    bool use_anki_connect = true;
     bool embed_media = false;
     bool compact_glossaries = false;
 };

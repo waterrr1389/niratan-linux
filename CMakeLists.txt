@@ -37,6 +37,7 @@ qt_add_library(niratan_core STATIC
     src/services/anki/mining_gate.cpp
     src/services/anki/mining.cpp
     src/services/anki/mining_card.cpp
+    src/services/anki/popup_options.cpp
     src/services/audio/audio_request.cpp
     src/services/audio/local_audio.cpp
     src/services/audio/local_file_server.cpp
@@ -50,6 +51,7 @@ qt_add_library(niratan_core STATIC
     src/services/dictionary/popup_html.cpp
     src/services/dictionary/popup_assets.cpp
     src/services/dictionary/text_selection.cpp
+    src/services/dictionary/term_dictionaries.cpp
     src/services/reader/theme.cpp
     src/services/reader/book_session.cpp
     src/services/reader/chapter_remaining.cpp

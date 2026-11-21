@@ -16,8 +16,11 @@
 #include "services/anki/anki_requests.h"
 #include "services/anki/duplicate_lookup.h"
 #include "services/anki/mining.h"
+#include "services/anki/popup_options.h"
 #include "services/audio/web_audio_download.h"
 #include "services/dictionary/dictionary_media.h"
+#include "services/dictionary/dictionary_store.h"
+#include "services/dictionary/term_dictionaries.h"
 #include "services/profiles/profile_repository.h"
 #include "services/storage/app_paths.h"
 
@@ -102,6 +105,18 @@ class MiningBackend {
     }
 
     void refresh_settings() { config.activate_profile(repository_profile_id()); }
+
+    // The active profile's ordered term list, reloaded from disk on each call.
+    std::vector<anki::TermDictionary> load_term_dictionaries() {
+        const std::string profile_id = repository_profile_id();
+        const auto directory = repository.profile_directory(profile_id);
+        if (!directory) {
+            return {};
+        }
+        return dictionary::term_dictionaries(
+            dictionary::DictionaryStore(storage::dictionaries_root()).installed(),
+            *directory / "dictionary_config.json");
+    }
 
     profiles::ProfileRepository repository;
     anki::AnkiConfigStore config{storage::data_root(), repository};
@@ -220,13 +235,14 @@ QVariantMap MiningViewModel::popupMiningOptions() {
         backend->refresh_settings();
     }
     const auto& settings = backend ? backend->config.settings() : defaults;
-    const bool needs_audio = std::ranges::any_of(
-        settings.field_mappings, [](const auto& field) { return field.second == "{audio}"; });
-    return {{"needsAudio", needs_audio},
-            {"allowDupes", settings.allow_dupes},
-            {"useAnkiConnect", true},
-            {"embedMedia", settings.embed_media},
-            {"compactGlossariesAnki", settings.compact_glossaries}};
+    state_->dictionaries =
+        backend ? backend->load_term_dictionaries() : std::vector<anki::TermDictionary>{};
+    const anki::PopupOptions options = anki::popup_options(settings);
+    return {{"needsAudio", options.needs_audio},
+            {"allowDupes", options.allow_dupes},
+            {"useAnkiConnect", options.use_anki_connect},
+            {"embedMedia", options.embed_media},
+            {"compactGlossariesAnki", options.compact_glossaries}};
 }
 
 void MiningViewModel::mineEntry(int requestId, const QVariant& content) {
@@ -250,6 +266,7 @@ void MiningViewModel::mineEntry(int requestId, const QVariant& content) {
                 std::nullopt});
         return;
     }
+    state_->dictionaries = backend->load_term_dictionaries();
     anki::MiningAttempt attempt{.content = {},
                                 .context = state_->context,
                                 .dictionaries = state_->dictionaries,

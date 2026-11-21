@@ -7,7 +7,9 @@
 
 #include "data_root.h"
 
+#include "services/anki/anki_config.h"
 #include "services/dictionary/dictionary_store.h"
+#include "services/profiles/profile_repository.h"
 #include "services/storage/app_paths.h"
 #include "viewmodels/dictionary/dictionary_popup_model.h"
 #include "yomitan_fixture.h"
@@ -18,7 +20,9 @@
 #include <filesystem>
 #include <memory>
 
+using niratan::anki::AnkiConfigStore;
 using niratan::dictionary::DictionaryStore;
+using niratan::profiles::ProfileRepository;
 using niratan::test::minimal_index;
 using niratan::test::minimal_term_bank;
 using niratan::test::TempDataRoot;
@@ -33,6 +37,8 @@ class DictionaryPopupModelTest : public QObject {
     void lookup_builds_popup_html();
     void whitespace_clears_results();
     void invalid_audio_url_is_reported();
+    void shell_globals_come_from_the_anki_configuration();
+    void shell_globals_follow_the_active_profile();
 
    private:
     std::unique_ptr<TempDataRoot> root_;
@@ -88,6 +94,65 @@ void DictionaryPopupModelTest::invalid_audio_url_is_reported() {
 
     QCOMPARE(audio_error_spy.count(), 1);
     QVERIFY(!model.audio_error().isEmpty());
+}
+
+// B9–B13, B15: the shell carries the five mining globals from the active
+// profile; useAnkiConnect is the computed constant true.
+void DictionaryPopupModelTest::shell_globals_come_from_the_anki_configuration() {
+    ProfileRepository profiles{niratan::storage::data_root()};
+    AnkiConfigStore config{niratan::storage::data_root(), profiles};
+    auto& settings = config.settings();
+    settings.field_mappings = {{"Audio", "{audio}"}};
+    settings.allow_dupes = true;
+    settings.embed_media = true;
+    settings.compact_glossaries = true;
+    QVERIFY(config.save().ok);
+
+    DictionaryPopupModel model;
+    model.lookup(QStringLiteral("decide"));
+
+    QVERIFY(model.has_results());
+    QVERIFY(model.html().contains(QStringLiteral("window.needsAudio = true;")));
+    QVERIFY(model.html().contains(QStringLiteral("window.allowDupes = true;")));
+    QVERIFY(model.html().contains(QStringLiteral("window.useAnkiConnect = true;")));
+    QVERIFY(model.html().contains(QStringLiteral("window.embedMedia = true;")));
+    QVERIFY(model.html().contains(QStringLiteral("window.compactGlossariesAnki = true;")));
+}
+
+// B14: a profile change changes the globals before the next render.
+void DictionaryPopupModelTest::shell_globals_follow_the_active_profile() {
+    ProfileRepository profiles{niratan::storage::data_root()};
+    AnkiConfigStore config{niratan::storage::data_root(), profiles};
+    auto& defaults = config.settings();
+    defaults.field_mappings = {{"Audio", "{audio}"}};
+    defaults.allow_dupes = true;
+    defaults.embed_media = true;
+    defaults.compact_glossaries = true;
+    QVERIFY(config.save().ok);
+
+    DictionaryPopupModel model;
+    model.lookup(QStringLiteral("decide"));
+    QVERIFY(model.html().contains(QStringLiteral("window.needsAudio = true;")));
+
+    const auto other = profiles.create_profile(
+        "Other", niratan::profiles::ContentLanguage::japanese, profiles.active_profile().id);
+    QVERIFY(other.profile.has_value());
+    config.activate_profile(other.profile->id);
+    auto& settings = config.settings();
+    settings.field_mappings = {{"Word", "{expression}"}};
+    settings.allow_dupes = false;
+    settings.embed_media = false;
+    settings.compact_glossaries = false;
+    QVERIFY(config.save().ok);
+    QVERIFY(!profiles.set_active_profile(other.profile->id).has_value());
+
+    model.lookup(QStringLiteral("decide"));
+
+    QVERIFY(model.html().contains(QStringLiteral("window.needsAudio = false;")));
+    QVERIFY(model.html().contains(QStringLiteral("window.allowDupes = false;")));
+    QVERIFY(model.html().contains(QStringLiteral("window.useAnkiConnect = true;")));
+    QVERIFY(model.html().contains(QStringLiteral("window.embedMedia = false;")));
+    QVERIFY(model.html().contains(QStringLiteral("window.compactGlossariesAnki = false;")));
 }
 
 QTEST_MAIN(DictionaryPopupModelTest)

@@ -15,11 +15,14 @@
 #include <string_view>
 
 #include "models/dictionary/audio_source.h"
+#include "services/anki/anki_config.h"
+#include "services/anki/popup_options.h"
 #include "services/dictionary/dictionary_query.h"
 #include "services/dictionary/dictionary_store.h"
 #include "services/dictionary/popup_assets.h"
 #include "services/dictionary/popup_entries.h"
 #include "services/dictionary/popup_html.h"
+#include "services/profiles/profile_repository.h"
 #include "services/settings/dictionary_settings_watch.h"
 #include "services/storage/app_paths.h"
 
@@ -27,12 +30,12 @@ namespace niratan::viewmodels {
 
 using niratan::dictionary::DictionaryQueryService;
 using niratan::dictionary::DictionaryStore;
-using niratan::dictionary::LookupOutcome;
-using niratan::dictionary::PopupAssets;
-using niratan::dictionary::PopupConfig;
 using niratan::dictionary::load_popup_assets;
 using niratan::dictionary::lookup_entries_json;
+using niratan::dictionary::LookupOutcome;
 using niratan::dictionary::popup_shell_html;
+using niratan::dictionary::PopupAssets;
+using niratan::dictionary::PopupConfig;
 
 struct DictionaryPopupModel::State {
     DictionaryStore store{storage::dictionaries_root()};
@@ -185,8 +188,8 @@ void DictionaryPopupModel::run_lookup() {
     }
 
     const auto& settings = state_->settings_watch.settings();
-    const LookupOutcome outcome = state_->query->lookup(
-        state_->last_query.toStdString(), settings.max_results, settings.scan_length);
+    const LookupOutcome outcome = state_->query->lookup(state_->last_query.toStdString(),
+                                                        settings.max_results, settings.scan_length);
     if (!outcome.ok) {
         state_->html.clear();
         state_->error = QString::fromStdString(outcome.error);
@@ -203,6 +206,15 @@ void DictionaryPopupModel::run_lookup() {
     QJsonObject styles;
     for (const auto& [name, css] : state_->query->dictionary_styles()) {
         styles.insert(QString::fromStdString(name), QString::fromStdString(css));
+    }
+
+    // The active profile is resolved again for every render, so a profile
+    // switch reaches the page before the next lookup.
+    anki::PopupOptions mining;
+    if (auto repository = profiles::ProfileRepository::at_data_root()) {
+        anki::AnkiConfigStore anki_store{storage::data_root(), *repository};
+        anki_store.load();
+        mining = anki::popup_options(anki_store.settings());
     }
 
     PopupConfig config;
@@ -223,6 +235,11 @@ void DictionaryPopupModel::run_lookup() {
     const dictionary::AudioSource source = dictionary::default_audio_source();
     config.audio.sources = {source.url};
     config.audio.source_names = {source.name};
+    config.mining = {.needs_audio = mining.needs_audio,
+                     .allow_dupes = mining.allow_dupes,
+                     .use_anki_connect = mining.use_anki_connect,
+                     .embed_media = mining.embed_media,
+                     .compact_glossaries = mining.compact_glossaries};
     config.theme.dark = state_->dark;
     config.theme.background = state_->background.name(QColor::HexRgb).toStdString();
     config.theme.text = state_->text_color.name(QColor::HexRgb).toStdString();

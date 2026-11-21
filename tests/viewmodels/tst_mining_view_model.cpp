@@ -16,6 +16,8 @@
 #include <QTcpSocket>
 #include <QtTest>
 
+#include <filesystem>
+
 #include "data_root.h"
 #include "services/anki/anki_config.h"
 #include "services/profiles/profile_repository.h"
@@ -153,6 +155,37 @@ QVariantMap mining_payload(const QString& status, const QString& message, const 
     return payload;
 }
 
+QJsonObject dictionary_entry(const QString& file_name, int order, const QString& category,
+                             bool is_enabled = true) {
+    return {{"fileName", file_name},
+            {"isEnabled", is_enabled},
+            {"order", order},
+            {"category", category}};
+}
+
+QJsonObject dictionary_config(const QJsonArray& terms) {
+    return {{"termDictionaries", terms},
+            {"frequencyDictionaries", QJsonArray{}},
+            {"pitchDictionaries", QJsonArray{}}};
+}
+
+bool write_dictionary_config(const std::filesystem::path& path, const QJsonObject& document) {
+    std::error_code error;
+    std::filesystem::create_directories(path.parent_path(), error);
+    if (error) {
+        return false;
+    }
+    QFile file(QString::fromStdString(path.string()));
+    const QByteArray bytes = QJsonDocument(document).toJson(QJsonDocument::Compact);
+    return file.open(QIODevice::WriteOnly) && file.write(bytes) == bytes.size();
+}
+
+std::filesystem::path dictionary_config_path(const ProfileRepository& profiles,
+                                             std::string_view profile_id) {
+    const auto directory = profiles.profile_directory(profile_id);
+    return directory ? *directory / "dictionary_config.json" : std::filesystem::path{};
+}
+
 }  // namespace
 
 class MiningViewModelTest : public QObject {
@@ -174,6 +207,11 @@ class MiningViewModelTest : public QObject {
     void newer_toast_restarts_the_dismissal_timer();
     void context_confirmation_publishes_decimal_note_command();
     void popup_options_come_from_anki_configuration();
+    void add_uses_ordered_profile_term_dictionaries();
+    void term_dictionaries_refresh_with_the_active_profile();
+    void popup_options_defaults_match_the_anki_manager();
+    void popup_options_track_each_profile_value();
+    void popup_options_follow_the_active_profile();
 };
 
 // B2, B3: PopupWebView.Coordinator.userContentController (async).
@@ -492,6 +530,215 @@ void MiningViewModelTest::popup_options_come_from_anki_configuration() {
          {"needsAudio", "allowDupes", "useAnkiConnect", "embedMedia", "compactGlossariesAnki"}) {
         QCOMPARE(options.value(key), QVariant(true));
     }
+}
+
+// B1, B2, B3, B7: DictionaryManager.collectDictionaries,
+// AnkiManager.categoryGlossary and MiningAttempt.dictionaries.
+void MiningViewModelTest::add_uses_ordered_profile_term_dictionaries() {
+    Fixture f;
+    f.config.settings().allow_dupes = true;
+    f.config.settings().field_mappings = {{"Word", "{expression}"},
+                                          {"Definition", "{monolingual-definition}"}};
+    QVERIFY(f.save());
+
+    std::error_code error;
+    for (const char* name : {"A", "B", "C"}) {
+        const auto directory = niratan::storage::dictionaries_root() / name;
+        std::filesystem::create_directories(directory, error);
+        QVERIFY(!error);
+        const QJsonObject index{
+            {"title", QString::fromUtf8(name)},
+            {"format", 3},
+            {"revision", "1"},
+            {"isUpdatable", false},
+            {"indexUrl", ""},
+            {"downloadUrl", ""},
+        };
+        QFile index_file(QString::fromStdString((directory / "index.json").string()));
+        QVERIFY(index_file.open(QIODevice::WriteOnly));
+        const QByteArray bytes = QJsonDocument(index).toJson(QJsonDocument::Compact);
+        QVERIFY(index_file.write(bytes) == bytes.size());
+    }
+    const auto config = dictionary_config(QJsonArray{
+        dictionary_entry("C", 1, "monolingual", false),
+        dictionary_entry("B", 2, "monolingual"),
+        dictionary_entry("A", 3, "bilingual"),
+    });
+    QVERIFY(write_dictionary_config(
+        dictionary_config_path(f.profiles, f.profiles.active_profile().id), config));
+
+    MiningViewModel model;
+    QSignalSpy replies(&model, &MiningViewModel::replyReady);
+    QVariantMap body = content();
+    body.insert("singleGlossaries",
+                QString::fromStdString(R"({"A":"alpha","B":"beta","C":"gamma"})"));
+    model.mineEntry(11, body);
+
+    QTRY_COMPARE_WITH_TIMEOUT(replies.size(), 1, 1500);
+    QCOMPARE(replies.first().at(1).toMap(),
+             mining_payload("added", "Added to Anki.", added_id_text));
+    QCOMPARE(f.anki.actions(), QStringList{"addNote"});
+    const auto note = f.anki.params("addNote").value("note").toObject();
+    const auto fields = note.value("fields").toObject();
+    QCOMPARE(fields.value("Word").toString(), expression);
+    QCOMPARE(fields.value("Definition").toString(), QStringLiteral("gamma"));
+}
+
+// B5, B7: activateProfile and the per-profile dictionary_config.json; the list
+// is read again before the next add.
+void MiningViewModelTest::term_dictionaries_refresh_with_the_active_profile() {
+    Fixture f;
+    f.config.settings().allow_dupes = true;
+    f.config.settings().field_mappings = {{"Word", "{expression}"},
+                                          {"Definition", "{monolingual-definition}"}};
+    QVERIFY(f.save());
+
+    const std::string default_id = f.profiles.active_profile().id;
+    const auto other = f.profiles.create_profile(
+        "Other", niratan::profiles::ContentLanguage::japanese, default_id);
+    QVERIFY(other.profile.has_value());
+    f.config.activate_profile(other.profile->id);
+    QVERIFY(f.save());
+    QVERIFY(!f.profiles.set_active_profile(default_id).has_value());
+
+    std::error_code error;
+    for (const char* name : {"A", "B", "C"}) {
+        const auto directory = niratan::storage::dictionaries_root() / name;
+        std::filesystem::create_directories(directory, error);
+        QVERIFY(!error);
+        const QJsonObject index{
+            {"title", QString::fromUtf8(name)},
+            {"format", 3},
+            {"revision", "1"},
+            {"isUpdatable", false},
+            {"indexUrl", ""},
+            {"downloadUrl", ""},
+        };
+        QFile index_file(QString::fromStdString((directory / "index.json").string()));
+        QVERIFY(index_file.open(QIODevice::WriteOnly));
+        const QByteArray bytes = QJsonDocument(index).toJson(QJsonDocument::Compact);
+        QVERIFY(index_file.write(bytes) == bytes.size());
+    }
+    QVERIFY(write_dictionary_config(dictionary_config_path(f.profiles, default_id),
+                                    dictionary_config(QJsonArray{
+                                        dictionary_entry("A", 0, "monolingual"),
+                                    })));
+    QVERIFY(write_dictionary_config(dictionary_config_path(f.profiles, other.profile->id),
+                                    dictionary_config(QJsonArray{
+                                        dictionary_entry("C", 0, "monolingual"),
+                                    })));
+
+    MiningViewModel model;
+    QSignalSpy replies(&model, &MiningViewModel::replyReady);
+    QVariantMap body = content();
+    body.insert("singleGlossaries",
+                QString::fromStdString(R"({"A":"alpha","B":"beta","C":"gamma"})"));
+    model.mineEntry(12, body);
+    QTRY_COMPARE_WITH_TIMEOUT(replies.size(), 1, 1500);
+    QCOMPARE(f.anki.params("addNote")
+                 .value("note")
+                 .toObject()
+                 .value("fields")
+                 .toObject()
+                 .value("Definition")
+                 .toString(),
+             QStringLiteral("alpha"));
+
+    QVERIFY(write_dictionary_config(dictionary_config_path(f.profiles, default_id),
+                                    dictionary_config(QJsonArray{
+                                        dictionary_entry("B", 0, "monolingual"),
+                                    })));
+    f.anki.requests.clear();
+    replies.clear();
+    model.mineEntry(14, body);
+    QTRY_COMPARE_WITH_TIMEOUT(replies.size(), 1, 1500);
+    QCOMPARE(f.anki.params("addNote")
+                 .value("note")
+                 .toObject()
+                 .value("fields")
+                 .toObject()
+                 .value("Definition")
+                 .toString(),
+             QStringLiteral("beta"));
+
+    QVERIFY(!f.profiles.set_active_profile(other.profile->id).has_value());
+    f.anki.requests.clear();
+    replies.clear();
+    model.mineEntry(13, body);
+    QTRY_COMPARE_WITH_TIMEOUT(replies.size(), 1, 1500);
+    QCOMPARE(f.anki.params("addNote")
+                 .value("note")
+                 .toObject()
+                 .value("fields")
+                 .toObject()
+                 .value("Definition")
+                 .toString(),
+             QStringLiteral("gamma"));
+}
+
+// B17: AnkiManager's defaults when no Anki configuration was saved.
+void MiningViewModelTest::popup_options_defaults_match_the_anki_manager() {
+    TempDataRoot data;
+    QVERIFY(data.isValid());
+    MiningViewModel model;
+
+    const auto options = model.popupMiningOptions();
+    QCOMPARE(options.value("needsAudio"), QVariant(false));
+    QCOMPARE(options.value("allowDupes"), QVariant(false));
+    QCOMPARE(options.value("useAnkiConnect"), QVariant(true));
+    QCOMPARE(options.value("embedMedia"), QVariant(false));
+    QCOMPARE(options.value("compactGlossariesAnki"), QVariant(false));
+}
+
+// B9–B13: each global follows its own source; {sasayaki-audio} is not audio.
+void MiningViewModelTest::popup_options_track_each_profile_value() {
+    Fixture f;
+    auto& settings = f.config.settings();
+    settings.allow_dupes = true;
+    settings.embed_media = true;
+    settings.compact_glossaries = true;
+    settings.field_mappings = {{"Audio", "{sasayaki-audio}"}};
+    QVERIFY(f.save());
+    MiningViewModel model;
+
+    const auto options = model.popupMiningOptions();
+    QCOMPARE(options.value("needsAudio"), QVariant(false));
+    QCOMPARE(options.value("allowDupes"), QVariant(true));
+    QCOMPARE(options.value("useAnkiConnect"), QVariant(true));
+    QCOMPARE(options.value("embedMedia"), QVariant(true));
+    QCOMPARE(options.value("compactGlossariesAnki"), QVariant(true));
+}
+
+// B14: activateProfile reloads the profile before popupMiningOptions computes
+// the globals; a page never keeps the previous profile's values.
+void MiningViewModelTest::popup_options_follow_the_active_profile() {
+    Fixture f;
+    auto& settings = f.config.settings();
+    settings.allow_dupes = true;
+    settings.embed_media = true;
+    settings.compact_glossaries = true;
+    settings.field_mappings = {{"Audio", "{audio}"}};
+    QVERIFY(f.save());
+
+    const auto other = f.profiles.create_profile(
+        "Other", niratan::profiles::ContentLanguage::japanese, f.profiles.active_profile().id);
+    QVERIFY(other.profile.has_value());
+    f.config.activate_profile(other.profile->id);
+    auto& other_settings = f.config.settings();
+    other_settings.allow_dupes = false;
+    other_settings.embed_media = false;
+    other_settings.compact_glossaries = false;
+    other_settings.field_mappings = {{"Word", "{expression}"}};
+    QVERIFY(f.save());
+    QVERIFY(!f.profiles.set_active_profile(other.profile->id).has_value());
+
+    MiningViewModel model;
+    const auto options = model.popupMiningOptions();
+    QCOMPARE(options.value("needsAudio"), QVariant(false));
+    QCOMPARE(options.value("allowDupes"), QVariant(false));
+    QCOMPARE(options.value("useAnkiConnect"), QVariant(true));
+    QCOMPARE(options.value("embedMedia"), QVariant(false));
+    QCOMPARE(options.value("compactGlossariesAnki"), QVariant(false));
 }
 
 QTEST_GUILESS_MAIN(MiningViewModelTest)

@@ -126,6 +126,14 @@ target_link_libraries(tst_field_content PRIVATE niratan_core Qt6::Test)
 target_compile_options(tst_field_content PRIVATE -Wall -Wextra -Wpedantic -Werror)
 add_test(NAME field_content COMMAND tst_field_content)
 
+qt_add_executable(tst_popup_options
+    anki/tst_popup_options.cpp
+)
+target_include_directories(tst_popup_options PRIVATE ${CMAKE_SOURCE_DIR}/src)
+target_link_libraries(tst_popup_options PRIVATE niratan_core Qt6::Test)
+target_compile_options(tst_popup_options PRIVATE -Wall -Wextra -Wpedantic -Werror)
+add_test(NAME popup_options COMMAND tst_popup_options)
+
 qt_add_executable(tst_anki_connect
     anki/tst_anki_connect.cpp
 )
@@ -229,6 +237,14 @@ target_include_directories(tst_media_type PRIVATE ${CMAKE_SOURCE_DIR}/src)
 target_link_libraries(tst_media_type PRIVATE niratan_core Qt6::Test)
 target_compile_options(tst_media_type PRIVATE -Wall -Wextra -Wpedantic -Werror)
 add_test(NAME media_type COMMAND tst_media_type)
+
+qt_add_executable(tst_term_dictionaries
+    dictionary/tst_term_dictionaries.cpp
+)
+target_include_directories(tst_term_dictionaries PRIVATE ${CMAKE_SOURCE_DIR}/src)
+target_link_libraries(tst_term_dictionaries PRIVATE niratan_core Qt6::Test)
+target_compile_options(tst_term_dictionaries PRIVATE -Wall -Wextra -Wpedantic -Werror)
+add_test(NAME term_dictionaries COMMAND tst_term_dictionaries)
 
 qt_add_executable(tst_audio_request
     audio/tst_audio_request.cpp
