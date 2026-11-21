@@ -5,11 +5,22 @@
 // EPUBKit, using the system libzip (SPEC.md 3.5).
 //
 // open() reads META-INF/container.xml, the first rootfile package, the OPF
-// metadata, manifest and spine, then the table of contents. The EPUB 3 nav
-// document (a manifest item with the "nav" property) wins; without one the
+// metadata, manifest, spine and guide, then the table of contents. The EPUB 3
+// nav document (a manifest item with the "nav" property) wins; without one the
 // EPUB 2 NCX named by the spine's toc attribute is used. TOC entries are
 // flattened in document order with a zero based nesting level; nav links are
 // leveled by their <ol> depth and navPoints by their nesting depth.
+//
+// A spine item keeps the manifest item's inputs as written (raw href and
+// properties) beside the resolved href, and the linear attribute's reading
+// ((item.attributes["linear"] ?? "yes") == "yes"). The guide keeps the direct
+// <guide><reference> children in document order, with raw type and href and no
+// title.
+//
+// A repeated manifest id resolves to the first item, and references from every
+// <guide> element are kept; Swift's manifest keeps the last item for a repeated
+// id and reads only the first guide. EPUB requires unique ids and a single
+// guide, so valid packages are unaffected.
 //
 // Metadata keeps the first dc:title and dc:creator text as written. The
 // cover is the manifest item with the "cover-image" property, else the item
@@ -45,8 +56,25 @@ struct EpubSpineItem {
     std::string idref;
     std::string href;
     std::string media_type;
+    // The manifest item's raw href attribute, exactly as written: not
+    // percent-decoded and not resolved against the package directory.
+    std::string manifest_href;
+    // The manifest item's raw properties attribute, empty when absent.
+    std::string properties;
+    // (item.attributes["linear"] ?? "yes") == "yes"
+    bool linear = true;
 
     bool operator==(const EpubSpineItem&) const = default;
+};
+
+// A direct <guide><reference> child: the raw type and href attributes. A
+// reference missing either attribute is not represented, and title is not
+// exposed.
+struct EpubGuideReference {
+    std::string type;
+    std::string href;
+
+    bool operator==(const EpubGuideReference&) const = default;
 };
 
 struct EpubTocEntry {
@@ -74,6 +102,10 @@ class EpubBook {
     const EpubMetadata& metadata() const;
     const std::vector<EpubSpineItem>& spine() const;
     const std::vector<EpubTocEntry>& toc() const;
+    // Direct <guide><reference> children of the package document, in document
+    // order, with the raw type and href attributes; an empty vector when the
+    // package has no guide.
+    const std::vector<EpubGuideReference>& guide() const;
 
     std::optional<std::string> read(std::string_view href) const;
 

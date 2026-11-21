@@ -14,6 +14,7 @@
 #include <vector>
 
 using niratan::novels::EpubBook;
+using niratan::novels::EpubGuideReference;
 using niratan::novels::EpubMetadata;
 using niratan::novels::EpubSpineItem;
 using niratan::novels::EpubTocEntry;
@@ -153,6 +154,8 @@ class EpubBookTest : public QObject {
    private slots:
     void metadata_and_cover_are_read();
     void the_spine_follows_the_itemref_order();
+    void spine_items_keep_linear_and_manifest_inputs();
+    void guide_references_are_read_raw();
     void entries_can_be_read_by_href();
     void the_nav_document_supplies_leveled_toc_entries();
     void the_ncx_supplies_the_toc_without_a_nav_document();
@@ -191,10 +194,92 @@ void EpubBookTest::the_spine_follows_the_itemref_order() {
     auto book = EpubBook::open(make_file(directory, "book.epub"));
     QVERIFY(book.has_value());
     const std::vector<EpubSpineItem> expected{
-        EpubSpineItem{"chapter1", "OEBPS/text/chapter1.xhtml", "application/xhtml+xml"},
-        EpubSpineItem{"chapter2", "OEBPS/text/chapter2.xhtml", "application/xhtml+xml"},
+        EpubSpineItem{"chapter1", "OEBPS/text/chapter1.xhtml", "application/xhtml+xml",
+                      "text/chapter1.xhtml", "", true},
+        EpubSpineItem{"chapter2", "OEBPS/text/chapter2.xhtml", "application/xhtml+xml",
+                      "text/chapter2.xhtml", "", true},
     };
     QCOMPARE(book->spine(), expected);
+    QVERIFY(book->guide().empty());
+}
+
+void EpubBookTest::spine_items_keep_linear_and_manifest_inputs() {
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    ZipWriter zip(make_file(directory, "book.epub"));
+    QVERIFY(zip.valid());
+    zip.add("mimetype", "application/epub+zip");
+    zip.add("META-INF/container.xml", container_xml("OEBPS/pkg/content.opf"));
+    zip.add("OEBPS/pkg/content.opf",
+            "<?xml version=\"1.0\"?><package xmlns=\"http://www.idpf.org/2007/opf\" "
+            "version=\"3.0\"><metadata xmlns:dc=\"http://purl.org/dc/elements/1.1/\">"
+            "<dc:title>Linear</dc:title></metadata><manifest>"
+            "<item id=\"a\" href=\"text/a.xhtml\" media-type=\"application/xhtml+xml\"/>"
+            "<item id=\"b\" href=\"text/b.xhtml\" media-type=\"application/xhtml+xml\"/>"
+            "<item id=\"c\" href=\"text/c.xhtml\" media-type=\"application/xhtml+xml\" "
+            "properties=\"scripted nav\"/>"
+            "<item id=\"d\" href=\"text/d.xhtml\" media-type=\"application/xhtml+xml\"/>"
+            "<item id=\"e\" href=\"text/%61.xhtml\" media-type=\"application/xhtml+xml\"/>"
+            "</manifest><spine>"
+            "<itemref idref=\"a\"/>"
+            "<itemref idref=\"b\" linear=\"no\"/>"
+            "<itemref idref=\"c\" linear=\"YES\"/>"
+            "<itemref idref=\"d\" linear=\"yes\"/>"
+            "<itemref idref=\"e\"/>"
+            "</spine></package>");
+    zip.add("OEBPS/pkg/text/a.xhtml", "<html><body>A</body></html>");
+    zip.add("OEBPS/pkg/text/b.xhtml", "<html><body>B</body></html>");
+    zip.add("OEBPS/pkg/text/c.xhtml", "<html><body>C</body></html>");
+    zip.add("OEBPS/pkg/text/d.xhtml", "<html><body>D</body></html>");
+    zip.close();
+
+    auto book = EpubBook::open(make_file(directory, "book.epub"));
+    QVERIFY(book.has_value());
+    const std::vector<EpubSpineItem> expected{
+        EpubSpineItem{"a", "OEBPS/pkg/text/a.xhtml", "application/xhtml+xml", "text/a.xhtml", "",
+                      true},
+        EpubSpineItem{"b", "OEBPS/pkg/text/b.xhtml", "application/xhtml+xml", "text/b.xhtml", "",
+                      false},
+        EpubSpineItem{"c", "OEBPS/pkg/text/c.xhtml", "application/xhtml+xml", "text/c.xhtml",
+                      "scripted nav", false},
+        EpubSpineItem{"d", "OEBPS/pkg/text/d.xhtml", "application/xhtml+xml", "text/d.xhtml", "",
+                      true},
+        EpubSpineItem{"e", "OEBPS/pkg/text/a.xhtml", "application/xhtml+xml", "text/%61.xhtml", "",
+                      true},
+    };
+    QCOMPARE(book->spine(), expected);
+}
+
+void EpubBookTest::guide_references_are_read_raw() {
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    ZipWriter zip(make_file(directory, "book.epub"));
+    QVERIFY(zip.valid());
+    zip.add("mimetype", "application/epub+zip");
+    zip.add("META-INF/container.xml", container_xml("OEBPS/content.opf"));
+    zip.add("OEBPS/content.opf",
+            "<?xml version=\"1.0\"?><package xmlns=\"http://www.idpf.org/2007/opf\" "
+            "version=\"3.0\"><metadata xmlns:dc=\"http://purl.org/dc/elements/1.1/\">"
+            "<dc:title>Guide</dc:title></metadata><manifest>"
+            "<item id=\"c\" href=\"text/c.xhtml\" media-type=\"application/xhtml+xml\"/>"
+            "</manifest><spine><itemref idref=\"c\"/></spine><guide>"
+            "<reference type=\"toc\" href=\"text/c3.xhtml#part\"/>"
+            "<reference type=\"other\" href=\"x\"/>"
+            "<reference href=\"no-type\"/>"
+            "<reference type=\"notoc\"/>"
+            "<reference type=\"toc\" href=\"\"/>"
+            "</guide></package>");
+    zip.add("OEBPS/text/c.xhtml", "<html><body>Guide body</body></html>");
+    zip.close();
+
+    auto book = EpubBook::open(make_file(directory, "book.epub"));
+    QVERIFY(book.has_value());
+    const std::vector<EpubGuideReference> expected{
+        EpubGuideReference{"toc", "text/c3.xhtml#part"},
+        EpubGuideReference{"other", "x"},
+        EpubGuideReference{"toc", ""},
+    };
+    QCOMPARE(book->guide(), expected);
 }
 
 void EpubBookTest::entries_can_be_read_by_href() {

@@ -4,11 +4,11 @@
 src/models/books/book.cpp 624
 src/models/statistics/dashboard_models.cpp 838
 src/models/statistics/statistics.cpp 596
-src/services/novels/epub_book.cpp 608
+src/services/novels/epub_book.cpp 479
 src/services/sasayaki/matcher.cpp 666
 src/viewmodels/player/player_study_view_model.cpp 693
 src/viewmodels/reader/reader_view_model.cpp 910
-src/viewmodels/sasayaki/sasayaki_view_model.cpp 908
+src/viewmodels/sasayaki/sasayaki_view_model.cpp 876
 src/viewmodels/settings/settings_view_model.cpp 510
 src/viewmodels/statistics/statistics_view_model.cpp 754
 src/views/pages/PlayerPage.qml 1395

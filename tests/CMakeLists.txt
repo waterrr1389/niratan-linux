@@ -523,6 +523,14 @@ target_link_libraries(tst_matcher PRIVATE niratan_core Qt6::Test)
 target_compile_options(tst_matcher PRIVATE -Wall -Wextra -Wpedantic -Werror)
 add_test(NAME matcher COMMAND tst_matcher)
 
+qt_add_executable(tst_match_chapters
+    sasayaki/tst_match_chapters.cpp
+)
+target_include_directories(tst_match_chapters PRIVATE ${CMAKE_SOURCE_DIR}/src)
+target_link_libraries(tst_match_chapters PRIVATE niratan_core Qt6::Test)
+target_compile_options(tst_match_chapters PRIVATE -Wall -Wextra -Wpedantic -Werror)
+add_test(NAME match_chapters COMMAND tst_match_chapters)
+
 qt_add_executable(tst_global_settings
     settings/tst_global_settings.cpp
 )

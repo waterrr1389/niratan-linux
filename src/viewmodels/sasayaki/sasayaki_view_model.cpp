@@ -26,8 +26,8 @@
 #include "services/audiobook/audiobook_metadata.h"
 #include "services/books/book_storage.h"
 #include "services/reader/book_session.h"
-#include "services/reader/character_normalizer.h"
 #include "services/sasayaki/cue_timeline.h"
+#include "services/sasayaki/match_chapters.h"
 #include "services/sasayaki/matcher.h"
 #include "services/sasayaki/srt_parser.h"
 #include "services/storage/app_paths.h"
@@ -364,13 +364,8 @@ void SasayakiViewModel::matchSubtitles(int searchWindow) {
                     if (!book) {
                         error = tr("The EPUB for the open book could not be opened.");
                     } else {
-                        std::vector<sasayaki::MatchChapter> chapters;
-                        for (int index = 0; index < book->spine_count() && !stop.stop_requested();
-                             ++index) {
-                            if (const auto entry = book->book().read(book->spine_path(index))) {
-                                chapters.push_back({index, reader::filtered_text(*entry)});
-                            }
-                        }
+                        std::vector<sasayaki::MatchChapter> chapters = sasayaki::match_chapters(
+                            book->book(), [&stop]() { return stop.stop_requested(); });
                         if (!stop.stop_requested()) {
                             QMetaObject::invokeMethod(
                                 this,
