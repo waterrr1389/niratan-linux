@@ -41,6 +41,7 @@
 namespace {
 
 constexpr int kPollIntervalMs = 100;
+constexpr int kLoadRetryMs = 100;
 constexpr double kPositionEpsilon = 0.02;
 constexpr double kValueEpsilon = 1e-6;
 constexpr double kMinSpeed = 0.25;
@@ -52,9 +53,10 @@ constexpr int kMaxSubtitleSize = 72;
 constexpr int kMinSubtitleWeight = 100;
 constexpr int kMaxSubtitleWeight = 900;
 
-// Qt destroys the renderer in an order the item cannot observe: the scene
-// graph node may outlive the item at window teardown. Both sides register here
-// so the render context is always freed before the handle it belongs to.
+// Qt keeps the renderer, which owns the render context, alive in the scene
+// graph node after the item is destroyed at window teardown. Both sides
+// register here so the context is always freed before the handle it belongs
+// to, whichever of them survives the other.
 struct SharedLink {
     bool item_alive = true;
     bool renderer_alive = false;
@@ -67,10 +69,6 @@ std::unordered_map<const MpvItem*, SharedLink> g_links;
 // ended() must fire once per load. Polling, open() and the destructor all run
 // on the GUI thread, so no lock is needed here.
 std::unordered_set<const MpvItem*> g_ended_items;
-
-}  // namespace
-
-namespace {
 
 class MpvRenderer : public QQuickFramebufferObject::Renderer {
    public:
@@ -427,29 +425,6 @@ void MpvItem::open(const QUrl& file) {
         return;
     }
 
-    // mpv aborts a file whose vo=libmpv starts before a render context exists,
-    // which happens when the item is asked to play before its first frame.
-    bool context_ready = false;
-    {
-        QMutexLocker locker(&g_links_mutex);
-        context_ready = render_context_ != nullptr;
-    }
-    if (!context_ready) {
-        QTimer::singleShot(kPollIntervalMs, this, [this, file] { open(file); });
-        return;
-    }
-
-    // mpv takes the path as one argument, never as a parsed command line, so a
-    // path with spaces or quotes needs no escaping.
-    const QByteArray path = source.toUtf8();
-    const char* args[] = {"loadfile", path.constData(), "replace", nullptr};
-    const int status = mpv_command(handle_, args);
-    if (status < 0) {
-        error_ = QString::fromUtf8(mpv_error_string(status));
-        emit errorChanged();
-        return;
-    }
-
     // A-B loop and chapter belong to the previous file until mpv reports the
     // new ones, and a stale loop would immediately cut the new file.
     ab_loop_start_ = -1.0;
@@ -474,6 +449,28 @@ void MpvItem::open(const QUrl& file) {
         error_.clear();
         emit errorChanged();
     }
+
+    // mpv aborts a file whose vo=libmpv starts before a render context exists,
+    // which happens when the item is asked to play before its first frame.
+    bool context_ready = false;
+    {
+        QMutexLocker locker(&g_links_mutex);
+        context_ready = render_context_ != nullptr;
+    }
+    if (!context_ready) {
+        QTimer::singleShot(kLoadRetryMs, this, [this, file] { open(file); });
+        return;
+    }
+
+    // mpv takes the path as one argument, never as a parsed command line, so a
+    // path with spaces or quotes needs no escaping.
+    const QByteArray path = source.toUtf8();
+    const char* args[] = {"loadfile", path.constData(), "replace", nullptr};
+    const int status = mpv_command(handle_, args);
+    if (status < 0) {
+        error_ = QString::fromUtf8(mpv_error_string(status));
+        emit errorChanged();
+    }
 }
 
 void MpvItem::togglePause() {
@@ -496,7 +493,9 @@ void MpvItem::seek(qreal seconds) {
     }
     command("seek " + QByteArray::number(target, 'f', 3) + " absolute+exact");
 
-    if (position_ != target) {
+    // Reflecting the seek immediately keeps the timeline responsive while
+    // paused; before a file is loaded the position is mpv's to report.
+    if (loaded_ && position_ != target) {
         position_ = target;
         emit positionChanged();
     }
@@ -589,8 +588,8 @@ void MpvItem::applySubtitleStyle(int font_size, int position_percent, int weight
 
     set_property("sub-font-size", size);
     set_property("sub-pos", position);
-    // mpv 0.37 added sub-font-weight. An older build rejects it without harm,
-    // and so does any build that lacks it.
+    // Subtitle weight exists only in builds that provide sub-font-weight; an
+    // unknown property name costs one failed call and changes nothing.
     set_property("sub-font-weight", font_weight);
 
     // mpv colors are #AARRGGBB; the box is black with the configured alpha.
@@ -615,8 +614,8 @@ mpv_handle* MpvItem::handle() const {
 }
 
 void MpvItem::setRenderContext(void* context) {
-    // Written by the renderer on the scene graph thread, read by the item when
-    // the renderer is destroyed, hence the shared lock.
+    // Written by the renderer on the scene graph thread and read by open() on
+    // the GUI thread to know whether mpv may start a file, hence the lock.
     QMutexLocker locker(&g_links_mutex);
     render_context_ = context;
 }

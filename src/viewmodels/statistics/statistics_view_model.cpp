@@ -1,0 +1,614 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+
+#include "statistics_view_model.h"
+
+#include <QDateTime>
+#include <QJsonDocument>
+#include <QJsonObject>
+#include <QTimeZone>
+#include <QUrl>
+#include <QVariantMap>
+
+#include <algorithm>
+#include <filesystem>
+#include <map>
+#include <optional>
+#include <string>
+#include <string_view>
+#include <utility>
+#include <vector>
+
+#include "models/statistics/dashboard_models.h"
+#include "models/statistics/statistics.h"
+#include "services/books/book_storage.h"
+#include "services/statistics/statistics_storage.h"
+#include "services/storage/app_paths.h"
+#include "services/storage/json_file.h"
+
+namespace niratan::viewmodels {
+namespace {
+
+using niratan::books::BookInfo;
+using niratan::books::BookMetadata;
+using niratan::books::BookShelf;
+using niratan::books::BookStorage;
+using niratan::statistics::DailyTargetType;
+using niratan::statistics::Statistics;
+using niratan::statistics::StatisticsBookRankingMetric;
+using niratan::statistics::StatisticsBookRankingRow;
+using niratan::statistics::StatisticsBookSnapshotInput;
+using niratan::statistics::StatisticsDashboardSnapshot;
+using niratan::statistics::StatisticsDateRange;
+using niratan::statistics::StatisticsDayAggregate;
+using niratan::statistics::StatisticsRangeMode;
+using niratan::statistics::StatisticsRangeSummary;
+using niratan::statistics::StatisticsShelfComparisonRow;
+using niratan::statistics::StatisticsSpeedSummary;
+using niratan::statistics::StatisticsTargetSettings;
+using niratan::statistics::StatisticsTodaySummary;
+using niratan::statistics::StatisticsTrendGrain;
+using niratan::statistics::StatisticsTrendMetric;
+using niratan::statistics::StatisticsTrendPoint;
+using niratan::statistics::StatisticsWeekSummary;
+
+// The reader stores no statisticsResetTime preference yet, and every model
+// call takes the reset minute as an argument.
+constexpr int kResetMinutes = 0;
+
+// statisticsBookRankingLimit in StatisticsDashboardView.swift.
+constexpr int kRankingPageSize = 12;
+
+StatisticsRangeMode range_mode_of(int mode) {
+    switch (mode) {
+        case 1:
+            return StatisticsRangeMode::month;
+        case 2:
+            return StatisticsRangeMode::week;
+        case 3:
+            return StatisticsRangeMode::day;
+        default:
+            return StatisticsRangeMode::year;
+    }
+}
+
+StatisticsTrendGrain trend_grain_of(int grain) {
+    switch (grain) {
+        case 1:
+            return StatisticsTrendGrain::week;
+        case 2:
+            return StatisticsTrendGrain::month;
+        default:
+            return StatisticsTrendGrain::day;
+    }
+}
+
+// A missing optional speed or percent is -1 in the projections.
+int optional_value(const std::optional<int>& value) { return value.value_or(-1); }
+
+QString date_key_text(QDate date) { return date.toString(QStringLiteral("yyyy-MM-dd")); }
+
+QString cover_url(const std::optional<std::string>& path) {
+    return path.has_value()
+               ? QUrl::fromLocalFile(QString::fromStdString(*path)).toString()
+               : QString();
+}
+
+QJsonObject read_settings_object(const std::filesystem::path& path) {
+    const storage::JsonReadResult read = storage::read_json_file(path);
+    if (read.status == storage::JsonReadStatus::success && read.document.isObject()) {
+        return read.document.object();
+    }
+    return {};
+}
+
+// Merges `values` into the existing object so unrelated settings survive. A
+// file that is valid JSON but not an object is left untouched.
+bool write_settings(const std::filesystem::path& path, const QJsonObject& values) {
+    QJsonObject object;
+    const storage::JsonReadResult read = storage::read_json_file(path);
+    if (read.status == storage::JsonReadStatus::success) {
+        if (!read.document.isObject()) {
+            return false;
+        }
+        object = read.document.object();
+    }
+    for (auto it = values.constBegin(); it != values.constEnd(); ++it) {
+        object.insert(it.key(), it.value());
+    }
+    std::string error;
+    return storage::write_json_file(path, QJsonDocument(object), &error);
+}
+
+StatisticsTargetSettings load_settings(const std::filesystem::path& path) {
+    StatisticsTargetSettings settings;
+    const QJsonObject object = read_settings_object(path);
+    const std::string_view duration_id =
+        statistics::daily_target_type_id(DailyTargetType::duration);
+    if (object.value(QStringLiteral("dailyStatisticsTargetType")).toString() ==
+        QString::fromStdString(std::string(duration_id))) {
+        settings.daily_target_type = DailyTargetType::duration;
+    }
+    settings.daily_character_target = object
+                                          .value(QStringLiteral("dailyStatisticsCharacterTarget"))
+                                          .toInt(settings.daily_character_target);
+    settings.daily_duration_target_minutes =
+        object.value(QStringLiteral("dailyStatisticsDurationTargetMinutes"))
+            .toInt(settings.daily_duration_target_minutes);
+    settings.weekly_target_days =
+        object.value(QStringLiteral("weeklyStatisticsTargetDays"))
+            .toInt(settings.weekly_target_days);
+    return settings.clamped();
+}
+
+}  // namespace
+
+struct StatisticsViewModel::State {
+    explicit State(std::filesystem::path data_root)
+        : storage(data_root), settings_path(std::move(data_root) / "settings.json") {}
+
+    BookStorage storage;
+    std::filesystem::path settings_path;
+    StatisticsTargetSettings settings;
+    StatisticsDashboardSnapshot snapshot;
+    std::vector<BookShelf> shelves;
+
+    QDate today;
+    QDate anchor;
+    QDate selected;
+    bool anchor_explicit = false;
+    bool selected_explicit = false;
+
+    int range_mode = 0;
+    int grain = 0;
+    int metric = 0;
+    int ranking_limit = kRankingPageSize;
+
+    QDate range_start;
+    QDate range_end;
+    QVariantMap today_view;
+    QVariantMap week_view;
+    QVariantMap range_view;
+    QVariantMap speed_view;
+    QVariantList calendar_view;
+    QVariantList trend_view;
+    QVariantList ranking_view;
+    QVariantList shelf_view;
+    bool ranking_has_more = false;
+};
+
+StatisticsViewModel* StatisticsViewModel::instance() {
+    static StatisticsViewModel* model = new StatisticsViewModel();
+    return model;
+}
+
+StatisticsViewModel* StatisticsViewModel::create(QQmlEngine*, QJSEngine*) {
+    StatisticsViewModel* model = instance();
+    // The singleton outlives every engine, so QML must not take ownership.
+    QJSEngine::setObjectOwnership(model, QJSEngine::CppOwnership);
+    return model;
+}
+
+StatisticsViewModel::StatisticsViewModel(QObject* parent)
+    : QObject(parent), state_(std::make_unique<State>(storage::data_root())) {
+    state_->settings = load_settings(state_->settings_path);
+    state_->today = statistics::local_day(QDateTime::currentDateTime(), kResetMinutes,
+                                          QTimeZone::systemTimeZone());
+    reset_selection();
+    project();
+}
+
+StatisticsViewModel::~StatisticsViewModel() = default;
+
+bool StatisticsViewModel::has_books() const { return !state_->snapshot.books.empty(); }
+
+bool StatisticsViewModel::has_statistics() const { return !state_->snapshot.days.empty(); }
+
+QVariantMap StatisticsViewModel::today() const { return state_->today_view; }
+
+QVariantMap StatisticsViewModel::week() const { return state_->week_view; }
+
+QVariantMap StatisticsViewModel::selected_range() const { return state_->range_view; }
+
+QVariantMap StatisticsViewModel::speed() const { return state_->speed_view; }
+
+QVariantList StatisticsViewModel::calendar_days() const { return state_->calendar_view; }
+
+QVariantList StatisticsViewModel::trend() const { return state_->trend_view; }
+
+QVariantList StatisticsViewModel::ranking() const { return state_->ranking_view; }
+
+bool StatisticsViewModel::has_more_books() const { return state_->ranking_has_more; }
+
+QVariantList StatisticsViewModel::shelf_comparison() const { return state_->shelf_view; }
+
+QDate StatisticsViewModel::range_start() const { return state_->range_start; }
+
+QDate StatisticsViewModel::range_end() const { return state_->range_end; }
+
+int StatisticsViewModel::range_mode() const { return state_->range_mode; }
+
+void StatisticsViewModel::setRangeMode(int mode) {
+    const int clamped = std::clamp(mode, 0, 3);
+    if (state_->range_mode == clamped) {
+        return;
+    }
+    state_->range_mode = clamped;
+    state_->ranking_limit = kRankingPageSize;
+    project();
+    emit viewChanged();
+}
+
+int StatisticsViewModel::trend_grain() const { return state_->grain; }
+
+void StatisticsViewModel::setTrendGrain(int grain) {
+    const int clamped = std::clamp(grain, 0, 2);
+    if (state_->grain == clamped) {
+        return;
+    }
+    state_->grain = clamped;
+    project();
+    emit viewChanged();
+}
+
+int StatisticsViewModel::trend_metric() const { return state_->metric; }
+
+void StatisticsViewModel::setTrendMetric(int metric) {
+    const int clamped = std::clamp(metric, 0, 2);
+    if (state_->metric == clamped) {
+        return;
+    }
+    state_->metric = clamped;
+    // Only the chart's plotted value depends on the metric; the projected
+    // points are shared by all three.
+    emit viewChanged();
+}
+
+QDate StatisticsViewModel::anchor_date() const { return state_->anchor; }
+
+void StatisticsViewModel::setAnchorDate(QDate date) {
+    if (!date.isValid() || !state_->today.isValid()) {
+        return;
+    }
+    const StatisticsDateRange window = StatisticsDateRange::recent_year(state_->today);
+    const QDate coerced = window.coerce(date);
+    state_->anchor_explicit = true;
+    if (state_->anchor == coerced) {
+        return;
+    }
+    state_->anchor = coerced;
+    state_->ranking_limit = kRankingPageSize;
+    project();
+    emit viewChanged();
+}
+
+QDate StatisticsViewModel::selected_date() const { return state_->selected; }
+
+void StatisticsViewModel::setSelectedDate(QDate date) {
+    if (!date.isValid() || !state_->today.isValid()) {
+        return;
+    }
+    const StatisticsDateRange window = StatisticsDateRange::recent_year(state_->today);
+    const QDate coerced = window.coerce(date);
+    state_->selected_explicit = true;
+    if (state_->selected == coerced) {
+        return;
+    }
+    state_->selected = coerced;
+    emit viewChanged();
+}
+
+int StatisticsViewModel::target_type() const {
+    return state_->settings.daily_target_type == DailyTargetType::duration ? 1 : 0;
+}
+
+void StatisticsViewModel::setTargetType(int type) {
+    const DailyTargetType target = type == 1 ? DailyTargetType::duration
+                                             : DailyTargetType::characters;
+    if (state_->settings.daily_target_type == target) {
+        return;
+    }
+    state_->settings.daily_target_type = target;
+    persist_settings();
+    emit settingsChanged();
+    project();
+}
+
+int StatisticsViewModel::character_target() const {
+    return state_->settings.daily_character_target;
+}
+
+void StatisticsViewModel::setCharacterTarget(int target) {
+    const int snapped = StatisticsTargetSettings::snap_character_target(target);
+    if (state_->settings.daily_character_target == snapped) {
+        return;
+    }
+    state_->settings.daily_character_target = snapped;
+    persist_settings();
+    emit settingsChanged();
+    project();
+}
+
+int StatisticsViewModel::duration_target_minutes() const {
+    return state_->settings.daily_duration_target_minutes;
+}
+
+void StatisticsViewModel::setDurationTargetMinutes(int minutes) {
+    const int snapped = StatisticsTargetSettings::snap_duration_target(minutes);
+    if (state_->settings.daily_duration_target_minutes == snapped) {
+        return;
+    }
+    state_->settings.daily_duration_target_minutes = snapped;
+    persist_settings();
+    emit settingsChanged();
+    project();
+}
+
+int StatisticsViewModel::weekly_target_days() const { return state_->settings.weekly_target_days; }
+
+void StatisticsViewModel::setWeeklyTargetDays(int days) {
+    const int clamped = std::clamp(days, StatisticsTargetSettings::weekly_target_days_min,
+                                   StatisticsTargetSettings::weekly_target_days_max);
+    if (state_->settings.weekly_target_days == clamped) {
+        return;
+    }
+    state_->settings.weekly_target_days = clamped;
+    persist_settings();
+    emit settingsChanged();
+    project();
+}
+
+QVariantMap StatisticsViewModel::target_limits() const {
+    return QVariantMap{
+        {QStringLiteral("characterMin"), StatisticsTargetSettings::character_target_min},
+        {QStringLiteral("characterMax"), StatisticsTargetSettings::character_target_max},
+        {QStringLiteral("characterStep"), StatisticsTargetSettings::character_target_step},
+        {QStringLiteral("durationMin"), StatisticsTargetSettings::duration_target_minutes_min},
+        {QStringLiteral("durationMax"), StatisticsTargetSettings::duration_target_minutes_max},
+        {QStringLiteral("durationStep"), StatisticsTargetSettings::duration_target_minutes_step},
+        {QStringLiteral("weeklyMin"), StatisticsTargetSettings::weekly_target_days_min},
+        {QStringLiteral("weeklyMax"), StatisticsTargetSettings::weekly_target_days_max},
+        {QStringLiteral("weeklyStep"), 1},
+    };
+}
+
+void StatisticsViewModel::refresh() {
+    state_->today = statistics::local_day(QDateTime::currentDateTime(), kResetMinutes,
+                                          QTimeZone::systemTimeZone());
+
+    std::vector<StatisticsBookSnapshotInput> inputs;
+    for (const BookMetadata& book : state_->storage.load_all_books()) {
+        const std::optional<std::filesystem::path> root =
+            state_->storage.book_directory(book.folder);
+        if (!root.has_value()) {
+            continue;
+        }
+
+        StatisticsBookSnapshotInput input;
+        input.id = book.id;
+        input.title = book.display_title();
+        if (const std::optional<std::filesystem::path> cover = state_->storage.cover_path(book)) {
+            input.cover_path = cover->string();
+        }
+        if (const std::optional<BookInfo> info = state_->storage.load_book_info(book.folder)) {
+            input.total_characters = info->character_count;
+        }
+        for (const Statistics& row : statistics::read_daily_statistics(
+                 *root, kResetMinutes, QTimeZone::systemTimeZone())) {
+            input.rows.push_back({row.date_key, row.characters_read, row.reading_time,
+                                  row.last_statistic_modified});
+        }
+        inputs.push_back(std::move(input));
+    }
+
+    state_->snapshot = statistics::build_snapshot(inputs);
+    state_->shelves = state_->storage.load_shelves();
+    reset_selection();
+    project();
+    emit viewChanged();
+}
+
+void StatisticsViewModel::showMoreBooks() {
+    if (!state_->ranking_has_more) {
+        return;
+    }
+    state_->ranking_limit += kRankingPageSize;
+    project();
+}
+
+void StatisticsViewModel::selectCalendarDay(const QString& dateKey) {
+    const QDate day = QDate::fromString(dateKey, QStringLiteral("yyyy-MM-dd"));
+    if (!day.isValid() || !state_->today.isValid()) {
+        return;
+    }
+    const StatisticsDateRange window = StatisticsDateRange::recent_year(state_->today);
+    const QDate coerced = window.coerce(day);
+    state_->anchor_explicit = true;
+    state_->selected_explicit = true;
+    const bool range_changed = state_->anchor != coerced;
+    state_->anchor = coerced;
+    state_->selected = coerced;
+    state_->ranking_limit = kRankingPageSize;
+    if (range_changed) {
+        project();
+    }
+    emit viewChanged();
+}
+
+void StatisticsViewModel::reset_selection() {
+    if (!state_->today.isValid()) {
+        return;
+    }
+    const StatisticsDateRange window = StatisticsDateRange::recent_year(state_->today);
+    const QDate latest =
+        state_->snapshot.days.empty()
+            ? window.coerce(state_->today)
+            : window.coerce(state_->snapshot.days.back().date);
+
+    state_->anchor = state_->anchor_explicit ? window.coerce(state_->anchor) : latest;
+    state_->selected = state_->selected_explicit ? window.coerce(state_->selected) : latest;
+}
+
+void StatisticsViewModel::persist_settings() {
+    const std::string_view target_id =
+        statistics::daily_target_type_id(state_->settings.daily_target_type);
+    QJsonObject values;
+    values.insert(QStringLiteral("dailyStatisticsTargetType"),
+                  QString::fromStdString(std::string(target_id)));
+    values.insert(QStringLiteral("dailyStatisticsCharacterTarget"),
+                  state_->settings.daily_character_target);
+    values.insert(QStringLiteral("dailyStatisticsDurationTargetMinutes"),
+                  state_->settings.daily_duration_target_minutes);
+    values.insert(QStringLiteral("weeklyStatisticsTargetDays"),
+                  state_->settings.weekly_target_days);
+
+    // Re-reading the merged file is the reload step: the in-memory settings
+    // then match what a later launch sees.
+    if (write_settings(state_->settings_path, values)) {
+        state_->settings = load_settings(state_->settings_path);
+    }
+}
+
+void StatisticsViewModel::project() {
+    if (!state_->today.isValid()) {
+        return;
+    }
+
+    const StatisticsDashboardSnapshot& snapshot = state_->snapshot;
+    const StatisticsTargetSettings& settings = state_->settings;
+    const StatisticsDateRange window = StatisticsDateRange::recent_year(state_->today);
+    const StatisticsDateRange range =
+        statistics::selected_range(range_mode_of(state_->range_mode), state_->anchor, window);
+    state_->range_start = range.start;
+    state_->range_end = range.end;
+
+    const StatisticsTodaySummary today =
+        statistics::today_summary(snapshot.days, state_->today, settings);
+    state_->today_view = QVariantMap{
+        {QStringLiteral("characters"), today.characters},
+        {QStringLiteral("duration"), today.reading_time},
+        {QStringLiteral("speed"), optional_value(today.average_speed_per_hour)},
+        {QStringLiteral("targetPercent"), today.target_percent},
+        {QStringLiteral("streak"), today.daily_streak_days},
+    };
+
+    const StatisticsWeekSummary week =
+        statistics::week_summary(snapshot.days, state_->today, settings);
+    QVariantList chips;
+    chips.reserve(static_cast<qsizetype>(week.days.size()));
+    for (const statistics::StatisticsWeekDaySummary& day : week.days) {
+        chips.append(QVariantMap{
+            {QStringLiteral("dateKey"), date_key_text(day.date)},
+            {QStringLiteral("percent"), optional_value(day.percent)},
+            {QStringLiteral("metTarget"), day.met_target},
+            {QStringLiteral("isToday"), day.is_today},
+            {QStringLiteral("isFuture"), day.is_future},
+        });
+    }
+    state_->week_view = QVariantMap{
+        {QStringLiteral("characters"), week.characters},
+        {QStringLiteral("duration"), week.reading_time},
+        {QStringLiteral("speed"), optional_value(week.average_speed_per_hour)},
+        {QStringLiteral("metTargetDays"), week.met_target_days},
+        {QStringLiteral("averageCharacters"), week.average_characters_per_elapsed_day},
+        {QStringLiteral("days"), chips},
+    };
+
+    const StatisticsRangeSummary summary =
+        statistics::range_summary(snapshot.days, range, settings);
+    state_->range_view = QVariantMap{
+        {QStringLiteral("characters"), summary.characters},
+        {QStringLiteral("duration"), summary.reading_time},
+        {QStringLiteral("speed"), optional_value(summary.average_speed_per_hour)},
+        {QStringLiteral("targetDays"), summary.target_days},
+        {QStringLiteral("targetProgressPercent"), summary.target_progress_percent},
+    };
+
+    const StatisticsSpeedSummary speeds = statistics::speed_summary(snapshot.days, range);
+    state_->speed_view = QVariantMap{
+        {QStringLiteral("weighted"), optional_value(speeds.weighted_average_speed_per_hour)},
+        {QStringLiteral("typical"), optional_value(speeds.median_day_speed_per_hour)},
+        {QStringLiteral("recent"), optional_value(speeds.recent_active_day_speed_per_hour)},
+        {QStringLiteral("hasChange"), speeds.speed_change_percent.has_value()},
+        {QStringLiteral("change"), speeds.speed_change_percent.value_or(0)},
+        {QStringLiteral("bestDate"),
+         speeds.best_day.has_value() ? date_key_text(speeds.best_day->date) : QString()},
+        {QStringLiteral("bestSpeed"),
+         speeds.best_day.has_value() ? speeds.best_day->speed_per_hour : -1},
+        {QStringLiteral("worstDate"),
+         speeds.worst_day.has_value() ? date_key_text(speeds.worst_day->date) : QString()},
+        {QStringLiteral("worstSpeed"),
+         speeds.worst_day.has_value() ? speeds.worst_day->speed_per_hour : -1},
+    };
+
+    std::map<QDate, int> characters_by_day;
+    for (const StatisticsDayAggregate& day : snapshot.days) {
+        characters_by_day.insert_or_assign(day.date, day.characters);
+    }
+    const int heat_max = statistics::calendar_heat_max_characters(snapshot.days);
+    QVariantList calendar;
+    for (QDate day = window.start; day <= window.end; day = day.addDays(1)) {
+        const auto entry = characters_by_day.find(day);
+        const int characters = entry == characters_by_day.end() ? 0 : entry->second;
+        calendar.append(QVariantMap{
+            {QStringLiteral("dateKey"), date_key_text(day)},
+            {QStringLiteral("characters"), characters},
+            {QStringLiteral("factor"), statistics::calendar_heat_factor(characters, heat_max)},
+        });
+    }
+    state_->calendar_view = calendar;
+
+    QVariantList trend;
+    for (const StatisticsTrendPoint& point :
+         statistics::trend_points(trend_grain_of(state_->grain), range, snapshot.days)) {
+        trend.append(QVariantMap{
+            {QStringLiteral("id"), QString::fromStdString(point.id)},
+            {QStringLiteral("label"), QString::fromStdString(point.label)},
+            {QStringLiteral("characters"), point.characters},
+            {QStringLiteral("time"), point.reading_time},
+            {QStringLiteral("speed"), optional_value(point.average_speed_per_hour)},
+        });
+    }
+    state_->trend_view = trend;
+
+    std::map<std::string, QString, std::less<>> book_covers;
+    for (const statistics::StatisticsBookRecord& book : snapshot.books) {
+        book_covers.insert_or_assign(book.id, cover_url(book.cover_path));
+    }
+    const std::vector<StatisticsBookRankingRow> rows = statistics::book_ranking_rows(
+        snapshot.days, range, StatisticsBookRankingMetric::characters);
+    state_->ranking_has_more = rows.size() > static_cast<std::size_t>(state_->ranking_limit);
+    const int shown = std::min(static_cast<int>(rows.size()), state_->ranking_limit);
+    QVariantList ranking;
+    for (int index = 0; index < shown; ++index) {
+        const StatisticsBookRankingRow& row = rows[static_cast<std::size_t>(index)];
+        const auto cover = book_covers.find(row.id);
+        ranking.append(QVariantMap{
+            {QStringLiteral("title"), QString::fromStdString(row.title)},
+            {QStringLiteral("cover"),
+             cover == book_covers.end() ? QString() : cover->second},
+            {QStringLiteral("characters"), row.characters},
+            {QStringLiteral("time"), row.reading_time},
+            {QStringLiteral("speed"), optional_value(row.average_speed_per_hour)},
+        });
+    }
+    state_->ranking_view = ranking;
+
+    QVariantList shelves;
+    for (const StatisticsShelfComparisonRow& row : statistics::shelf_comparison_rows(
+             snapshot.books, state_->shelves, snapshot.days, range,
+             tr("Unshelved").toStdString())) {
+        shelves.append(QVariantMap{
+            {QStringLiteral("name"), QString::fromStdString(row.name)},
+            {QStringLiteral("books"), row.book_count},
+            {QStringLiteral("totalCharacters"), row.total_characters},
+            {QStringLiteral("characters"), row.recorded_characters},
+            {QStringLiteral("time"), row.reading_time},
+            {QStringLiteral("speed"), optional_value(row.average_speed_per_hour)},
+        });
+    }
+    state_->shelf_view = shelves;
+
+    emit dataChanged();
+}
+
+}  // namespace niratan::viewmodels

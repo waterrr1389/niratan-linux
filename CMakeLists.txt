@@ -13,7 +13,10 @@ set(HOSHI_WARNINGS ${CMAKE_CXX_FLAGS})
 add_subdirectory(third_party/hoshidicts EXCLUDE_FROM_ALL)
 set(CMAKE_CXX_FLAGS ${HOSHI_WARNINGS})
 
-find_package(Qt6 6.12 REQUIRED COMPONENTS Quick QuickControls2 Test Network WebEngineQuick WebChannelQuick QuickDialogs2)
+find_package(Qt6 6.12 REQUIRED COMPONENTS Quick QuickControls2 Test Network WebEngineQuick
+    WebChannelQuick QuickDialogs2 OpenGL Multimedia)
+find_package(PkgConfig REQUIRED)
+pkg_check_modules(MPV REQUIRED IMPORTED_TARGET mpv)
 qt_standard_project_setup(REQUIRES 6.12)
 find_package(SQLite3 REQUIRED)
 find_package(libzip REQUIRED)
@@ -45,6 +48,8 @@ qt_add_library(niratan_core STATIC
     src/services/reader/layout.cpp
     src/services/reader/reader_css.cpp
     src/services/reader/reader_shell.cpp
+    src/services/reader/reading_tracker.cpp
+    src/models/statistics/dashboard_models.cpp
     src/models/books/book.cpp
     src/models/books/library_model.cpp
     src/services/books/book_storage.cpp
@@ -58,6 +63,7 @@ qt_add_library(niratan_core STATIC
     src/models/sasayaki/sasayaki.cpp
     src/models/statistics/statistics.cpp
     src/services/sasayaki/srt_parser.cpp
+    src/services/sasayaki/cue_timeline.cpp
     src/services/statistics/statistics_storage.cpp
     src/services/novels/epub_book.cpp
     src/services/player/mining_history.cpp
@@ -82,8 +88,16 @@ qt_add_executable(niratan
     src/viewmodels/dictionary/dictionary_popup_model.h
     src/viewmodels/library/library_view_model.cpp
     src/viewmodels/library/library_view_model.h
+    src/viewmodels/profiles/profiles_view_model.cpp
+    src/viewmodels/profiles/profiles_view_model.h
+    src/viewmodels/sasayaki/sasayaki_view_model.cpp
+    src/viewmodels/sasayaki/sasayaki_view_model.h
+    src/viewmodels/statistics/statistics_view_model.cpp
+    src/viewmodels/statistics/statistics_view_model.h
     src/viewmodels/reader/reader_view_model.cpp
     src/viewmodels/reader/reader_view_model.h
+    src/views/player/mpv_item.cpp
+    src/views/player/mpv_item.h
     src/views/reader/reader_scheme_handler.cpp
     src/views/reader/reader_scheme_handler.h
     src/views/dictionary/audio_scheme_handler.cpp
@@ -108,14 +122,20 @@ qt_add_qml_module(niratan
         src/views/MainWindow.qml
         src/views/pages/DictionaryPage.qml
         src/views/pages/LibraryPage.qml
+        src/views/pages/PlayerPage.qml
+        src/views/pages/ProfilesPage.qml
+        src/views/pages/StatisticsPage.qml
+        src/views/reader/SasayakiPanel.qml
         src/views/pages/ReaderPage.qml
         src/views/theme/Theme.qml
         src/views/theme/ThemePreview.qml
 )
 target_link_libraries(niratan PRIVATE niratan_core Qt6::Quick Qt6::QuickControls2
-    Qt6::WebEngineQuick Qt6::WebChannelQuick Qt6::QuickDialogs2)
+    Qt6::WebEngineQuick Qt6::WebChannelQuick Qt6::QuickDialogs2 Qt6::OpenGL
+    Qt6::Multimedia PkgConfig::MPV)
 target_include_directories(niratan PRIVATE src/views/theme src/viewmodels/dictionary
-    src/viewmodels/reader src/views/reader src/viewmodels/library)
+    src/viewmodels/reader src/views/reader src/viewmodels/library src/views/player
+    src/viewmodels/profiles src/viewmodels/sasayaki src/viewmodels/statistics)
 target_compile_options(niratan PRIVATE -Wall -Wextra -Wpedantic -Werror)
 
 enable_testing()

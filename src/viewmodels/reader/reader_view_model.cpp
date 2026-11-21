@@ -138,6 +138,10 @@ int ReaderViewModel::chapter_count() const {
     return state_->session.has_value() ? state_->session->spine_count() : 0;
 }
 
+QString ReaderViewModel::book_folder() const {
+    return state_->has_book ? QString::fromStdString(state_->book.folder) : QString();
+}
+
 double ReaderViewModel::progress() const {
     if (!state_->session.has_value() || state_->session->info().character_count <= 0) {
         return 0.0;
@@ -298,6 +302,7 @@ void ReaderViewModel::closeBook() {
     }
     persist_bookmark();
     state_->session.reset();
+    state_->book = books::BookMetadata{};
     state_->has_book = false;
     state_->chapter_index = 0;
     state_->chapter_progress = 0.0;

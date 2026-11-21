@@ -17,6 +17,9 @@ Item {
 
     signal bookOpened(string folder)
     signal dictionaryRequested()
+    signal videoRequested()
+    signal profilesRequested()
+    signal statisticsRequested()
 
     property bool selecting: false
     property var selectedFolders: ({})
@@ -295,6 +298,18 @@ Item {
                     Button {
                         text: qsTr("Dictionary")
                         onClicked: page.dictionaryRequested()
+                    }
+                    Button {
+                        text: qsTr("Video")
+                        onClicked: page.videoRequested()
+                    }
+                    Button {
+                        text: qsTr("Profiles")
+                        onClicked: page.profilesRequested()
+                    }
+                    Button {
+                        text: qsTr("Statistics")
+                        onClicked: page.statisticsRequested()
                     }
                     Button {
                         text: qsTr("Import")

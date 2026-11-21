@@ -25,8 +25,9 @@
 // minute (normalized to 0..1439). It loads the persisted records on the first
 // enabled configure, so the read-only totals are available while autostart is
 // Off or still waiting for a page turn. A changed reset minute re-groups the
-// loaded history at once; the live session and its tracking baseline are left
-// to the next timestamped call, because configure() has no instant.
+// loaded history at once, including while statistics is disabled; the live
+// session and its tracking baseline are left to the next timestamped call,
+// because configure() has no instant.
 //
 // start() begins tracking only when statistics is enabled and the autostart
 // mode is On. Page Turn starts on the first on_manual_navigation(); Off never
@@ -34,7 +35,8 @@
 // kept when it already has activity (a stop/start on the same day continues
 // it); otherwise it starts at the given instant. Tracking starts paused when
 // the context is inactive, and the first update_position() after start or
-// resume only establishes the character baseline.
+// resume establishes the character baseline and credits the elapsed time
+// without characters.
 //
 // set_context_active() receives the result of the model's predicate
 //     statistics_sheet_active || (reader_window_active && !reader_content_covered)
@@ -49,7 +51,9 @@
 // form, then moves the baseline to the given position. A non-positive time
 // delta credits nothing and leaves the baseline alone. A forward jump is
 // credited in full; a backward jump can only take the session down to zero.
-// While paused, not tracking or disabled, the position is ignored. flush()
+// While paused, not tracking or disabled, the position is ignored. The caller
+// must not report a position while a synced bookmark is being restored, as
+// Swift's updateStats does not apply a position during that restore. flush()
 // credits the time since the last baseline with no characters (the last known
 // position is unchanged) and refuses while paused; it never persists by
 // itself.
@@ -69,10 +73,12 @@
 // live session as applyStatisticsHistory does (a newer record for this id
 // replaces the live values once; a tombstone starts a fresh session with a new
 // id), and then writes only when the live session has activity and its stored
-// value differs. The record's modification time is max(now_ms,
-// last_saved_modified + 1). The caller's title is used for the derived daily
-// rows and is retained so a day-rotation save can write without one. A failed
-// write leaves the in-memory history unchanged, so a later save retries it.
+// value differs. It does nothing when statistics is disabled. The record's
+// modification time is max(now_ms, last_saved_modified + 1). The caller's
+// title is used for the derived daily rows and retained so a day-rotation save
+// can write without one; an empty title keeps the retained one. A failed write
+// does not add the live record to the in-memory history, so a later save
+// retries it.
 //
 // Totals
 // ------
@@ -99,8 +105,9 @@
 // * The first position after start or resume establishes the character
 //   baseline and credits only the elapsed time. Swift's resetTrackingBaseline
 //   reads the current character at that moment.
-// * save() receives its title from the caller; Swift derives it from the stored
-//   daily rows and metadata.
+// * save() receives its title from the caller and keeps the retained title for
+//   an empty argument; Swift derives it from the stored daily rows and
+//   metadata.
 
 #pragma once
 
@@ -124,7 +131,8 @@ class StatisticsStore {
    public:
     virtual ~StatisticsStore() = default;
 
-    virtual statistics::StatisticsReadResult load(int reset_minutes, const QTimeZone& zone) = 0;
+    virtual statistics::ReadingSessionRecords load(int reset_minutes,
+                                                   const QTimeZone& zone) = 0;
     virtual bool save(const statistics::ReadingSessionRecords& records, std::string_view title,
                       int reset_minutes, const QTimeZone& zone, std::string* error) = 0;
 };
@@ -134,7 +142,7 @@ class BookStatisticsStore final : public StatisticsStore {
    public:
     explicit BookStatisticsStore(std::filesystem::path book_root);
 
-    statistics::StatisticsReadResult load(int reset_minutes, const QTimeZone& zone) override;
+    statistics::ReadingSessionRecords load(int reset_minutes, const QTimeZone& zone) override;
     bool save(const statistics::ReadingSessionRecords& records, std::string_view title,
               int reset_minutes, const QTimeZone& zone, std::string* error) override;
 
@@ -161,7 +169,8 @@ class ReadingTracker {
     // rules above. Does nothing while already tracking.
     void start(std::int64_t now_ms);
 
-    // Flushes, then leaves tracking; does nothing when not tracking.
+    // Flushes when not paused, then leaves tracking; does nothing when not
+    // tracking.
     void stop(std::int64_t now_ms);
 
     // `active` is the context predicate result described above. Resuming resets
@@ -216,6 +225,13 @@ class ReadingTracker {
     std::map<std::string, statistics::ReadingTotal, std::less<>> history_day_totals_;
     statistics::ReadingTotal history_total_;
     std::int64_t last_saved_session_modified_ = 0;
+
+    void begin_tracking(std::int64_t now_ms);
+    void reload_history();
+    void apply_history(statistics::ReadingSessionRecords records, std::int64_t now_ms);
+    void regroup_history();
+    void credit_time(std::int64_t now_ms);
+    bool rotate_session(std::int64_t now_ms);
 };
 
 }  // namespace niratan::reader

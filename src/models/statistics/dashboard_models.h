@@ -27,17 +27,17 @@
 // Ordering
 // --------
 // Titles compare by Unicode code point, which is UTF-8 byte order, as the
-// bookshelf model does. macOS sorts titles, shelf names and trend labels with
-// localizedStandardCompare, which follows the user's locale, ignores case and
-// reads digit runs as numbers ("Vol 2" before "Vol 10"); this port keeps the
-// deterministic code-point order. Every tie Swift leaves to dictionary order
-// gets a deterministic break here, noted per function.
+// bookshelf model does. macOS sorts titles, shelf names and breakdown titles
+// with localizedStandardCompare, which follows the user's locale, ignores
+// case and reads digit runs as numbers ("Vol 2" before "Vol 10"); this port
+// keeps the deterministic code-point order. Every tie Swift leaves to
+// dictionary order gets a deterministic break here, noted per function.
 //
 // Inputs that Swift's repository cannot produce
 // --------------------------------------------
 // * Two rows of one book with the same date key: the row with the greater
 //   last_modified wins and an equal modification time keeps the first row,
-//   the order deduplicated_statistics() applies. A Swift snapshot comes from
+//   the rule deduplicated_statistics() applies. A Swift snapshot comes from
 //   a dictionary keyed by day and would trap instead.
 // * A date key that is not exactly "yyyy-MM-dd" is skipped. Swift splits the
 //   key on '-' and drops non-numeric components, so it also accepts unpadded
@@ -47,21 +47,21 @@
 // * The input row carries no title, so a contribution always uses the book's
 //   title. Swift falls back to the daily row's title only when the book title
 //   is empty.
+// * Day totals and speeds sum machine integers and doubles without checks;
+//   Swift traps on an overflowing Int, values that cannot reach a card.
 //
-// Known deviations from Swift
-// ---------------------------
-// * StatisticsDayAggregate.activeBookCount counts contributions that read
-//   characters or spent time, exactly as Swift does.
-// * week_summary().met_target_days counts every day of the week whose target
-//   ratio reaches 1, including a day later than today; Swift's
-//   weekSummary filters the same seven aggregates and does not exclude future
-//   days, while its per-day rows do.
+// Range and target rules a caller must rely on
+// --------------------------------------------
 // * Speed samples need characters > 0 and at least 60 seconds. A day with
 //   book contributions is sampled per contribution only; the day total is
 //   used only when the day has no contributions at all, as in Swift.
+// * week_summary().met_target_days counts every day of the week whose target
+//   ratio reaches 1, including a day later than today; Swift's weekSummary
+//   filters the same seven aggregates and does not exclude future days, while
+//   its per-day rows do.
 // * calendar_heat_factor is 0 for a day without characters (the view draws
 //   those in the secondary color) and otherwise 0.18 + 0.72 * the ratio
-//   clamped to 0.18..1, so an active day lies in 0.3096..0.9.
+//   clamped to 0.18..1, so an active day lies in 0.3096..0.9, not 0.18..0.9.
 
 #pragma once
 
@@ -167,7 +167,8 @@ struct StatisticsDashboardSnapshot {
 // title then id.
 StatisticsDashboardSnapshot build_snapshot(const std::vector<StatisticsBookSnapshotInput>& books);
 
-// An inclusive span of whole days.
+// An inclusive span of whole days. A range whose end precedes its start is
+// empty rather than an error; nothing here builds one.
 struct StatisticsDateRange {
     QDate start;
     QDate end;
@@ -272,7 +273,8 @@ struct StatisticsWeekSummary {
 
 // The Monday-based week of `today`: all seven days are aggregated, elapsed
 // days are clamped to 1..7 (today through the week's start), and met days
-// count every day at or above the target.
+// count every day at or above the target, including a later day of the week
+// that already has data.
 StatisticsWeekSummary week_summary(const std::vector<StatisticsDayAggregate>& days, QDate today,
                                    const StatisticsTargetSettings& settings);
 
@@ -363,8 +365,8 @@ struct StatisticsBookRankingRow {
 };
 
 // One row per book with activity in `range`, keeping only rows whose chosen
-// metric is positive and sorting by that metric descending, then title. The
-// caller applies any limit and lookahead.
+// metric is positive and sorting by that metric descending, then title, then
+// book id. The caller applies any limit and lookahead.
 std::vector<StatisticsBookRankingRow> book_ranking_rows(
     const std::vector<StatisticsDayAggregate>& days, const StatisticsDateRange& range,
     StatisticsBookRankingMetric metric);
@@ -384,7 +386,7 @@ struct StatisticsShelfComparisonRow {
 // One row per shelf plus one for the books on no shelf. Shelf IDs are
 // "shelf:<name>", the unshelved row is "unshelved". Only known books count;
 // rows without a book are dropped, and the rest sort by recorded characters
-// descending, then name.
+// descending, then name, then id.
 std::vector<StatisticsShelfComparisonRow> shelf_comparison_rows(
     const std::vector<StatisticsBookRecord>& books,
     const std::vector<niratan::books::BookShelf>& shelves,

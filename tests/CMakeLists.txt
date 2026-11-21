@@ -333,3 +333,27 @@ target_include_directories(tst_statistics_storage PRIVATE ${CMAKE_SOURCE_DIR}/sr
 target_link_libraries(tst_statistics_storage PRIVATE niratan_core Qt6::Test)
 target_compile_options(tst_statistics_storage PRIVATE -Wall -Wextra -Wpedantic -Werror)
 add_test(NAME statistics_storage COMMAND tst_statistics_storage)
+
+qt_add_executable(tst_reading_tracker
+    reader/tst_reading_tracker.cpp
+)
+target_include_directories(tst_reading_tracker PRIVATE ${CMAKE_SOURCE_DIR}/src)
+target_link_libraries(tst_reading_tracker PRIVATE niratan_core Qt6::Test)
+target_compile_options(tst_reading_tracker PRIVATE -Wall -Wextra -Wpedantic -Werror)
+add_test(NAME reading_tracker COMMAND tst_reading_tracker)
+
+qt_add_executable(tst_dashboard_models
+    statistics/tst_dashboard_models.cpp
+)
+target_include_directories(tst_dashboard_models PRIVATE ${CMAKE_SOURCE_DIR}/src)
+target_link_libraries(tst_dashboard_models PRIVATE niratan_core Qt6::Test)
+target_compile_options(tst_dashboard_models PRIVATE -Wall -Wextra -Wpedantic -Werror)
+add_test(NAME dashboard_models COMMAND tst_dashboard_models)
+
+qt_add_executable(tst_cue_timeline
+    sasayaki/tst_cue_timeline.cpp
+)
+target_include_directories(tst_cue_timeline PRIVATE ${CMAKE_SOURCE_DIR}/src)
+target_link_libraries(tst_cue_timeline PRIVATE niratan_core Qt6::Test)
+target_compile_options(tst_cue_timeline PRIVATE -Wall -Wextra -Wpedantic -Werror)
+add_test(NAME cue_timeline COMMAND tst_cue_timeline)

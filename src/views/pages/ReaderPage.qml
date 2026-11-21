@@ -39,6 +39,39 @@ Item {
                           })
     }
 
+    // Re-applies the current chapter's cue ranges. The model's JSON is an
+    // array literal, so it is inserted as an expression like the Swift reader
+    // does; anything else is dropped rather than evaluated.
+    function applySasayakiCues() {
+        if (!ReaderViewModel.hasBook || !sasayaki.hasMatch)
+            return
+        var cues = sasayaki.applyCuesJson()
+        if (cues.length === 0)
+            return
+        try {
+            JSON.parse(cues)
+        } catch (error) {
+            return
+        }
+        web.runJavaScript("window.hoshiReader.applySasayakiCues(" + cues + ");", function () {
+            page.highlightSasayakiCue(sasayaki.currentCueId)
+        })
+    }
+
+    function highlightSasayakiCue(cueId) {
+        if (!ReaderViewModel.hasBook || !sasayaki.hasMatch)
+            return
+        if (cueId && cueId.length > 0) {
+            web.runJavaScript("window.hoshiReader.highlightSasayakiCue("
+                              + JSON.stringify(cueId) + ", true)", function (result) {
+                                  if (typeof result === "number")
+                                      ReaderViewModel.updateChapterProgress(result)
+                              })
+        } else {
+            web.runJavaScript("window.hoshiReader.clearSasayakiCue()")
+        }
+    }
+
     Component.onCompleted: ReaderViewModel.setPageSize(Math.round(width), Math.round(height))
     onWidthChanged: ReaderViewModel.setPageSize(Math.round(width), Math.round(height))
     onHeightChanged: ReaderViewModel.setPageSize(Math.round(width), Math.round(height))
@@ -72,6 +105,17 @@ Item {
         }
         function onChapterUrlChanged() {
             chapter.visible = false
+        }
+    }
+
+    SasayakiViewModel {
+        id: sasayaki
+    }
+
+    Connections {
+        target: sasayaki
+        function onActiveCueChanged(cueId) {
+            page.highlightSasayakiCue(cueId)
         }
     }
 
@@ -133,6 +177,12 @@ Item {
                     enabled: ReaderViewModel.hasBook
                     onClicked: toc.open()
                 }
+                ToolButton {
+                    text: qsTr("Sasayaki")
+                    font.pixelSize: 12
+                    enabled: ReaderViewModel.hasBook
+                    onClicked: sasayakiPanel.open()
+                }
             }
         }
 
@@ -151,8 +201,10 @@ Item {
                     registeredObjects: [ReaderViewModel]
                 }
                 onLoadingChanged: function (request) {
-                    if (request.status === WebEngineView.LoadSucceededStatus)
+                    if (request.status === WebEngineView.LoadSucceededStatus) {
                         page.syncProgress()
+                        page.applySasayakiCues()
+                    }
                 }
             }
 
@@ -262,5 +314,11 @@ Item {
                 }
             }
         }
+    }
+
+    SasayakiPanel {
+        id: sasayakiPanel
+        anchors.fill: parent
+        player: sasayaki
     }
 }

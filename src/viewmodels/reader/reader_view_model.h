@@ -23,6 +23,10 @@
 //
 // Reader settings come from the active profile's reader_settings.json; the
 // page edits them through the setters, which rebuild the injected document.
+//
+// bookFolder is the open book's folder name under Books/, exposed so a model
+// that reads sidecar files (Sasayaki) can resolve them without matching the
+// display title. It is empty when no book is open.
 
 #pragma once
 
@@ -50,6 +54,7 @@ class ReaderViewModel : public QObject {
     Q_PROPERTY(QString chapterTitle READ chapter_title NOTIFY chapterChanged)
     Q_PROPERTY(int chapterIndex READ chapter_index NOTIFY chapterChanged)
     Q_PROPERTY(int chapterCount READ chapter_count NOTIFY bookChanged)
+    Q_PROPERTY(QString bookFolder READ book_folder NOTIFY bookChanged)
     Q_PROPERTY(double progress READ progress NOTIFY progressChanged)
     Q_PROPERTY(double chapterProgress READ chapter_progress NOTIFY progressChanged)
     Q_PROPERTY(QString chapterUrl READ chapter_url NOTIFY chapterUrlChanged)
@@ -78,6 +83,7 @@ class ReaderViewModel : public QObject {
     QString chapter_title() const;
     int chapter_index() const;
     int chapter_count() const;
+    QString book_folder() const;
     double progress() const;
     double chapter_progress() const;
     QString chapter_url() const;

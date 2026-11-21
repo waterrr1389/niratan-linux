@@ -176,7 +176,7 @@ private slots:
     void trend_points_by_grain();
     void speed_summary_samples_and_change();
     void book_ranking_metric_and_order();
-    void shelf_comparison_rows();
+    void shelf_comparison_groups_books();
     void calendar_heat_scale();
     void local_day_resolves_the_caller_zone();
 };
@@ -229,16 +229,18 @@ void DashboardModelsTest::snapshot_builds_days_and_books() {
     // Days ascend by date; the unparsable key and the idle row are dropped.
     QCOMPARE(snapshot.days.size(), 2u);
     QCOMPARE(snapshot.days[0].date, on(2026, 11, 1));
-    QCOMPARE(snapshot.days[0].characters, 150);
-    QCOMPARE(snapshot.days[0].reading_time, 120.0);
-    QCOMPARE(snapshot.days[0].active_book_count(), 2);
-    QCOMPARE(snapshot.days[0].book_contributions.size(), 2u);
+    QCOMPARE(snapshot.days[0].characters, 350);
+    QCOMPARE(snapshot.days[0].reading_time, 180.0);
+    QCOMPARE(snapshot.days[0].active_book_count(), 3);
+    QCOMPARE(snapshot.days[0].book_contributions.size(), 3u);
     QCOMPARE(snapshot.days[0].book_contributions[0].title, std::string("Alpha"));
     QCOMPARE(snapshot.days[0].book_contributions[0].characters, 150);
     QCOMPARE(snapshot.days[0].book_contributions[0].reading_time, 90.0);
-    QCOMPARE(snapshot.days[0].book_contributions[1].title, std::string("Gamma"));
-    QCOMPARE(snapshot.days[0].book_contributions[1].characters, 0);
-    QCOMPARE(snapshot.days[0].book_contributions[1].reading_time, 30.0);
+    QCOMPARE(snapshot.days[0].book_contributions[1].title, std::string("Beta"));
+    QCOMPARE(snapshot.days[0].book_contributions[1].characters, 200);
+    QCOMPARE(snapshot.days[0].book_contributions[2].title, std::string("Gamma"));
+    QCOMPARE(snapshot.days[0].book_contributions[2].characters, 0);
+    QCOMPARE(snapshot.days[0].book_contributions[2].reading_time, 30.0);
 
     QCOMPARE(snapshot.days[1].date, on(2026, 11, 2));
     QCOMPARE(snapshot.days[1].characters, 300);
@@ -352,17 +354,26 @@ void DashboardModelsTest::day_aggregate_targets_and_streak() {
     days.push_back(plain_day(on(2026, 11, 21), 500, 300.0));
 
     // Today is below the target, so the streak starts at yesterday.
-    QCOMPARE(daily_goal_streak(days, on(2026, 11, 21), characters), 4);
+    const StatisticsTargetSettings goal = character_target(1000);
+    QCOMPARE(daily_goal_streak(days, on(2026, 11, 21), goal), 4);
 
+    // A met today extends the streak, but yesterday below the target ends it.
     days.push_back(plain_day(on(2026, 11, 22), 1000, 600.0));
-    QCOMPARE(daily_goal_streak(days, on(2026, 11, 22), characters), 5);
+    QCOMPARE(daily_goal_streak(days, on(2026, 11, 22), goal), 1);
+
+    std::vector<StatisticsDayAggregate> contiguous;
+    contiguous.push_back(plain_day(on(2026, 11, 18), 1000, 600.0));
+    contiguous.push_back(plain_day(on(2026, 11, 19), 1000, 600.0));
+    contiguous.push_back(plain_day(on(2026, 11, 20), 1000, 600.0));
+    contiguous.push_back(plain_day(on(2026, 11, 21), 1000, 600.0));
+    QCOMPARE(daily_goal_streak(contiguous, on(2026, 11, 21), goal), 4);
 
     // A missing day ends the streak.
     std::vector<StatisticsDayAggregate> gapped;
     gapped.push_back(plain_day(on(2026, 11, 18), 1000, 600.0));
     gapped.push_back(plain_day(on(2026, 11, 19), 1000, 600.0));
     gapped.push_back(plain_day(on(2026, 11, 21), 500, 300.0));
-    QCOMPARE(daily_goal_streak(gapped, on(2026, 11, 21), characters), 0);
+    QCOMPARE(daily_goal_streak(gapped, on(2026, 11, 21), goal), 0);
 
     // Today's speed ignores a sample under one minute, and its streak is the
     // daily one.
@@ -517,7 +528,8 @@ void DashboardModelsTest::trend_points_by_grain() {
     QCOMPARE(daily[0].characters, 100);
     QCOMPARE(daily[0].reading_time, 120.0);
     check_optional_int(daily[0].average_speed_per_hour, 6000);
-    const std::vector<std::string> first_titles = {"A", "B"};
+    // B read no characters, so it is not part of the breakdown.
+    const std::vector<std::string> first_titles = {"A"};
     QCOMPARE(titles(daily[0].book_breakdown), first_titles);
 
     QCOMPARE(daily[1].id, std::string("2026-11-02"));
@@ -533,7 +545,7 @@ void DashboardModelsTest::trend_points_by_grain() {
     const std::vector<std::string> wide_titles = {"T1", "T2", "T3", "T4", "T5"};
     QCOMPARE(titles(daily[4].book_breakdown), wide_titles);
 
-    QCOMPARE(daily[9].date, on(2026, 11, 10));
+    QCOMPARE(daily[9].id, std::string("2026-11-10"));
     QCOMPARE(daily[9].characters, 50);
     QVERIFY(!daily[9].average_speed_per_hour.has_value());
 
@@ -558,7 +570,7 @@ void DashboardModelsTest::trend_points_by_grain() {
     QCOMPARE(weekly[1].characters, 510);
     QCOMPARE(weekly[1].reading_time, 1020.0);
     check_optional_int(weekly[1].average_speed_per_hour, 2040);
-    const std::vector<std::string> week_titles = {"C", "A", "D", "T1", "T2"};
+    const std::vector<std::string> week_titles = {"C", "D", "T1", "T2", "T3"};
     QCOMPARE(titles(weekly[1].book_breakdown), week_titles);
     QCOMPARE(weekly[2].id, std::string("2026-W46"));
     QCOMPARE(weekly[2].characters, 50);
@@ -624,6 +636,8 @@ void DashboardModelsTest::speed_summary_samples_and_change() {
     equal.push_back(plain_day(on(2026, 11, 1), 600, 600.0));
     const StatisticsSpeedSummary equal_summary =
         speed_summary(equal, StatisticsDateRange{on(2026, 11, 1), on(2026, 11, 30)});
+    QVERIFY(equal_summary.best_day.has_value());
+    QVERIFY(equal_summary.worst_day.has_value());
     QCOMPARE(equal_summary.best_day->date, on(2026, 11, 1));
     QCOMPARE(equal_summary.worst_day->date, on(2026, 11, 1));
 
@@ -639,6 +653,8 @@ void DashboardModelsTest::speed_summary_samples_and_change() {
     check_optional_int(change.weighted_average_speed_per_hour, 5400);
     check_optional_int(change.recent_active_day_speed_per_hour, 7200);
     check_optional_int(change.median_day_speed_per_hour, 5400);
+    QVERIFY(change.best_day.has_value());
+    QVERIFY(change.worst_day.has_value());
     QCOMPARE(change.best_day->date, on(2026, 11, 15));
     QCOMPARE(change.worst_day->date, on(2026, 11, 1));
 
@@ -708,9 +724,20 @@ void DashboardModelsTest::book_ranking_metric_and_order() {
     QCOMPARE(by_speed.size(), 4u);
     const std::vector<std::string> speed_titles = {"Beta", "Alpha", "Alpha Two", "Gamma"};
     QCOMPARE(ranking_titles(by_speed), speed_titles);
+
+    // An equal title and metric fall to the book id.
+    std::vector<StatisticsBookContribution> tied_contributions;
+    tied_contributions.push_back(contribution("z", "Same", 40, 300.0));
+    tied_contributions.push_back(contribution("a", "Same", 40, 300.0));
+    std::vector<StatisticsDayAggregate> tied_days;
+    tied_days.push_back(aggregate(on(2026, 11, 1), tied_contributions));
+    const std::vector<StatisticsBookRankingRow> tied =
+        book_ranking_rows(tied_days, range, StatisticsBookRankingMetric::characters);
+    const std::vector<std::string> tied_ids = {"a", "z"};
+    QCOMPARE(ranking_ids(tied), tied_ids);
 }
 
-void DashboardModelsTest::shelf_comparison_rows() {
+void DashboardModelsTest::shelf_comparison_groups_books() {
     std::vector<StatisticsBookRecord> books;
     StatisticsBookRecord a;
     a.id = "a";
@@ -775,7 +802,7 @@ void DashboardModelsTest::shelf_comparison_rows() {
     QCOMPARE(rows[1].total_characters, 5000);
     QCOMPARE(rows[1].recorded_characters, 200);
     QCOMPARE(rows[1].reading_time, 420.0);
-    check_optional_int(rows[1].average_speed_per_hour, 1714);
+    check_optional_int(rows[1].average_speed_per_hour, 2400);
 
     QCOMPARE(rows[2].name, std::string("Unshelved"));
     QCOMPARE(rows[2].book_count, 1);
