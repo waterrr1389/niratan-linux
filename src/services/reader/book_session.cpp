@@ -2,13 +2,9 @@
 
 #include "book_session.h"
 
-#include <QByteArray>
 #include <QFile>
-#include <QHash>
-#include <QRegularExpression>
 #include <QString>
 #include <QStringList>
-#include <QUrl>
 
 #include <algorithm>
 #include <cctype>
@@ -25,41 +21,11 @@
 #include "models/profiles/profile_ops.h"
 #include "services/profiles/profile_repository.h"
 #include "services/reader/character_normalizer.h"
+#include "services/reader/toc_target.h"
 #include "services/storage/json_file.h"
 
 namespace niratan::reader {
 namespace {
-
-QString from_utf8(std::string_view text) {
-    return QString::fromUtf8(text.data(), static_cast<qsizetype>(text.size()));
-}
-
-std::string to_utf8(const QString& text) { return text.toUtf8().toStdString(); }
-
-// An href split at its first '#'. Table of contents paths arrive resolved
-// against the package directory, so only the fragment needs decoding before
-// it is compared with an identifier.
-struct TocTarget {
-    std::string path;
-    std::optional<std::string> fragment;
-};
-
-TocTarget split_target(const std::string& href) {
-    const std::size_t fragment_at = href.find('#');
-    if (fragment_at == std::string::npos) {
-        return TocTarget{href, std::nullopt};
-    }
-    const std::string fragment = href.substr(fragment_at + 1);
-    // Swift's target(from:) drops an empty fragment, so "#" alone is no target.
-    return TocTarget{href.substr(0, fragment_at), fragment.empty()
-                                                        ? std::nullopt
-                                                        : std::optional<std::string>(fragment)};
-}
-
-std::string percent_decoded(std::string_view text) {
-    const QByteArray encoded(text.data(), static_cast<qsizetype>(text.size()));
-    return to_utf8(QUrl::fromPercentEncoding(encoded));
-}
 
 std::string to_lower_ascii(std::string_view text) {
     std::string lowered;
@@ -68,141 +34,6 @@ std::string to_lower_ascii(std::string_view text) {
         lowered.push_back(static_cast<char>(std::tolower(static_cast<unsigned char>(character))));
     }
     return lowered;
-}
-
-// The value of the tag's id attribute, else xml:id, following
-// ReaderChapterIndex.attributeValues: attribute names are lowercased and the
-// first spelling of a name wins. Character references are still encoded.
-std::optional<QString> tag_identifier(const QString& tag) {
-    static const QRegularExpression attribute_regex(QStringLiteral(
-        R"regex(\s([A-Za-z_:][A-Za-z0-9_.:-]*)\s*=\s*(?:"([^"]*)"|'([^']*)'))regex"));
-
-    QHash<QString, QString> attributes;
-    QRegularExpressionMatchIterator matches = attribute_regex.globalMatch(tag);
-    while (matches.hasNext()) {
-        const QRegularExpressionMatch match = matches.next();
-        const QString name = match.captured(1).toLower();
-        if (attributes.contains(name)) {
-            continue;
-        }
-        if (match.capturedStart(2) >= 0) {
-            attributes.insert(name, match.captured(2));
-        } else if (match.capturedStart(3) >= 0) {
-            attributes.insert(name, match.captured(3));
-        }
-    }
-
-    const auto id = attributes.constFind(QStringLiteral("id"));
-    if (id != attributes.cend()) {
-        return *id;
-    }
-    const auto xml_id = attributes.constFind(QStringLiteral("xml:id"));
-    if (xml_id != attributes.cend()) {
-        return *xml_id;
-    }
-    return std::nullopt;
-}
-
-// The fragments' readable character offsets inside one chapter, following
-// ReaderChapterIndex.fragmentOffsets. Every requested fragment starts at zero
-// and keeps that offset when no tag carries its identifier.
-//
-// The counted span is the body content: everything after the first <body ...>
-// tag up to the next </body>. A document without a body tag leaves every
-// offset at zero, as ReaderChapterIndex does. Tags inside comments, script and
-// style blocks, and CDATA never name a fragment. Every fragment reachable
-// through an identifier is filled at the first tag carrying it.
-std::map<std::string, int> fragment_offsets(std::string_view markup,
-                                            const std::set<std::string>& fragments) {
-    std::map<std::string, int> offsets;
-    if (fragments.empty()) {
-        return offsets;
-    }
-
-    // A fragment is reachable by its raw and its percent-decoded spelling.
-    // Character references are decoded on both sides, as the tag's attribute is.
-    std::map<std::string, std::vector<std::string>> pending;
-    for (const std::string& fragment : fragments) {
-        offsets.emplace(fragment, 0);
-        const std::string decoded = decoded_character_references(fragment);
-        const std::string decoded_percent = decoded_character_references(percent_decoded(fragment));
-        pending[decoded].push_back(fragment);
-        if (decoded_percent != decoded) {
-            pending[decoded_percent].push_back(fragment);
-        }
-    }
-
-    const QString text = from_utf8(markup);
-
-    static const QRegularExpression body_regex(QStringLiteral(R"(<body\b[^>]*>)"),
-                                               QRegularExpression::CaseInsensitiveOption);
-    static const QRegularExpression closing_body_regex(QStringLiteral(R"(</body\s*>)"),
-                                                       QRegularExpression::CaseInsensitiveOption);
-
-    const QRegularExpressionMatch body_match = body_regex.match(text);
-    if (!body_match.hasMatch()) {
-        return offsets;
-    }
-    const qsizetype content_start = body_match.capturedEnd();
-    qsizetype content_end = text.size();
-    const QRegularExpressionMatch closing_match = closing_body_regex.match(text, content_start);
-    if (closing_match.hasMatch()) {
-        content_end = closing_match.capturedStart();
-    }
-    const QString content = text.mid(content_start, content_end - content_start);
-
-    static const QRegularExpression comment_regex(QStringLiteral(R"((?s)<!--.*?-->)"));
-    static const QRegularExpression script_style_regex(
-        QStringLiteral(R"((?s)<(script|style)\b[^>]*>.*?</\1\s*>)"),
-        QRegularExpression::CaseInsensitiveOption);
-    static const QRegularExpression cdata_regex(QStringLiteral(R"((?s)<!\[CDATA\[.*?\]\]>)"));
-    static const QRegularExpression opening_tag_regex(
-        QStringLiteral(R"(<\s*[A-Za-z][A-Za-z0-9:_-]*\b[^>]*>)"),
-        QRegularExpression::CaseInsensitiveOption);
-
-    std::vector<std::pair<qsizetype, qsizetype>> ignored;
-    for (const QRegularExpression& regex : {comment_regex, script_style_regex, cdata_regex}) {
-        QRegularExpressionMatchIterator matches = regex.globalMatch(content);
-        while (matches.hasNext()) {
-            const QRegularExpressionMatch match = matches.next();
-            ignored.emplace_back(match.capturedStart(), match.capturedEnd());
-        }
-    }
-    std::sort(ignored.begin(), ignored.end(),
-              [](const std::pair<qsizetype, qsizetype>& left,
-                 const std::pair<qsizetype, qsizetype>& right) { return left.first < right.first; });
-
-    std::size_t ignored_index = 0;
-    QRegularExpressionMatchIterator tags = opening_tag_regex.globalMatch(content);
-    while (tags.hasNext()) {
-        const QRegularExpressionMatch tag = tags.next();
-        const qsizetype tag_start = tag.capturedStart();
-        while (ignored_index < ignored.size() && ignored[ignored_index].second <= tag_start) {
-            ++ignored_index;
-        }
-        if (ignored_index < ignored.size() && ignored[ignored_index].first <= tag_start) {
-            continue;
-        }
-
-        const std::optional<QString> raw_identifier = tag_identifier(tag.captured(0));
-        if (!raw_identifier.has_value()) {
-            continue;
-        }
-        const auto match = pending.find(decoded_character_references(to_utf8(*raw_identifier)));
-        if (match == pending.end()) {
-            continue;
-        }
-        const int offset = readable_character_count(to_utf8(content.left(tag_start)));
-        for (const std::string& fragment : match->second) {
-            offsets[fragment] = offset;
-        }
-        pending.erase(match);
-        if (pending.empty()) {
-            break;
-        }
-    }
-
-    return offsets;
 }
 
 // A zip entry name may name any container path, but never one that climbs out
@@ -251,8 +82,15 @@ std::optional<BookSession> BookSession::open(const std::filesystem::path& path,
     std::vector<ContentsEntry> contents;
     for (const niratan::novels::EpubTocEntry& entry : book->toc()) {
         const TocTarget target = split_target(entry.href);
+        // Decode the fragment the same way ContentsEntry stores it, so the
+        // fragment_offsets map keys match ContentsEntry.fragment in
+        // chapter_characters_remaining.
+        const std::string decoded_fragment =
+            target.fragment
+                ? decoded_character_references(percent_decoded(*target.fragment))
+                : std::string();
         if (target.fragment.has_value()) {
-            fragments_by_path[target.path].insert(*target.fragment);
+            fragments_by_path[target.path].insert(decoded_fragment);
         }
         const auto spine_index = first_spine_index.find(target.path);
         if (spine_index == first_spine_index.end()) {
@@ -260,18 +98,16 @@ std::optional<BookSession> BookSession::open(const std::filesystem::path& path,
         }
         contents.push_back(ContentsEntry{
             static_cast<int>(spine_index->second), entry.level, entry.title,
-            target.fragment ? decoded_character_references(percent_decoded(*target.fragment))
-                            : std::string()});
+            decoded_fragment});
         // The first entry naming the chapter supplies its label.
         if (!spine_titles[spine_index->second].has_value()) {
             spine_titles[spine_index->second] = entry.title;
         }
     }
-    if (book->toc().empty()) {
-        for (std::size_t index = 0; index < spine_paths.size(); ++index) {
-            contents.push_back(ContentsEntry{static_cast<int>(index), 0, spine_paths[index], {}});
-        }
-    }
+    // An empty TOC produces no contents entries. chapterStarts([]) in Swift
+    // returns only [0], so the whole book is treated as one chapter;
+    // chapter_characters_remaining seeds starts with {0} and reaches the same
+    // result when contents_ is empty.
 
     niratan::books::BookInfo info;
     int running_total = 0;

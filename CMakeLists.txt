@@ -45,6 +45,7 @@ qt_add_library(niratan_core STATIC
     src/services/reader/theme.cpp
     src/services/reader/book_session.cpp
     src/services/reader/chapter_remaining.cpp
+    src/services/reader/toc_target.cpp
     src/services/reader/book_search.cpp
     src/services/reader/character_normalizer.cpp
     src/services/reader/layout.cpp

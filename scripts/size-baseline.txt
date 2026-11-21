@@ -5,7 +5,6 @@ src/models/books/book.cpp 624
 src/models/statistics/dashboard_models.cpp 838
 src/models/statistics/statistics.cpp 596
 src/services/novels/epub_book.cpp 608
-src/services/reader/book_session.cpp 507
 src/services/sasayaki/matcher.cpp 666
 src/services/statistics/statistics_storage.cpp 536
 src/viewmodels/player/player_study_view_model.cpp 693
