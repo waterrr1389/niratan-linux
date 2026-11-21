@@ -128,7 +128,7 @@ void BookStorageTest::importing_a_book_writes_its_files() {
     const std::filesystem::path source = make_epub(directory, "source.epub", "My Book");
     BookStorage storage(app_dir(directory));
 
-    const auto result = storage.import_book(source);
+    const auto result = storage.import_book(source.string());
 
     QVERIFY2(result.book.has_value(), result.error.c_str());
     QVERIFY(!result.already_exists);
@@ -159,8 +159,8 @@ void BookStorageTest::importing_the_same_title_reports_a_duplicate() {
     const std::filesystem::path source = make_epub(directory, "source.epub", "Same");
     BookStorage storage(app_dir(directory));
 
-    QVERIFY(storage.import_book(source).book.has_value());
-    const auto second = storage.import_book(source);
+    QVERIFY(storage.import_book(source.string()).book.has_value());
+    const auto second = storage.import_book(source.string());
 
     QVERIFY(!second.book.has_value());
     QVERIFY(second.already_exists);
@@ -175,7 +175,7 @@ void BookStorageTest::importing_a_broken_epub_reports_an_error() {
     std::ofstream(source) << "not an epub";
     BookStorage storage(app_dir(directory));
 
-    const auto result = storage.import_book(source);
+    const auto result = storage.import_book(source.string());
 
     QVERIFY(!result.book.has_value());
     QVERIFY(!result.error.empty());

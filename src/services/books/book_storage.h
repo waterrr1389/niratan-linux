@@ -105,7 +105,7 @@ class BookStorage {
     std::vector<BookShelf> load_shelves() const;
     bool save_shelves(const std::vector<BookShelf>& shelves) const;
 
-    ImportResult import_book(const std::filesystem::path& source) const;
+    ImportResult import_book(std::string_view source) const;
 
    private:
     std::filesystem::path app_directory_;

@@ -11,8 +11,8 @@
 // selection, reader, highlights and paragraph scripts. When the document has
 // no head or body markers the blocks are prepended or appended instead.
 //
-// The scripts are the upstream files verbatim, loaded from resources by the
-// caller. They talk to the platform through window.webkit.messageHandlers;
+// The scripts are the upstream files verbatim, loaded from Qt resources.
+// They talk to the platform through window.webkit.messageHandlers;
 // the generated preamble installs that object on top of the QWebChannel
 // bridge and queues messages until the channel is ready.
 //
@@ -67,6 +67,9 @@ struct ReaderScripts {
     // qwebchannel.js, so the page can reach the bridge without a network load.
     std::string webchannel;
 };
+
+// Loads the reader scripts from Qt resources. Call once at startup.
+ReaderScripts load_reader_scripts();
 
 // The chapter with the stylesheet and script inserted. `scripts.reader` is
 // used unless appearance.continuous selects `scripts.scrollreader`.

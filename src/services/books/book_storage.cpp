@@ -368,7 +368,8 @@ bool BookStorage::save_shelves(const std::vector<BookShelf>& shelves) const {
     return storage::write_json_file(books_directory_ / kShelvesFile, shelves_to_json(shelves));
 }
 
-ImportResult BookStorage::import_book(const std::filesystem::path& source) const {
+ImportResult BookStorage::import_book(std::string_view source_path) const {
+    const std::filesystem::path source(source_path);
     std::string error;
     const std::optional<novels::EpubBook> document = novels::EpubBook::open(source, &error);
     if (!document.has_value()) {

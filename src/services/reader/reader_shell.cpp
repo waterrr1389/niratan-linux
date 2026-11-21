@@ -2,6 +2,8 @@
 
 #include "reader_shell.h"
 
+#include <QFile>
+
 #include <algorithm>
 #include <array>
 #include <charconv>
@@ -164,6 +166,26 @@ constexpr const char* kScrollProgress = R"js(    if (!window.hoshiNativeProgress
 )js";
 
 }  // namespace
+
+ReaderScripts load_reader_scripts() {
+    const auto read = [](const QString& path) -> std::string {
+        QFile file(path.startsWith(QStringLiteral(":/qtwebchannel/"))
+                       ? path
+                       : QStringLiteral(":/niratan/reader/") + path);
+        if (!file.open(QIODevice::ReadOnly)) {
+            return {};
+        }
+        return file.readAll().toStdString();
+    };
+    ReaderScripts scripts;
+    scripts.selection = read(QStringLiteral("selection.js"));
+    scripts.reader = read(QStringLiteral("reader.js"));
+    scripts.scrollreader = read(QStringLiteral("scrollreader.js"));
+    scripts.highlights = read(QStringLiteral("highlights.js"));
+    scripts.paragraph = read(QStringLiteral("paragraph.js"));
+    scripts.webchannel = read(QStringLiteral(":/qtwebchannel/qwebchannel.js"));
+    return scripts;
+}
 
 std::string reader_document(const std::string& chapter_html, const ShellInput& input,
                             const ReaderScripts& scripts) {

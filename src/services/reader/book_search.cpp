@@ -5,6 +5,7 @@
 #include <QRegularExpression>
 
 #include <algorithm>
+#include <filesystem>
 
 #include "services/reader/book_session.h"
 
@@ -125,11 +126,11 @@ std::vector<SearchHit> search_book(const std::vector<SearchChapter>& chapters, c
     return hits;
 }
 
-std::optional<std::vector<SearchHit>> search_epub(const std::filesystem::path& path,
+std::optional<std::vector<SearchHit>> search_epub(std::string_view path,
                                                 const QString& query) {
     // Each worker opens its own archive; the visible reader owns a different
     // libzip handle and can continue fetching resources during the query.
-    const auto session = BookSession::open(path);
+    const auto session = BookSession::open(std::filesystem::path(path));
     if (!session) {
         return std::nullopt;
     }

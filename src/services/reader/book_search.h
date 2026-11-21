@@ -10,8 +10,8 @@
 
 #include <QString>
 
-#include <filesystem>
 #include <optional>
+#include <string_view>
 #include <vector>
 
 namespace niratan::reader {
@@ -36,7 +36,7 @@ struct SearchHit {
 bool has_searchable_text(const QString& query);
 std::vector<SearchHit> search_book(const std::vector<SearchChapter>& chapters, const QString& query,
                                    int limit = 1000);
-std::optional<std::vector<SearchHit>> search_epub(const std::filesystem::path& path,
+std::optional<std::vector<SearchHit>> search_epub(std::string_view path,
                                                 const QString& query);
 
 }  // namespace niratan::reader

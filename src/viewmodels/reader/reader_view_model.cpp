@@ -3,7 +3,6 @@
 #include "reader_view_model.h"
 
 #include <QDateTime>
-#include <QFile>
 #include <QFutureWatcher>
 #include <QJsonArray>
 #include <QJsonDocument>
@@ -15,7 +14,7 @@
 
 #include <algorithm>
 #include <cmath>
-#include <filesystem>
+#include <string>
 #include <utility>
 
 #include "models/profiles/reader_settings.h"
@@ -45,16 +44,6 @@ using niratan::statistics::ReadingTotal;
 using niratan::statistics::StatisticsAutostartMode;
 
 std::int64_t now_milliseconds() { return QDateTime::currentMSecsSinceEpoch(); }
-
-std::string read_resource(const QString& path) {
-    QFile file(path.startsWith(QStringLiteral(":/qtwebchannel/"))
-                   ? path
-                   : QStringLiteral(":/niratan/reader/") + path);
-    if (!file.open(QIODevice::ReadOnly)) {
-        return {};
-    }
-    return file.readAll().toStdString();
-}
 
 double clamp_progress(double progress) { return std::min(std::max(progress, 0.0), 1.0); }
 
@@ -86,18 +75,7 @@ struct ReaderViewModel::State {
     explicit State(std::function<void()> on_settings_changed)
         : storage(storage::data_root()),
           settings_watch(storage.app_directory(), std::move(on_settings_changed)),
-          assets(load_assets()) {}
-
-    static ReaderScripts load_assets() {
-        ReaderScripts scripts;
-        scripts.selection = read_resource(QStringLiteral("selection.js"));
-        scripts.reader = read_resource(QStringLiteral("reader.js"));
-        scripts.scrollreader = read_resource(QStringLiteral("scrollreader.js"));
-        scripts.highlights = read_resource(QStringLiteral("highlights.js"));
-        scripts.paragraph = read_resource(QStringLiteral("paragraph.js"));
-        scripts.webchannel = read_resource(QStringLiteral(":/qtwebchannel/qwebchannel.js"));
-        return scripts;
-    }
+          assets(reader::load_reader_scripts()) {}
 
     BookStorage storage;
     reader::ReaderSettingsWatch settings_watch;
@@ -108,7 +86,7 @@ struct ReaderViewModel::State {
     int scan_length = 16;
     bool scan_non_japanese = true;
     std::optional<BookSession> session;
-    std::filesystem::path epub_path;
+    std::string epub_path;
     std::size_t search_revision = 0;
     QVariantList search_results;
     int search_state = 0;
@@ -550,8 +528,8 @@ void ReaderViewModel::setReaderActive(bool active) {
 }
 
 bool ReaderViewModel::importAndOpen(const QUrl& file) {
-    const std::filesystem::path source = file.toLocalFile().toStdString();
-    const books::ImportResult imported = state_->storage.import_book(source);
+    const books::ImportResult imported = state_->storage.import_book(
+        file.toLocalFile().toStdString());
     if (!imported.book.has_value()) {
         state_->error =
             imported.already_exists
@@ -589,7 +567,7 @@ bool ReaderViewModel::openBook(const QString& folder) {
     state_->highlights = state_->storage.load_highlights(state_->book.folder)
                              .value_or(std::vector<books::Highlight>{});
     clearBookSearch();
-    state_->epub_path = *epub;
+    state_->epub_path = epub->string();
     state_->session = std::move(session);
     state_->has_book = true;
     state_->error.clear();
