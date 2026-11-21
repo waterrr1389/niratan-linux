@@ -591,6 +591,14 @@ target_link_libraries(tst_mining_view_model PRIVATE niratan_app Qt6::Test)
 target_compile_options(tst_mining_view_model PRIVATE -Wall -Wextra -Wpedantic -Werror)
 add_test(NAME mining_view_model COMMAND tst_mining_view_model)
 
+qt_add_executable(tst_sasayaki_view_model
+    viewmodels/tst_sasayaki_view_model.cpp
+)
+target_include_directories(tst_sasayaki_view_model PRIVATE ${CMAKE_SOURCE_DIR}/src)
+target_link_libraries(tst_sasayaki_view_model PRIVATE niratan_app Qt6::Test)
+target_compile_options(tst_sasayaki_view_model PRIVATE -Wall -Wextra -Wpedantic -Werror)
+add_test(NAME sasayaki_view_model COMMAND tst_sasayaki_view_model)
+
 qt_add_executable(tst_anki_settings_view_model
     viewmodels/tst_anki_settings_view_model.cpp
 )

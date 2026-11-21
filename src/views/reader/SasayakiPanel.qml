@@ -242,7 +242,7 @@ Item {
                 ToolButton {
                     text: "\u221215"
                     font.pixelSize: 11
-                    onClicked: player.skip(-15)
+                    onClicked: player.skipForward(false)
                     ToolTip.visible: hovered
                     ToolTip.text: qsTr("Back 15 seconds")
                 }
@@ -276,7 +276,7 @@ Item {
                 ToolButton {
                     text: "+15"
                     font.pixelSize: 11
-                    onClicked: player.skip(15)
+                    onClicked: player.skipForward(true)
                     ToolTip.visible: hovered
                     ToolTip.text: qsTr("Forward 15 seconds")
                 }

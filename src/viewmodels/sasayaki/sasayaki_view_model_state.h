@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
 // The private state of SasayakiViewModel, shared by sasayaki_view_model.cpp and
-// its audiobook split. The playback and matching fields keep the meaning the
-// class comment gives them; audiobook_metadata, audiobook_chapters and
+// its playback, matching and audiobook splits. The playback and matching fields keep the meaning
+// the class comment gives them; audiobook_metadata, audiobook_chapters and
 // loading_audiobook_chapters follow SasayakiPlayer.audiobookMetadata,
 // audiobookChapters and isLoadingAudiobookChapters.
 
@@ -70,7 +70,18 @@ struct SasayakiViewModel::State {
     bool playing = false;
     bool reloading = false;
     bool needs_initial_seek = false;
+    // SasayakiPlayer.hasPlayedOnce: set on the first start, never reset.
+    bool has_played_once = false;
+    // The sasayakiAutoScroll and sasayakiAutoPause preferences.
+    bool auto_scroll = true;
+    bool auto_pause = true;
     std::optional<double> pending_seek;
+    // The landing options of the seek in flight.
+    bool seek_start_playback = false;
+    bool seek_update_cue = true;
+    std::optional<double> seek_stop_time;
+    // B2: armed by playCue(stop: true), cleared when reached.
+    std::optional<double> stop_playback_time;
     int last_second = -1;
 };
 

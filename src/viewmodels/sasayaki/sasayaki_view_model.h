@@ -43,13 +43,23 @@
 // and the chpl chapter list replace them, with isLoadingAudiobookChapters true
 // while reading and chapters exposed as maps of id, title, startTime and
 // endTime (null when unknown). currentAudiobookChapterId follows
-// SasayakiPlayer.currentAudiobookChapterID. Auto-scroll, auto-pause on lookup,
-// sentence audio mining and transcription are not part of this class.
+// SasayakiPlayer.currentAudiobookChapterID. The sasayakiAutoScroll and
+// sasayakiAutoPause preferences are read from the global settings document on
+// every book load and by reloadSasayakiSettings(); a cue change reveals only
+// when auto-scroll is on and playback has started. Sentence audio mining and
+// transcription are not part of this class.
+//
+// Playback keeps SasayakiPlayer's seek landing: a seek stores its target, the
+// start-playback, update-cue and stop-time options and persists the target
+// before moving the player; the next position tick within 0.75 s applies them,
+// and the 1500 ms timer only drops a target that never landed. playCue(cueId,
+// stop) arms the cue's end + delay as that stop time. flushPlayback writes a
+// pending target as-is and never samples a paused player.
 //
 // The reader side is driven from ReaderPage, which owns this model: the page
 // passes applyCuesJson() to window.hoshiReader.applySasayakiCues after each
-// chapter loads, and forwards activeCueChanged to highlightSasayakiCue or
-// clearSasayakiCue. After matching, the panel asks the page to install the
+// chapter loads, and forwards activeCueChanged, whose reveal flag it passes to
+// highlightSasayakiCue. After matching, the panel asks the page to install the
 // current chapter's new ranges, and the model re-emits activeCueChanged even
 // if the current cue ID is unchanged. The model never touches the web view.
 
@@ -63,6 +73,7 @@
 #include <QtQml/qqmlregistration.h>
 
 #include <memory>
+#include <optional>
 
 namespace niratan::sasayaki {
 struct SasayakiCue;
@@ -157,8 +168,8 @@ class SasayakiViewModel : public QObject {
     Q_INVOKABLE void pause();
     Q_INVOKABLE void togglePlayback();
     Q_INVOKABLE void seek(double seconds);
-    // Relative seek in seconds, positive forward.
-    Q_INVOKABLE void skip(double seconds);
+    // SasayakiPlayer.skip(forward:): 15 s, clamped to the duration.
+    Q_INVOKABLE void skipForward(bool forward);
     Q_INVOKABLE void previousCue();
     Q_INVOKABLE void nextCue();
     // Seeks to the current cue's start + delay, or to 0 when no cue is active.
@@ -166,6 +177,18 @@ class SasayakiViewModel : public QObject {
     Q_INVOKABLE void jumpCue(const QString& cueId);
     Q_INVOKABLE void setRate(double rate);
     Q_INVOKABLE void setDelay(double delay);
+    // Plays the cue with this id and starts playback on landing; `stop` arms
+    // the cue's end + delay as the stop time. Unknown ids do nothing.
+    Q_INVOKABLE void playCue(const QString& cueId, bool stop);
+    // B13: pauses for a lookup and reports whether this call paused a playing
+    // player; only such a pause is resumed by resumeAfterLookup().
+    Q_INVOKABLE bool pauseForLookup();
+    Q_INVOKABLE void resumeAfterLookup(bool was_paused_by_lookup);
+    // Persists a pending seek target as-is, or the playing position. A paused
+    // player writes nothing.
+    Q_INVOKABLE void flushPlayback();
+    // Re-reads auto-scroll and auto-pause from the global settings document.
+    Q_INVOKABLE void reloadSasayakiSettings();
 
     // The current chapter's cue ranges as reader.js applySasayakiCues expects:
     // a compact JSON array of {id, start, length}. Empty without match data.
@@ -193,8 +216,9 @@ class SasayakiViewModel : public QObject {
     void audiobookMetadataChanged();
     void audiobookChaptersChanged();
     void matchApplied();
-    // The cue to highlight, or an empty id to clear the highlight.
-    void activeCueChanged(const QString& id);
+    // The cue to highlight, or an empty id to clear the highlight; `reveal`
+    // scrolls to it only when auto-scroll is on and playback has started.
+    void activeCueChanged(const QString& id, bool reveal);
 
    private:
     struct State;
@@ -209,9 +233,15 @@ class SasayakiViewModel : public QObject {
     void rebuild_timeline(bool refresh_highlight = false);
     void rebuild_cue_list();
     void update_cue(bool refresh_highlight = false);
-    void apply_position(double seconds, bool persist);
+    // SasayakiPlayer.tick: landing options first, then stop, persistence and
+    // the cue.
+    void position_tick(double seconds);
+    void apply_position(double seconds);
     void persist_position(double seconds);
-    void save_playback();
+    void save_playback(double position);
+    void update_audiobook_chapter();
+    void seek(double seconds, bool start_playback, bool update_cue,
+              std::optional<double> stop_playback_time);
     void navigate_to_cue(const sasayaki::SasayakiCue& cue);
     void set_error(const QString& message);
     void set_match_error(const QString& message);

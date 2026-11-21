@@ -207,8 +207,8 @@ Item {
 
     Connections {
         target: sasayaki
-        function onActiveCueChanged(cueId) {
-            page.highlightSasayakiCue(cueId, true)
+        function onActiveCueChanged(cueId, reveal) {
+            page.highlightSasayakiCue(cueId, reveal)
         }
     }
 

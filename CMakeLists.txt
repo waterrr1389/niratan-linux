@@ -134,7 +134,11 @@ qt_add_library(niratan_app STATIC
     src/viewmodels/library/library_view_model.h
     src/viewmodels/profiles/profiles_view_model.cpp
     src/viewmodels/profiles/profiles_view_model.h
+    src/viewmodels/sasayaki/sasayaki_player_policy.cpp
+    src/viewmodels/sasayaki/sasayaki_player_policy.h
     src/viewmodels/sasayaki/sasayaki_view_model.cpp
+    src/viewmodels/sasayaki/sasayaki_view_model_match.cpp
+    src/viewmodels/sasayaki/sasayaki_view_model_playback.cpp
     src/viewmodels/sasayaki/sasayaki_view_model_audiobook.cpp
     src/viewmodels/sasayaki/sasayaki_view_model.h
     src/viewmodels/statistics/statistics_view_model.cpp
