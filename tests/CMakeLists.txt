@@ -110,6 +110,14 @@ target_link_libraries(tst_anki_connect PRIVATE niratan_core Qt6::Test)
 target_compile_options(tst_anki_connect PRIVATE -Wall -Wextra -Wpedantic -Werror)
 add_test(NAME anki_connect COMMAND tst_anki_connect)
 
+qt_add_executable(tst_anki_requests
+    anki/tst_anki_requests.cpp
+)
+target_include_directories(tst_anki_requests PRIVATE ${CMAKE_SOURCE_DIR}/src)
+target_link_libraries(tst_anki_requests PRIVATE niratan_core Qt6::Test)
+target_compile_options(tst_anki_requests PRIVATE -Wall -Wextra -Wpedantic -Werror)
+add_test(NAME anki_requests COMMAND tst_anki_requests)
+
 qt_add_executable(tst_mining_gate
     anki/tst_mining_gate.cpp
 )
