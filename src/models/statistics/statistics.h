@@ -121,11 +121,12 @@ ResetPreferenceLoad load_reset_preference(const StoredResetPreference& stored);
 
 // One TTU statistics.json daily row, following Statistics in
 // Models/Statistics.swift. The field order matches the synthesized Codable
-// keys; last_statistic_modified is Swift's Int, milliseconds since the epoch.
+// keys; characters_read and last_statistic_modified are Swift's Int, and the
+// speeds are stored as int.
 struct Statistics {
     std::string title;
     std::string date_key;
-    int characters_read = 0;
+    qint64 characters_read = 0;
     double reading_time = 0.0;
     int min_reading_speed = 0;
     int alt_min_reading_speed = 0;
@@ -138,7 +139,7 @@ struct Statistics {
 
 // ReadingTotal.speed: truncating int(characters / time * 3600), and 0 when
 // the time is not positive.
-int reading_speed(int characters_read, double reading_time);
+int reading_speed(std::int64_t characters_read, double reading_time);
 
 // StatisticsEditor.deduplicated: one row per date key, keeping the row with
 // the greater last_statistic_modified; on a tie the first row in input order
@@ -154,7 +155,7 @@ std::vector<Statistics> visible_statistics(std::vector<Statistics> statistics);
 // row with this date key (the argument title is only used for a new row),
 // replaces or appends, and sorts by ascending date key.
 std::vector<Statistics> updating_statistics(std::string_view date_key, std::string_view title,
-                                            int characters_read, double reading_time,
+                                            std::int64_t characters_read, double reading_time,
                                             std::int64_t modified_at,
                                             std::vector<Statistics> statistics);
 
@@ -175,7 +176,7 @@ struct ReadingSession;
 
 // ReadingTotal: a character and time sum with a derived speed.
 struct ReadingTotal {
-    int characters_read = 0;
+    qint64 characters_read = 0;
     double reading_time = 0.0;
 
     int reading_speed() const;
@@ -195,7 +196,7 @@ struct ReadingTotal {
 struct ReadingSession {
     std::int64_t started_at = 0;
     std::int64_t ended_at = 0;
-    int characters_read = 0;
+    qint64 characters_read = 0;
     double reading_time = 0.0;
 
     bool has_activity() const;
@@ -205,7 +206,7 @@ struct ReadingSession {
     QDateTime start_date(const QTimeZone& zone) const;
     ReadingTotal total() const;
 
-    void track(int characters, double time, const QDateTime& until);
+    void track(std::int64_t characters, double time, const QDateTime& until);
     static ReadingSession starting_at(const QDateTime& date);
 
     bool operator==(const ReadingSession&) const = default;

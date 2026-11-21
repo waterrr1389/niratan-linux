@@ -81,6 +81,7 @@ qt_add_library(niratan_core STATIC
     src/services/sasayaki/cue_timeline.cpp
     src/services/sasayaki/matcher.cpp
     src/services/statistics/statistics_storage.cpp
+    src/services/statistics/statistics_storage_codec.cpp
     src/services/novels/epub_book.cpp
     src/services/player/mining_history.cpp
     src/services/player/mining_history_store.cpp

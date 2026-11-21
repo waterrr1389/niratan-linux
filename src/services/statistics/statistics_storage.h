@@ -27,16 +27,24 @@
 // lastStatisticModified). It is rewritten from the sessions, never merged
 // into, whenever this module saves.
 //
-// Both files are written indented through storage::write_json_file, which
-// replaces the target atomically and refuses to replace bytes it cannot parse
-// as JSON.
+// Both files are written indented through QSaveFile: the sessions file first,
+// then the daily file, each replacing its target wholesale even when the
+// target's current bytes are not valid JSON. The shared
+// storage::write_json_file keeps its refusal to replace a damaged target for
+// its other callers. A daily write failure leaves the new sessions file on
+// disk.
 //
 // Decoding follows synthesized Codable: every key shown above is required,
 // extra keys are ignored, and a document of the wrong shape is rejected as a
-// whole. Integer keys require a number without a fractional part inside the
-// field's range. A file that is absent, unreadable or rejected is treated as
-// absent, as Swift's decode does; the read paths never throw and never repair
-// the bytes on disk. has_statistics reports the file's presence, not its
+// whole. Integer keys require a number without a fractional part; the speed
+// fields are int, so a value outside that range rejects the file, while
+// charactersRead and lastStatisticModified are read as signed 64-bit integers,
+// as Swift's Int is. The integer keys are read through QJsonValue::toInteger(),
+// which keeps a parsed integer literal exact instead of rounding it through
+// double. A file that is absent, unreadable or rejected is treated as absent,
+// as Swift's decode does; the read paths never throw. A read that only derives
+// rows never repairs the bytes, while a pending reconcile write during load
+// does replace them. has_statistics reports the file's presence, not its
 // validity.
 //
 // Time
@@ -50,15 +58,16 @@
 //
 // Reconciliation
 // --------------
-// load_statistics builds the records and the daily rows in memory and never
-// writes; needs_save tells the caller whether save_statistics is required.
+// load_statistics builds the records and the daily rows in memory.
 //   1. With a usable sessions file, its records are the base. Every
 //      deduplicated row of statistics.json whose exportedDaily entry differs
-//      from its lastStatisticModified is then merged in with the Merge rules,
-//      and needs_save becomes true when there is at least one such row.
+//      from its lastStatisticModified is then merged in with the Merge rules.
 //   2. Without a usable sessions file, the rows of statistics.json are
-//      converted by legacy_sessions() and needs_save is true whenever that
-//      file holds at least one row, even when no row converts.
+//      converted by legacy_sessions().
+// When either rule leaves work to persist, load_statistics writes both files
+// before it returns, and a write failure is swallowed: the reconciled records
+// are returned either way. needs_save reports that a reconcile was pending; it
+// needs no action from the caller.
 // The daily rows are then daily_statistics() of the resulting records: one
 // row per day with activity, sorted by date key.
 //
@@ -67,11 +76,11 @@
 //
 // Title
 // -----
-// Derived rows carry one title: the first non-empty title among the stored
+// Both files carry one title: the first non-empty title among the stored
 // daily rows in file order, else metadata.json's renamedTitle, else its title,
 // else "". This is StatisticsStorage.title(root:daily:). save_statistics
-// instead writes the title its caller supplies, because the title lives on
-// BookMetadata and the caller already holds it.
+// ignores the title its caller supplies; the argument stays in the signature
+// because callers already hold the book's display title.
 //
 // Import
 // ------
@@ -86,8 +95,9 @@
 //   sessions are stamped with now_ms, so days the import does not cover stop
 //   being visible.
 // The written daily file uses the first supplied row's title, or the resolved
-// title when no rows are supplied. Nothing is written when the records do not
-// change, so a pending legacy migration stays unwritten until a caller saves.
+// title when no rows are supplied. load_statistics runs first, so a pending
+// reconcile is persisted even when the imported rows change nothing; the
+// import itself writes only when the records change.
 
 #pragma once
 
@@ -113,39 +123,43 @@ std::int64_t current_time_milliseconds();
 struct StatisticsReadResult {
     ReadingSessionRecords records;
     std::vector<Statistics> daily;
-    // True when statistics.json holds a row that is not reconciled into
-    // records: a legacy migration is pending, or external daily rows were
-    // merged in.
+    // True when statistics.json held work a load had to reconcile: a legacy
+    // migration, or external daily rows that were merged in. load_statistics
+    // has already written it; the flag is informational.
     bool needs_save = false;
 
     bool operator==(const StatisticsReadResult&) const = default;
 };
 
 // Reads both files, reconciles them as described above and returns the
-// records with the daily rows derived from them. Never writes.
+// records with the daily rows derived from them. A pending reconcile is
+// written before returning; a failed write is swallowed.
 StatisticsReadResult load_statistics(const std::filesystem::path& book_root, int reset_minutes,
                                      const QTimeZone& zone = QTimeZone(QTimeZone::LocalTime));
 
-// Read-only daily view: derives the rows from a usable sessions file without
-// importing external daily rows or writing. When the sessions file is absent
-// or rejected, the visible rows of statistics.json are returned as stored
-// (deduplicated, rows without activity dropped, sorted by date key). An empty
-// result means there is nothing to show; it does not distinguish a missing
-// file from an empty one.
+// Read-only daily view: applies the same reconcile in memory, so an external
+// daily row is merged and legacy rows are converted, and never writes. When
+// the sessions file is absent or rejected and statistics.json is undecodable,
+// the result is empty.
 std::vector<Statistics> read_daily_statistics(
     const std::filesystem::path& book_root, int reset_minutes,
     const QTimeZone& zone = QTimeZone(QTimeZone::LocalTime));
 
-// Dashboard read: absent or empty data is an empty vector; an existing
-// book with no decodable statistics file returns nullopt.
+// Dashboard read: a book without either file is an empty vector so a caller
+// that reads every book, as this port's dashboard does, does not mark it
+// corrupt; StatisticsStorage.hasStatistics is the gate Swift's caller applies
+// before the read, where dailyStatistics is nil. A book whose reconciled
+// records are empty and whose statistics.json did not decode returns nullopt,
+// as Swift's nil does.
 std::optional<std::vector<Statistics>> read_dashboard_statistics(
     const std::filesystem::path& book_root, int reset_minutes, const QTimeZone& zone);
 
 // Writes both files from `records`: the sessions with exportedDaily set to
 // each derived row's lastStatisticModified (the greater one on a duplicate
-// date key), then the derived rows sorted by date key. Returns false, with a
-// reason in `error` when given, if a write fails; the sessions file is
-// written first, so a daily failure leaves the new sessions on disk.
+// date key), then the derived rows sorted by date key, all titled by the
+// resolved title. `title` is ignored. Returns false, with a reason in `error`
+// when given, if a write fails; the sessions file is written first, so a daily
+// failure leaves the new sessions on disk.
 bool save_statistics(const std::filesystem::path& book_root,
                      const ReadingSessionRecords& records, std::string_view title,
                      int reset_minutes, const QTimeZone& zone = QTimeZone(QTimeZone::LocalTime),

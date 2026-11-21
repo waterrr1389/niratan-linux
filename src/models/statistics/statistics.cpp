@@ -189,7 +189,7 @@ ResetPreferenceLoad load_reset_preference(const StoredResetPreference& stored) {
     return load;
 }
 
-int reading_speed(int characters_read, double reading_time) {
+int reading_speed(std::int64_t characters_read, double reading_time) {
     if (!(reading_time > 0.0)) {
         return 0;
     }
@@ -224,14 +224,14 @@ std::vector<Statistics> visible_statistics(std::vector<Statistics> statistics) {
 }
 
 std::vector<Statistics> updating_statistics(std::string_view date_key, std::string_view title,
-                                            int characters_read, double reading_time,
+                                            std::int64_t characters_read, double reading_time,
                                             std::int64_t modified_at,
                                             std::vector<Statistics> statistics) {
     std::vector<Statistics> records = deduplicated_statistics(std::move(statistics));
 
     // The editor clamps before deriving the speed, so a negative character
     // count cannot produce a negative speed.
-    const int characters = std::max(characters_read, 0);
+    const std::int64_t characters = std::max<std::int64_t>(characters_read, 0);
     const double time = std::max(reading_time, 0.0);
     const int speed = reading_speed(characters, time);
 
@@ -329,8 +329,8 @@ ReadingTotal ReadingSession::total() const {
     return ReadingTotal{characters_read, reading_time};
 }
 
-void ReadingSession::track(int characters, double time, const QDateTime& until) {
-    characters_read = std::max(characters_read + characters, 0);
+void ReadingSession::track(std::int64_t characters, double time, const QDateTime& until) {
+    characters_read = std::max<std::int64_t>(characters_read + characters, 0);
     reading_time += time;
     ended_at = until.toMSecsSinceEpoch();
 }
@@ -521,7 +521,7 @@ std::optional<ReadingSession> legacy_session(const Statistics& statistic, int re
     session.started_at = start.toMSecsSinceEpoch();
     session.ended_at = static_cast<std::int64_t>(
         std::llround(static_cast<double>(session.started_at) + reading_time * 1000.0));
-    session.characters_read = std::max(statistic.characters_read, 0);
+    session.characters_read = std::max<std::int64_t>(statistic.characters_read, 0);
     session.reading_time = reading_time;
     return session;
 }

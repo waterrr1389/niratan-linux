@@ -91,7 +91,7 @@ void ReaderViewModel::refresh_statistics(bool notify) {
         today = state_->tracker->today_total(now_milliseconds());
         session = state_->tracker->session_total();
     }
-    const int today_characters = std::max(today.characters_read, 0);
+    const std::int64_t today_characters = std::max<std::int64_t>(today.characters_read, 0);
     const int today_seconds = static_cast<int>(std::max(today.reading_time, 0.0));
     const int session_speed = session.reading_speed();
     const int session_minutes = static_cast<int>(std::max(session.reading_time, 0.0) / 60);

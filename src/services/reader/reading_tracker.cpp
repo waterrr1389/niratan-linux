@@ -160,7 +160,8 @@ void ReadingTracker::update_position(int character, std::int64_t now_ms) {
     }
 
     const int character_delta = character - last_count_;
-    const int credited = std::max(character_delta, -current_session_.characters_read);
+    const std::int64_t credited =
+        std::max<std::int64_t>(character_delta, -current_session_.characters_read);
     current_session_.track(credited, static_cast<double>(now_ms - last_timestamp_ms_) / 1000.0,
                            instant(now_ms, zone_));
     last_timestamp_ms_ = now_ms;

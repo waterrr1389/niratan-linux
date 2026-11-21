@@ -506,8 +506,8 @@ void StatisticsViewModel::refresh() {
             }
             if (auto daily = statistics::read_dashboard_statistics(*root, reset_minutes, zone)) {
                 for (const Statistics& row : *daily) {
-                    input.rows.push_back({row.date_key, row.characters_read, row.reading_time,
-                                          row.last_statistic_modified});
+                    input.rows.push_back({row.date_key, static_cast<int>(row.characters_read),
+                                          row.reading_time, row.last_statistic_modified});
                 }
             } else {
                 result->corrupt = true;

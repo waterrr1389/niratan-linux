@@ -25,12 +25,6 @@
 #include <utility>
 #include <vector>
 
-using niratan::statistics::ReadingSession;
-using niratan::statistics::ReadingSessionRecords;
-using niratan::statistics::Statistics;
-using niratan::statistics::StatisticsReadResult;
-using niratan::statistics::StatisticsSyncMode;
-using niratan::statistics::TimestampedSession;
 using niratan::statistics::daily_statistics;
 using niratan::statistics::has_statistics;
 using niratan::statistics::import_daily_statistics;
@@ -38,9 +32,16 @@ using niratan::statistics::legacy_session_id;
 using niratan::statistics::legacy_sessions;
 using niratan::statistics::load_statistics;
 using niratan::statistics::read_daily_statistics;
+using niratan::statistics::read_dashboard_statistics;
+using niratan::statistics::ReadingSession;
+using niratan::statistics::ReadingSessionRecords;
 using niratan::statistics::save_statistics;
+using niratan::statistics::Statistics;
 using niratan::statistics::statistics_daily_file_name;
 using niratan::statistics::statistics_sessions_file_name;
+using niratan::statistics::StatisticsReadResult;
+using niratan::statistics::StatisticsSyncMode;
+using niratan::statistics::TimestampedSession;
 
 // Core/StatisticsStorage.swift defines the two files, the reconciliation at
 // load and the import rules; Models/Statistics.swift defines the legacy
@@ -190,6 +191,14 @@ std::optional<QJsonDocument> read_document(const std::filesystem::path& path) {
     return QJsonDocument::fromJson(file.readAll());
 }
 
+QByteArray read_bytes(const std::filesystem::path& path) {
+    QFile file(QString::fromStdString(path.string()));
+    if (!file.open(QIODevice::ReadOnly)) {
+        return {};
+    }
+    return file.readAll();
+}
+
 const Statistics* find_row(const std::vector<Statistics>& rows,
                            const std::string& date_key) {
     for (const Statistics& row : rows) {
@@ -223,6 +232,15 @@ class StatisticsStorageTest : public QObject {
     void save_writes_one_row_per_active_day();
     void damaged_files_are_treated_as_missing();
     void daily_view_reads_sessions_without_writing();
+    void load_persists_merged_daily_rows();
+    void merge_import_gives_a_taken_legacy_id_a_fresh_session();
+    void load_returns_records_when_the_reconcile_write_fails();
+    void save_writes_the_resolved_title();
+    void import_writes_the_first_supplied_title();
+    void write_order_keeps_the_sessions_when_the_daily_write_fails();
+    void damaged_targets_are_replaced();
+    void dashboard_read_is_null_without_reconcilable_statistics();
+    void sessions_record_requires_a_value_key();
 };
 
 void StatisticsStorageTest::first_load_converts_legacy_daily_rows() {
@@ -264,8 +282,39 @@ void StatisticsStorageTest::first_load_converts_legacy_daily_rows() {
     QCOMPARE(loaded.daily.front().date_key, std::string("2026-01-05"));
     QCOMPARE(loaded.daily.front().title, std::string("My Book"));
 
-    // Loading reports the pending migration instead of writing it.
-    QVERIFY(!std::filesystem::exists(sessions_path(root)));
+    // B1: StatisticsStorage.load writes a pending reconcile, so the legacy
+    // daily file leaves a converted statistics_sessions.json and a re-derived
+    // statistics.json (Core/StatisticsStorage.swift, load and write).
+    QVERIFY(std::filesystem::exists(sessions_path(root)));
+    const std::optional<QJsonDocument> sessions_document = read_document(sessions_path(root));
+    QVERIFY(sessions_document.has_value());
+    const QJsonObject sessions_file = sessions_document->object();
+    const QJsonObject stored_sessions =
+        sessions_file.value(QLatin1StringView("sessions")).toObject();
+    QCOMPARE(stored_sessions.size(), qsizetype(2));
+    QVERIFY(stored_sessions.contains(QString::fromStdString(first_id)));
+    QVERIFY(stored_sessions.value(QString::fromStdString(first_id))
+                .toObject()
+                .value(QLatin1StringView("value"))
+                .isObject());
+    const QJsonObject stored_exported =
+        sessions_file.value(QLatin1StringView("exportedDaily")).toObject();
+    QCOMPARE(stored_exported.value(QLatin1StringView("2026-01-05")).toInteger(), qint64(first));
+    QCOMPARE(stored_exported.value(QLatin1StringView("2026-01-06")).toInteger(), qint64(second));
+
+    const std::optional<QJsonDocument> daily_document = read_document(daily_path(root));
+    QVERIFY(daily_document.has_value());
+    QCOMPARE(daily_document->array().size(), qsizetype(2));
+    const QJsonObject first_written = daily_document->array().at(0).toObject();
+    QCOMPARE(first_written.value(QLatin1StringView("title")).toString(), QStringLiteral("My Book"));
+    QCOMPARE(first_written.value(QLatin1StringView("charactersRead")).toInt(), 1200);
+
+    // A second load finds nothing pending and the same records: the write
+    // stamped exportedDaily with the derived rows (StatisticsStorage.reconciled).
+    const StatisticsReadResult again = load_statistics(root, 0, zone);
+    QVERIFY(!again.needs_save);
+    QVERIFY(again.records == loaded.records);
+    QVERIFY(again.daily == loaded.daily);
 }
 
 void StatisticsStorageTest::sessions_round_trip_and_tombstones_stay_hidden() {
@@ -606,7 +655,9 @@ void StatisticsStorageTest::damaged_files_are_treated_as_missing() {
 void StatisticsStorageTest::daily_view_reads_sessions_without_writing() {
     const QTimeZone zone = utc_zone();
 
-    // A sessions file exists: an external daily row is not imported here.
+    // B4: StatisticsStorage.dailyStatistics applies the same reconcile in
+    // memory, so an external daily row is visible and nothing is written
+    // (Core/StatisticsStorage.swift, reconciled and dailyStatistics).
     {
         QTemporaryDir directory;
         QVERIFY(directory.isValid());
@@ -619,21 +670,29 @@ void StatisticsStorageTest::daily_view_reads_sessions_without_writing() {
         external.push_back(day_row("2026-01-06", 999, 50.0, 4000, "My Book"));
         QVERIFY(write_daily_file(root, external));
 
-        const std::vector<Statistics> daily = read_daily_statistics(root, 0, zone);
-        QCOMPARE(daily.size(), std::size_t(1));
-        QCOMPARE(daily.front().date_key, std::string("2026-01-05"));
-        QCOMPARE(daily.front().characters_read, 800);
-        QCOMPARE(daily.front().title, std::string("My Book"));
+        const QByteArray sessions_before = read_bytes(sessions_path(root));
+        const QByteArray daily_before = read_bytes(daily_path(root));
 
-        // load_statistics does reconcile the external row, which shows that
-        // the read-only view deliberately did not.
-        const StatisticsReadResult loaded = load_statistics(root, 0, zone);
-        QVERIFY(loaded.needs_save);
-        QCOMPARE(loaded.daily.size(), std::size_t(2));
+        const std::vector<Statistics> daily = read_daily_statistics(root, 0, zone);
+        QCOMPARE(daily.size(), std::size_t(2));
+        const Statistics* own_day = find_row(daily, "2026-01-05");
+        QVERIFY(own_day != nullptr);
+        QCOMPARE(own_day->characters_read, 800);
+        const Statistics* merged_day = find_row(daily, "2026-01-06");
+        QVERIFY(merged_day != nullptr);
+        QCOMPARE(merged_day->characters_read, 999);
+        QCOMPARE(merged_day->reading_time, 50.0);
+        QCOMPARE(merged_day->last_statistic_modified, std::int64_t(4000));
+        QCOMPARE(merged_day->title, std::string("My Book"));
+
+        // The reconcile stays in memory, so both files keep their bytes.
+        QCOMPARE(read_bytes(sessions_path(root)), sessions_before);
+        QCOMPARE(read_bytes(daily_path(root)), daily_before);
     }
 
-    // Without a sessions file the stored visible rows are shown as they are,
-    // and no session file appears.
+    // B4: without a sessions file the stored rows are converted and derived
+    // in memory, and no sessions file appears
+    // (StatisticsStorage.dailyStatistics, ReadingSessionLog.legacySessions).
     {
         QTemporaryDir directory;
         QVERIFY(directory.isValid());
@@ -644,11 +703,512 @@ void StatisticsStorageTest::daily_view_reads_sessions_without_writing() {
         rows.push_back(day_row("2026-01-06", 0, 0.0, 6000, "My Book"));
         QVERIFY(write_daily_file(root, rows));
 
+        const ReadingSessionRecords converted = legacy_sessions(rows, "Book", 0, zone);
+        const std::vector<Statistics> expected = daily_statistics(converted, "My Book", 0, zone);
         const std::vector<Statistics> daily = read_daily_statistics(root, 0, zone);
         QCOMPARE(daily.size(), std::size_t(1));
         QCOMPARE(daily.front().date_key, std::string("2026-01-05"));
         QCOMPARE(daily.front().characters_read, 700);
+        QVERIFY(daily == expected);
         QVERIFY(!std::filesystem::exists(sessions_path(root)));
+    }
+
+    // B4: a changed reset minute regroups the same sessions instead of
+    // duplicating them, and its own export is not re-imported
+    // (StatisticsStorage.dailyStatistics and reconciled).
+    {
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        const std::filesystem::path root = make_root(directory);
+        ReadingSessionRecords records;
+        records["live"] = make_record(1000, make_session(ms_at(2026, 1, 5, 12, 0), 800, 200.0));
+        QVERIFY(write_text(root / "metadata.json", R"({"title":"My Book"})"));
+        QVERIFY(save_statistics(root, records, "My Book", 0, zone));
+        const QByteArray sessions_before = read_bytes(sessions_path(root));
+
+        const std::vector<Statistics> daily = read_daily_statistics(root, 23 * 60, zone);
+        QVERIFY(daily == daily_statistics(records, "My Book", 23 * 60, zone));
+        QCOMPARE(daily.size(), std::size_t(1));
+        QCOMPARE(daily.front().date_key, std::string("2026-01-04"));
+
+        const StatisticsReadResult loaded = load_statistics(root, 23 * 60, zone);
+        QVERIFY(!loaded.needs_save);
+        QVERIFY(loaded.records == records);
+        QCOMPARE(read_bytes(sessions_path(root)), sessions_before);
+    }
+}
+
+// B2: StatisticsStorage.reconciled merges external daily rows into the
+// records, and StatisticsStorage.load persists them with the sessions
+// (ReadingSessionLog.importingDaily(.merge), StatisticsEditor.deduplicated).
+void StatisticsStorageTest::load_persists_merged_daily_rows() {
+    const QTimeZone zone = utc_zone();
+
+    // A newer external row replaces the sessions of its day.
+    {
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        const std::filesystem::path root = make_root(directory);
+        ReadingSessionRecords records;
+        records["local"] = make_record(1000, make_session(ms_at(2026, 1, 5, 19, 55), 800, 200.0));
+        QVERIFY(write_sessions_file(root, records, {}));
+        std::vector<Statistics> external;
+        external.push_back(day_row("2026-01-05", 2000, 300.0, 5000, "My Book"));
+        QVERIFY(write_daily_file(root, external));
+
+        const StatisticsReadResult loaded = load_statistics(root, 0, zone);
+        QVERIFY(loaded.needs_save);
+        QCOMPARE(loaded.records.size(), std::size_t(1));
+        QVERIFY(loaded.records.contains("local"));
+        QCOMPARE(loaded.records.at("local").modified, std::int64_t(5000));
+        QVERIFY(loaded.records.at("local").value.has_value());
+        QCOMPARE(loaded.records.at("local").value->characters_read, 2000);
+        QCOMPARE(loaded.daily.size(), std::size_t(1));
+        QCOMPARE(loaded.daily.front().characters_read, 2000);
+
+        // The merged record and its export stamp reached the sessions file.
+        const std::optional<QJsonDocument> sessions_document = read_document(sessions_path(root));
+        QVERIFY(sessions_document.has_value());
+        const QJsonObject stored =
+            sessions_document->object().value(QLatin1StringView("sessions")).toObject();
+        const QJsonObject stored_local = stored.value(QLatin1StringView("local")).toObject();
+        QCOMPARE(stored_local.value(QLatin1StringView("modified")).toInteger(), qint64(5000));
+        QCOMPARE(stored_local.value(QLatin1StringView("value"))
+                     .toObject()
+                     .value(QLatin1StringView("charactersRead"))
+                     .toInt(),
+                 2000);
+        const QJsonObject exported =
+            sessions_document->object().value(QLatin1StringView("exportedDaily")).toObject();
+        QCOMPARE(exported.value(QLatin1StringView("2026-01-05")).toInteger(), qint64(5000));
+
+        // The daily file was re-derived from the merged records.
+        const std::optional<QJsonDocument> daily_document = read_document(daily_path(root));
+        QVERIFY(daily_document.has_value());
+        QCOMPARE(daily_document->array().size(), qsizetype(1));
+        const QJsonObject merged_row = daily_document->array().at(0).toObject();
+        QCOMPARE(merged_row.value(QLatin1StringView("charactersRead")).toInt(), 2000);
+        QCOMPARE(merged_row.value(QLatin1StringView("title")).toString(),
+                 QStringLiteral("My Book"));
+
+        const StatisticsReadResult again = load_statistics(root, 0, zone);
+        QVERIFY(!again.needs_save);
+        QVERIFY(again.records == loaded.records);
+        QVERIFY(again.daily == loaded.daily);
+    }
+
+    // A row older than its day is skipped, yet the reconcile is still pending.
+    {
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        const std::filesystem::path root = make_root(directory);
+        ReadingSessionRecords records;
+        records["local"] = make_record(5000, make_session(ms_at(2026, 1, 5, 12, 0), 800, 200.0));
+        QVERIFY(write_sessions_file(root, records, {}));
+        std::vector<Statistics> older;
+        older.push_back(day_row("2026-01-05", 4000, 200.0, 4000, "My Book"));
+        QVERIFY(write_daily_file(root, older));
+
+        const StatisticsReadResult loaded = load_statistics(root, 0, zone);
+        QVERIFY(loaded.needs_save);
+        QCOMPARE(loaded.records.size(), std::size_t(1));
+        QVERIFY(loaded.records.at("local").value.has_value());
+        QCOMPARE(loaded.records.at("local").value->characters_read, 800);
+        QCOMPARE(loaded.records.at("local").modified, std::int64_t(5000));
+        QCOMPARE(loaded.daily.size(), std::size_t(1));
+        QCOMPARE(loaded.daily.front().characters_read, 800);
+
+        // The derived stamps were persisted even though no record changed.
+        const std::optional<QJsonDocument> sessions_document = read_document(sessions_path(root));
+        QVERIFY(sessions_document.has_value());
+        const QJsonObject exported =
+            sessions_document->object().value(QLatin1StringView("exportedDaily")).toObject();
+        QCOMPARE(exported.value(QLatin1StringView("2026-01-05")).toInteger(), qint64(5000));
+        const std::optional<QJsonDocument> daily_document = read_document(daily_path(root));
+        QVERIFY(daily_document.has_value());
+        QCOMPARE(daily_document->array().size(), qsizetype(1));
+        QCOMPARE(daily_document->array()
+                     .at(0)
+                     .toObject()
+                     .value(QLatin1StringView("charactersRead"))
+                     .toInt(),
+                 800);
+
+        const StatisticsReadResult again = load_statistics(root, 0, zone);
+        QVERIFY(!again.needs_save);
+        QVERIFY(again.records == loaded.records);
+        QVERIFY(again.daily == loaded.daily);
+    }
+}
+
+// B2: ReadingSessionLog.importingDaily imports a foreign row whose legacy id is
+// already used by a record on another day under a fresh session id.
+void StatisticsStorageTest::merge_import_gives_a_taken_legacy_id_a_fresh_session() {
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    const std::filesystem::path root = make_root(directory);
+    const QTimeZone zone = utc_zone();
+    const std::string legacy_id = legacy_session_id("Book", "2026-01-06");
+
+    ReadingSessionRecords records;
+    records[legacy_id] = make_record(1000, make_session(ms_at(2026, 1, 5, 12, 0), 800, 200.0));
+    QVERIFY(write_sessions_file(root, records, {}));
+    std::vector<Statistics> external;
+    external.push_back(day_row("2026-01-06", 500, 100.0, 4000, "My Book"));
+    QVERIFY(write_daily_file(root, external));
+
+    const StatisticsReadResult loaded = load_statistics(root, 0, zone);
+    QCOMPARE(loaded.records.size(), std::size_t(2));
+    QVERIFY(loaded.records.contains(legacy_id));
+    QCOMPARE(loaded.records.at(legacy_id).modified, std::int64_t(1000));
+    QVERIFY(loaded.records.at(legacy_id).value.has_value());
+    QCOMPARE(loaded.records.at(legacy_id).value->characters_read, 800);
+
+    const TimestampedSession* imported = nullptr;
+    for (const auto& entry : loaded.records) {
+        if (entry.first != legacy_id) {
+            imported = &entry.second;
+        }
+    }
+    QVERIFY(imported != nullptr);
+    QCOMPARE(imported->modified, std::int64_t(4000));
+    QVERIFY(imported->value.has_value());
+    QCOMPARE(imported->value->characters_read, 500);
+}
+
+// B3: StatisticsStorage.load swallows a failed reconcile write and still
+// returns the reconciled records.
+void StatisticsStorageTest::load_returns_records_when_the_reconcile_write_fails() {
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    const std::filesystem::path root = make_root(directory);
+    const QTimeZone zone = utc_zone();
+
+    // A directory at the sessions path makes the write fail.
+    QVERIFY(std::filesystem::create_directories(sessions_path(root)));
+    std::vector<Statistics> rows;
+    rows.push_back(day_row("2026-01-05", 1200, 300.0, ms_at(2026, 1, 5, 20, 0), "My Book"));
+    QVERIFY(write_daily_file(root, rows));
+
+    const StatisticsReadResult loaded = load_statistics(root, 0, zone);
+    QVERIFY(loaded.needs_save);
+    QCOMPARE(loaded.records.size(), std::size_t(1));
+    QVERIFY(loaded.records.contains(legacy_session_id("Book", "2026-01-05")));
+    QCOMPARE(loaded.daily.size(), std::size_t(1));
+    QCOMPARE(loaded.daily.front().characters_read, 1200);
+
+    // The failed write left the sessions target and the daily file alone.
+    QVERIFY(std::filesystem::is_directory(sessions_path(root)));
+    const std::optional<QJsonDocument> daily_document = read_document(daily_path(root));
+    QVERIFY(daily_document.has_value());
+    QCOMPARE(daily_document->array().size(), qsizetype(1));
+    QCOMPARE(
+        daily_document->array().at(0).toObject().value(QLatin1StringView("charactersRead")).toInt(),
+        1200);
+}
+
+// B5: rows carry StatisticsStorage.title(root:daily:), the resolved title,
+// not one held by the caller, through save and write.
+void StatisticsStorageTest::save_writes_the_resolved_title() {
+    const QTimeZone zone = utc_zone();
+    ReadingSessionRecords records;
+    records["a"] = make_record(10, make_session(ms_at(2026, 1, 5, 10, 0), 100, 60.0));
+
+    // metadata.json's renamedTitle when no stored row has a title.
+    {
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        const std::filesystem::path root = make_root(directory);
+        QVERIFY(write_text(root / "metadata.json",
+                           R"({"renamedTitle":"Renamed Book","title":"Metadata Book"})"));
+        QVERIFY(save_statistics(root, records, "Caller Title", 0, zone));
+        const std::vector<Statistics> daily = read_daily_statistics(root, 0, zone);
+        QVERIFY(daily == daily_statistics(records, "Renamed Book", 0, zone));
+        QCOMPARE(daily.front().title, std::string("Renamed Book"));
+    }
+
+    // The first non-empty stored row title outranks metadata.json.
+    {
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        const std::filesystem::path root = make_root(directory);
+        QVERIFY(write_text(root / "metadata.json",
+                           R"({"renamedTitle":"Renamed Book","title":"Metadata Book"})"));
+        std::vector<Statistics> stored;
+        stored.push_back(day_row("2026-01-05", 5, 5.0, 100, "Stored Title"));
+        QVERIFY(write_daily_file(root, stored));
+        QVERIFY(save_statistics(root, records, "Caller Title", 0, zone));
+        const std::vector<Statistics> daily = read_daily_statistics(root, 0, zone);
+        QVERIFY(daily == daily_statistics(records, "Stored Title", 0, zone));
+        QCOMPARE(daily.front().title, std::string("Stored Title"));
+    }
+
+    // metadata.json's title when renamedTitle is absent.
+    {
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        const std::filesystem::path root = make_root(directory);
+        QVERIFY(write_text(root / "metadata.json", R"({"title":"Metadata Title"})"));
+        QVERIFY(save_statistics(root, records, "Caller Title", 0, zone));
+        const std::vector<Statistics> daily = read_daily_statistics(root, 0, zone);
+        QVERIFY(daily == daily_statistics(records, "Metadata Title", 0, zone));
+        QCOMPARE(daily.front().title, std::string("Metadata Title"));
+    }
+
+    // An empty title when no stored row and no metadata.json exist.
+    {
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        const std::filesystem::path root = make_root(directory);
+        QVERIFY(save_statistics(root, records, "Caller Title", 0, zone));
+        const std::vector<Statistics> daily = read_daily_statistics(root, 0, zone);
+        QVERIFY(daily == daily_statistics(records, "", 0, zone));
+        QVERIFY(daily.front().title.empty());
+    }
+}
+
+// B5: StatisticsStorage.importDaily stores the first supplied row's title:
+// title: statistics.first?.title ?? title(root:daily:).
+void StatisticsStorageTest::import_writes_the_first_supplied_title() {
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    const std::filesystem::path root = make_root(directory);
+
+    QVERIFY(import_daily_statistics(root,
+                                    {day_row("2026-01-05", 1000, 300.0, 5000, "Imported Title")},
+                                    StatisticsSyncMode::merge, 0, utc_zone(), 1234));
+
+    const std::optional<QJsonDocument> daily_document = read_document(daily_path(root));
+    QVERIFY(daily_document.has_value());
+    QCOMPARE(daily_document->array().size(), qsizetype(1));
+    const QJsonObject row = daily_document->array().at(0).toObject();
+    QCOMPARE(row.value(QLatin1StringView("title")).toString(), QStringLiteral("Imported Title"));
+    QCOMPARE(row.value(QLatin1StringView("charactersRead")).toInt(), 1000);
+    QCOMPARE(row.value(QLatin1StringView("lastStatisticModified")).toInteger(), qint64(5000));
+}
+
+// B6: StatisticsStorage.write writes statistics_sessions.json first, then
+// statistics.json; a daily failure leaves the new sessions file and reports
+// the error. StatisticsStorage.encode replaces a damaged target wholesale
+// (B7), which is what makes the written sessions observable here.
+void StatisticsStorageTest::write_order_keeps_the_sessions_when_the_daily_write_fails() {
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    const std::filesystem::path root = make_root(directory);
+    const QTimeZone zone = utc_zone();
+
+    QVERIFY(write_text(sessions_path(root), "{ not json"));
+    QVERIFY(std::filesystem::create_directories(daily_path(root)));
+
+    ReadingSessionRecords records;
+    records["live"] = make_record(1000, make_session(ms_at(2026, 1, 5, 12, 0), 800, 200.0));
+
+    std::string error;
+    QVERIFY(!save_statistics(root, records, "My Book", 0, zone, &error));
+    QVERIFY(!error.empty());
+
+    // The sessions file was replaced before the daily write failed.
+    const std::optional<QJsonDocument> sessions_document = read_document(sessions_path(root));
+    QVERIFY(sessions_document.has_value());
+    const QJsonObject stored_sessions =
+        sessions_document->object().value(QLatin1StringView("sessions")).toObject();
+    QCOMPARE(stored_sessions.size(), qsizetype(1));
+    QVERIFY(stored_sessions.contains(QStringLiteral("live")));
+    QVERIFY(stored_sessions.value(QStringLiteral("live"))
+                .toObject()
+                .value(QLatin1StringView("value"))
+                .isObject());
+    QVERIFY(std::filesystem::is_directory(daily_path(root)));
+
+    // A later read finds the written sessions and still returns the records.
+    const StatisticsReadResult loaded = load_statistics(root, 0, zone);
+    QVERIFY(loaded.records == records);
+}
+
+// B7: StatisticsStorage.encode writes through Data.write(options: .atomic),
+// so a target whose bytes are not a parseable JSON document is still replaced
+// by save_statistics and by a pending reconcile in load_statistics.
+void StatisticsStorageTest::damaged_targets_are_replaced() {
+    const QTimeZone zone = utc_zone();
+    ReadingSessionRecords records;
+    records["live"] = make_record(1000, make_session(ms_at(2026, 1, 5, 12, 0), 800, 200.0));
+
+    // Both files hold bytes that are not JSON documents.
+    {
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        const std::filesystem::path root = make_root(directory);
+        QVERIFY(write_text(sessions_path(root), "{ not json"));
+        QVERIFY(write_text(daily_path(root), "[ not json"));
+
+        QVERIFY(save_statistics(root, records, "My Book", 0, zone));
+
+        const std::optional<QJsonDocument> sessions_document = read_document(sessions_path(root));
+        QVERIFY(sessions_document.has_value());
+        QVERIFY(sessions_document->object()
+                    .value(QLatin1StringView("sessions"))
+                    .toObject()
+                    .contains(QStringLiteral("live")));
+        const std::optional<QJsonDocument> daily_document = read_document(daily_path(root));
+        QVERIFY(daily_document.has_value());
+        QCOMPARE(daily_document->array().size(), qsizetype(1));
+
+        const StatisticsReadResult loaded = load_statistics(root, 0, zone);
+        QVERIFY(!loaded.needs_save);
+        QVERIFY(loaded.records == records);
+        QCOMPARE(loaded.daily.size(), std::size_t(1));
+    }
+
+    // A pending reconcile replaces a damaged sessions target on load.
+    {
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        const std::filesystem::path root = make_root(directory);
+        QVERIFY(write_text(sessions_path(root), "{ not json"));
+        std::vector<Statistics> rows;
+        rows.push_back(day_row("2026-01-05", 1200, 300.0, ms_at(2026, 1, 5, 20, 0), "My Book"));
+        QVERIFY(write_daily_file(root, rows));
+
+        const StatisticsReadResult loaded = load_statistics(root, 0, zone);
+        QVERIFY(loaded.needs_save);
+        QCOMPARE(loaded.records.size(), std::size_t(1));
+
+        const std::optional<QJsonDocument> sessions_document = read_document(sessions_path(root));
+        QVERIFY(sessions_document.has_value());
+        QVERIFY(sessions_document->object()
+                    .value(QLatin1StringView("sessions"))
+                    .toObject()
+                    .contains(QString::fromStdString(legacy_session_id("Book", "2026-01-05"))));
+    }
+}
+
+// B8: StatisticsStorage.dailyStatistics is nil when the reconciled records are
+// empty and statistics.json did not decode; a book with neither file is an
+// empty view, not corrupt.
+void StatisticsStorageTest::dashboard_read_is_null_without_reconcilable_statistics() {
+    const QTimeZone zone = utc_zone();
+
+    // Neither file: the book is skipped by its has_statistics gate.
+    {
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        const std::filesystem::path root = make_root(directory);
+        QVERIFY(!has_statistics(root));
+        const std::optional<std::vector<Statistics>> daily =
+            read_dashboard_statistics(root, 0, zone);
+        QVERIFY(daily.has_value());
+        QVERIFY(daily->empty());
+    }
+
+    // A valid empty sessions file and no daily file: no records and no daily
+    // document, so the dashboard has nothing to show.
+    {
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        const std::filesystem::path root = make_root(directory);
+        QVERIFY(write_sessions_file(root, {}, {}));
+        QVERIFY(has_statistics(root));
+        QVERIFY(!read_dashboard_statistics(root, 0, zone).has_value());
+        QVERIFY(read_daily_statistics(root, 0, zone).empty());
+    }
+
+    // Only tombstones: the records dictionary is non-empty even though no
+    // session is live, so the guard passes and the view is empty.
+    {
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        const std::filesystem::path root = make_root(directory);
+        QVERIFY(write_sessions_file(root, {{"gone", make_record(7000, std::nullopt)}}, {}));
+        QVERIFY(read_dashboard_statistics(root, 0, zone).has_value());
+        QVERIFY(read_dashboard_statistics(root, 0, zone)->empty());
+    }
+
+    // A decodable empty daily array is still a document: an empty view, not nil.
+    {
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        const std::filesystem::path root = make_root(directory);
+        QVERIFY(write_daily_file(root, {}));
+        const std::optional<std::vector<Statistics>> daily =
+            read_dashboard_statistics(root, 0, zone);
+        QVERIFY(daily.has_value());
+        QVERIFY(daily->empty());
+    }
+
+    // Both files damaged: nil.
+    {
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        const std::filesystem::path root = make_root(directory);
+        QVERIFY(write_text(sessions_path(root), "{ not json"));
+        QVERIFY(write_text(daily_path(root), "{ not json"));
+        QVERIFY(!read_dashboard_statistics(root, 0, zone).has_value());
+    }
+}
+
+// B9: StatisticsStorage.SessionsFile and Timestamped's synthesized Codable:
+// the value key is required, null is a tombstone, a missing key rejects the
+// whole sessions file, and both top-level keys are required.
+void StatisticsStorageTest::sessions_record_requires_a_value_key() {
+    const QTimeZone zone = utc_zone();
+
+    // One record without the value key rejects the file; the daily rows are
+    // converted instead.
+    {
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        const std::filesystem::path root = make_root(directory);
+        QVERIFY(write_text(sessions_path(root),
+                           "{\"sessions\":{"
+                           "\"good\":{\"modified\":1,\"value\":{\"startedAt\":0,\"endedAt\":0,"
+                           "\"charactersRead\":5,\"readingTime\":1}},"
+                           "\"bad\":{\"modified\":2}},"
+                           "\"exportedDaily\":{}}"));
+        std::vector<Statistics> rows;
+        rows.push_back(day_row("2026-01-05", 1000, 300.0, ms_at(2026, 1, 5, 20, 0), "My Book"));
+        QVERIFY(write_daily_file(root, rows));
+
+        const StatisticsReadResult loaded = load_statistics(root, 0, zone);
+        QVERIFY(loaded.needs_save);
+        QVERIFY(!loaded.records.contains("good"));
+        QVERIFY(loaded.records == legacy_sessions(rows, "Book", 0, zone));
+    }
+
+    // A missing exportedDaily key also rejects the file.
+    {
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        const std::filesystem::path root = make_root(directory);
+        QVERIFY(write_text(sessions_path(root),
+                           "{\"sessions\":{\"good\":{\"modified\":1,\"value\":{"
+                           "\"startedAt\":0,\"endedAt\":0,\"charactersRead\":5,"
+                           "\"readingTime\":1}}}}"));
+        std::vector<Statistics> rows;
+        rows.push_back(day_row("2026-01-05", 1000, 300.0, ms_at(2026, 1, 5, 20, 0), "My Book"));
+        QVERIFY(write_daily_file(root, rows));
+
+        const StatisticsReadResult loaded = load_statistics(root, 0, zone);
+        QVERIFY(!loaded.records.contains("good"));
+        QVERIFY(loaded.records == legacy_sessions(rows, "Book", 0, zone));
+    }
+
+    // A null value is a tombstone that keeps the id and its modification time.
+    {
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        const std::filesystem::path root = make_root(directory);
+        ReadingSessionRecords records;
+        records["gone"] = make_record(7000, std::nullopt);
+        QVERIFY(write_sessions_file(root, records, {}));
+
+        const StatisticsReadResult loaded = load_statistics(root, 0, zone);
+        QVERIFY(!loaded.needs_save);
+        QCOMPARE(loaded.records.size(), std::size_t(1));
+        QVERIFY(loaded.records.contains("gone"));
+        QCOMPARE(loaded.records.at("gone").modified, std::int64_t(7000));
+        QVERIFY(!loaded.records.at("gone").value.has_value());
+        QVERIFY(loaded.daily.empty());
+        QVERIFY(!std::filesystem::exists(daily_path(root)));
     }
 }
 
