@@ -467,6 +467,7 @@ bool ReaderViewModel::openBook(const QString& folder) {
     state_->highlights = state_->storage.load_highlights(state_->book.folder)
                              .value_or(std::vector<books::Highlight>{});
     clearBookSearch();
+    clear_gallery();
     state_->epub_path = epub->string();
     state_->session = std::move(session);
     state_->has_book = true;
@@ -524,6 +525,7 @@ void ReaderViewModel::closeBook() {
     if (!state_->has_book) {
         return;
     }
+    clear_gallery();
     persist_bookmark();
     clearBookSearch();
     if (state_->tracker) {

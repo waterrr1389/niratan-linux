@@ -125,6 +125,8 @@ class ReaderViewModel : public QObject {
     Q_PROPERTY(bool englishContent READ english_content NOTIFY settingsChanged)
     Q_PROPERTY(QString chapterUrl READ chapter_url NOTIFY chapterUrlChanged)
     Q_PROPERTY(QVariantList chapters READ chapters NOTIFY bookChanged)
+    Q_PROPERTY(QVariantList galleryImages READ gallery_images NOTIFY galleryChanged)
+    Q_PROPERTY(bool galleryLoading READ gallery_loading NOTIFY galleryChanged)
     Q_PROPERTY(QVariantList searchResults READ search_results NOTIFY searchChanged)
     Q_PROPERTY(int searchState READ search_state NOTIFY searchChanged)
     Q_PROPERTY(QVariantList highlights READ highlights NOTIFY highlightsChanged)
@@ -188,6 +190,9 @@ class ReaderViewModel : public QObject {
     bool english_content() const;
     QString chapter_url() const;
     QVariantList chapters() const;
+    QVariantList gallery_images() const;
+    bool gallery_loading() const;
+    Q_INVOKABLE void loadGallery();
     QVariantList search_results() const;
     int search_state() const;
     Q_INVOKABLE bool hasSearchableText(const QString& query) const;
@@ -290,6 +295,7 @@ class ReaderViewModel : public QObject {
     void readerTappedOutside();
     void searchChanged();
     void highlightsChanged();
+    void galleryChanged();
     // The page should run navigation for this direction ("forward"/"backward").
     void pageTurnRequested(const QString& direction);
 
@@ -301,6 +307,8 @@ class ReaderViewModel : public QObject {
     std::unique_ptr<State> state_;
 
     void load_chapter(int index, double progress, const QString& fragment = {});
+    void clear_gallery();
+    void scan_gallery_chapter(int index, std::size_t revision, const QString& route);
     void reload_document(bool reflow = false);
     void reload_settings(bool reflow);
     void update_palette();

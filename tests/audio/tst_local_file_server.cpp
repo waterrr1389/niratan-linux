@@ -165,6 +165,7 @@ class LocalFileServerTest : public QObject {
 
    private slots:
     void unknown_routes_are_not_found();
+    void book_images_use_the_active_route();
     void cover_route_serves_the_cover_bytes();
     void cover_route_matches_the_prefix();
     void sasayaki_route_is_exact();
@@ -181,6 +182,29 @@ class LocalFileServerTest : public QObject {
     void responses_close_the_connection();
     void a_source_list_without_a_match_is_empty();
 };
+
+void LocalFileServerTest::book_images_use_the_active_route() {
+    LocalFileServer server({}, 0);
+    server.set_book_images("/book-images/current/", [](std::string_view path)
+        -> std::optional<LocalFileServer::BookImage> {
+        if (path == "OEBPS/images/cover #1.png") {
+            return LocalFileServer::BookImage{"image/png", "image bytes"};
+        }
+        return std::nullopt;
+    });
+    QVERIFY(server.is_listening());
+
+    const auto image = exchange(server.port(), "/book-images/current/OEBPS/images/cover%20%231.png");
+    QVERIFY(image.complete);
+    QCOMPARE(image.status, 200);
+    QCOMPARE(image.content_type, QByteArray("image/png"));
+    QCOMPARE(image.body, QByteArray("image bytes"));
+    QCOMPARE(exchange(server.port(), "/book-images/previous/OEBPS/images/cover%20%231.png").status, 404);
+    QCOMPARE(exchange(server.port(), "/book-images/current/OEBPS/content.opf").status, 404);
+
+    server.set_book_images({}, {});
+    QVERIFY(!server.is_listening());
+}
 
 void LocalFileServerTest::unknown_routes_are_not_found() {
     LocalFileServer server("", 0);

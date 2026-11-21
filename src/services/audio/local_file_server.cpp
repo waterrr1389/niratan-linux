@@ -256,6 +256,17 @@ bool LocalFileServer::is_listening() const {
     return server_.isListening();
 }
 
+void LocalFileServer::set_book_images(
+    std::string route, std::function<std::optional<BookImage>(std::string_view)> lookup) {
+    book_image_route_ = std::move(route);
+    book_image_lookup_ = std::move(lookup);
+    if (book_image_lookup_) {
+        start();
+    } else {
+        stop_if_idle();
+    }
+}
+
 quint16 LocalFileServer::port() const {
     return server_.isListening() ? server_.serverPort() : 0;
 }
@@ -290,6 +301,16 @@ void LocalFileServer::handle_connection() {
 
 void LocalFileServer::handle_request(QTcpSocket* socket, const QByteArray& header) {
     const Request request = parse_request(header);
+
+    if (book_image_lookup_ && request.path.starts_with(book_image_route_)) {
+        const auto image = book_image_lookup_(std::string_view(request.path).substr(book_image_route_.size()));
+        if (image) {
+            send_response(socket, "200 OK", image->first, image->second);
+        } else {
+            send_not_found(socket);
+        }
+        return;
+    }
 
     if (request.path.starts_with(kCoverPrefix)) {
         if (!cover_) {
@@ -387,7 +408,8 @@ void LocalFileServer::start() {
     if (server_.isListening()) {
         return;
     }
-    if (server_.listen(QHostAddress::Any, requested_port_)) {
+    if (server_.listen(book_image_lookup_ ? QHostAddress::LocalHost : QHostAddress::Any,
+                       requested_port_)) {
         retry_count_ = 0;
         retry_timer_.stop();
         return;
@@ -401,7 +423,7 @@ void LocalFileServer::start() {
 }
 
 void LocalFileServer::stop_if_idle() {
-    if (cover_ || sasayaki_audio_ || audio_enabled_) {
+    if (cover_ || sasayaki_audio_ || audio_enabled_ || book_image_lookup_) {
         return;
     }
     retry_timer_.stop();

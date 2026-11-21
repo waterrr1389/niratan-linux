@@ -7,10 +7,12 @@
 #include <QDateTime>
 
 #include <functional>
+#include <set>
 #include <utility>
 #include <vector>
 
 #include "models/profiles/reader_settings.h"
+#include "services/audio/local_file_server.h"
 #include "services/books/book_storage.h"
 #include "services/reader/reading_tracker.h"
 #include "services/storage/app_paths.h"
@@ -38,6 +40,11 @@ struct ReaderViewModel::State {
     std::size_t search_revision = 0;
     QVariantList search_results;
     int search_state = 0;
+    QVariantList gallery_images;
+    std::set<std::string, std::less<>> gallery_paths;
+    bool gallery_loading = false;
+    std::size_t gallery_revision = 0;
+    audio::LocalFileServer gallery_server{{}, 0};
     std::vector<books::Highlight> highlights;
     books::BookMetadata book;
     bool has_book = false;

@@ -51,8 +51,11 @@
 #include <QTcpServer>
 #include <QTimer>
 
+#include <functional>
 #include <optional>
 #include <string>
+#include <string_view>
+#include <utility>
 
 namespace niratan::audio {
 
@@ -74,6 +77,12 @@ class LocalFileServer : public QObject {
     // Enabling restarts the listener; disabling stops it once nothing remains.
     void set_audio_enabled(bool enabled);
 
+    // An active gallery route serves an image MIME type and bytes from the
+    // caller's index. An empty callback removes the route.
+    using BookImage = std::pair<std::string, QByteArray>;
+    void set_book_images(std::string route,
+                         std::function<std::optional<BookImage>(std::string_view)> lookup);
+
     bool is_listening() const;
     // The bound port, or 0 while not listening.
     quint16 port() const;
@@ -89,6 +98,8 @@ class LocalFileServer : public QObject {
     std::optional<QByteArray> cover_;
     std::optional<QByteArray> sasayaki_audio_;
     bool audio_enabled_ = false;
+    std::string book_image_route_;
+    std::function<std::optional<BookImage>(std::string_view)> book_image_lookup_;
     int retry_count_ = 0;
     QTcpServer server_;
     QTimer retry_timer_;

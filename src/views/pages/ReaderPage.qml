@@ -245,6 +245,16 @@ Item {
                 ToolTip.text: text
                 onClicked: toc.open()
             }
+            BarButton {
+                glyph: "▦"
+                tip: qsTr("Gallery")
+                Accessible.name: tip
+                visible: ReaderViewModel.hasBook
+                onClicked: {
+                    ReaderViewModel.loadGallery()
+                    gallery.open()
+                }
+            }
             ToolButton {
                 text: qsTr("Statistics")
                 visible: ReaderViewModel.statisticsEnabled
@@ -588,5 +598,10 @@ Item {
         id: sasayakiPanel
         anchors.fill: parent
         player: sasayaki
+    }
+
+    ReaderGallery {
+        id: gallery
+        readerPage: page
     }
 }
