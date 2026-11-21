@@ -7,9 +7,12 @@
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QTemporaryDir>
 #include <QtTest>
 
 #include <cstddef>
+#include <filesystem>
+#include <fstream>
 #include <limits>
 #include <optional>
 #include <string>
@@ -25,6 +28,7 @@ using niratan::sasayaki::match_data_to_json;
 using niratan::sasayaki::parse_cues;
 using niratan::sasayaki::playback_data_from_json;
 using niratan::sasayaki::playback_data_to_json;
+using niratan::sasayaki::read_cue_file;
 
 // Models/Sasayaki.swift and Features/Sasayaki/{SasayakiParser,SasayakiSRT}.swift
 // are the specification; script/test_sasayaki_text_matcher.swift supplies the
@@ -78,6 +82,8 @@ class SasayakiTest : public QObject {
 
    private slots:
     void parses_a_multi_cue_file();
+    void reads_cues_from_a_file();
+    void an_unreadable_cue_file_is_none();
     void reads_comma_and_dot_milliseconds();
     void strips_the_bom_and_normalizes_line_endings();
     void joins_text_lines_and_trims_them();
@@ -469,6 +475,27 @@ void SasayakiTest::playback_data_rejects_missing_or_mistyped_keys() {
         QByteArrayLiteral("{\"lastPosition\":1,\"rate\":0.1}")));
     QVERIFY(narrowed.has_value());
     QCOMPARE(narrowed->rate, 0.1F);
+}
+
+void SasayakiTest::reads_cues_from_a_file() {
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    const std::filesystem::path file =
+        std::filesystem::path(directory.path().toStdString()) / "cues.srt";
+    std::ofstream(file, std::ios::binary) << "1\r\n00:00:01,000 --> 00:00:02,500\r\nHello\r\n";
+
+    const auto cues = read_cue_file(file);
+    QVERIFY(cues.has_value());
+    QCOMPARE(cues->size(), std::size_t{1});
+    QCOMPARE(cues->front(), cue("0", 1.0, 2.5, "Hello"));
+}
+
+void SasayakiTest::an_unreadable_cue_file_is_none() {
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    const std::filesystem::path root(directory.path().toStdString());
+    QVERIFY(!read_cue_file(root / "missing.srt").has_value());
+    QVERIFY(!read_cue_file(root).has_value());
 }
 
 QTEST_APPLESS_MAIN(SasayakiTest)

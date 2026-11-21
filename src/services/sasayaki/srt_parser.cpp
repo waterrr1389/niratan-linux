@@ -11,9 +11,12 @@
 #include <algorithm>
 #include <cmath>
 #include <cstddef>
+#include <fstream>
+#include <iterator>
 #include <optional>
 #include <string>
 #include <string_view>
+#include <system_error>
 #include <utility>
 #include <vector>
 
@@ -317,6 +320,23 @@ std::string encode_cues(const std::vector<SasayakiCue>& cues) {
         entries.append(entry);
     }
     return entries.join(QStringLiteral("\n")).toStdString();
+}
+
+std::optional<std::vector<SasayakiCue>> read_cue_file(const std::filesystem::path& path) {
+    std::error_code error;
+    if (!std::filesystem::is_regular_file(path, error)) {
+        return std::nullopt;
+    }
+    std::ifstream stream(path, std::ios::binary);
+    if (!stream) {
+        return std::nullopt;
+    }
+    const std::string bytes{std::istreambuf_iterator<char>(stream),
+                            std::istreambuf_iterator<char>()};
+    if (stream.bad()) {
+        return std::nullopt;
+    }
+    return parse_cues(bytes);
 }
 
 }  // namespace niratan::sasayaki

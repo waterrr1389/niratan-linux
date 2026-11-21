@@ -10,7 +10,7 @@ src/services/sasayaki/matcher.cpp 666
 src/services/statistics/statistics_storage.cpp 536
 src/viewmodels/player/player_study_view_model.cpp 693
 src/viewmodels/reader/reader_view_model.cpp 1054
-src/viewmodels/sasayaki/sasayaki_view_model.cpp 927
+src/viewmodels/sasayaki/sasayaki_view_model.cpp 908
 src/viewmodels/settings/settings_view_model.cpp 511
 src/viewmodels/statistics/statistics_view_model.cpp 757
 src/views/pages/LibraryPage.qml 516

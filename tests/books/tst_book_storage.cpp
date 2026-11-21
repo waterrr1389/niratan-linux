@@ -109,6 +109,9 @@ class BookStorageTest : public QObject {
     void book_order_and_shelves_round_trip();
     void unsafe_folders_are_rejected();
     void books_without_metadata_are_skipped();
+    void book_directories_must_exist();
+    void sasayaki_sidecars_round_trip();
+    void missing_or_undecodable_sasayaki_sidecars_load_as_none();
 };
 
 void BookStorageTest::file_names_replace_forbidden_characters() {
@@ -240,6 +243,76 @@ void BookStorageTest::books_without_metadata_are_skipped() {
     std::ofstream(app_dir(directory) / "Books" / "Damaged" / "metadata.json") << "{}";
 
     QVERIFY(storage.load_all_books().empty());
+}
+
+void BookStorageTest::book_directories_must_exist() {
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    BookStorage storage(app_dir(directory));
+    std::filesystem::create_directories(app_dir(directory) / "Books" / "Title");
+    std::ofstream(app_dir(directory) / "Books" / "File") << "{}";
+
+    QVERIFY(storage.has_book_directory("Title"));
+    QVERIFY(!storage.has_book_directory("Missing"));
+    QVERIFY(!storage.has_book_directory("File"));
+    QVERIFY(!storage.has_book_directory("../escape"));
+}
+
+// BookStorage.loadSasayakiPlayback / loadSasayakiMatch and
+// BookStorage.save(_:inside:as:) with FileNames.sasayakiPlayback and
+// FileNames.sasayakiMatch.
+void BookStorageTest::sasayaki_sidecars_round_trip() {
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    BookStorage storage(app_dir(directory));
+    const auto folder = app_dir(directory) / "Books" / "Title";
+    std::filesystem::create_directories(folder);
+
+    niratan::sasayaki::SasayakiPlaybackData playback;
+    playback.last_position = 12.5;
+    playback.delay = -0.25;
+    playback.rate = 1.5F;
+    playback.audio_bookmark = QByteArray("/music/book.m4b");
+    QVERIFY(storage.save_sasayaki_playback("Title", playback));
+    QVERIFY(std::filesystem::exists(folder / "sasayaki_playback.json"));
+    QCOMPARE(storage.load_sasayaki_playback("Title"),
+             std::optional<niratan::sasayaki::SasayakiPlaybackData>{playback});
+
+    niratan::sasayaki::SasayakiMatchData match;
+    niratan::sasayaki::SasayakiMatch entry;
+    entry.id = "1";
+    entry.start_time = 1.0;
+    entry.end_time = 2.0;
+    entry.text = "text";
+    entry.chapter_index = 3;
+    entry.start = 10;
+    entry.length = 4;
+    match.matches.push_back(entry);
+    match.unmatched = 2;
+    QVERIFY(storage.save_sasayaki_match("Title", match));
+    QVERIFY(std::filesystem::exists(folder / "sasayaki_match.json"));
+    QCOMPARE(storage.load_sasayaki_match("Title"),
+             std::optional<niratan::sasayaki::SasayakiMatchData>{match});
+
+    QVERIFY(!storage.save_sasayaki_playback("../escape", playback));
+    std::string reason;
+    QVERIFY(!storage.save_sasayaki_match("../escape", match, &reason));
+}
+
+void BookStorageTest::missing_or_undecodable_sasayaki_sidecars_load_as_none() {
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    BookStorage storage(app_dir(directory));
+    const auto folder = app_dir(directory) / "Books" / "Title";
+    std::filesystem::create_directories(folder);
+
+    QVERIFY(!storage.load_sasayaki_playback("Title").has_value());
+    QVERIFY(!storage.load_sasayaki_match("Title").has_value());
+
+    std::ofstream(folder / "sasayaki_playback.json") << "{ damaged";
+    std::ofstream(folder / "sasayaki_match.json") << R"({"matches": 3})";
+    QVERIFY(!storage.load_sasayaki_playback("Title").has_value());
+    QVERIFY(!storage.load_sasayaki_match("Title").has_value());
 }
 
 QTEST_APPLESS_MAIN(BookStorageTest)

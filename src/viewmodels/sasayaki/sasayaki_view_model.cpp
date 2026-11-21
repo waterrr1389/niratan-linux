@@ -3,7 +3,6 @@
 #include "sasayaki_view_model.h"
 
 #include <QAudioOutput>
-#include <QFile>
 #include <QFileInfo>
 #include <QJsonArray>
 #include <QJsonDocument>
@@ -16,11 +15,8 @@
 #include <algorithm>
 #include <cmath>
 #include <exception>
-#include <filesystem>
 #include <optional>
 #include <string>
-#include <string_view>
-#include <system_error>
 #include <thread>
 #include <utility>
 #include <vector>
@@ -33,7 +29,6 @@
 #include "services/sasayaki/matcher.h"
 #include "services/sasayaki/srt_parser.h"
 #include "services/storage/app_paths.h"
-#include "services/storage/json_file.h"
 #include "viewmodels/reader/reader_view_model.h"
 
 namespace niratan::viewmodels {
@@ -53,24 +48,23 @@ constexpr int kDefaultSearchWindow = 200;
 constexpr int kMinimumSearchWindow = 50;
 constexpr int kMaximumSearchWindow = 1000;
 constexpr int kSearchWindowIncrement = 50;
-constexpr const char* kPlaybackFileName = "sasayaki_playback.json";
-constexpr const char* kMatchFileName = "sasayaki_match.json";
+
+niratan::books::BookStorage book_storage() {
+    return niratan::books::BookStorage(niratan::storage::data_root());
+}
 
 // The reader exposes the folder of the book it has open, so the sidecars are
 // found without comparing display titles.
-std::optional<std::filesystem::path> resolve_book_root() {
+std::optional<std::string> resolve_book_folder() {
     const ReaderViewModel* reader = ReaderViewModel::instance();
     if (!reader->has_book()) {
         return std::nullopt;
     }
-    niratan::books::BookStorage storage(niratan::storage::data_root());
-    const std::optional<std::filesystem::path> directory =
-        storage.book_directory(reader->book_folder().toStdString());
-    std::error_code error;
-    if (!directory.has_value() || !std::filesystem::is_directory(*directory, error)) {
+    std::string folder = reader->book_folder().toStdString();
+    if (!book_storage().has_book_directory(folder)) {
         return std::nullopt;
     }
-    return directory;
+    return folder;
 }
 
 QVariantMap cue_entry(const SasayakiCue& cue) {
@@ -89,7 +83,8 @@ struct SasayakiViewModel::State {
     QAudioOutput* output = nullptr;
     QTimer* seek_timer = nullptr;
 
-    std::filesystem::path root;
+    // The open book's folder under Books, set while has_root.
+    std::string folder;
     bool has_root = false;
 
     SasayakiPlaybackData playback;
@@ -346,14 +341,13 @@ bool SasayakiViewModel::openSubtitles(const QUrl& file) {
     if (!take_local_file(file, &path)) {
         return false;
     }
-    QFile handle(path);
-    if (!handle.open(QIODevice::ReadOnly)) {
+    std::optional<std::vector<SasayakiCue>> read =
+        niratan::sasayaki::read_cue_file(path.toStdString());
+    if (!read.has_value()) {
         set_error(tr("The subtitle file could not be read: %1").arg(path));
         return false;
     }
-    const QByteArray bytes = handle.readAll();
-    std::vector<SasayakiCue> cues = niratan::sasayaki::parse_cues(
-        std::string_view(bytes.constData(), static_cast<std::size_t>(bytes.size())));
+    std::vector<SasayakiCue> cues = std::move(*read);
     if (cues.empty()) {
         set_error(tr("No cues were found in the subtitle file: %1").arg(path));
         return false;
@@ -475,8 +469,7 @@ void SasayakiViewModel::apply_match_result(const SasayakiMatchData& result) {
         return;
     }
     std::string reason;
-    if (!niratan::storage::write_json_file(state_->root / kMatchFileName,
-                                         sasayaki::match_data_to_json(result), &reason)) {
+    if (!book_storage().save_sasayaki_match(state_->folder, result, &reason)) {
         set_match_error(tr("Could not save subtitle matches: %1").arg(QString::fromStdString(reason)));
     } else if (!load_match()) {
         set_match_error(tr("Could not reload saved subtitle matches."));
@@ -645,7 +638,7 @@ void SasayakiViewModel::reload_book() {
     state_->player->stop();
     state_->player->setSource(QUrl());
 
-    state_->root.clear();
+    state_->folder.clear();
     state_->has_root = false;
     state_->playback = SasayakiPlaybackData{};
     state_->match.reset();
@@ -671,9 +664,9 @@ void SasayakiViewModel::reload_book() {
     state_->last_second = -1;
     state_->error.clear();
 
-    const std::optional<std::filesystem::path> root = resolve_book_root();
-    if (root.has_value()) {
-        state_->root = *root;
+    std::optional<std::string> folder = resolve_book_folder();
+    if (folder.has_value()) {
+        state_->folder = std::move(*folder);
         state_->has_root = true;
         load_playback();
         load_match();
@@ -707,14 +700,8 @@ void SasayakiViewModel::reload_book() {
 }
 
 void SasayakiViewModel::load_playback() {
-    state_->playback = SasayakiPlaybackData{};
-    const niratan::storage::JsonReadResult read =
-        niratan::storage::read_json_file(state_->root / kPlaybackFileName);
-    if (read.status == niratan::storage::JsonReadStatus::success) {
-        if (const auto decoded = niratan::sasayaki::playback_data_from_json(read.document)) {
-            state_->playback = *decoded;
-        }
-    }
+    state_->playback =
+        book_storage().load_sasayaki_playback(state_->folder).value_or(SasayakiPlaybackData{});
     state_->position = std::max(0.0, state_->playback.last_position);
     state_->delay = state_->playback.delay;
     // A stored speed outside the control range can come from another client;
@@ -725,12 +712,7 @@ void SasayakiViewModel::load_playback() {
 }
 
 bool SasayakiViewModel::load_match() {
-    const niratan::storage::JsonReadResult read =
-        niratan::storage::read_json_file(state_->root / kMatchFileName);
-    if (read.status != niratan::storage::JsonReadStatus::success) {
-        return false;
-    }
-    auto decoded = niratan::sasayaki::match_data_from_json(read.document);
+    auto decoded = book_storage().load_sasayaki_match(state_->folder);
     if (!decoded.has_value()) {
         return false;
     }
@@ -865,8 +847,7 @@ void SasayakiViewModel::save_playback() {
     data.delay = state_->delay;
     data.rate = static_cast<float>(state_->rate);
     data.audio_bookmark = state_->playback.audio_bookmark;
-    niratan::storage::write_json_file(state_->root / kPlaybackFileName,
-                                      niratan::sasayaki::playback_data_to_json(data));
+    book_storage().save_sasayaki_playback(state_->folder, data);
 }
 
 void SasayakiViewModel::navigate_to_cue(const SasayakiCue& cue) {

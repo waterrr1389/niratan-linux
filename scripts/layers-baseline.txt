@@ -8,5 +8,4 @@ viewmodel-io src/viewmodels/dictionary/dictionary_popup_model.cpp
 viewmodel-io src/viewmodels/library/library_view_model.cpp
 viewmodel-io src/viewmodels/player/player_study_view_model.cpp
 viewmodel-io src/viewmodels/reader/reader_view_model.cpp
-viewmodel-io src/viewmodels/sasayaki/sasayaki_view_model.cpp
 viewmodel-io src/viewmodels/statistics/statistics_view_model.cpp

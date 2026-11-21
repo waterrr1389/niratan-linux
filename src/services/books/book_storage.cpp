@@ -25,6 +25,8 @@ namespace {
 
 constexpr const char* kMetadataFile = "metadata.json";
 constexpr const char* kBookmarkFile = "bookmark.json";
+constexpr const char* kSasayakiPlaybackFile = "sasayaki_playback.json";
+constexpr const char* kSasayakiMatchFile = "sasayaki_match.json";
 constexpr const char* kBookInfoFile = "bookinfo.json";
 constexpr const char* kBookOrderFile = "book_order.json";
 constexpr const char* kShelvesFile = "shelves.json";
@@ -205,6 +207,62 @@ bool BookStorage::save_bookmark(std::string_view folder, const Bookmark& bookmar
         return false;
     }
     return storage::write_json_file(*directory / kBookmarkFile, bookmark_to_json(bookmark));
+}
+
+bool BookStorage::has_book_directory(std::string_view folder) const {
+    const std::optional<std::filesystem::path> directory = book_directory(folder);
+    std::error_code error;
+    return directory.has_value() && std::filesystem::is_directory(*directory, error);
+}
+
+std::optional<sasayaki::SasayakiPlaybackData> BookStorage::load_sasayaki_playback(
+    std::string_view folder) const {
+    const std::optional<std::filesystem::path> directory = book_directory(folder);
+    if (!directory.has_value()) {
+        return std::nullopt;
+    }
+    const std::optional<QJsonDocument> document = read_document(*directory / kSasayakiPlaybackFile);
+    if (!document.has_value()) {
+        return std::nullopt;
+    }
+    return sasayaki::playback_data_from_json(*document);
+}
+
+bool BookStorage::save_sasayaki_playback(std::string_view folder,
+                                         const sasayaki::SasayakiPlaybackData& playback) const {
+    const std::optional<std::filesystem::path> directory = book_directory(folder);
+    if (!directory.has_value()) {
+        return false;
+    }
+    return storage::write_json_file(*directory / kSasayakiPlaybackFile,
+                                    sasayaki::playback_data_to_json(playback));
+}
+
+std::optional<sasayaki::SasayakiMatchData> BookStorage::load_sasayaki_match(
+    std::string_view folder) const {
+    const std::optional<std::filesystem::path> directory = book_directory(folder);
+    if (!directory.has_value()) {
+        return std::nullopt;
+    }
+    const std::optional<QJsonDocument> document = read_document(*directory / kSasayakiMatchFile);
+    if (!document.has_value()) {
+        return std::nullopt;
+    }
+    return sasayaki::match_data_from_json(*document);
+}
+
+bool BookStorage::save_sasayaki_match(std::string_view folder,
+                                      const sasayaki::SasayakiMatchData& match,
+                                      std::string* reason) const {
+    const std::optional<std::filesystem::path> directory = book_directory(folder);
+    if (!directory.has_value()) {
+        if (reason != nullptr) {
+            *reason = "the book folder is outside the library";
+        }
+        return false;
+    }
+    return storage::write_json_file(*directory / kSasayakiMatchFile,
+                                    sasayaki::match_data_to_json(match), reason);
 }
 
 std::optional<std::vector<Highlight>> BookStorage::load_highlights(std::string_view folder) const {

@@ -45,6 +45,8 @@
 
 #pragma once
 
+#include <filesystem>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -54,6 +56,9 @@
 namespace niratan::sasayaki {
 
 std::vector<SasayakiCue> parse_cues(std::string_view text);
+// The file's bytes through parse_cues, as SasayakiMatchView reads the picked
+// SRT with Data(contentsOf:). None when the file cannot be read.
+std::optional<std::vector<SasayakiCue>> read_cue_file(const std::filesystem::path& path);
 
 std::string encode_cues(const std::vector<SasayakiCue>& cues);
 

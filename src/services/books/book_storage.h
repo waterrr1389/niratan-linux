@@ -9,6 +9,8 @@
 //   Books/<folder>/bookinfo.json    BookInfo
 //   Books/<folder>/<epub>           the imported EPUB
 //   Books/<folder>/<cover>          the extracted cover image
+//   Books/<folder>/sasayaki_playback.json  SasayakiPlaybackData
+//   Books/<folder>/sasayaki_match.json     SasayakiMatchData
 //   Books/book_order.json           [] of book IDs
 //   Books/shelves.json              [] of BookShelf
 //
@@ -36,6 +38,7 @@
 #include <vector>
 
 #include "models/books/book.h"
+#include "models/sasayaki/sasayaki.h"
 
 namespace niratan::books {
 
@@ -61,6 +64,8 @@ class BookStorage {
 
     // nullopt when the folder is absolute or climbs out of Books.
     std::optional<std::filesystem::path> book_directory(std::string_view folder) const;
+    // Whether book_directory(folder) names an existing directory.
+    bool has_book_directory(std::string_view folder) const;
 
     // Directories without a readable metadata.json are skipped.
     std::vector<BookMetadata> load_all_books() const;
@@ -72,6 +77,17 @@ class BookStorage {
     // A missing sidecar is empty. A damaged sidecar is not writable.
     std::optional<std::vector<Highlight>> load_highlights(std::string_view folder) const;
     bool save_highlights(std::string_view folder, const std::vector<Highlight>& highlights) const;
+
+    // loadSasayakiPlayback / loadSasayakiMatch and BookStorage.save for the
+    // Sasayaki sidecars. A missing or undecodable file loads as none.
+    std::optional<sasayaki::SasayakiPlaybackData> load_sasayaki_playback(
+        std::string_view folder) const;
+    bool save_sasayaki_playback(std::string_view folder,
+                                const sasayaki::SasayakiPlaybackData& playback) const;
+    std::optional<sasayaki::SasayakiMatchData> load_sasayaki_match(std::string_view folder) const;
+    // reason, when given, receives why the write failed.
+    bool save_sasayaki_match(std::string_view folder, const sasayaki::SasayakiMatchData& match,
+                             std::string* reason = nullptr) const;
 
     std::optional<BookInfo> load_book_info(std::string_view folder) const;
     bool save_book_info(std::string_view folder, const BookInfo& info) const;

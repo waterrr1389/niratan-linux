@@ -16,7 +16,8 @@
 //
 // The book root is the reader's open book folder: ReaderViewModel::book_folder()
 // names the folder under Books/, and the sidecar files are
-// sasayaki_playback.json and sasayaki_match.json inside it, with the codecs in
+// sasayaki_playback.json and sasayaki_match.json inside it, read and written by
+// books::BookStorage with the codecs in
 // models/sasayaki/sasayaki.h. While a book is open, a folder that cannot be
 // resolved is reported through error(); no title matching is involved, so two
 // books with the same display title never share sidecars.
