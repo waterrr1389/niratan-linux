@@ -17,8 +17,10 @@ void register_reader_url_schemes() {
     QWebEngineUrlScheme scheme(QByteArrayLiteral("reader"));
     scheme.setFlags(QWebEngineUrlScheme::SecureScheme | QWebEngineUrlScheme::LocalAccessAllowed |
                     QWebEngineUrlScheme::CorsEnabled | QWebEngineUrlScheme::FetchApiAllowed);
-    scheme.setSyntax(QWebEngineUrlScheme::Syntax::HostAndPort);
-    scheme.setDefaultPort(0);
+    // Chromium rejects a host-and-port scheme whose port is 0, which leaves the
+    // navigation pending; the reader URL carries the book in the host and the
+    // container path after it, so a host-only syntax is enough.
+    scheme.setSyntax(QWebEngineUrlScheme::Syntax::Host);
     QWebEngineUrlScheme::registerScheme(scheme);
 }
 
