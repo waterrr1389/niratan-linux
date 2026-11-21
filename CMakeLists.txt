@@ -26,6 +26,7 @@ qt_add_library(niratan_core STATIC
     src/services/anki/field_mapping.cpp
     src/services/anki/duplicate_scope.cpp
     src/services/anki/duplicate_query.cpp
+    src/services/anki/duplicate_lookup.cpp
     src/services/anki/glossary_markup.cpp
     src/services/anki/media_naming.cpp
     src/services/anki/field_content.cpp
