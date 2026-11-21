@@ -53,7 +53,7 @@ Item {
     // disappearing under the pointer or during a scrub.
     readonly property bool chromeShown: mpv.loaded
         && (page.chromeVisible || mpv.paused || page.barHovered
-            || page.scrubbing || page.speedPanelOpen)
+            || page.scrubbing || page.speedPanelOpen || page.studyOpen)
     readonly property bool fullScreen: page.Window.window
         ? page.Window.window.visibility === Window.FullScreen
         : false
@@ -68,6 +68,8 @@ Item {
     property string osdTitle: ""
     property string osdValue: ""
     property real osdMeter: -1
+
+    onStudyOpenChanged: page.scheduleHide()
 
     focus: true
     Keys.priority: Keys.BeforeItem
@@ -122,12 +124,14 @@ Item {
         if (!mpv.loaded)
             return
         page.chromeVisible = true
-        hideTimer.restart()
+        page.scheduleHide()
     }
 
     function scheduleHide() {
-        if (!mpv.loaded)
+        if (!mpv.loaded || page.studyOpen) {
+            hideTimer.stop()
             return
+        }
         hideTimer.restart()
     }
 
@@ -482,8 +486,10 @@ Item {
         anchors.top: page.top
         anchors.right: page.right
         anchors.bottom: page.bottom
-        width: Math.min(studySidebar.preferredWidth,
+        preferredWidth: mpv.videoSettings.studySidebarWidth
+        width: Math.min(studySidebar.implicitWidth,
                         Math.max(studySidebar.minimumWidth, page.width - 340))
+        onWidthSaveRequested: width => mpv.changeVideoSetting("studySidebarWidth", width)
         study: studyModel
         playbackReady: mpv.loaded
         subtitleTracks: mpv.tracks.filter(track => track.type === "sub")

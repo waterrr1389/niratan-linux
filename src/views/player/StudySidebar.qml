@@ -20,20 +20,21 @@ Rectangle {
     property bool extractingTranscript: false
     property real loopStart: -1
     property real loopEnd: -1
-    property int preferredWidth: 340
+    required property int preferredWidth
     property int selectedTab: 0
     property bool followingTranscript: true
     readonly property int minimumWidth: 320
     readonly property int maximumWidth: 560
 
     signal closeRequested()
+    signal widthSaveRequested(int width)
     signal subtitleFileRequested(url file)
     signal subtitleTrackRequested(int trackId, bool extract)
     signal transcriptRequested()
     signal loopStartRequested(real time)
     signal loopEndRequested(real time)
 
-    implicitWidth: preferredWidth
+    implicitWidth: resize.previewWidth || preferredWidth
     color: Theme.windowBackground
 
     function timeLabel(seconds: real): string {
@@ -124,13 +125,13 @@ Rectangle {
                     Item { Layout.fillWidth: true }
                     SidebarButton {
                         text: qsTr("Clear")
-                        enabled: sidebar.study.history.length > 0
+                        enabled: sidebar.study.historyLimit > 0 && history.count > 0
                         onClicked: clearDialog.open()
                     }
                 }
 
                 EmptyLabel {
-                    visible: history.count === 0
+                    visible: sidebar.study.historyLimit === 0 || history.count === 0
                     text: sidebar.study.historyLimit === 0
                         ? qsTr("Mining history is disabled.")
                         : qsTr("Saved subtitles will appear here.")
@@ -140,7 +141,7 @@ Rectangle {
                     id: history
                     Layout.fillWidth: true
                     Layout.fillHeight: true
-                    visible: count > 0
+                    visible: sidebar.study.historyLimit > 0 && count > 0
                     clip: true
                     model: sidebar.study.history
                     boundsBehavior: Flickable.StopAtBounds
@@ -219,7 +220,6 @@ Rectangle {
                     }
                 }
             }
-
             ColumnLayout {
                 spacing: Theme.spacingSm
 
@@ -426,7 +426,6 @@ Rectangle {
                     }
                 }
             }
-
             Item {
                 ListView {
                     id: chapterList
@@ -444,12 +443,12 @@ Rectangle {
                         width: chapterList.width - Theme.spacingMd
                         marker: String(chapter.index + 1)
                         title: chapter.modelData.title || qsTr("Chapter %1").arg(chapter.index + 1)
-                        detail: sidebar.timeLabel(chapter.modelData.start)
+                        detail: sidebar.timeLabel(chapter.modelData.start) + (chapter.modelData.duration > 0
+                            ? " · " + sidebar.timeLabel(chapter.modelData.duration) : "")
                         selected: chapter.index === sidebar.study.currentChapter
                         onClicked: sidebar.study.playChapter(chapter.index)
                     }
                 }
-
                 Label {
                     anchors.centerIn: parent
                     width: parent.width
@@ -502,6 +501,7 @@ Rectangle {
         cursorShape: Qt.SizeHorCursor
         property real pointerStart: 0
         property int widthStart: 0
+        property int previewWidth: 0
         onPressed: function(mouse) {
             resize.widthStart = sidebar.width
             resize.pointerStart = resize.mapToItem(null, mouse.x, mouse.y).x
@@ -509,12 +509,17 @@ Rectangle {
         onPositionChanged: function(mouse) {
             if (resize.pressed) {
                 const pointer = resize.mapToItem(null, mouse.x, mouse.y).x
-                sidebar.preferredWidth = Math.round(Math.max(sidebar.minimumWidth,
+                resize.previewWidth = Math.round(Math.max(sidebar.minimumWidth,
                     Math.min(sidebar.maximumWidth, resize.widthStart + resize.pointerStart - pointer)))
             }
         }
+        onReleased: {
+            if (resize.previewWidth > 0 && resize.previewWidth !== sidebar.preferredWidth)
+                sidebar.widthSaveRequested(resize.previewWidth)
+            resize.previewWidth = 0
+        }
+        onCanceled: resize.previewWidth = 0
     }
-
     FileDialog {
         id: subtitleDialog
         title: qsTr("Load Subtitle File")
@@ -561,5 +566,4 @@ Rectangle {
             border.color: button.selected || button.activeFocus ? Theme.accent : Theme.cardStroke
         }
     }
-
 }

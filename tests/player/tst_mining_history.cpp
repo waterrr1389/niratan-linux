@@ -8,8 +8,10 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QJsonValue>
+#include <QLocale>
 #include <QStringList>
 #include <QTemporaryDir>
+#include <QTimeZone>
 #include <QtTest>
 
 #include <cstddef>
@@ -188,7 +190,28 @@ class MiningHistoryTest : public QObject {
     void clear_stores_an_empty_list();
     void a_missing_file_reads_as_an_empty_list();
     void a_damaged_or_foreign_document_reads_as_an_empty_list();
+    void named_history_date_thresholds();
 };
+
+// VideoMiningHistorySidebar.historyRow uses a named relative date.
+void MiningHistoryTest::named_history_date_thresholds() {
+    const QLocale locale(QLocale::English, QLocale::UnitedStates);
+    QLocale::setDefault(locale);
+    const QDateTime now(QDate(2026, 11, 21), QTime(12, 0), QTimeZone::UTC);
+    const double created_at_now = reference_seconds(now.toSecsSinceEpoch());
+    const auto label = [created_at_now, &now](double age) {
+        return niratan::player::mining_history_date_label(created_at_now - age, now);
+    };
+    QCOMPARE(label(-1), QStringLiteral("Just now"));
+    QCOMPARE(label(59.999), QStringLiteral("Just now"));
+    QCOMPARE(label(60), QStringLiteral("1 min ago"));
+    QCOMPARE(label(3599.999), QStringLiteral("59 min ago"));
+    QCOMPARE(label(3600), QStringLiteral("1 hour ago"));
+    QCOMPARE(label(86399.999), QStringLiteral("23 hours ago"));
+    QCOMPARE(label(86400), QStringLiteral("Yesterday"));
+    QCOMPARE(label(129600), QStringLiteral("Yesterday"));
+    QCOMPARE(label(129600.001), locale.toString(QDate(2026, 11, 19), QLocale::ShortFormat));
+}
 
 void MiningHistoryTest::round_trip_keeps_optional_members() {
     QTemporaryDir directory;

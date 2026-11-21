@@ -60,6 +60,9 @@
 
 #pragma once
 
+#include <QDateTime>
+#include <QString>
+
 #include <filesystem>
 #include <optional>
 #include <string>
@@ -114,6 +117,11 @@ struct MiningHistoryItem {
 };
 
 std::filesystem::path mining_history_path(const std::filesystem::path& app_directory);
+
+// VideoMiningHistorySidebar.historyRow uses a named relative date. The Linux
+// label uses elapsed minutes/hours up to 24 hours, then yesterday in the
+// reference time zone or a locale short date. Future dates show Just now.
+QString mining_history_date_label(double created_at, const QDateTime& now);
 
 // Records in stored order. A document that is an object with an "items" array is
 // unwrapped first, since an earlier build of the port wrote that shape. Empty when

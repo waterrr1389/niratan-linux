@@ -8,7 +8,6 @@
 #include <QClipboard>
 #include <QDateTime>
 #include <QGuiApplication>
-#include <QJsonObject>
 #include <QRegularExpression>
 #include <QUuid>
 
@@ -644,30 +643,14 @@ void PlayerStudyViewModel::clearHistory() {
 void PlayerStudyViewModel::refreshHistory() {
     auto snapshot = state_->history_store.load_snapshot();
     QVariantList history;
-    const double now = QDateTime::currentMSecsSinceEpoch() / 1000.0 - kFoundationEpoch;
+    const auto now = QDateTime::currentDateTime();
     for (auto item = snapshot.items.crbegin(); item != snapshot.items.crend(); ++item) {
-        const double elapsed = std::max(0.0, now - item->created_at);
-        const auto count = [elapsed](int unit) {
-            return int(std::min(elapsed / unit, double(std::numeric_limits<int>::max())));
-        };
-        QString relative;
-        if (elapsed < 60.0) {
-            relative = tr("Just now");
-        } else if (elapsed < 3600.0) {
-            relative = count(60) == 1 ? tr("1 minute ago") : tr("%n minutes ago", "", count(60));
-        } else if (elapsed < 86400.0) {
-            relative = count(3600) == 1 ? tr("1 hour ago") : tr("%n hours ago", "", count(3600));
-        } else if (elapsed < 172800.0) {
-            relative = tr("Yesterday");
-        } else {
-            relative = tr("%n days ago", "", count(86400));
-        }
         history.append(QVariantMap{
             {QStringLiteral("id"), QString::fromStdString(item->id)},
             {QStringLiteral("text"), QString::fromStdString(item->subtitle_text)},
             {QStringLiteral("videoTitle"), QString::fromStdString(item->video_title)},
             {QStringLiteral("start"), item->cue_start},
-            {QStringLiteral("relativeDate"), relative},
+            {QStringLiteral("relativeDate"), player::mining_history_date_label(item->created_at, now)},
         });
     }
     const bool changed = state_->snapshot.limit != snapshot.limit || state_->history != history;

@@ -1,9 +1,10 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
-// Follows VideoMiningHistoryStore.swift (init and loadItems), with the Linux
-// empty-root contract and Core/UserConfig.swift's videoMiningHistoryLimit.
+// Follows VideoMiningHistoryStore.swift (init, loadItems and updateLimit), with
+// the Linux empty-root contract and Core/UserConfig.swift's videoMiningHistoryLimit.
 
 #include "services/player/mining_history_store.h"
+#include "services/player/video_settings.h"
 
 #include <QTemporaryDir>
 #include <QtTest>
@@ -35,6 +36,22 @@ class TestMiningHistoryStore : public QObject {
         QVERIFY(snapshot.items.empty());
         QCOMPARE(snapshot.limit, 25);
         QVERIFY(!std::filesystem::exists(path));
+    }
+
+    void zero_limit_clears_saved_records() {
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        const auto path = std::filesystem::path(directory.path().toStdString());
+        MiningHistoryStore store(path);
+        niratan::player::MiningHistoryItem item;
+        item.id = "saved";
+        QVERIFY(store.add(item, 25));
+        QCOMPARE(niratan::player::load(path).size(), 1u);
+        QVERIFY(niratan::player::store_video_settings(path, {{"videoMiningHistoryLimit", 0}}));
+        QCOMPARE(store.load_snapshot(), MiningHistoryStore::Snapshot{});
+        QVERIFY(niratan::player::load(path).empty());
+        QVERIFY(niratan::player::store_video_settings(path, {{"videoMiningHistoryLimit", 25}}));
+        QVERIFY(store.load_snapshot().items.empty());
     }
 };
 

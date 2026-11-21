@@ -3,7 +3,9 @@
 // Core/UserConfig.swift (video preferences, init, resetVideoSubtitleAppearance),
 // VideoSubtitlePositionPolicy.swift (legacy placement), VideoSubtitleEdgeStyle.swift
 // (edge migration/recipe), and ColorHexCodec.swift (RGB/RGBA order).
-// Linux keeps the Swift keys in the player settings.json object. Unknown keys
+// Linux keeps video preferences in settings.json. The Study width follows
+// VideoPlayerScreen.studySidebarWidth and VideoMiningHistorySidebar's bounds:
+// 340 by default, clamped to 320–560 and stored as an integer. Unknown keys
 // are preserved; invalid documents are not replaced.
 
 #pragma once

@@ -23,7 +23,14 @@ MiningHistoryStore::Snapshot MiningHistoryStore::load_snapshot() const {
     const int limit = player::load_video_settings(app_directory_)
                           .value("videoMiningHistoryLimit")
                           .toInt();
-    return {player::pruned_items(player::load(app_directory_), limit), limit};
+    auto items = player::load(app_directory_);
+    if (limit == 0) {
+        if (!items.empty()) {
+            clear();
+        }
+        return {};
+    }
+    return {player::pruned_items(std::move(items), limit), limit};
 }
 
 bool MiningHistoryStore::add(const MiningHistoryItem& item, int limit) const {

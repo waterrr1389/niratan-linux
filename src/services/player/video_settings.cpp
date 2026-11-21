@@ -21,6 +21,7 @@ struct Number {
 constexpr Number numbers[] = {
     {"videoSeekInterval", 5, 1, 60},
     {"videoMiningHistoryLimit", 25, 0, 1000},
+    {"studySidebarWidth", 340, 320, 560},
     {"videoSubtitleGapFastForwardSpeed", 2.7, 1.1, 5},
     {"videoBrightness", 0, -100, 100},
     {"videoContrast", 0, -100, 100},
@@ -94,7 +95,7 @@ QJsonObject video_settings(const QJsonObject& stored) {
         const auto key = QLatin1StringView(name);
         result.insert(key, stored.value(key).toBool(false));
     }
-    for (const auto* name : {"videoMiningHistoryLimit", "videoSubtitleFontWeight"}) {
+    for (const auto* name : {"videoMiningHistoryLimit", "videoSubtitleFontWeight", "studySidebarWidth"}) {
         const auto key = QLatin1StringView(name);
         result.insert(key, static_cast<int>(result.value(key).toDouble()));
     }

@@ -3,8 +3,9 @@
 // Owned handle for the video mining history, wrapping the free functions in
 // mining_history.h with a data root so viewmodels need not hold a path.
 // Follows Features/Video/VideoMiningHistoryStore.swift
-// (VideoMiningHistoryStore.init) in owning the storage location. Snapshot
-// loading reads the configured limit before pruning and never writes.
+// (VideoMiningHistoryStore.init and updateLimit) in owning the storage
+// location. Refreshing reads the configured limit before pruning. A zero
+// limit clears saved records; an empty or unreadable history is left alone.
 // An empty root returns an empty snapshot and rejects every mutation.
 // Item validation and mutation results follow mining_history.h.
 

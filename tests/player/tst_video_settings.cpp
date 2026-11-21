@@ -2,6 +2,7 @@
 //
 // Core/UserConfig.swift (video defaults and reset), VideoSubtitlePositionPolicy,
 // VideoSubtitleEdgePreferenceResolver, VideoSubtitleEdgeRecipe and ColorHexCodec.
+// VideoPlayerScreen.studySidebarWidth and VideoMiningHistorySidebar's bounds.
 
 #include "services/player/video_settings.h"
 #include "services/storage/json_file.h"
@@ -54,6 +55,18 @@ private slots:
         QCOMPARE(subtitle_edges(QStringLiteral("highContrast"), 0.5, 36).outline, 1.875);
         QCOMPARE(subtitle_edges(QStringLiteral("softShadow"), 1, 72).shadow, 8);
         QCOMPARE(subtitle_edges(QStringLiteral("off"), 1, 72).outline, 0);
+    }
+
+    void studySidebarWidth() {
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        const auto path = std::filesystem::path(dir.path().toStdString());
+        QCOMPARE(load_video_settings(path).value("studySidebarWidth").toInt(), 340);
+        QCOMPARE(video_settings({{"studySidebarWidth", 200}}).value("studySidebarWidth").toInt(), 320);
+        QCOMPARE(video_settings({{"studySidebarWidth", 700}}).value("studySidebarWidth").toInt(), 560);
+        QVERIFY(store_video_settings(path, {{"studySidebarWidth", 480}}));
+        QVERIFY(store_video_settings(path, subtitle_appearance_defaults()));
+        QCOMPARE(load_video_settings(path).value("studySidebarWidth").toInt(), 480);
     }
 
     void saveAndReset() {

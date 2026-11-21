@@ -9,17 +9,21 @@
 
 #include "mining_history.h"
 
+#include <QCoreApplication>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QJsonValue>
 #include <QLatin1StringView>
+#include <QLocale>
 #include <QString>
+#include <QTimeZone>
 #include <QUrl>
 
 #include <algorithm>
 #include <cmath>
 #include <cstddef>
+#include <limits>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -333,6 +337,31 @@ bool item_before(const MiningHistoryItem& lhs, const MiningHistoryItem& rhs) {
 
 std::filesystem::path mining_history_path(const std::filesystem::path& app_directory) {
     return app_directory / "video_mining_history.json";
+}
+
+QString mining_history_date_label(double created_at, const QDateTime& now) {
+    constexpr double foundation_epoch = 978307200.0;
+    const double elapsed = (now.toMSecsSinceEpoch() / 1000.0 - foundation_epoch) - created_at;
+    if (elapsed < 60) {
+        return QCoreApplication::translate("PlayerStudyViewModel", "Just now");
+    }
+    if (elapsed < 3600) {
+        return QCoreApplication::translate("PlayerStudyViewModel", "%n min ago", nullptr, int(elapsed / 60));
+    }
+    if (elapsed < 86400) {
+        const int hours = int(elapsed / 3600);
+        return hours == 1 ? QCoreApplication::translate("PlayerStudyViewModel", "1 hour ago")
+            : QCoreApplication::translate("PlayerStudyViewModel", "%n hours ago", nullptr, hours);
+    }
+    const double unix_ms = std::floor((created_at + foundation_epoch) * 1000);
+    if (!std::isfinite(unix_ms) || unix_ms <= double(std::numeric_limits<qint64>::min()) ||
+        unix_ms >= double(std::numeric_limits<qint64>::max())) {
+        return {};
+    }
+    const QDate date = QDateTime::fromMSecsSinceEpoch(qint64(unix_ms), now.timeZone()).date();
+    return date == now.date().addDays(-1)
+        ? QCoreApplication::translate("PlayerStudyViewModel", "Yesterday")
+        : QLocale().toString(date, QLocale::ShortFormat);
 }
 
 std::vector<MiningHistoryItem> load(const std::filesystem::path& app_directory) {

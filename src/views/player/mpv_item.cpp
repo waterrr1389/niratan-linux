@@ -718,11 +718,10 @@ void MpvItem::refresh_chapters() {
             {QStringLiteral("title"), fields.value(QStringLiteral("title")).toString()},
             {QStringLiteral("start"), start},
         };
-        // As in the study list, use the next strictly later start, then
-        // fall back to the file duration for the last chapter.
+        // VideoMiningHistorySidebar.chapterEndTime uses the next later start or media end.
         double end = start;
         for (const QVariant& other : nodes) {
-            const double candidate = other.toMap().value(start_key).toDouble();
+            const double candidate = other.toMap().value(start_key, start).toDouble();
             if (candidate > start && (end <= start || candidate < end)) {
                 end = candidate;
             }
@@ -885,6 +884,7 @@ void MpvItem::poll() {
     }
     if (std::abs(duration - duration_) > kValueEpsilon) {
         duration_ = duration;
+        chapters_dirty_ = true;
         emit durationChanged();
     }
     if (file_ready_) {
