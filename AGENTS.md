@@ -215,8 +215,10 @@ Unicode rules, do the same rather than assuming ASCII.
 - Only the coordinating agent commits, after review. Delegated agents edit
   the files they are given and never run `git commit`, `git add` or
   `git stash`.
-- Work on one first-release flow at a time; the next starts when the
-  current one's flow test passes.
+- At most two first-release flows are in progress at once, each in its own
+  git worktree with its own build directory and its own `Audit` session.
+  Within a worktree there is one intent at a time. A flow that shares files
+  with another in-progress flow waits.
 - Never commit `build/`, `cache/`, zip fixtures, media or user data.
 - No AI tool names and no progress words (Step, Phase, FIXED, AC-x) in code,
   comments, commit messages or PR text. Comments explain intent and
