@@ -8,6 +8,7 @@
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QLocale>
 #include <QPromise>
 #include <QThreadPool>
 #include <QUuid>
@@ -18,6 +19,7 @@
 #include <utility>
 
 #include "models/profiles/reader_settings.h"
+#include "models/statistics/reader_statistics.h"
 #include "models/statistics/statistics.h"
 #include "services/books/book_storage.h"
 #include "services/reader/reading_tracker.h"
@@ -31,6 +33,7 @@ namespace {
 
 using niratan::books::BookStorage;
 using niratan::books::Bookmark;
+using niratan::profiles::ContentLanguage;
 using niratan::profiles::ReaderProfileSettings;
 using niratan::reader::BookSession;
 using niratan::reader::BookStatisticsStore;
@@ -155,6 +158,10 @@ ReaderViewModel* ReaderViewModel::create(QQmlEngine*, QJSEngine*) {
 
 ReaderViewModel::ReaderViewModel()
     : state_(std::make_unique<State>([this] { reload_settings(true); })) {
+    // The inspector's text follows the tracker, the position and the profile.
+    connect(this, &ReaderViewModel::statisticsChanged, this, &ReaderViewModel::statisticsInspectorChanged);
+    connect(this, &ReaderViewModel::progressChanged, this, &ReaderViewModel::statisticsInspectorChanged);
+    connect(this, &ReaderViewModel::settingsChanged, this, &ReaderViewModel::statisticsInspectorChanged);
     reload_settings(false);
     update_palette();
 }
@@ -495,27 +502,19 @@ bool ReaderViewModel::tracking() const {
     return state_->tracker && state_->tracker->is_tracking();
 }
 
-QVariantMap ReaderViewModel::reading_statistics() const {
-    if (!state_->tracker || !state_->session) {
-        return {};
-    }
-    const auto now = now_milliseconds();
-    const auto session = state_->tracker->session_total();
-    const auto today = state_->tracker->today_total(now);
-    const auto all_time = state_->tracker->all_time_total();
-    const bool english = state_->content_language == "en";
-    const auto present = [english](const ReadingTotal& total) {
-        const auto count = [english](int raw) {
-            return english ? static_cast<int>(std::ceil(raw / 5.0)) : raw;
-        };
-        return QVariantMap{{QStringLiteral("count"), count(total.characters_read)},
-                           {QStringLiteral("speed"), count(total.reading_speed())},
-                           {QStringLiteral("time"), total.reading_time}};
-    };
-    return {{QStringLiteral("session"), present(session)},
-            {QStringLiteral("today"), present(today)},
-            {QStringLiteral("allTime"), present(all_time)},
-            {QStringLiteral("english"), english}};
+QVariantMap ReaderViewModel::statistics_inspector() const {
+    if (!state_->tracker || !state_->session) return {};
+    const ContentLanguage language = state_->content_language == "en" ? ContentLanguage::english
+                                                                     : ContentLanguage::japanese;
+    return statistics::reader_statistics_map(
+        statistics::present_reader_statistics(
+            state_->tracker->session_total(), state_->tracker->today_total(now_milliseconds()),
+            state_->tracker->all_time_total(), language, state_->session->info().character_count,
+            state_->session->character_offset(state_->chapter_index, state_->chapter_progress),
+            state_->session->chapter_characters_remaining(state_->chapter_index,
+                                                          state_->chapter_progress),
+            QLocale()),
+        language);
 }
 
 void ReaderViewModel::toggleTracking() {

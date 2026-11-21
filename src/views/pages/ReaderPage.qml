@@ -24,13 +24,6 @@ Item {
     readonly property bool statisticsContextActive: visible && readerWindowActive
         && (statisticsPanel.visible || (!toc.visible && !sasayakiPanel.visible))
 
-    function formatReadingTime(value) {
-        const seconds = Math.max(0, Math.floor(value))
-        return String(Math.floor(seconds / 3600)).padStart(2, "0") + ":"
-               + String(Math.floor(seconds / 60) % 60).padStart(2, "0") + ":"
-               + String(seconds % 60).padStart(2, "0")
-    }
-
     function dismissLookup() {
         lookupModel.clear()
         web.runJavaScript("window.hoshiSelection?.clearSelection()")
@@ -136,7 +129,8 @@ Item {
                    || event.key === Qt.Key_PageUp) {
             forward = false
         } else if (event.key === Qt.Key_T && event.modifiers === Qt.NoModifier
-                   && ReaderViewModel.statisticsEnabled) {
+                   && ReaderViewModel.statisticsEnabled
+                   && !statisticsPanel.visible && !toc.visible && !sasayakiPanel.visible) {
             ReaderViewModel.toggleTracking()
             event.accepted = true
             return
@@ -405,83 +399,8 @@ Item {
         }
     }
 
-    Drawer {
+    ReaderStatisticsInspector {
         id: statisticsPanel
-        edge: Qt.RightEdge
-        width: Math.min(380, page.width * 0.65)
-        height: page.height
-        modal: true
-        padding: Theme.spacingLg
-
-        ColumnLayout {
-            anchors.fill: parent
-            spacing: Theme.spacingMd
-            RowLayout {
-                Layout.fillWidth: true
-                Label {
-                    text: qsTr("Statistics")
-                    font.bold: true
-                    Layout.fillWidth: true
-                }
-                ToolButton {
-                    text: ReaderViewModel.tracking ? qsTr("Pause Tracking") : qsTr("Start Tracking")
-                    ToolTip.visible: hovered
-                    ToolTip.text: text
-                    onClicked: ReaderViewModel.toggleTracking()
-                }
-                ToolButton {
-                    text: "\u00d7"
-                    Accessible.name: qsTr("Close")
-                    ToolTip.visible: hovered
-                    ToolTip.text: qsTr("Close")
-                    onClicked: statisticsPanel.close()
-                }
-            }
-            Label {
-                text: ReaderViewModel.tracking ? qsTr("Tracking") : qsTr("Paused")
-                color: ReaderViewModel.tracking ? Theme.accent : Theme.textSecondary
-            }
-            Label { text: qsTr("Book Progress") }
-            ProgressBar {
-                Layout.fillWidth: true
-                from: 0
-                to: 1
-                value: ReaderViewModel.progress
-            }
-            Label {
-                text: qsTr("%1%").arg((ReaderViewModel.progress * 100).toFixed(1))
-            }
-            Repeater {
-                model: [
-                    { label: qsTr("Session"), total: ReaderViewModel.readingStatistics.session },
-                    { label: qsTr("Today"), total: ReaderViewModel.readingStatistics.today },
-                    { label: qsTr("All Time"), total: ReaderViewModel.readingStatistics.allTime }
-                ]
-                delegate: ColumnLayout {
-                    id: statisticRow
-                    required property var modelData
-                    visible: modelData.total !== undefined
-                    Label {
-                        text: statisticRow.modelData.label
-                        font.bold: true
-                    }
-                    Label {
-                        text: {
-                            const total = statisticRow.modelData.total
-                            if (!total)
-                                return ""
-                            const count = Number(total.count).toLocaleString(Qt.locale(), "f", 0)
-                            return (ReaderViewModel.readingStatistics.english
-                                    ? qsTr("%1 approximate words").arg(count)
-                                    : qsTr("%1 characters").arg(count))
-                                   + " · " + qsTr("%1/h").arg(total.speed)
-                                   + " · " + page.formatReadingTime(total.time)
-                        }
-                    }
-                }
-            }
-            Item { Layout.fillHeight: true }
-        }
     }
 
     Drawer {

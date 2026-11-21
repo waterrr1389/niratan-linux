@@ -55,6 +55,7 @@
 
 #include <QLocale>
 #include <QString>
+#include <QVariantMap>
 
 #include "models/profiles/content_language.h"
 #include "models/statistics/statistics.h"
@@ -94,5 +95,13 @@ ReaderStatisticsInspectorText present_reader_statistics(
     const ReadingTotal& session, const ReadingTotal& today, const ReadingTotal& all_time,
     profiles::ContentLanguage language, int book_characters, int current_character,
     int chapter_characters_remaining, const QLocale& locale);
+
+// The map the reader page binds to. Keys are "english" (whether the profile
+// counts words), "session", "today" and "allTime" (each with "characters",
+// "speed" and "duration"), "bookPercent", "bookFraction", "bookRemaining" and
+// "chapterRemaining". The shape is what ReaderStatisticsInspector.qml reads;
+// no text is decided here beyond what present_reader_statistics returns.
+QVariantMap reader_statistics_map(const ReaderStatisticsInspectorText& text,
+                                  profiles::ContentLanguage language);
 
 }  // namespace niratan::statistics

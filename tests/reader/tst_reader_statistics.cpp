@@ -18,6 +18,7 @@
 
 using niratan::profiles::ContentLanguage;
 using niratan::statistics::present_reader_statistics;
+using niratan::statistics::reader_statistics_map;
 using niratan::statistics::ReaderStatisticsInspectorText;
 using niratan::statistics::ReadingTotal;
 
@@ -51,6 +52,7 @@ class ReaderStatisticsTest : public QObject {
     void book_progress_is_clamped_and_has_one_fraction_digit();
     void remaining_times_use_the_session_speed();
     void remaining_times_are_dashes_without_a_pace_or_characters();
+    void map_exposes_the_text_the_view_binds();
 };
 
 void ReaderStatisticsTest::periods_show_grouped_characters_speed_and_clock() {
@@ -170,6 +172,26 @@ void ReaderStatisticsTest::remaining_times_are_dashes_without_a_pace_or_characte
                 ContentLanguage::japanese, 1000, 2000, -10);
     QCOMPARE(beyond.book_remaining, QStringLiteral("—"));
     QCOMPARE(beyond.chapter_remaining, QStringLiteral("—"));
+}
+
+void ReaderStatisticsTest::map_exposes_the_text_the_view_binds() {
+    const ReadingTotal session{12345, 3600.0};
+    const ReaderStatisticsInspectorText text =
+        present(session, ReadingTotal{}, session, ContentLanguage::english, 20000, 12345, 500);
+    const QVariantMap map = reader_statistics_map(text, ContentLanguage::english);
+
+    QCOMPARE(map.value(QStringLiteral("english")).toBool(), true);
+    QCOMPARE(map.value(QStringLiteral("session")).toMap().value(QStringLiteral("characters"))
+                 .toString(),
+             QStringLiteral("2,469"));
+    QCOMPARE(map.value(QStringLiteral("allTime")).toMap().value(QStringLiteral("duration"))
+                 .toString(),
+             QStringLiteral("1:00:00"));
+    QCOMPARE(map.value(QStringLiteral("bookPercent")).toString(), QStringLiteral("61.7%"));
+    QCOMPARE(map.value(QStringLiteral("bookFraction")).toDouble(), 0.61725);
+    QCOMPARE(map.value(QStringLiteral("bookRemaining")).toString(), QStringLiteral("0:37:12"));
+    QCOMPARE(map.value(QStringLiteral("chapterRemaining")).toString(),
+             QStringLiteral("0:02:25"));
 }
 
 QTEST_APPLESS_MAIN(ReaderStatisticsTest)

@@ -78,4 +78,21 @@ ReaderStatisticsInspectorText present_reader_statistics(
     return text;
 }
 
+QVariantMap reader_statistics_map(const ReaderStatisticsInspectorText& text,
+                                  profiles::ContentLanguage language) {
+    const auto period = [](const ReaderStatisticsPeriodText& value) {
+        return QVariantMap{{QStringLiteral("characters"), value.characters},
+                           {QStringLiteral("speed"), value.speed},
+                           {QStringLiteral("duration"), value.duration}};
+    };
+    return {{QStringLiteral("english"), language == profiles::ContentLanguage::english},
+            {QStringLiteral("session"), period(text.session)},
+            {QStringLiteral("today"), period(text.today)},
+            {QStringLiteral("allTime"), period(text.all_time)},
+            {QStringLiteral("bookPercent"), text.book_percent},
+            {QStringLiteral("bookFraction"), text.book_fraction},
+            {QStringLiteral("bookRemaining"), text.book_remaining},
+            {QStringLiteral("chapterRemaining"), text.chapter_remaining}};
+}
+
 }  // namespace niratan::statistics

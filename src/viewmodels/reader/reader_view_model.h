@@ -59,6 +59,12 @@
 // The four read-only properties below are cached when the tracker changes, so
 // a QML binding does no work until statisticsChanged() fires.
 //
+// statisticsInspector is the reader sheet's presentation, rebuilt from the
+// tracker, the current position and the profile's content language whenever
+// the totals, the position or the open book change. models/statistics/
+// reader_statistics.h owns the number, duration and "—" decisions; this class
+// only supplies the values.
+//
 // bookFolder is the open book's folder name under Books/, exposed so a model
 // that reads sidecar files (Sasayaki) can resolve them without matching the
 // display title. It is empty when no book is open.
@@ -122,7 +128,8 @@ class ReaderViewModel : public QObject {
     Q_PROPERTY(int statisticsSessionSpeed READ statistics_session_speed NOTIFY statisticsChanged)
     Q_PROPERTY(bool statisticsEnabled READ statistics_enabled NOTIFY statisticsChanged)
     Q_PROPERTY(bool tracking READ tracking NOTIFY statisticsChanged)
-    Q_PROPERTY(QVariantMap readingStatistics READ reading_statistics NOTIFY statisticsChanged)
+    Q_PROPERTY(QVariantMap statisticsInspector READ statistics_inspector NOTIFY
+                   statisticsInspectorChanged)
 
    public:
     ~ReaderViewModel() override;
@@ -184,7 +191,9 @@ class ReaderViewModel : public QObject {
     int statistics_session_speed() const;
     bool statistics_enabled() const;
     bool tracking() const;
-    QVariantMap reading_statistics() const;
+    // The inspector's derived text, following Features/Reader/StatisticsView.swift
+    // (ReaderStatisticsContentView). Empty until a book is open with a tracker.
+    QVariantMap statistics_inspector() const;
     Q_INVOKABLE void toggleTracking();
     Q_INVOKABLE void tickTracking();
 
@@ -236,6 +245,7 @@ class ReaderViewModel : public QObject {
     void settingsChanged();
     void paletteChanged();
     void statisticsChanged();
+    void statisticsInspectorChanged();
     void paginationChanged();
     void pageChanged(int index);
     void documentRestored(bool revealCue);
