@@ -118,6 +118,14 @@ target_link_libraries(tst_mining_gate PRIVATE niratan_core Qt6::Test)
 target_compile_options(tst_mining_gate PRIVATE -Wall -Wextra -Wpedantic -Werror)
 add_test(NAME mining_gate COMMAND tst_mining_gate)
 
+qt_add_executable(tst_anki_config
+    anki/tst_anki_config.cpp
+)
+target_include_directories(tst_anki_config PRIVATE ${CMAKE_SOURCE_DIR}/src)
+target_link_libraries(tst_anki_config PRIVATE niratan_core Qt6::Test)
+target_compile_options(tst_anki_config PRIVATE -Wall -Wextra -Wpedantic -Werror)
+add_test(NAME anki_config COMMAND tst_anki_config)
+
 qt_add_executable(tst_audio_source
     audio/tst_audio_source.cpp
 )

@@ -2,6 +2,8 @@
 # only shrink. Format: <src-relative header path>
 
 services/anki/anki_connect.h
+services/anki/anki_config.h
+services/anki/anki_config_codec.h
 services/anki/duplicate_query.h
 services/anki/duplicate_scope.h
 services/anki/field_content.h

@@ -30,6 +30,8 @@ qt_add_library(niratan_core STATIC
     src/services/anki/media_naming.cpp
     src/services/anki/field_content.cpp
     src/services/anki/anki_connect.cpp
+    src/services/anki/anki_config.cpp
+    src/services/anki/anki_config_codec.cpp
     src/services/anki/mining_gate.cpp
     src/services/audio/audio_request.cpp
     src/services/audio/local_audio.cpp
