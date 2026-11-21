@@ -8,6 +8,7 @@
 
 #include <functional>
 #include <utility>
+#include <vector>
 
 #include "models/profiles/reader_settings.h"
 #include "services/books/book_storage.h"
@@ -58,6 +59,8 @@ struct ReaderViewModel::State {
     int page_height = 600;
     int page_count = 0;
     int page_index = 0;
+    std::vector<int> spine_page_counts;
+    int spine_page_offset = 0;
     int revision = 0;
     bool restoring = false;
     bool reveal_cue_after_restore = false;

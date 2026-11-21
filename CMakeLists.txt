@@ -118,6 +118,7 @@ qt_add_executable(niratan
     src/viewmodels/settings/settings_view_model.h
     src/viewmodels/reader/reader_view_model.cpp
     src/viewmodels/reader/reader_view_model.h
+    src/viewmodels/reader/reader_view_model_pagination.cpp
     src/viewmodels/reader/reader_view_model_state.h
     src/viewmodels/reader/reader_view_model_statistics.cpp
     src/views/player/mpv_item.cpp
@@ -160,6 +161,7 @@ qt_add_qml_module(niratan
         src/views/reader/SasayakiPanel.qml
         src/views/reader/ReaderStatisticsInspector.qml
         src/views/reader/ReaderProgress.qml
+        src/views/reader/ReaderContents.qml
         src/views/reader/ReaderChrome.qml
         src/views/player/BarButton.qml
         src/views/player/StudySidebar.qml

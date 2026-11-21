@@ -67,6 +67,13 @@ void ReaderViewModel::setReaderActive(bool active) {
     refresh_statistics();
 }
 
+void ReaderViewModel::start_tracking_on_navigation() {
+    if (state_->tracker) {
+        state_->tracker->on_manual_navigation(now_milliseconds());
+        refresh_statistics();
+    }
+}
+
 void ReaderViewModel::save_statistics() {
     if (!state_->tracker) {
         return;

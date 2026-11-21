@@ -64,6 +64,7 @@ class ReaderShellTest : public QObject {
     void paragraph_layout_runs_between_font_readiness_and_restore();
     void the_bridge_shim_is_installed_before_the_scripts();
     void the_language_and_lookup_settings_are_passed();
+    void illustration_blur_is_opt_in();
 };
 
 void ReaderShellTest::the_document_keeps_the_chapter_and_inserts_both_blocks() {
@@ -203,6 +204,22 @@ void ReaderShellTest::the_language_and_lookup_settings_are_passed() {
     QVERIFY(has(block, "registerShiftHoverLookup(24, 400)"));
     QVERIFY(has(block, "hoshiReader.sharedSyncCoordinates = true;"));
     QVERIFY(has(block, "scanNonJapaneseText = true;"));
+}
+
+void ReaderShellTest::illustration_blur_is_opt_in() {
+    ShellInput shell = input();
+    const std::string mark = "classList.add('blurred')";
+    QVERIFY(!has(reader_script_block(shell, scripts()), mark));
+
+    shell.appearance.blur_images = true;
+    const std::string block = reader_script_block(shell, scripts());
+    const auto token = block.find("hoshiReaderRestoreToken");
+    const auto blur = block.find(mark);
+    const auto restore = block.find("return window.hoshiReader.restoreProgress(0.25)");
+    QVERIFY(token != std::string::npos && token < blur && blur < restore);
+    QVERIFY(has(block, "querySelectorAll('svg')"));
+    QVERIFY(has(block, "img:not(.gaiji):not(.gaiji-line)"));
+    QVERIFY(has(block, "img.naturalWidth > 256 || img.naturalHeight > 256"));
 }
 
 QTEST_APPLESS_MAIN(ReaderShellTest)

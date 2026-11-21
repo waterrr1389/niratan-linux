@@ -241,6 +241,23 @@ std::string reader_script_block(const ShellInput& input, const ReaderScripts& sc
 
     script += "    window.hoshiReaderRestoreToken = '" + js_string(input.restore_token) + "';\n";
 
+    if (appearance.blur_images) {
+        script += R"js(    document.querySelectorAll('svg').forEach(svg => svg.classList.add('blurred'));
+    document.querySelectorAll('img:not(.gaiji):not(.gaiji-line)').forEach(img => {
+        const blurIllustration = () => {
+            if (img.classList.contains('block-img') || img.naturalWidth > 256 || img.naturalHeight > 256) {
+                img.classList.add('block-img', 'blurred');
+            }
+        };
+        if (img.complete || img.classList.contains('block-img')) {
+            blurIllustration();
+        } else {
+            img.addEventListener('load', blurIllustration, { once: true });
+        }
+    });
+)js";
+    }
+
     // The upstream chapter carries its own viewport; replacing it disables
     // pinch zoom and keeps CSS pixels equal to device-independent pixels.
     script += R"js(    var viewport = document.querySelector('meta[name="viewport"]');

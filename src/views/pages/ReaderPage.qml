@@ -390,6 +390,10 @@ Item {
         modal: true
         padding: 0
         onAboutToShow: navigationTabs.currentIndex = 0
+        onOpened: {
+            if (chaptersList.visible && chaptersList.currentIndex >= 0)
+                chaptersList.positionViewAtIndex(chaptersList.currentIndex, ListView.Center)
+        }
         onClosed: {
             bookSearch.text = ""
             ReaderViewModel.clearBookSearch()
@@ -432,39 +436,12 @@ Item {
                 TabButton { text: qsTr("Highlights") }
             }
 
-            ListView {
+            ReaderContents {
                 id: chaptersList
                 Layout.fillWidth: true
                 Layout.fillHeight: true
                 visible: navigationTabs.currentIndex === 0
-                clip: true
-                model: ReaderViewModel.chapters
-                currentIndex: {
-                    const offset = ReaderViewModel.characterOffset
-                    let best = -1
-                    let start = 0
-                    for (let i = 0; i < model.length; ++i) {
-                        const candidate = model[i].characterStart
-                        if (candidate >= start && candidate <= offset) {
-                            best = i
-                            start = candidate
-                        }
-                    }
-                    return best
-                }
-                delegate: ItemDelegate {
-                    id: chapterItem
-                    required property var modelData
-                    width: ListView.view.width
-                    leftPadding: padding + 12 * chapterItem.modelData.level
-                    text: chapterItem.modelData.title
-                    highlighted: ListView.isCurrentItem
-                    onClicked: {
-                        ReaderViewModel.goToContentsEntry(chapterItem.modelData.index,
-                                                          chapterItem.modelData.fragment)
-                        toc.close()
-                    }
-                }
+                onChapterSelected: toc.close()
             }
 
             ColumnLayout {

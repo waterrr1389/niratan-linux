@@ -122,10 +122,6 @@ int ReaderViewModel::chapter_characters_remaining() const {
                : 0;
 }
 
-int ReaderViewModel::page_count() const { return state_->page_count; }
-
-int ReaderViewModel::page_index() const { return state_->page_index; }
-
 bool ReaderViewModel::shows_page_count() const {
     return !state_->settings.continuous_mode && state_->settings.progress_count == "Pages";
 }
@@ -392,7 +388,7 @@ void ReaderViewModel::setVerticalWriting(bool vertical) {
     }
     state_->settings.vertical_writing = vertical;
     emit settingsChanged();
-    reload_document();
+    reload_document(true);
 }
 
 int ReaderViewModel::font_size() const { return state_->settings.font_size; }
@@ -404,7 +400,7 @@ void ReaderViewModel::setFontSize(int size) {
     }
     state_->settings.font_size = clamped;
     emit settingsChanged();
-    reload_document();
+    reload_document(true);
 }
 
 int ReaderViewModel::horizontal_padding() const { return state_->settings.horizontal_padding; }
@@ -416,7 +412,7 @@ void ReaderViewModel::setHorizontalPadding(int padding) {
     }
     state_->settings.horizontal_padding = clamped;
     emit settingsChanged();
-    reload_document();
+    reload_document(true);
 }
 
 int ReaderViewModel::vertical_padding() const { return state_->settings.vertical_padding; }
@@ -428,7 +424,7 @@ void ReaderViewModel::setVerticalPadding(int padding) {
     }
     state_->settings.vertical_padding = clamped;
     emit settingsChanged();
-    reload_document();
+    reload_document(true);
 }
 
 bool ReaderViewModel::importAndOpen(const QUrl& file) {
@@ -517,7 +513,7 @@ bool ReaderViewModel::openBook(const QString& folder) {
 
     emit bookChanged();
     emit highlightsChanged();
-    reload_document();
+    reload_document(true);
     emit chapterChanged();
     emit progressChanged();
     refresh_statistics(true);
@@ -549,6 +545,7 @@ void ReaderViewModel::closeBook() {
     emit restoreStateChanged();
     state_->fragment.clear();
     state_->chapter_url.clear();
+    state_->spine_page_counts.clear();
     set_pagination(0, 0);
     emit bookChanged();
     emit highlightsChanged();
@@ -566,7 +563,7 @@ void ReaderViewModel::setPageSize(int width, int height) {
     }
     state_->page_width = new_width;
     state_->page_height = new_height;
-    reload_document();
+    reload_document(true);
 }
 
 void ReaderViewModel::goToChapter(int index) {
@@ -621,10 +618,7 @@ void ReaderViewModel::handlePageTurnResult(bool forward, const QVariant& result)
     }
     // NativeReaderView's onPageTurn: Page Turn mode starts here, before the
     // result moves the position.
-    if (state_->tracker) {
-        state_->tracker->on_manual_navigation(now_milliseconds());
-        refresh_statistics();
-    }
+    start_tracking_on_navigation();
     if (result.typeId() == QMetaType::Double || result.typeId() == QMetaType::Int) {
         updateChapterProgress(result.toDouble());
         return;
@@ -708,10 +702,7 @@ void ReaderViewModel::message(const QString& name, const QString& payload) {
         }
         // The wheel is a manual page turn; Page Turn mode starts here, before
         // the page runs the navigation the signal asks for.
-        if (state_->tracker) {
-            state_->tracker->on_manual_navigation(now_milliseconds());
-            refresh_statistics();
-        }
+        start_tracking_on_navigation();
         emit pageTurnRequested(direction);
     } else if (name == QStringLiteral("restoreCompleted") && state_->restoring) {
         state_->restoring = false;
@@ -733,9 +724,13 @@ void ReaderViewModel::message(const QString& name, const QString& payload) {
         }
         const bool reveal = std::exchange(state_->reveal_cue_after_restore, false);
         emit documentRestored(reveal);
-    } else if (name == QStringLiteral("progressChanged")) {
-        updateChapterProgress(
-            data.value(QStringLiteral("progress")).toDouble(state_->chapter_progress));
+    } else if (name == QStringLiteral("progressChanged") && !state_->restoring &&
+               state_->settings.continuous_mode) {
+        const double progress = data.value(QStringLiteral("progress")).toDouble(state_->chapter_progress);
+        if (std::abs(clamp_progress(progress) - state_->chapter_progress) >= 1e-6) {
+            start_tracking_on_navigation();
+            updateChapterProgress(progress);
+        }
     } else if (name == QStringLiteral("pageChanged") && !state_->restoring) {
         const int count = data.value(QStringLiteral("pageCount")).toInt();
         const int index = data.value(QStringLiteral("pageIndex")).toInt();
@@ -778,7 +773,7 @@ void ReaderViewModel::load_chapter(int index, double progress, const QString& fr
     refresh_statistics();
 }
 
-void ReaderViewModel::reload_document() {
+void ReaderViewModel::reload_document(bool reflow) {
     if (!state_->session.has_value()) {
         return;
     }
@@ -789,6 +784,9 @@ void ReaderViewModel::reload_document() {
     url.setPath(QLatin1Char('/') + QString::fromStdString(path));
     url.setQuery(QStringLiteral("v=%1").arg(state_->revision));
     state_->chapter_url = QString::fromUtf8(url.toEncoded());
+    if (reflow) {
+        state_->spine_page_counts.assign(state_->session->spine_count(), 0);
+    }
     set_pagination(0, 0);
     emit restoreStateChanged();
     emit chapterUrlChanged();
@@ -817,19 +815,7 @@ void ReaderViewModel::reload_settings(bool reflow) {
     }
     if (reflow && (reader_changed || lookup_changed)) {
         state_->reveal_cue_after_restore = false;
-        reload_document();
-    }
-}
-
-void ReaderViewModel::set_pagination(int index, int count) {
-    if (index == state_->page_index && count == state_->page_count) {
-        return;
-    }
-    state_->page_index = index;
-    state_->page_count = count;
-    emit paginationChanged();
-    if (count > 0) {
-        emit pageChanged(index - 1);
+        reload_document(reader_changed);
     }
 }
 

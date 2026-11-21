@@ -28,8 +28,9 @@
 // change which scripts are injected. This restore neither saves the bookmark
 // nor credits statistics. Dictionary settings still require reopening.
 // TOC fragment jumps use the document's anchor; a missing anchor leaves the
-// reader at the start of that spine item. Page numbers are local to that item
-// and unavailable in continuous mode, as in NativeReaderView.showsPageCount.
+// reader at the start of that spine item. Following ReaderPageIndex.swift's
+// progress, page numbers accumulate measured spine counts and are unavailable
+// in continuous mode. Unmeasured spine items contribute zero pages.
 //
 // Reading statistics
 // ------------------
@@ -43,7 +44,8 @@
 // mode, reset minute) through settings::GlobalSettings; a missing or damaged
 // settings.json gives the defaults. The reader never writes those keys.
 // The tracker is configured with the local time zone, and On mode starts
-// tracking at the open instant. Page Turn mode starts on the first page turn.
+// tracking at the open instant. Page Turn mode starts on a page turn or a
+// continuous scroll that changes reading progress after restore.
 //
 // Time and characters are credited by updateChapterProgress(): it maps the
 // reported chapter progress to BookSession::character_offset and passes the
@@ -107,7 +109,7 @@ class ReaderViewModel : public QObject {
     Q_PROPERTY(int chapterCharactersRemaining READ chapter_characters_remaining NOTIFY progressChanged)
     Q_PROPERTY(int pageCount READ page_count NOTIFY paginationChanged)
     Q_PROPERTY(int pageIndex READ page_index NOTIFY paginationChanged)
-    Q_PROPERTY(int chapterPageCount READ page_count NOTIFY paginationChanged)
+    Q_PROPERTY(int chapterPageCount READ chapter_page_count NOTIFY paginationChanged)
     Q_PROPERTY(bool showsPageCount READ shows_page_count NOTIFY settingsChanged)
     Q_PROPERTY(QString progressCountMode READ progress_count_mode NOTIFY settingsChanged)
     Q_PROPERTY(bool showTitle READ show_title NOTIFY settingsChanged)
@@ -170,6 +172,7 @@ class ReaderViewModel : public QObject {
     int chapter_characters_remaining() const;
     int page_count() const;
     int page_index() const;
+    int chapter_page_count() const;
     bool shows_page_count() const;
     QString progress_count_mode() const;
     bool show_title() const;
@@ -298,7 +301,7 @@ class ReaderViewModel : public QObject {
     std::unique_ptr<State> state_;
 
     void load_chapter(int index, double progress, const QString& fragment = {});
-    void reload_document();
+    void reload_document(bool reflow = false);
     void reload_settings(bool reflow);
     void update_palette();
     void set_pagination(int index, int count);
@@ -306,6 +309,7 @@ class ReaderViewModel : public QObject {
     // Credits the elapsed time without characters and writes the live
     // session. Called before a chapter change; never on a page turn.
     void save_statistics();
+    void start_tracking_on_navigation();
     // Also notifies on book changes and timer ticks, which may change the
     // inspector even if the cached values did not change.
     void refresh_statistics(bool notify = false);

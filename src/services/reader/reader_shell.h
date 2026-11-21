@@ -22,6 +22,8 @@
 //   restore token, writing mode through the stylesheet, and the initial
 //   restore call (a fragment jump or a progress restore).
 //
+// NativeReaderView.injectReader starts large non-gaiji illustrations blurred
+// when UserConfig.blurImages is enabled; SVG elements are also marked.
 // After fonts and images are ready, paginated paragraph mode prepares its
 // layout before highlights and the initial restore expression are applied.
 

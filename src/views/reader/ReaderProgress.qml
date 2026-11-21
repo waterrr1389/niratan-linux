@@ -43,8 +43,8 @@ Rectangle {
                         let count = ""
                         if (!progressLine.modelData && ReaderViewModel.progressCountMode !== "Off") {
                             if (ReaderViewModel.showsPageCount) {
-                                if (ReaderViewModel.pageCount > 0)
-                                    count = qsTr("%1 / %2").arg(ReaderViewModel.pageIndex).arg(ReaderViewModel.chapterPageCount)
+                                if (ReaderViewModel.chapterPageCount > 0)
+                                    count = qsTr("%1 / %2").arg(ReaderViewModel.pageIndex).arg(ReaderViewModel.pageCount)
                             } else {
                                 const remaining = ReaderViewModel.chapterCharactersRemaining
                                 const quantity = ReaderViewModel.englishContent ? Math.ceil(remaining / 5) : remaining
