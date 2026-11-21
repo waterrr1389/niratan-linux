@@ -17,7 +17,6 @@
 
 #include "services/player/video_settings.h"
 #include "services/storage/app_paths.h"
-#include "services/storage/json_file.h"
 
 #include <QByteArray>
 #include <QChar>
@@ -64,40 +63,6 @@ constexpr quint64 kTracksObservation = 2;
 constexpr quint64 kDurationObservation = 3;
 constexpr qint64 kMaxSubtitleDocumentBytes = 16 * 1024 * 1024;
 constexpr int kResumeSaveIntervalMs = 5000;
-constexpr double kResumeMarginSeconds = 10.0;
-
-std::filesystem::path playback_history_path() {
-    const auto root = niratan::storage::data_root();
-    return root.empty() ? root : root / "video_playback.json";
-}
-
-void update_playback_history(const QString& key, const QJsonObject& entry = {}) {
-    const auto path = playback_history_path();
-    if (key.isEmpty() || path.empty()) {
-        return;
-    }
-    const auto read = niratan::storage::read_json_file(path);
-    if (read.status == niratan::storage::JsonReadStatus::invalid ||
-        (read.status == niratan::storage::JsonReadStatus::success && !read.document.isObject())) {
-        return;
-    }
-    auto records = read.document.object();
-    if (entry.isEmpty()) {
-        if (!records.contains(key)) {
-            return;
-        }
-        records.remove(key);
-    } else {
-        const auto previous = records.value(key).toObject();
-        if (previous.value(QStringLiteral("position")) == entry.value(QStringLiteral("position")) &&
-            previous.value(QStringLiteral("duration")) == entry.value(QStringLiteral("duration"))) {
-            return;
-        }
-        records.insert(key, entry);
-    }
-    niratan::storage::write_json_file(path, QJsonDocument(records));
-}
-
 QVariantMap node_fields(const mpv_node& node) {
     QVariantMap fields;
     if (node.format != MPV_FORMAT_NODE_MAP || node.u.list == nullptr) {
@@ -536,8 +501,7 @@ void MpvItem::unload() {
 void MpvItem::replace_file(const QUrl& file) {
     const QString next_path = file.isLocalFile() && !file.toLocalFile().isEmpty()
         ? QFileInfo(file.toLocalFile()).absoluteFilePath() : QString{};
-    // Persist the outgoing file before the path changes; only reaching the end
-    // of a file clears its record.
+    // Persist the outgoing file before the path changes.
     save_playback_position();
     local_video_path_ = next_path;
     set_resume_position(0.0);
@@ -632,26 +596,27 @@ void MpvItem::save_playback_position() {
         return;
     }
     if (get_bool("eof-reached", false)) {
-        clear_playback_position();
+        record_finished_playback();
         return;
     }
     const double position = get_double("time-pos", position_);
-    if (!std::isfinite(position) || !std::isfinite(duration_) || duration_ <= 0.0) {
+    if (!std::isfinite(position) || !std::isfinite(duration_)) {
         return;
     }
-    if (position <= 0.0) {
-        clear_playback_position();
-        return;
+    playback_history_.save(local_video_path_, position, duration_);
+}
+
+void MpvItem::record_finished_playback() {
+    if (video_settings_.value("videoRememberPlaybackPosition").toBool()
+        && !local_video_path_.isEmpty() && std::isfinite(duration_)) {
+        playback_history_.save(local_video_path_, duration_, duration_);
     }
-    update_playback_history(local_video_path_, {
-        {QStringLiteral("position"), position},
-        {QStringLiteral("duration"), duration_},
-        {QStringLiteral("updatedAt"), QDateTime::currentDateTimeUtc().toString(Qt::ISODateWithMs)},
-    });
 }
 
 void MpvItem::clear_playback_position() {
-    update_playback_history(local_video_path_);
+    if (!local_video_path_.isEmpty()) {
+        playback_history_.clear(local_video_path_);
+    }
 }
 
 void MpvItem::set_resume_position(double position) {
@@ -662,18 +627,17 @@ void MpvItem::set_resume_position(double position) {
 }
 
 void MpvItem::restore_playback_position() {
-    const auto path = playback_history_path();
     if (!video_settings_.value("videoRememberPlaybackPosition").toBool()
-        || local_video_path_.isEmpty() || path.empty()) {
+        || local_video_path_.isEmpty()) {
         return;
     }
-    const auto records = niratan::storage::read_json_file(path).document.object();
-    const double position = records.value(local_video_path_).toObject()
-        .value(QStringLiteral("position")).toDouble();
-    if (position > kResumeMarginSeconds && duration_ - position > kResumeMarginSeconds) {
-        seek(position);
-        set_resume_position(position);
+    const auto position = playback_history_.resume_position(local_video_path_);
+    if (!position) {
+        return;
     }
+    const double target = duration_ > 0.0 ? std::min(*position, duration_) : *position;
+    seek(target);
+    set_resume_position(target);
 }
 
 void MpvItem::restartFromBeginning() {
@@ -1236,7 +1200,9 @@ void MpvItem::poll() {
                 }
                 if (file_ready_) {
                     if (end != nullptr && end->reason == MPV_END_FILE_REASON_EOF) {
-                        clear_playback_position();
+                        if (!ended_) {
+                            record_finished_playback();
+                        }
                         set_resume_position(0.0);
                         if (!ended_) {
                             ended_ = true;
@@ -1343,7 +1309,7 @@ void MpvItem::poll() {
     if (file_ready_ && get_bool("eof-reached", false)) {
         if (!ended_) {
             ended_ = true;
-            clear_playback_position();
+            record_finished_playback();
             set_resume_position(0.0);
             emit ended();
         }

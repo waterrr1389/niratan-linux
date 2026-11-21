@@ -70,6 +70,7 @@ qt_add_library(niratan_core STATIC
     src/services/novels/epub_book.cpp
     src/services/player/mining_history.cpp
     src/services/player/playback_controls.cpp
+    src/services/player/playback_history.cpp
     src/services/player/video_settings.cpp
     src/services/profiles/profile_repository.cpp
     src/services/settings/global_settings.cpp

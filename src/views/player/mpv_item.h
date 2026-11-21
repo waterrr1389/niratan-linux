@@ -14,7 +14,9 @@
 // Cue times are in the subtitle timeline (before delay); missing times read
 // as -1. Track types use mpv's video, audio and sub identifiers.
 // Local resume follows VideoPlayerViewModel.swift's save and loaded-restore
-// order, with a ten-second margin at each end and no remote history.
+// order through player::PlaybackHistory: saved every 5 s while playing and
+// when the file changes or the item goes away, recorded as finished at the
+// end, restored when resumable, with no remote history.
 // Embedded transcripts follow VideoPlayerScreen+Subtitles.swift's track
 // lifecycle, using mpv's ff-index (not its subtitle selection ID) for ffmpeg.
 //
@@ -26,6 +28,7 @@
 #pragma once
 
 #include "services/player/playback_controls.h"
+#include "services/player/playback_history.h"
 
 #include <QQuickFramebufferObject>
 #include <QByteArray>
@@ -176,6 +179,7 @@ class MpvItem : public QQuickFramebufferObject {
     void replace_file(const QUrl& file);
     void open_when_ready(const QUrl& file, quint64 generation);
     void save_playback_position();
+    void record_finished_playback();
     void clear_playback_position();
     void restore_playback_position();
     void set_resume_position(double position);
@@ -218,6 +222,7 @@ class MpvItem : public QQuickFramebufferObject {
     QString local_video_path_;
     QElapsedTimer resume_save_timer_;
     double resume_position_ = 0.0;
+    niratan::player::PlaybackHistory playback_history_ = niratan::player::PlaybackHistory::at_data_root();
     int selected_subtitle_id_ = -1;
     QProcess* transcript_process_ = nullptr;
     bool chapters_dirty_ = true;
