@@ -71,6 +71,8 @@ qt_add_library(niratan_core STATIC
     src/services/player/mining_history.cpp
     src/services/player/playback_controls.cpp
     src/services/player/playback_history.cpp
+    src/services/player/transcript_extractor.cpp
+    src/services/player/transcript_extractor.h
     src/services/player/video_settings.cpp
     src/services/profiles/profile_repository.cpp
     src/services/settings/global_settings.cpp

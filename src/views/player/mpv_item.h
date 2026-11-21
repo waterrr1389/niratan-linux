@@ -18,7 +18,9 @@
 // when the file changes or the item goes away, recorded as finished at the
 // end, restored when resumable, with no remote history.
 // Embedded transcripts follow VideoPlayerScreen+Subtitles.swift's track
-// lifecycle, using mpv's ff-index (not its subtitle selection ID) for ffmpeg.
+// lifecycle: the item picks the selected text track and hands mpv's ff-index
+// (not its subtitle selection ID) to player::TranscriptExtractor, and cancels
+// the extraction when the track or file changes.
 //
 // The handle is created with the same safety options as HSMpvClient:
 // config=no, osc=no, input-default-bindings=no, keep-open=yes, vo=libmpv.
@@ -29,6 +31,7 @@
 
 #include "services/player/playback_controls.h"
 #include "services/player/playback_history.h"
+#include "services/player/transcript_extractor.h"
 
 #include <QQuickFramebufferObject>
 #include <QByteArray>
@@ -42,8 +45,6 @@
 #include <QtQml/qqmlregistration.h>
 
 #include <mpv/client.h>
-
-class QProcess;
 
 class MpvItem : public QQuickFramebufferObject {
     Q_OBJECT
@@ -217,7 +218,8 @@ class MpvItem : public QQuickFramebufferObject {
     double resume_position_ = 0.0;
     niratan::player::PlaybackHistory playback_history_ = niratan::player::PlaybackHistory::at_data_root();
     int selected_subtitle_id_ = -1;
-    QProcess* transcript_process_ = nullptr;
+    niratan::player::TranscriptExtractor transcript_extractor_{
+        niratan::player::TranscriptExtractor::default_cache_directory()};
     bool chapters_dirty_ = true;
     bool tracks_dirty_ = true;
     QVariantList chapters_;

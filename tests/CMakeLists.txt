@@ -350,6 +350,14 @@ target_link_libraries(tst_playback_history PRIVATE niratan_core Qt6::Test)
 target_compile_options(tst_playback_history PRIVATE -Wall -Wextra -Wpedantic -Werror)
 add_test(NAME playback_history COMMAND tst_playback_history)
 
+qt_add_executable(tst_transcript_extractor
+    player/tst_transcript_extractor.cpp
+)
+target_include_directories(tst_transcript_extractor PRIVATE ${CMAKE_SOURCE_DIR}/src)
+target_link_libraries(tst_transcript_extractor PRIVATE niratan_core Qt6::Test)
+target_compile_options(tst_transcript_extractor PRIVATE -Wall -Wextra -Wpedantic -Werror)
+add_test(NAME transcript_extractor COMMAND tst_transcript_extractor)
+
 qt_add_executable(tst_sasayaki
     sasayaki/tst_sasayaki.cpp
 )

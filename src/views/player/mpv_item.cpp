@@ -12,19 +12,13 @@
 
 #include <QByteArray>
 #include <QChar>
-#include <QCryptographicHash>
 #include <QDateTime>
 #include <QDebug>
-#include <QDir>
-#include <QFile>
 #include <QFileInfo>
 #include <QJsonObject>
 #include <QMetaObject>
-#include <QProcess>
 #include <QSize>
 #include <QString>
-#include <QStandardPaths>
-#include <QTemporaryFile>
 #include <QUrl>
 
 #include <mpv/client.h>
@@ -45,7 +39,6 @@ constexpr double kMaxDelaySeconds = 60.0;
 constexpr quint64 kChaptersObservation = 1;
 constexpr quint64 kTracksObservation = 2;
 constexpr quint64 kDurationObservation = 3;
-constexpr qint64 kMaxSubtitleDocumentBytes = 16 * 1024 * 1024;
 constexpr int kResumeSaveIntervalMs = 5000;
 QVariantMap node_fields(const mpv_node& node) {
     QVariantMap fields;
@@ -126,6 +119,15 @@ MpvItem::MpvItem(QQuickItem* parent) : QQuickFramebufferObject(parent),
 
     poll_timer_.setInterval(kPollIntervalMs);
     connect(&poll_timer_, &QTimer::timeout, this, &MpvItem::poll);
+    connect(&transcript_extractor_, &niratan::player::TranscriptExtractor::runningChanged, this,
+            [this] {
+                if (transcript_extractor_.running()) {
+                    emit embeddedTranscriptChanged({}, {});
+                }
+                emit extractingTranscriptChanged();
+            });
+    connect(&transcript_extractor_, &niratan::player::TranscriptExtractor::finished, this,
+            &MpvItem::embeddedTranscriptChanged);
     poll_timer_.start();
 }
 
@@ -266,7 +268,7 @@ QVariantList MpvItem::chapters() const { return chapters_; }
 QVariantList MpvItem::tracks() const { return tracks_; }
 bool MpvItem::resumeAvailable() const { return resume_position_ > 0.0; }
 qreal MpvItem::resumePosition() const { return resume_position_; }
-bool MpvItem::extractingTranscript() const { return transcript_process_ != nullptr; }
+bool MpvItem::extractingTranscript() const { return transcript_extractor_.running(); }
 QString MpvItem::subtitleText() const { return subtitle_text_; }
 qreal MpvItem::subtitleStart() const { return subtitle_start_; }
 qreal MpvItem::subtitleEnd() const { return subtitle_end_; }
@@ -514,16 +516,11 @@ void MpvItem::selectSubtitleTrack(int id) {
 }
 
 void MpvItem::cancel_transcript() {
-    if (auto* process = std::exchange(transcript_process_, nullptr)) {
-        process->disconnect(this);
-        process->kill();
-        process->deleteLater();
-        emit extractingTranscriptChanged();
-    }
+    transcript_extractor_.cancel();
 }
 
 void MpvItem::extractTranscript() {
-    if (!file_ready_ || transcript_process_) {
+    if (!file_ready_ || transcript_extractor_.running()) {
         return;
     }
     const auto track_it = std::ranges::find_if(tracks_, [this](const QVariant& entry) {
@@ -554,98 +551,7 @@ void MpvItem::extractTranscript() {
         report_error(tr("mpv did not provide a stream index for this subtitle track."));
         return;
     }
-    const auto root = niratan::storage::data_root();
-    const auto directory = QString::fromStdString((root / "Cache/video-subtitles").string());
-    if (root.empty() || !QDir().mkpath(directory)) {
-        report_error(tr("Could not create the embedded transcript cache."));
-        return;
-    }
-    const auto hash = QCryptographicHash::hash(local_video_path_.toUtf8(), QCryptographicHash::Sha256);
-    const QString cache = QDir(directory).filePath(QStringLiteral("%1-%2.srt")
-        .arg(QString::fromLatin1(hash.toHex())).arg(selected_subtitle_id_));
-    const auto mtime = video.lastModified();
-    const auto read_transcript = [this, report_error](const QString& path) {
-        QFile file(path);
-        if (!file.open(QIODevice::ReadOnly)) {
-            report_error(tr("Could not read the extracted transcript."));
-            return;
-        }
-        const auto bytes = file.read(kMaxSubtitleDocumentBytes + 1);
-        if (file.error() != QFile::NoError || bytes.size() > kMaxSubtitleDocumentBytes) {
-            report_error(tr("Could not read the extracted transcript, or it is too large."));
-            return;
-        }
-        if (bytes.isEmpty()) {
-            report_error(tr("No readable cues were found in the embedded subtitle track."));
-            return;
-        }
-        emit embeddedTranscriptChanged(bytes, {});
-    };
-    if (mtime.isValid() && QFileInfo(cache).lastModified() == mtime) {
-        read_transcript(cache);
-        return;
-    }
-    const QString ffmpeg = QStandardPaths::findExecutable(QStringLiteral("ffmpeg"));
-    if (ffmpeg.isEmpty()) {
-        report_error(tr("ffmpeg was not found on PATH."));
-        return;
-    }
-
-    // Keep partial output out of the shared cache, even if the track changes
-    // or a second player extracts the same track.
-    auto* process = new QProcess(this);
-    auto* staging = new QTemporaryFile(cache + QStringLiteral(".XXXXXX.srt"), process);
-    if (!staging->open()) {
-        delete process;
-        report_error(tr("Could not create a temporary transcript file."));
-        return;
-    }
-    staging->close();
-    const auto finish = [this, process] {
-        transcript_process_ = nullptr;
-        process->deleteLater();
-        emit extractingTranscriptChanged();
-    };
-    connect(process, &QProcess::errorOccurred, this, [this, finish, report_error](auto error) {
-        if (error == QProcess::FailedToStart) {
-            finish();
-            report_error(tr("Could not start ffmpeg to extract the transcript."));
-        }
-    });
-    connect(process, &QProcess::finished, this,
-            [this, finish, report_error, read_transcript, staging, cache,
-             mtime, video_path = local_video_path_](int code, QProcess::ExitStatus status) {
-        finish();
-        if (status != QProcess::NormalExit || code != 0) {
-            report_error(tr("ffmpeg could not extract this subtitle track as text."));
-            return;
-        }
-        if (QFileInfo(video_path).lastModified() != mtime) {
-            report_error(tr("The video changed while extracting its transcript. Please try again."));
-            return;
-        }
-        QFile output(staging->fileName());
-        if (mtime.isValid() && output.open(QIODevice::ReadWrite) &&
-            output.setFileTime(mtime, QFileDevice::FileModificationTime)) {
-            output.close();
-            std::error_code error;
-            std::filesystem::rename(staging->fileName().toStdString(), cache.toStdString(), error);
-            if (!error) {
-                read_transcript(cache);
-                return;
-            }
-        }
-        read_transcript(staging->fileName());
-    });
-    transcript_process_ = process;
-    emit embeddedTranscriptChanged({}, {});
-    emit extractingTranscriptChanged();
-    process->setStandardOutputFile(QProcess::nullDevice());
-    process->setStandardErrorFile(QProcess::nullDevice());
-    process->start(ffmpeg, {QStringLiteral("-nostdin"), QStringLiteral("-y"),
-        QStringLiteral("-i"), local_video_path_, QStringLiteral("-map"),
-        QStringLiteral("0:%1").arg(index), QStringLiteral("-c:s"), QStringLiteral("srt"),
-        staging->fileName()});
+    transcript_extractor_.start(local_video_path_, selected_subtitle_id_, index);
 }
 
 void MpvItem::disableSubtitles() {
@@ -936,14 +842,10 @@ void MpvItem::refresh_tracks() {
         if (subtitle_document_.isEmpty()) {
             emit subtitleDocumentChanged({}, {}, false);
         } else {
-            QFile file(subtitle_document_.toLocalFile());
-            const bool opened = QFileInfo(file).isFile() && file.open(QIODevice::ReadOnly);
-            const QByteArray bytes = opened ? file.read(kMaxSubtitleDocumentBytes + 1)
-                                            : QByteArray{};
-            const bool readable = opened && file.error() == QFile::NoError &&
-                                  bytes.size() <= kMaxSubtitleDocumentBytes;
-            emit subtitleDocumentChanged(subtitle_document_, readable ? bytes : QByteArray{},
-                                         readable);
+            const auto bytes =
+                niratan::player::read_subtitle_document(subtitle_document_.toLocalFile());
+            emit subtitleDocumentChanged(subtitle_document_, bytes.value_or(QByteArray{}),
+                                         bytes.has_value());
         }
     }
 }
