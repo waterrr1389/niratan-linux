@@ -2,7 +2,8 @@
 //
 // Reader, dictionary and statistics controls follow AppearanceView,
 // DictionaryBehaviorSettingsSections and StatisticsSettingsView. The section
-// rail keeps profile preferences separate from global statistics preferences.
+// rail itself is SettingsSectionRail.qml; its Anki entry reports
+// ankiRequested(), which MainWindow turns into the Anki settings page.
 
 pragma ComponentBehavior: Bound
 
@@ -15,6 +16,7 @@ Page {
     id: page
 
     signal backRequested
+    signal ankiRequested
 
     padding: 0
     palette.window: Theme.windowBackground
@@ -165,78 +167,14 @@ Page {
             Layout.fillHeight: true
             spacing: 0
 
-            Pane {
-                Layout.fillHeight: true
-                padding: Theme.spacingSm
+            SettingsSectionRail {
+                id: rail
 
-                background: Rectangle {
-                    color: Theme.cardBackground
-
-                    Rectangle {
-                        anchors.top: parent.top
-                        anchors.right: parent.right
-                        anchors.bottom: parent.bottom
-                        width: Theme.cardBorderWidth
-                        color: Theme.cardStroke
-                    }
+                selected: settings.section
+                onSectionSelected: index => {
+                    settings.section = index;
                 }
-
-                contentItem: ColumnLayout {
-                    spacing: Theme.spacingXs
-
-                    Repeater {
-                        model: [qsTr("Reader"), qsTr("Dictionary"), qsTr("Statistics")]
-
-                        delegate: Button {
-                            id: sectionButton
-
-                            required property int index
-                            required property string modelData
-                            readonly property bool selected: settings.section === sectionButton.index
-
-                            Layout.fillWidth: true
-                            leftPadding: Theme.spacingLg
-                            rightPadding: Theme.spacingLg
-                            text: sectionButton.modelData
-                            Accessible.selected: sectionButton.selected
-                            onClicked: settings.section = sectionButton.index
-
-                            contentItem: Label {
-                                text: sectionButton.text
-                                color: Theme.textPrimary
-                                font.pixelSize: Theme.fontBody
-                                font.weight: sectionButton.selected ? Font.DemiBold : Font.Normal
-                                verticalAlignment: Text.AlignVCenter
-                            }
-
-                            background: Item {
-                                Rectangle {
-                                    anchors.fill: parent
-                                    visible: sectionButton.selected || sectionButton.hovered || sectionButton.activeFocus
-                                    color: Theme.windowBackground
-                                    radius: Theme.controlRadius
-                                    border.width: sectionButton.visualFocus ? 1 : 0
-                                    border.color: Theme.accent
-                                }
-
-                                Rectangle {
-                                    anchors.left: parent.left
-                                    anchors.leftMargin: Theme.spacingXs
-                                    anchors.verticalCenter: parent.verticalCenter
-                                    width: 2
-                                    height: Theme.spacingLg
-                                    radius: 1
-                                    visible: sectionButton.selected
-                                    color: Theme.accent
-                                }
-                            }
-                        }
-                    }
-
-                    Item {
-                        Layout.fillHeight: true
-                    }
-                }
+                onAnkiRequested: page.ankiRequested()
             }
 
             ScrollView {

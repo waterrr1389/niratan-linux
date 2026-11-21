@@ -85,6 +85,14 @@ ApplicationWindow {
         id: settingsPage
         SettingsPage {
             onBackRequested: stack.pop()
+            onAnkiRequested: stack.push(ankiPage)
+        }
+    }
+
+    Component {
+        id: ankiPage
+        AnkiSettingsPage {
+            onBackRequested: stack.pop()
         }
     }
 }

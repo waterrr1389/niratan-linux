@@ -175,6 +175,9 @@ qt_add_qml_module(niratan_app
         src/views/MainWindow.qml
         src/views/components/PageHeader.qml
         src/views/dictionary/AnkiMiningToast.qml
+        src/views/pages/AnkiFieldRow.qml
+        src/views/pages/AnkiSettingsAlerts.qml
+        src/views/pages/AnkiSettingsPage.qml
         src/views/pages/DictionaryPage.qml
         src/views/pages/LibraryPage.qml
         src/views/pages/LibraryShelfSidebar.qml
@@ -183,6 +186,7 @@ qt_add_qml_module(niratan_app
         src/views/pages/StatisticsPage.qml
         src/views/statistics/StatisticsDeleteDialog.qml
         src/views/pages/SettingsPage.qml
+        src/views/pages/SettingsSectionRail.qml
         src/views/pages/SettingRow.qml
         src/views/pages/SettingsSliderRow.qml
         src/views/reader/SasayakiPanel.qml

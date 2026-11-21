@@ -29,6 +29,7 @@
 #include <QtWebEngineQuick/QtWebEngineQuick>
 
 #include <clocale>
+#include <memory>
 
 Q_IMPORT_QML_PLUGIN(NiratanPlugin)
 
@@ -46,6 +47,19 @@ QString error_text(const QQmlComponent& component) {
         lines.append(error.toString());
     }
     return lines.join('\n');
+}
+
+// Every non-empty text string the page created, in declaration order. A row a
+// conditional leaves out is missing here, as it is missing from the view.
+QStringList page_texts(QQuickItem* page) {
+    QStringList texts;
+    for (QObject* child : page->findChildren<QObject*>()) {
+        const QVariant text = child->property("text");
+        if (text.isValid() && !text.toString().isEmpty()) {
+            texts.append(text.toString());
+        }
+    }
+    return texts;
 }
 
 // QML reports compile errors and binding failures through the message handler.
@@ -74,10 +88,15 @@ class QmlLoadTest : public QObject {
     void initTestCase();
     void main_window_loads();
     void page_components_load();
+    void anki_settings_page_connection_rows();
+    void settings_page_offers_anki_section();
 
    private:
     // Empty when the component loaded without a QML warning.
     QString warnings_after(const QString& label);
+
+    // Creates a page from src/views/pages inside window; null with error set.
+    std::unique_ptr<QObject> create_page(const QString& page, QQuickWindow& window, QString& error);
 
     QQmlApplicationEngine engine_;
 };
@@ -105,37 +124,150 @@ void QmlLoadTest::main_window_loads() {
 
 void QmlLoadTest::page_components_load() {
     const QStringList pages{
-        QStringLiteral("DictionaryPage"), QStringLiteral("LibraryPage"),
-        QStringLiteral("PlayerPage"),     QStringLiteral("ProfilesPage"),
-        QStringLiteral("ReaderPage"),     QStringLiteral("SettingsPage"),
-        QStringLiteral("StatisticsPage"),
+        QStringLiteral("AnkiSettingsPage"), QStringLiteral("DictionaryPage"),
+        QStringLiteral("LibraryPage"),      QStringLiteral("PlayerPage"),
+        QStringLiteral("ProfilesPage"),     QStringLiteral("ReaderPage"),
+        QStringLiteral("SettingsPage"),     QStringLiteral("StatisticsPage"),
     };
 
     QQuickWindow window;
     window.resize(960, 640);
 
     for (const QString& page : pages) {
-        const QUrl url(QStringLiteral("qrc:/qt/qml/Niratan/src/views/pages/%1.qml").arg(page));
-        QQmlComponent component(&engine_, url);
-        QVERIFY2(!component.isError(),
-                 qPrintable(page + QStringLiteral(": ") + error_text(component)));
-
-        QScopedPointer<QObject> object(component.beginCreate(engine_.rootContext()));
-        QVERIFY2(object != nullptr,
-                 qPrintable(page + QStringLiteral(": ") + error_text(component)));
-
-        auto* item = qobject_cast<QQuickItem*>(object.data());
-        QVERIFY2(item != nullptr, qPrintable(page + QStringLiteral(" is not an Item")));
-        item->setParentItem(window.contentItem());
-        item->setWidth(960);
-        item->setHeight(640);
-        component.completeCreate();
+        QString error;
+        std::unique_ptr<QObject> object = create_page(page, window, error);
+        QVERIFY2(object != nullptr, qPrintable(error));
 
         const QString warnings = warnings_after(page);
         QVERIFY2(warnings.isEmpty(), qPrintable(warnings));
         object.reset();
         QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
     }
+}
+
+std::unique_ptr<QObject> QmlLoadTest::create_page(const QString& page, QQuickWindow& window,
+                                                  QString& error) {
+    const QUrl url(QStringLiteral("qrc:/qt/qml/Niratan/src/views/pages/%1.qml").arg(page));
+    QQmlComponent component(&engine_, url);
+    if (component.isError()) {
+        error = page + QStringLiteral(": ") + error_text(component);
+        return {};
+    }
+
+    std::unique_ptr<QObject> object(component.beginCreate(engine_.rootContext()));
+    if (!object) {
+        error = page + QStringLiteral(": ") + error_text(component);
+        return {};
+    }
+
+    auto* item = qobject_cast<QQuickItem*>(object.get());
+    if (item == nullptr) {
+        error = page + QStringLiteral(" is not an Item");
+        return {};
+    }
+    item->setParentItem(window.contentItem());
+    item->setWidth(960);
+    item->setHeight(640);
+    component.completeCreate();
+    return object;
+}
+
+// Features/Settings/AnkiView.swift body: the connection card exists before any
+// connection, with Address, the masked API key from AnkiConnectView.swift, the
+// status line and Connect. The sections behind AnkiManager.isConnected are not
+// created while the page is not connected.
+void QmlLoadTest::anki_settings_page_connection_rows() {
+    QQuickWindow window;
+    window.resize(960, 640);
+    QString error;
+    std::unique_ptr<QObject> object =
+        create_page(QStringLiteral("AnkiSettingsPage"), window, error);
+    QVERIFY2(object != nullptr, qPrintable(error));
+    auto* item = qobject_cast<QQuickItem*>(object.get());
+    QVERIFY2(item != nullptr, "AnkiSettingsPage is not an Item");
+
+    // Read the disconnected state before the event loop delivers the page's
+    // opening ping, so a locally running Anki cannot change this result.
+    const QStringList texts = page_texts(item);
+
+    const QStringList shown{
+        QStringLiteral("Anki"),
+        QStringLiteral("AnkiConnect"),
+        QStringLiteral("Address"),
+        QStringLiteral("API Key (optional)"),
+        QStringLiteral("Status: Not connected"),
+        QStringLiteral("Connect"),
+        QStringLiteral("Card creation uses AnkiConnect."),
+    };
+    for (const QString& text : shown) {
+        QVERIFY2(
+            texts.contains(text),
+            qPrintable(text + QStringLiteral(" missing: ") + texts.join(QStringLiteral(" | "))));
+    }
+
+    // Refresh, AnkiConnect Settings, Config and Settings wait for the
+    // connection; Fields also needs a selected note type. Deferred rows and the
+    // AnkiMobile footer sentence are not part of the page.
+    const QStringList hidden{
+        QStringLiteral("Refresh"),
+        QStringLiteral("Fetch decks and models from AnkiConnect"),
+        QStringLiteral("AnkiConnect Settings"),
+        QStringLiteral("Duplicate Scope"),
+        QStringLiteral("Check All Models"),
+        QStringLiteral("Config"),
+        QStringLiteral("Deck"),
+        QStringLiteral("Model"),
+        QStringLiteral("Settings"),
+        QStringLiteral("Allow Duplicates"),
+        QStringLiteral("Compact Glossaries"),
+        QStringLiteral("Compress Images"),
+        QStringLiteral("Fields"),
+        QStringLiteral("Apply Defaults"),
+        QStringLiteral("Tags"),
+        QStringLiteral("Force Sync on adding card"),
+        QStringLiteral("Embed Media"),
+        QStringLiteral("Audio Compression Format"),
+        QStringLiteral("Image Format"),
+        QStringLiteral("AnkiMobile callbacks are not used in the Mac app."),
+    };
+    for (const QString& text : hidden) {
+        QVERIFY2(!texts.contains(text),
+                 qPrintable(text + QStringLiteral(" shown while not connected")));
+    }
+
+    // AnkiConnectView.swift uses a SecureField: the key never shows in clear.
+    bool masked = false;
+    for (QObject* child : item->findChildren<QObject*>()) {
+        if (child->property("placeholderText").toString() == QStringLiteral("API Key (optional)") &&
+            child->property("echoMode").toInt() == 2) {
+            masked = true;
+        }
+    }
+    QVERIFY2(masked, "The API key row is not a masked input");
+
+    const QString warnings = warnings_after(QStringLiteral("AnkiSettingsPage"));
+    QVERIFY2(warnings.isEmpty(), qPrintable(warnings));
+}
+
+// SettingsHomeView.swift lists Anki in the settings sidebar; the repo's
+// SettingsPage rail reaches the Anki page through a signal instead.
+void QmlLoadTest::settings_page_offers_anki_section() {
+    QQuickWindow window;
+    window.resize(960, 640);
+    QString error;
+    std::unique_ptr<QObject> object = create_page(QStringLiteral("SettingsPage"), window, error);
+    QVERIFY2(object != nullptr, qPrintable(error));
+    auto* item = qobject_cast<QQuickItem*>(object.get());
+    QVERIFY2(item != nullptr, "SettingsPage is not an Item");
+
+    QVERIFY2(item->metaObject()->indexOfSignal("ankiRequested()") >= 0,
+             "SettingsPage has no ankiRequested signal");
+
+    const QStringList texts = page_texts(item);
+    QVERIFY2(texts.contains(QStringLiteral("Anki")), qPrintable(texts.join(QStringLiteral(" | "))));
+
+    const QString warnings = warnings_after(QStringLiteral("SettingsPage"));
+    QVERIFY2(warnings.isEmpty(), qPrintable(warnings));
 }
 
 int main(int argc, char* argv[]) {
