@@ -51,10 +51,6 @@ using niratan::statistics::StatisticsTrendMetric;
 using niratan::statistics::StatisticsTrendPoint;
 using niratan::statistics::StatisticsWeekSummary;
 
-// The reader stores no statisticsResetTime preference yet, and every model
-// call takes the reset minute as an argument.
-constexpr int kResetMinutes = 0;
-
 // statisticsBookRankingLimit in StatisticsDashboardView.swift.
 constexpr int kRankingPageSize = 12;
 
@@ -191,7 +187,7 @@ StatisticsViewModel* StatisticsViewModel::create(QQmlEngine*, QJSEngine*) {
 StatisticsViewModel::StatisticsViewModel(QObject* parent)
     : QObject(parent), state_(std::make_unique<State>(storage::data_root())) {
     state_->settings = load_settings(state_->settings_path);
-    state_->today = statistics::local_day(QDateTime::currentDateTime(), kResetMinutes,
+    state_->today = statistics::local_day(QDateTime::currentDateTime(), load_reset_minutes(),
                                           QTimeZone::systemTimeZone());
     reset_selection();
     project();
@@ -372,8 +368,9 @@ QVariantMap StatisticsViewModel::target_limits() const {
 }
 
 void StatisticsViewModel::refresh() {
-    state_->today = statistics::local_day(QDateTime::currentDateTime(), kResetMinutes,
-                                          QTimeZone::systemTimeZone());
+    const int reset_minutes = load_reset_minutes();
+    const QTimeZone zone = QTimeZone::systemTimeZone();
+    state_->today = statistics::local_day(QDateTime::currentDateTime(), reset_minutes, zone);
 
     std::vector<StatisticsBookSnapshotInput> inputs;
     for (const BookMetadata& book : state_->storage.load_all_books()) {
@@ -392,8 +389,7 @@ void StatisticsViewModel::refresh() {
         if (const std::optional<BookInfo> info = state_->storage.load_book_info(book.folder)) {
             input.total_characters = info->character_count;
         }
-        for (const Statistics& row : statistics::read_daily_statistics(
-                 *root, kResetMinutes, QTimeZone::systemTimeZone())) {
+        for (const Statistics& row : statistics::read_daily_statistics(*root, reset_minutes, zone)) {
             input.rows.push_back({row.date_key, row.characters_read, row.reading_time,
                                   row.last_statistic_modified});
         }
@@ -446,6 +442,12 @@ void StatisticsViewModel::reset_selection() {
 
     state_->anchor = state_->anchor_explicit ? window.coerce(state_->anchor) : latest;
     state_->selected = state_->selected_explicit ? window.coerce(state_->selected) : latest;
+}
+
+int StatisticsViewModel::load_reset_minutes() const {
+    const QJsonObject object = read_settings_object(state_->settings_path);
+    return statistics::normalized_reset_minutes(
+        object.value(QStringLiteral("statisticsResetTime")).toInt(0));
 }
 
 void StatisticsViewModel::persist_settings() {

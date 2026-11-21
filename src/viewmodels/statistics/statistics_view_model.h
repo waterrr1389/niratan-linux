@@ -20,10 +20,9 @@
 // distinguishable from a library without reading records. Nothing is cached
 // and no placeholder data is shown.
 //
-// `today` is the reporting day of the wall clock in the local zone, read once
-// per refresh(). The reset minute is 0 because this port has no
-// statisticsResetTime store yet; every storage and dashboard call receives it
-// as an argument, so a later setting changes only that constant.
+// `today` and session-derived daily rows use the same local zone and
+// reporting-day reset minute. The global statisticsResetTime setting is read
+// at construction and on refresh(), clamped to 0..1439, and defaults to 0.
 //
 // Settings
 // --------
@@ -174,6 +173,7 @@ class StatisticsViewModel : public QObject {
 
     void project();
     void reset_selection();
+    int load_reset_minutes() const;
     void persist_settings();
 };
 
