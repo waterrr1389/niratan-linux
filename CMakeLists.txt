@@ -102,8 +102,9 @@ target_include_directories(niratan_core PUBLIC src)
 target_link_libraries(niratan_core PUBLIC hoshidicts Qt6::Core Qt6::Network SQLite3::SQLite3 libzip::zip)
 target_compile_options(niratan_core PRIVATE -Wall -Wextra -Wpedantic -Werror)
 
-qt_add_executable(niratan
-    src/main.cpp
+# The application layer above niratan_core: view models, view C++ types and
+# the Niratan QML module. It is a static library so tests can link it.
+qt_add_library(niratan_app STATIC
     src/viewmodels/dictionary/dictionary_popup_model.cpp
     src/viewmodels/dictionary/dictionary_popup_model.h
     src/viewmodels/library/library_view_model.cpp
@@ -139,7 +140,7 @@ qt_add_executable(niratan
     src/views/theme/theme_state.cpp
     src/views/theme/theme_state.h
 )
-qt_add_resources(niratan "reader_scripts"
+qt_add_resources(niratan_app "reader_scripts"
     PREFIX "/niratan/reader"
     BASE "src/web/reader"
     FILES
@@ -150,7 +151,7 @@ qt_add_resources(niratan "reader_scripts"
         src/web/reader/selection.js
 )
 set_source_files_properties(src/views/theme/Theme.qml PROPERTIES QT_QML_SINGLETON_TYPE TRUE)
-qt_add_qml_module(niratan
+qt_add_qml_module(niratan_app
     URI Niratan
     QML_FILES
         src/views/MainWindow.qml
@@ -181,13 +182,19 @@ qt_add_qml_module(niratan
         src/views/theme/Theme.qml
         src/views/theme/ThemePreview.qml
 )
-target_link_libraries(niratan PRIVATE niratan_core Qt6::Quick Qt6::QuickControls2
+target_link_libraries(niratan_app PUBLIC niratan_core Qt6::Quick Qt6::QuickControls2
     Qt6::WebEngineQuick Qt6::WebChannelQuick Qt6::QuickDialogs2 Qt6::OpenGL
     Qt6::Multimedia PkgConfig::MPV)
-target_include_directories(niratan PRIVATE src/views/theme src/viewmodels/dictionary
+target_include_directories(niratan_app PUBLIC src/views/theme src/viewmodels/dictionary
     src/viewmodels/reader src/views/reader src/viewmodels/library src/views/player
     src/viewmodels/profiles src/viewmodels/sasayaki src/viewmodels/statistics
     src/viewmodels/player src/viewmodels/settings)
+target_compile_options(niratan_app PRIVATE -Wall -Wextra -Wpedantic -Werror)
+
+# The QML module is static, so its generated plugin must be imported by the
+# application for the module's types and resources to be registered.
+qt_add_executable(niratan src/main.cpp)
+target_link_libraries(niratan PRIVATE niratan_app niratan_appplugin)
 target_compile_options(niratan PRIVATE -Wall -Wextra -Wpedantic -Werror)
 
 enable_testing()

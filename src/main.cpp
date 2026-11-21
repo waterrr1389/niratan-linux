@@ -8,12 +8,17 @@
 #include <QQuickStyle>
 #include <QStyleHints>
 #include <QWebEngineProfile>
+#include <QtQml/qqmlextensionplugin.h>
 #include <QtWebEngineQuick/QtWebEngineQuick>
 
 #include "viewmodels/reader/reader_view_model.h"
 #include "views/dictionary/audio_scheme_handler.h"
 #include "views/dictionary/dictionary_media_scheme_handler.h"
 #include "views/reader/reader_scheme_handler.h"
+
+// The Niratan QML module is built as a static library, so its plugin is
+// imported here instead of being discovered at run time.
+Q_IMPORT_QML_PLUGIN(NiratanPlugin)
 
 namespace {
 
