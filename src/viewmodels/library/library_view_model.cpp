@@ -295,6 +295,26 @@ void LibraryViewModel::openBook(const QString& folder) {
     emit bookOpened(folder);
 }
 
+void LibraryViewModel::recordBookAccess(const QString& folder) {
+    if (folder.isEmpty()) {
+        return;
+    }
+    const std::string folder_name = folder.toStdString();
+    auto metadata = state_->storage.load_metadata(folder_name);
+    if (!metadata.has_value() || metadata->folder != folder_name) {
+        return;
+    }
+    metadata->last_access = books::reference_now();
+    state_->storage.save_metadata(*metadata);
+    if (const auto index = state_->find_book(folder_name)) {
+        state_->library.books[*index].metadata.last_access = metadata->last_access;
+        if (sort_option_of(state_->sort_option) == SortOption::recent) {
+            state_->rebuild_views();
+            emit booksChanged();
+        }
+    }
+}
+
 void LibraryViewModel::renameBook(const QString& folder, const QString& title) {
     const auto index = state_->find_book(folder.toStdString());
     if (!index.has_value()) {

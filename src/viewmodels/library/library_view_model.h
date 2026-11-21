@@ -19,7 +19,9 @@
 // back to all.
 //
 // The class never exposes QML types beyond QVariantList, and never opens the
-// reader: it emits bookOpened(folder) and the window decides.
+// reader: it emits bookOpened(folder) and the window decides. After a successful
+// open, recordBookAccess follows NativeReaderView.swift (loadBook) by updating
+// the latest stored metadata without changing the rest of the book record.
 
 #pragma once
 
@@ -63,6 +65,7 @@ class LibraryViewModel : public QObject {
     Q_INVOKABLE void refresh();
     Q_INVOKABLE void importBooks(const QList<QUrl>& files);
     Q_INVOKABLE void openBook(const QString& folder);
+    Q_INVOKABLE void recordBookAccess(const QString& folder);
     Q_INVOKABLE void renameBook(const QString& folder, const QString& title);
     Q_INVOKABLE void deleteBook(const QString& folder);
     Q_INVOKABLE void markRead(const QString& folder);

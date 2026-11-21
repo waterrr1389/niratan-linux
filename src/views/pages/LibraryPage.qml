@@ -8,20 +8,15 @@ import QtQuick.Dialogs
 import QtQuick.Layouts
 import Niratan
 
-// The bookshelf: shelves on the left, covers on the right. Values follow
-// BookView.swift (cover 160 wide by default, 110...240, aspect 0.709, 20 pt
-// spacing, titles 16 pt or 13 pt under 140) and BookshelfViewModel's sorting
-// and selection rules.
+// Cover geometry and badges follow BookView.swift (BookshelfLayout, ShelfCoverFrame).
 Item {
     id: page
-
     signal bookOpened(string folder)
     signal dictionaryRequested()
     signal videoRequested()
     signal profilesRequested()
     signal statisticsRequested()
     signal settingsRequested()
-
     property bool selecting: false
     property var selectedFolders: ({})
 
@@ -45,15 +40,11 @@ Item {
 
     LibraryViewModel {
         id: library
+        onBookOpened: folder => page.bookOpened(folder)
     }
-
-    Component.onCompleted: library.refresh()
-
     Connections {
-        target: library
-        function onBookOpened(folder) {
-            page.bookOpened(folder)
-        }
+        target: ReaderViewModel
+        function onBookChanged() { library.recordBookAccess(ReaderViewModel.bookFolder) }
     }
 
     FileDialog {
@@ -69,13 +60,16 @@ Item {
         title: qsTr("Rename Book")
         modal: true
         anchors.centerIn: parent
-        standardButtons: Dialog.Ok | Dialog.Cancel
+        standardButtons: Dialog.Save | Dialog.Cancel
         property string folder
+        property string currentTitle
         TextField {
             id: renameField
             width: 280
+            onAccepted: renameDialog.accept()
         }
-        onAboutToShow: renameField.text = ""
+        onAboutToShow: renameField.text = renameDialog.currentTitle
+        onOpened: renameField.forceActiveFocus()
         onAccepted: library.renameBook(renameDialog.folder, renameField.text)
     }
 
@@ -144,19 +138,16 @@ Item {
     RowLayout {
         anchors.fill: parent
         spacing: 0
-
         Rectangle {
             Layout.fillHeight: true
             Layout.preferredWidth: 208
             color: Theme.cardBackground
             border.width: 1
             border.color: Theme.cardStroke
-
             ColumnLayout {
                 anchors.fill: parent
                 anchors.margins: 8
                 spacing: 2
-
                 Label {
                     Layout.margins: 8
                     text: "Niratan"
@@ -173,7 +164,6 @@ Item {
                     ]
                     delegate: ItemDelegate {
                         id: smartRow
-                        required property int index
                         required property var modelData
                         Layout.fillWidth: true
                         text: smartRow.modelData.label
@@ -193,7 +183,6 @@ Item {
                     model: library.shelves
                     delegate: ItemDelegate {
                         id: shelfRow
-                        required property int index
                         required property var modelData
                         Layout.fillWidth: true
                         text: shelfRow.modelData.name + " (" + shelfRow.modelData.count + ")"
@@ -212,9 +201,7 @@ Item {
                         }
                     }
                 }
-
                 Item { Layout.fillHeight: true }
-
                 Button {
                     Layout.fillWidth: true
                     text: qsTr("New Shelf")
@@ -227,21 +214,20 @@ Item {
             Layout.fillWidth: true
             Layout.fillHeight: true
             spacing: 0
-
             Rectangle {
                 Layout.fillWidth: true
                 Layout.preferredHeight: 48
                 color: Theme.cardBackground
                 border.width: 1
                 border.color: Theme.cardStroke
-
                 RowLayout {
                     anchors.fill: parent
                     anchors.leftMargin: 12
                     anchors.rightMargin: 12
                     spacing: 8
-
                     Label {
+                        Layout.minimumWidth: 0
+                        Layout.maximumWidth: implicitWidth
                         Layout.fillWidth: true
                         text: library.selectedShelf === "all" ? qsTr("All Books")
                             : library.selectedShelf === "reading" ? qsTr("Currently Reading")
@@ -250,14 +236,19 @@ Item {
                         color: Theme.textPrimary
                         font.pixelSize: 16
                         font.bold: true
+                        elide: Text.ElideRight
                     }
-
+                    Label {
+                        text: qsTr("(%1)").arg(library.bookCount)
+                        color: Theme.textSecondary
+                        font.pixelSize: Theme.fontCaption
+                    }
+                    Item { Layout.fillWidth: true }
                     ComboBox {
                         model: [qsTr("Recent"), qsTr("Title"), qsTr("Manual")]
                         currentIndex: library.sortOption
                         onActivated: library.sortOption = currentIndex
                     }
-
                     Slider {
                         width: 120
                         from: 110
@@ -266,7 +257,6 @@ Item {
                         value: library.coverWidth
                         onMoved: library.coverWidth = Math.round(value)
                     }
-
                     Button {
                         text: page.selecting ? qsTr("Done") : qsTr("Select")
                         onClicked: {
@@ -327,7 +317,6 @@ Item {
                 Layout.fillWidth: true
                 Layout.fillHeight: true
                 clip: true
-
                 GridView {
                     id: grid
                     cellWidth: library.coverWidth + 40
@@ -336,13 +325,11 @@ Item {
                     topMargin: 16
                     model: library.books
                     boundsBehavior: Flickable.StopAtBounds
-
                     delegate: Item {
                         id: cell
                         required property var modelData
                         width: grid.cellWidth
                         height: grid.cellHeight
-
                         readonly property bool chosen: page.selectedFolders[cell.modelData.folder] === true
 
                         Rectangle {
@@ -355,7 +342,6 @@ Item {
                             color: Theme.cardBackground
                             border.width: 1
                             border.color: cell.chosen ? Theme.accent : Theme.cardStroke
-
                             Image {
                                 anchors.fill: parent
                                 anchors.margins: 3
@@ -364,7 +350,6 @@ Item {
                                 asynchronous: true
                                 visible: source.toString().length > 0
                             }
-
                             Label {
                                 anchors.centerIn: parent
                                 visible: cell.modelData.cover.length === 0
@@ -374,15 +359,23 @@ Item {
                                 horizontalAlignment: Text.AlignHCenter
                                 wrapMode: Text.WordWrap
                             }
-
                             Label {
                                 anchors.right: parent.right
-                                anchors.bottom: parent.bottom
-                                anchors.margins: 6
-                                visible: cell.modelData.finished
+                                anchors.rightMargin: 6
+                                y: cell.chosen ? 6 : parent.height - height - 6
+                                visible: cell.chosen || cell.modelData.finished
                                 text: "\u2713"
-                                color: Theme.textSecondary
-                                font.pixelSize: 22
+                                color: cell.chosen ? Theme.popupBackground : Theme.textSecondary
+                                width: 22
+                                height: width
+                                horizontalAlignment: Text.AlignHCenter
+                                verticalAlignment: Text.AlignVCenter
+                                font.pixelSize: cell.chosen ? Theme.fontBody : Theme.fontLargeTitle
+                                background: Rectangle {
+                                    visible: cell.chosen
+                                    radius: width / 2
+                                    color: Theme.accent
+                                }
                             }
                         }
 
@@ -403,8 +396,6 @@ Item {
                             y: coverFrame.height + 46
                             width: library.coverWidth
                             spacing: 4
-                            visible: cell.modelData.progress > 0
-
                             Item {
                                 Layout.fillWidth: true
                                 height: 3
@@ -431,18 +422,16 @@ Item {
                             anchors.fill: parent
                             acceptedButtons: Qt.LeftButton | Qt.RightButton
                             onClicked: function (mouse) {
-                                if (mouse.button === Qt.RightButton) {
-                                    if (!page.selecting) {
-                                        bookMenu.folder = cell.modelData.folder
-                                        bookMenu.title = cell.modelData.title
-                                        bookMenu.popup()
-                                    }
-                                    return
+                                if (mouse.button === Qt.LeftButton) {
+                                    if (page.selecting)
+                                        page.toggleSelection(cell.modelData.folder)
+                                    else
+                                        library.openBook(cell.modelData.folder)
+                                } else if (!page.selecting) {
+                                    bookMenu.folder = cell.modelData.folder
+                                    bookMenu.bookTitle = cell.modelData.title
+                                    bookMenu.popup()
                                 }
-                                if (page.selecting)
-                                    page.toggleSelection(cell.modelData.folder)
-                                else
-                                    library.openBook(cell.modelData.folder)
                             }
                         }
 
@@ -458,6 +447,7 @@ Item {
                                 text: qsTr("Rename")
                                 onClicked: {
                                     renameDialog.folder = bookMenu.folder
+                                    renameDialog.currentTitle = bookMenu.bookTitle
                                     renameDialog.open()
                                 }
                             }
@@ -495,15 +485,25 @@ Item {
                     }
                 }
             }
-
-            Label {
+            ColumnLayout {
+                id: emptyShelf
+                readonly property bool named: library.selectedShelf.startsWith("shelf:")
                 Layout.alignment: Qt.AlignHCenter
                 Layout.margins: 8
                 visible: library.bookCount === 0
-                text: qsTr("No Books. Import an EPUB using the button above to start reading.")
-                color: Theme.textSecondary
+                Label {
+                    Layout.alignment: Qt.AlignHCenter
+                    text: emptyShelf.named ? qsTr("This Shelf Is Empty")
+                        : qsTr("No Books. Import an EPUB using the button above to start reading.")
+                    color: emptyShelf.named ? Theme.textPrimary : Theme.textSecondary
+                }
+                Label {
+                    Layout.alignment: Qt.AlignHCenter
+                    visible: emptyShelf.named
+                    text: qsTr("Right-click a book and choose Move to Shelf, or use Select.")
+                    color: Theme.textSecondary
+                }
             }
-
             Label {
                 Layout.alignment: Qt.AlignHCenter
                 Layout.margins: 8
