@@ -353,14 +353,30 @@ void PlayerStudyViewModel::setSubtitleDocument(const QUrl& file, const QByteArra
             state_->transcript_error = tr("This subtitle format is not supported for transcripts.");
         } else {
             state_->cues = parse_document(bytes, state_->subtitle_format);
-            std::ranges::stable_sort(state_->cues, [](const Cue& lhs, const Cue& rhs) {
-                return std::tie(lhs.start, lhs.end) < std::tie(rhs.start, rhs.end);
-            });
             if (state_->cues.isEmpty()) {
                 state_->transcript_error = tr("No readable cues were found in this subtitle file.");
             }
         }
     }
+    publish_transcript();
+}
+
+void PlayerStudyViewModel::setEmbeddedTranscript(const QByteArray& bytes, const QString& error) {
+    if (!state_->subtitle_file.isEmpty()) {
+        return;
+    }
+    state_->transcript_error = error;
+    state_->cues = parse_document(bytes, QStringLiteral("srt"));
+    if (!bytes.isEmpty() && state_->cues.isEmpty()) {
+        state_->transcript_error = tr("No readable cues were found in the embedded subtitle track.");
+    }
+    publish_transcript();
+}
+
+void PlayerStudyViewModel::publish_transcript() {
+    std::ranges::stable_sort(state_->cues, [](const Cue& lhs, const Cue& rhs) {
+        return std::tie(lhs.start, lhs.end) < std::tie(rhs.start, rhs.end);
+    });
     state_->end_prefix.clear();
     state_->end_prefix.reserve(state_->cues.size());
     double latest = -1.0;

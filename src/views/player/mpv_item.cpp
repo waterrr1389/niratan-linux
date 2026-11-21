@@ -15,19 +15,29 @@
 
 #include "mpv_item.h"
 
+#include "services/storage/app_paths.h"
+#include "services/storage/json_file.h"
+
 #include <QByteArray>
 #include <QChar>
+#include <QCryptographicHash>
+#include <QDateTime>
 #include <QDebug>
+#include <QDir>
 #include <QFile>
 #include <QFileInfo>
+#include <QJsonObject>
 #include <QMetaObject>
 #include <QMutex>
 #include <QMutexLocker>
 #include <QOpenGLContext>
 #include <QOpenGLFramebufferObject>
 #include <QOpenGLFunctions>
+#include <QProcess>
 #include <QSize>
 #include <QString>
+#include <QStandardPaths>
+#include <QTemporaryFile>
 #include <QUrl>
 
 #include <mpv/client.h>
@@ -38,7 +48,7 @@
 #include <cmath>
 #include <cstdint>
 #include <unordered_map>
-#include <unordered_set>
+#include <utility>
 
 namespace {
 
@@ -58,6 +68,40 @@ constexpr quint64 kChaptersObservation = 1;
 constexpr quint64 kTracksObservation = 2;
 constexpr quint64 kDurationObservation = 3;
 constexpr qint64 kMaxSubtitleDocumentBytes = 16 * 1024 * 1024;
+constexpr int kResumeSaveIntervalMs = 5000;
+constexpr double kResumeMarginSeconds = 10.0;
+
+std::filesystem::path playback_history_path() {
+    const auto root = niratan::storage::data_root();
+    return root.empty() ? root : root / "video_playback.json";
+}
+
+void update_playback_history(const QString& key, const QJsonObject& entry = {}) {
+    const auto path = playback_history_path();
+    if (key.isEmpty() || path.empty()) {
+        return;
+    }
+    const auto read = niratan::storage::read_json_file(path);
+    if (read.status == niratan::storage::JsonReadStatus::invalid ||
+        (read.status == niratan::storage::JsonReadStatus::success && !read.document.isObject())) {
+        return;
+    }
+    auto records = read.document.object();
+    if (entry.isEmpty()) {
+        if (!records.contains(key)) {
+            return;
+        }
+        records.remove(key);
+    } else {
+        const auto previous = records.value(key).toObject();
+        if (previous.value(QStringLiteral("position")) == entry.value(QStringLiteral("position")) &&
+            previous.value(QStringLiteral("duration")) == entry.value(QStringLiteral("duration"))) {
+            return;
+        }
+        records.insert(key, entry);
+    }
+    niratan::storage::write_json_file(path, QJsonDocument(records));
+}
 
 QVariantMap node_fields(const mpv_node& node) {
     QVariantMap fields;
@@ -105,11 +149,6 @@ struct SharedLink {
 
 QMutex g_links_mutex;
 std::unordered_map<const MpvItem*, SharedLink> g_links;
-
-// eof-reached stays true for as long as the ended file is loaded, while
-// ended() must fire once per load. Polling, open() and the destructor all run
-// on the GUI thread, so no lock is needed here.
-std::unordered_set<const MpvItem*> g_ended_items;
 
 class MpvRenderer : public QQuickFramebufferObject::Renderer {
    public:
@@ -316,7 +355,7 @@ MpvItem::MpvItem(QQuickItem* parent) : QQuickFramebufferObject(parent) {
 
 MpvItem::~MpvItem() {
     poll_timer_.stop();
-    g_ended_items.erase(this);
+    save_playback_position();
 
     bool renderer_alive = false;
     {
@@ -457,6 +496,9 @@ QString MpvItem::error() const {
 
 QVariantList MpvItem::chapters() const { return chapters_; }
 QVariantList MpvItem::tracks() const { return tracks_; }
+bool MpvItem::resumeAvailable() const { return resume_position_ > 0.0; }
+qreal MpvItem::resumePosition() const { return resume_position_; }
+bool MpvItem::extractingTranscript() const { return transcript_process_ != nullptr; }
 QString MpvItem::subtitleText() const { return subtitle_text_; }
 qreal MpvItem::subtitleStart() const { return subtitle_start_; }
 qreal MpvItem::subtitleEnd() const { return subtitle_end_; }
@@ -482,13 +524,38 @@ void MpvItem::open(const QUrl& file) {
     if (file.isEmpty()) {
         return;
     }
+    replace_file(file);
+}
+
+void MpvItem::unload() {
+    if (handle_ != nullptr) {
+        replace_file({});
+    }
+}
+
+void MpvItem::replace_file(const QUrl& file) {
+    const QString next_path = file.isLocalFile() && !file.toLocalFile().isEmpty()
+        ? QFileInfo(file.toLocalFile()).absoluteFilePath() : QString{};
+    if (!file.isEmpty() && next_path != local_video_path_) {
+        clear_playback_position();
+    } else {
+        save_playback_position();
+    }
+    local_video_path_ = next_path;
+    set_resume_position(0.0);
+    resume_save_timer_.invalidate();
     const quint64 generation = ++load_generation_;
+    waiting_for_context_ = !file.isEmpty();
 
     // A-B loop and chapter belong to the previous file until mpv reports the
     // new ones, and a stale loop would immediately cut the new file.
     ab_loop_start_ = -1.0;
+    ended_ = false;
     chapter_index_ = -1;
     file_ready_ = false;
+    selected_subtitle_id_ = -1;
+    cancel_transcript();
+    emit embeddedTranscriptChanged({}, {});
     chapters_dirty_ = tracks_dirty_ = true;
     if (!chapters_.isEmpty()) {
         chapters_.clear();
@@ -507,7 +574,6 @@ void MpvItem::open(const QUrl& file) {
     set_property("ab-loop-b", QStringLiteral("no"));
     set_property("sid", QStringLiteral("no"));
     setSubtitlesVisible(true);
-    g_ended_items.erase(this);
 
     if (position_ != 0.0) {
         position_ = 0.0;
@@ -525,7 +591,11 @@ void MpvItem::open(const QUrl& file) {
         error_.clear();
         emit errorChanged();
     }
-    open_when_ready(file, generation);
+    if (file.isEmpty()) {
+        command("stop");
+    } else {
+        open_when_ready(file, generation);
+    }
 }
 
 void MpvItem::open_when_ready(const QUrl& file, quint64 generation) {
@@ -549,12 +619,70 @@ void MpvItem::open_when_ready(const QUrl& file, quint64 generation) {
     // path with spaces or quotes needs no escaping.
     while (mpv_wait_event(handle_, 0)->event_id != MPV_EVENT_NONE) {
     }
+    waiting_for_context_ = false;
     const QByteArray path = (file.isLocalFile() ? file.toLocalFile() : file.toString()).toUtf8();
     const char* args[] = {"loadfile", path.constData(), "replace", nullptr};
     const int status = mpv_command(handle_, args);
     if (status < 0) {
         error_ = QString::fromUtf8(mpv_error_string(status));
         emit errorChanged();
+    }
+}
+
+void MpvItem::save_playback_position() {
+    if (!file_ready_ || ended_ || local_video_path_.isEmpty()) {
+        return;
+    }
+    if (get_bool("eof-reached", false)) {
+        clear_playback_position();
+        return;
+    }
+    const double position = get_double("time-pos", position_);
+    if (!std::isfinite(position) || !std::isfinite(duration_) || duration_ <= 0.0) {
+        return;
+    }
+    if (position <= 0.0) {
+        clear_playback_position();
+        return;
+    }
+    update_playback_history(local_video_path_, {
+        {QStringLiteral("position"), position},
+        {QStringLiteral("duration"), duration_},
+        {QStringLiteral("updatedAt"), QDateTime::currentDateTimeUtc().toString(Qt::ISODateWithMs)},
+    });
+}
+
+void MpvItem::clear_playback_position() {
+    update_playback_history(local_video_path_);
+}
+
+void MpvItem::set_resume_position(double position) {
+    if (resume_position_ != position) {
+        resume_position_ = position;
+        emit resumeChanged();
+    }
+}
+
+void MpvItem::restore_playback_position() {
+    const auto path = playback_history_path();
+    if (local_video_path_.isEmpty() || path.empty()) {
+        return;
+    }
+    const auto records = niratan::storage::read_json_file(path).document.object();
+    const double position = records.value(local_video_path_).toObject()
+        .value(QStringLiteral("position")).toDouble();
+    if (position > kResumeMarginSeconds && duration_ - position > kResumeMarginSeconds) {
+        seek(position);
+        set_resume_position(position);
+    }
+}
+
+void MpvItem::restartFromBeginning() {
+    if (loaded_) {
+        seek(0.0);
+        clear_playback_position();
+        resume_save_timer_.start();
+        set_resume_position(0.0);
     }
 }
 
@@ -618,8 +746,145 @@ void MpvItem::selectSubtitleTrack(int id) {
     }
     set_property("sid", id);
     setSubtitlesVisible(true);
-    tracks_dirty_ = true;
+    if (file_ready_) {
+        refresh_tracks();
+    }
     set_subtitle_cue({}, -1.0, -1.0);
+}
+
+void MpvItem::cancel_transcript() {
+    if (auto* process = std::exchange(transcript_process_, nullptr)) {
+        process->disconnect(this);
+        process->kill();
+        process->deleteLater();
+        emit extractingTranscriptChanged();
+    }
+}
+
+void MpvItem::extractTranscript() {
+    if (!file_ready_ || transcript_process_) {
+        return;
+    }
+    const auto track_it = std::ranges::find_if(tracks_, [this](const QVariant& entry) {
+        const auto track = entry.toMap();
+        return track.value(QStringLiteral("type")).toString() == QStringLiteral("sub") &&
+            track.value(QStringLiteral("id")).toInt() == selected_subtitle_id_ &&
+            !track.value(QStringLiteral("isExternal")).toBool();
+    });
+    if (track_it == tracks_.end()) {
+        return;
+    }
+    const auto report_error = [this](const QString& error) {
+        emit embeddedTranscriptChanged({}, error);
+    };
+    const QFileInfo video(local_video_path_);
+    if (!video.isFile()) {
+        report_error(tr("Embedded transcripts require a local video file."));
+        return;
+    }
+    const auto track = track_it->toMap();
+    if (track.value(QStringLiteral("isImage")).toBool()) {
+        report_error(tr("This image-based subtitle track cannot be extracted as text."));
+        return;
+    }
+    bool index_valid = false;
+    const int index = track.value(QStringLiteral("ffIndex")).toInt(&index_valid);
+    if (!index_valid || index < 0) {
+        report_error(tr("mpv did not provide a stream index for this subtitle track."));
+        return;
+    }
+    const auto root = niratan::storage::data_root();
+    const auto directory = QString::fromStdString((root / "Cache/video-subtitles").string());
+    if (root.empty() || !QDir().mkpath(directory)) {
+        report_error(tr("Could not create the embedded transcript cache."));
+        return;
+    }
+    const auto hash = QCryptographicHash::hash(local_video_path_.toUtf8(), QCryptographicHash::Sha256);
+    const QString cache = QDir(directory).filePath(QStringLiteral("%1-%2.srt")
+        .arg(QString::fromLatin1(hash.toHex())).arg(selected_subtitle_id_));
+    const auto mtime = video.lastModified();
+    const auto read_transcript = [this, report_error](const QString& path) {
+        QFile file(path);
+        if (!file.open(QIODevice::ReadOnly)) {
+            report_error(tr("Could not read the extracted transcript."));
+            return;
+        }
+        const auto bytes = file.read(kMaxSubtitleDocumentBytes + 1);
+        if (file.error() != QFile::NoError || bytes.size() > kMaxSubtitleDocumentBytes) {
+            report_error(tr("Could not read the extracted transcript, or it is too large."));
+            return;
+        }
+        if (bytes.isEmpty()) {
+            report_error(tr("No readable cues were found in the embedded subtitle track."));
+            return;
+        }
+        emit embeddedTranscriptChanged(bytes, {});
+    };
+    if (mtime.isValid() && QFileInfo(cache).lastModified() == mtime) {
+        read_transcript(cache);
+        return;
+    }
+    const QString ffmpeg = QStandardPaths::findExecutable(QStringLiteral("ffmpeg"));
+    if (ffmpeg.isEmpty()) {
+        report_error(tr("ffmpeg was not found on PATH."));
+        return;
+    }
+
+    // Keep partial output out of the shared cache, even if the track changes
+    // or a second player extracts the same track.
+    auto* process = new QProcess(this);
+    auto* staging = new QTemporaryFile(cache + QStringLiteral(".XXXXXX.srt"), process);
+    if (!staging->open()) {
+        delete process;
+        report_error(tr("Could not create a temporary transcript file."));
+        return;
+    }
+    staging->close();
+    const auto finish = [this, process] {
+        transcript_process_ = nullptr;
+        process->deleteLater();
+        emit extractingTranscriptChanged();
+    };
+    connect(process, &QProcess::errorOccurred, this, [this, finish, report_error](auto error) {
+        if (error == QProcess::FailedToStart) {
+            finish();
+            report_error(tr("Could not start ffmpeg to extract the transcript."));
+        }
+    });
+    connect(process, &QProcess::finished, this,
+            [this, finish, report_error, read_transcript, staging, cache,
+             mtime, video_path = local_video_path_](int code, QProcess::ExitStatus status) {
+        finish();
+        if (status != QProcess::NormalExit || code != 0) {
+            report_error(tr("ffmpeg could not extract this subtitle track as text."));
+            return;
+        }
+        if (QFileInfo(video_path).lastModified() != mtime) {
+            report_error(tr("The video changed while extracting its transcript. Please try again."));
+            return;
+        }
+        QFile output(staging->fileName());
+        if (mtime.isValid() && output.open(QIODevice::ReadWrite) &&
+            output.setFileTime(mtime, QFileDevice::FileModificationTime)) {
+            output.close();
+            std::error_code error;
+            std::filesystem::rename(staging->fileName().toStdString(), cache.toStdString(), error);
+            if (!error) {
+                read_transcript(cache);
+                return;
+            }
+        }
+        read_transcript(staging->fileName());
+    });
+    transcript_process_ = process;
+    emit embeddedTranscriptChanged({}, {});
+    emit extractingTranscriptChanged();
+    process->setStandardOutputFile(QProcess::nullDevice());
+    process->setStandardErrorFile(QProcess::nullDevice());
+    process->start(ffmpeg, {QStringLiteral("-nostdin"), QStringLiteral("-y"),
+        QStringLiteral("-i"), local_video_path_, QStringLiteral("-map"),
+        QStringLiteral("0:%1").arg(index), QStringLiteral("-c:s"), QStringLiteral("srt"),
+        staging->fileName()});
 }
 
 void MpvItem::disableSubtitles() {
@@ -838,7 +1103,7 @@ void MpvItem::refresh_tracks() {
                 subtitle_document = QUrl::fromLocalFile(external);
             }
         }
-        tracks.append(QVariantMap{
+        QVariantMap track{
             {QStringLiteral("type"), type},
             {QStringLiteral("id"), id},
             {QStringLiteral("title"), fields.value(QStringLiteral("title")).toString()},
@@ -846,8 +1111,20 @@ void MpvItem::refresh_tracks() {
             {QStringLiteral("codec"), fields.value(QStringLiteral("codec")).toString()},
             {QStringLiteral("isImage"), fields.value(QStringLiteral("image")).toBool()},
             {QStringLiteral("isSelected"), fields.value(QStringLiteral("selected")).toBool()},
+            {QStringLiteral("isExternal"), fields.value(QStringLiteral("external")).toBool()
+                                          || !external.isEmpty()},
             {QStringLiteral("externalFilename"), external},
-        });
+        };
+        const auto index = fields.value(QStringLiteral("ff-index"));
+        if (index.isValid()) {
+            track.insert(QStringLiteral("ffIndex"), index);
+        }
+        tracks.append(track);
+    }
+    if (selected_subtitle_id_ != sid) {
+        selected_subtitle_id_ = sid;
+        cancel_transcript();
+        emit embeddedTranscriptChanged({}, {});
     }
     if (tracks_ != tracks) {
         tracks_ = std::move(tracks);
@@ -886,6 +1163,9 @@ void MpvItem::poll() {
 
     for (mpv_event* event = mpv_wait_event(handle_, 0); event->event_id != MPV_EVENT_NONE;
          event = mpv_wait_event(handle_, 0)) {
+        if (waiting_for_context_) {
+            continue;
+        }
         switch (event->event_id) {
             case MPV_EVENT_START_FILE:
                 file_ready_ = false;
@@ -899,6 +1179,20 @@ void MpvItem::poll() {
                 if (!file_ready_ && end != nullptr && end->reason == MPV_END_FILE_REASON_ERROR) {
                     error_ = QString::fromUtf8(mpv_error_string(end->error));
                     emit errorChanged();
+                }
+                if (file_ready_) {
+                    if (end != nullptr && end->reason == MPV_END_FILE_REASON_EOF) {
+                        clear_playback_position();
+                        set_resume_position(0.0);
+                        if (!ended_) {
+                            ended_ = true;
+                            emit ended();
+                        }
+                    } else {
+                        save_playback_position();
+                    }
+                    file_ready_ = false;
+                    cancel_transcript();
                 }
                 break;
             }
@@ -957,6 +1251,10 @@ void MpvItem::poll() {
     }
     if (loaded_changed) {
         loaded_ = loaded;
+        if (loaded_) {
+            restore_playback_position();
+            resume_save_timer_.start();
+        }
         emit loadedChanged();
     }
     if (paused_changed) {
@@ -989,11 +1287,19 @@ void MpvItem::poll() {
     }
 
     if (file_ready_ && get_bool("eof-reached", false)) {
-        if (g_ended_items.insert(this).second) {
+        if (!ended_) {
+            ended_ = true;
+            clear_playback_position();
+            set_resume_position(0.0);
             emit ended();
         }
-    } else {
-        g_ended_items.erase(this);
+    } else if (file_ready_) {
+        ended_ = false;
+        if (loaded_ && !paused_ && !local_video_path_.isEmpty() &&
+            resume_save_timer_.hasExpired(kResumeSaveIntervalMs - 1)) {
+            resume_save_timer_.restart();
+            save_playback_position();
+        }
     }
 }
 

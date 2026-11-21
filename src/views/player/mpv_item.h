@@ -15,6 +15,10 @@
 // which keeps the QML bindings quiet while mpv plays.
 // Cue times are in the subtitle timeline (before delay); missing times read
 // as -1. Track types use mpv's video, audio and sub identifiers.
+// Local resume follows VideoPlayerViewModel.swift's save and loaded-restore
+// order, with a ten-second margin at each end and no remote history.
+// Embedded transcripts follow VideoPlayerScreen+Subtitles.swift's track
+// lifecycle, using mpv's ff-index (not its subtitle selection ID) for ffmpeg.
 //
 // The handle is created with the same safety options as HSMpvClient:
 // config=no, osc=no, input-default-bindings=no, keep-open=yes, vo=libmpv.
@@ -25,6 +29,7 @@
 
 #include <QQuickFramebufferObject>
 #include <QByteArray>
+#include <QElapsedTimer>
 #include <QSize>
 #include <QString>
 #include <QTimer>
@@ -33,6 +38,8 @@
 #include <QtQml/qqmlregistration.h>
 
 #include <mpv/client.h>
+
+class QProcess;
 
 class MpvItem : public QQuickFramebufferObject {
     Q_OBJECT
@@ -51,6 +58,9 @@ class MpvItem : public QQuickFramebufferObject {
     Q_PROPERTY(QString error READ error NOTIFY errorChanged)
     Q_PROPERTY(QVariantList chapters READ chapters NOTIFY chaptersChanged)
     Q_PROPERTY(QVariantList tracks READ tracks NOTIFY tracksChanged)
+    Q_PROPERTY(bool resumeAvailable READ resumeAvailable NOTIFY resumeChanged)
+    Q_PROPERTY(qreal resumePosition READ resumePosition NOTIFY resumeChanged)
+    Q_PROPERTY(bool extractingTranscript READ extractingTranscript NOTIFY extractingTranscriptChanged)
     Q_PROPERTY(QString subtitleText READ subtitleText NOTIFY subtitleCueChanged)
     Q_PROPERTY(qreal subtitleStart READ subtitleStart NOTIFY subtitleCueChanged)
     Q_PROPERTY(qreal subtitleEnd READ subtitleEnd NOTIFY subtitleCueChanged)
@@ -83,6 +93,9 @@ class MpvItem : public QQuickFramebufferObject {
     QString error() const;
     QVariantList chapters() const;
     QVariantList tracks() const;
+    bool resumeAvailable() const;
+    qreal resumePosition() const;
+    bool extractingTranscript() const;
     QString subtitleText() const;
     qreal subtitleStart() const;
     qreal subtitleEnd() const;
@@ -90,12 +103,15 @@ class MpvItem : public QQuickFramebufferObject {
     void setSubtitlesVisible(bool visible);
 
     Q_INVOKABLE void open(const QUrl& file);
+    Q_INVOKABLE void unload();
+    Q_INVOKABLE void restartFromBeginning();
     Q_INVOKABLE void togglePause();
     Q_INVOKABLE void seek(qreal seconds);
     Q_INVOKABLE void skip(qreal delta);
     Q_INVOKABLE void seekToChapter(int index);
     Q_INVOKABLE bool loadExternalSubtitle(const QUrl& file);
     Q_INVOKABLE void selectSubtitleTrack(int id);
+    Q_INVOKABLE void extractTranscript();
     Q_INVOKABLE void disableSubtitles();
     // Reports whether mpv accepted the asynchronous request.
     Q_INVOKABLE bool screenshot(const QUrl& file);
@@ -134,13 +150,22 @@ class MpvItem : public QQuickFramebufferObject {
     void chapterChanged(int index);
     void chaptersChanged();
     void tracksChanged();
+    void resumeChanged();
+    void extractingTranscriptChanged();
+    void embeddedTranscriptChanged(const QByteArray& bytes, const QString& error);
     void subtitleCueChanged();
     void subtitlesVisibleChanged();
     void subtitleDocumentChanged(const QUrl& file, const QByteArray& bytes, bool readable);
 
    private:
     void poll();
+    void replace_file(const QUrl& file);
     void open_when_ready(const QUrl& file, quint64 generation);
+    void save_playback_position();
+    void clear_playback_position();
+    void restore_playback_position();
+    void set_resume_position(double position);
+    void cancel_transcript();
     void refresh_chapters();
     void refresh_tracks();
     void set_subtitle_cue(const QString& text, double start, double end);
@@ -170,7 +195,14 @@ class MpvItem : public QQuickFramebufferObject {
     qreal ab_loop_start_ = -1.0;
     int chapter_index_ = -1;
     quint64 load_generation_ = 0;
+    bool waiting_for_context_ = false;
     bool file_ready_ = false;
+    bool ended_ = false;
+    QString local_video_path_;
+    QElapsedTimer resume_save_timer_;
+    double resume_position_ = 0.0;
+    int selected_subtitle_id_ = -1;
+    QProcess* transcript_process_ = nullptr;
     bool chapters_dirty_ = true;
     bool tracks_dirty_ = true;
     QVariantList chapters_;

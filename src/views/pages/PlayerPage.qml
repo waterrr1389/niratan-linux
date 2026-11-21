@@ -22,9 +22,9 @@
 // speed panel, and while the timeline is being scrubbed.
 //
 // Chapters, subtitle transcripts and mining history live in the docked study
-// sidebar. Timeline chapter markers, an inspector, an ambient backdrop,
+// sidebar. The timeline also shows chapter markers. An inspector, an ambient backdrop,
 // remote and media-server sources, playlist navigation, screenshot UI,
-// drag-and-drop, playback history and full subtitle styling are not included.
+// drag-and-drop and full subtitle styling are not included.
 // The page tracks its requested A-B state. The floating bar cannot be dragged, the
 // compact-bottom layout and the density switching are not reproduced, and the
 // pointer cursor is not hidden.
@@ -351,7 +351,7 @@ Item {
         // The player is a stack page here, unlike Niratan's own window, so a
         // full screen left behind would also make the bookshelf full screen.
         page.exitFullScreen()
-        mpv.paused = true
+        mpv.unload()
         page.backRequested()
     }
 
@@ -517,7 +517,19 @@ Item {
                         Math.max(studySidebar.minimumWidth, page.width - 340))
         study: studyModel
         playbackReady: mpv.loaded
+        subtitleTracks: mpv.tracks.filter(track => track.type === "sub")
+        extractingTranscript: mpv.extractingTranscript
         onSubtitleFileRequested: function(file) { page.loadSubtitle(file) }
+        onSubtitleTrackRequested: function(trackId, extract) {
+            if (trackId > 0) {
+                mpv.selectSubtitleTrack(trackId)
+                if (extract)
+                    mpv.extractTranscript()
+            } else {
+                mpv.disableSubtitles()
+            }
+        }
+        onTranscriptRequested: mpv.extractTranscript()
         onCloseRequested: {
             page.studyOpen = false
             page.forceActiveFocus()
@@ -583,6 +595,13 @@ Item {
                                                              mpv.subtitleEnd)
             onSubtitleDocumentChanged: function(file, bytes, readable) {
                 studyModel.setSubtitleDocument(file, bytes, readable)
+            }
+            onEmbeddedTranscriptChanged: function(bytes, error) {
+                studyModel.setEmbeddedTranscript(bytes, error)
+            }
+            onResumeChanged: {
+                if (mpv.resumeAvailable)
+                    page.showOSD(qsTr("Resumed at %1").arg(page.formatTime(mpv.resumePosition)), "")
             }
             onPausedChanged: {
                 if (!mpv.paused)
@@ -749,6 +768,37 @@ Item {
                 width: parent.width
                 height: 18
 
+                readonly property var markers: {
+                    if (mpv.duration <= 0)
+                        return []
+                    const chapters = mpv.chapters.slice().sort((a, b) => a.start - b.start)
+                    const result = []
+                    let last = -Infinity
+                    for (const chapter of chapters) {
+                        if (chapter.start > 0 && chapter.start < mpv.duration
+                                && chapter.start - last >= 0.05) {
+                            result.push({ "id": chapter.id, "ratio": chapter.start / mpv.duration })
+                            last = chapter.start
+                        }
+                    }
+                    return result
+                }
+                readonly property var activeChapter: studyModel.currentChapter >= 0
+                    ? mpv.chapters[studyModel.currentChapter] : null
+
+                function markerAt(pointerX: real): int {
+                    let closest = -1
+                    let distance = 5
+                    for (const marker of timeline.markers) {
+                        const delta = Math.abs(pointerX - timeline.width * marker.ratio)
+                        if (delta <= distance) {
+                            closest = marker.id
+                            distance = delta
+                        }
+                    }
+                    return closest
+                }
+
                 Rectangle {
                     anchors.verticalCenter: parent.verticalCenter
                     width: parent.width
@@ -765,6 +815,32 @@ Item {
                     radius: 2
                     color: Theme.textPrimary
                     opacity: 0.85
+                }
+
+                Rectangle {
+                    anchors.verticalCenter: parent.verticalCenter
+                    visible: !!timeline.activeChapter && mpv.duration > 0
+                    x: visible ? timeline.width * timeline.activeChapter.start / mpv.duration : 0
+                    width: visible ? Math.max(0, Math.min(timeline.width - x,
+                        timeline.width * (timeline.activeChapter.duration || 0) / mpv.duration)) : 0
+                    height: 4
+                    radius: 2
+                    color: Theme.accent
+                }
+
+                Repeater {
+                    model: timeline.markers
+                    delegate: Rectangle {
+                        id: chapterTick
+                        required property var modelData
+                        x: Math.max(0, Math.min(timeline.width - width,
+                            timeline.width * chapterTick.modelData.ratio - width / 2))
+                        anchors.verticalCenter: parent.verticalCenter
+                        width: 2
+                        height: 9
+                        radius: 1
+                        color: Theme.textSecondary
+                    }
                 }
 
                 Rectangle {
@@ -806,15 +882,36 @@ Item {
                     anchors.fill: parent
                     hoverEnabled: true
                     cursorShape: Qt.PointingHandCursor
+                    property int pressedChapter: -1
+                    property real pressX: 0
                     onPressed: function (mouse) {
-                        page.beginScrub(mouse.x)
+                        timelineMouse.pressX = mouse.x
+                        timelineMouse.pressedChapter = timeline.markerAt(mouse.x)
+                        if (timelineMouse.pressedChapter < 0)
+                            page.beginScrub(mouse.x)
                     }
                     onPositionChanged: function (mouse) {
-                        if (timelineMouse.pressed)
+                        if (!timelineMouse.pressed)
+                            return
+                        if (timelineMouse.pressedChapter >= 0
+                                && Math.abs(mouse.x - timelineMouse.pressX) > 5) {
+                            timelineMouse.pressedChapter = -1
+                            page.beginScrub(mouse.x)
+                        } else if (timelineMouse.pressedChapter < 0) {
                             page.updateScrub(mouse.x)
+                        }
                     }
-                    onReleased: page.endScrub()
-                    onCanceled: page.endScrub()
+                    onReleased: {
+                        if (timelineMouse.pressedChapter >= 0)
+                            mpv.seekToChapter(timelineMouse.pressedChapter)
+                        else
+                            page.endScrub()
+                        timelineMouse.pressedChapter = -1
+                    }
+                    onCanceled: {
+                        timelineMouse.pressedChapter = -1
+                        page.endScrub()
+                    }
                 }
             }
 
@@ -852,6 +949,17 @@ Item {
                     buttonWidth: 42
                     buttonHeight: 42
                     onClicked: page.togglePause()
+                }
+
+                BarButton {
+                    visible: mpv.resumeAvailable
+                    glyph: "\u21A4"
+                    tip: qsTr("Restart from Beginning")
+                    Accessible.name: tip
+                    onClicked: {
+                        mpv.restartFromBeginning()
+                        page.showOSD(qsTr("Restarted from beginning"), "")
+                    }
                 }
 
                 BarButton {

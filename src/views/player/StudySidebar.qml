@@ -17,6 +17,8 @@ Rectangle {
 
     required property PlayerStudyViewModel study
     property bool playbackReady: false
+    property var subtitleTracks: []
+    property bool extractingTranscript: false
     property int preferredWidth: 340
     property int selectedTab: 0
     readonly property int minimumWidth: 320
@@ -24,6 +26,8 @@ Rectangle {
 
     signal closeRequested()
     signal subtitleFileRequested(url file)
+    signal subtitleTrackRequested(int trackId, bool extract)
+    signal transcriptRequested()
 
     implicitWidth: preferredWidth
     color: Theme.windowBackground
@@ -196,6 +200,39 @@ Rectangle {
                 spacing: Theme.spacingSm
 
                 RowLayout {
+                    Layout.fillWidth: true
+                    visible: sidebar.subtitleTracks.length > 0
+
+                    ComboBox {
+                        id: trackSelector
+                        Layout.fillWidth: true
+                        enabled: sidebar.playbackReady
+                        Accessible.name: qsTr("Subtitle track")
+                        textRole: "label"
+                        model: [{ "id": -1, "label": qsTr("Subtitles off"), "external": true }]
+                            .concat(sidebar.subtitleTracks.map(track => ({
+                                "id": track.id, "external": track.isExternal,
+                                "label": track.title || track.language
+                                    || qsTr("Subtitle Track %1").arg(track.id)
+                            })))
+                        currentIndex: sidebar.subtitleTracks.findIndex(track => track.isSelected) + 1
+                        readonly property bool embedded: currentIndex > 0
+                            && currentIndex < model.length && !model[currentIndex].external
+                        onActivated: function(index) {
+                            const track = trackSelector.model[index]
+                            sidebar.subtitleTrackRequested(track.id, !track.external)
+                        }
+                    }
+
+                    SidebarButton {
+                        visible: trackSelector.embedded
+                        enabled: sidebar.playbackReady && !sidebar.extractingTranscript
+                        text: qsTr("Extract transcript")
+                        onClicked: sidebar.transcriptRequested()
+                    }
+                }
+
+                RowLayout {
                     TextField {
                         Layout.fillWidth: true
                         Layout.minimumWidth: 80
@@ -234,9 +271,11 @@ Rectangle {
 
                 EmptyLabel {
                     visible: transcript.count === 0
-                    text: sidebar.study.transcriptError.length > 0 ? sidebar.study.transcriptError
+                    text: sidebar.extractingTranscript ? qsTr("Extracting transcript…")
+                        : sidebar.study.transcriptError.length > 0 ? sidebar.study.transcriptError
                         : sidebar.study.search.trim().length > 0 ? qsTr("No matching cues.")
-                        : qsTr("Load an external subtitle file to see its transcript.")
+                        : trackSelector.embedded ? qsTr("Extract the selected track to see its transcript.")
+                        : qsTr("Select a subtitle track or load an external subtitle file.")
                 }
 
                 ListView {

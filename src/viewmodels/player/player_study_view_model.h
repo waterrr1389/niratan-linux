@@ -6,9 +6,9 @@
 // VideoMiningHistoryNavigation.swift (local history destinations).
 // Transcript time is playback position minus subtitle delay; both cue
 // endpoints are inclusive. Chapter time is independent of subtitle delay.
-// The playback surface supplies external subtitle bytes and native cue state
-// and performs playback commands. Embedded-track extraction and remote
-// history resolution are not part of this model.
+// The playback surface supplies subtitle bytes and native cue state and
+// performs playback commands. Extracted cues retain their embedded track
+// identity; their cache file is not an external subtitle source.
 
 #pragma once
 
@@ -67,6 +67,7 @@ public:
     Q_INVOKABLE void updatePlayback(double position, double subtitleDelay);
     Q_INVOKABLE void updateNativeCue(const QString& text, double start, double end);
     Q_INVOKABLE void setSubtitleDocument(const QUrl& file, const QByteArray& bytes, bool readable);
+    Q_INVOKABLE void setEmbeddedTranscript(const QByteArray& bytes, const QString& error);
     Q_INVOKABLE void seekToRow(int index);
     Q_INVOKABLE void showEarlier();
     Q_INVOKABLE void showLater();
@@ -100,6 +101,7 @@ private:
 
     void update_current();
     void update_can_mine();
+    void publish_transcript();
     void rebuild_filter();
     void reset_window(int focus);
     void publish_window();
