@@ -2,10 +2,14 @@
 
 #include "dictionary_popup_model.h"
 
+#include <QAudioOutput>
 #include <QColor>
 #include <QJsonArray>
 #include <QJsonObject>
+#include <QMediaPlayer>
+#include <QUrl>
 
+#include <cmath>
 #include <memory>
 #include <string>
 #include <string_view>
@@ -39,6 +43,9 @@ struct DictionaryPopupModel::State {
     QString last_query;
     QString html;
     QString error;
+    QString audio_error;
+    QAudioOutput audio_output;
+    QMediaPlayer audio_player;
     bool dark = false;
     QColor background = QColor(QStringLiteral("#FFFFFF"));
     QColor text_color = QColor(QStringLiteral("#000000"));
@@ -47,6 +54,9 @@ struct DictionaryPopupModel::State {
 DictionaryPopupModel::DictionaryPopupModel(QObject* parent)
     : QObject(parent), state_(std::make_unique<State>()) {
     state_->assets = load_popup_assets();
+    state_->audio_player.setAudioOutput(&state_->audio_output);
+    connect(&state_->audio_player, &QMediaPlayer::errorOccurred, this,
+            [this] { set_audio_error(tr("Could not play word audio")); });
     connect(&state_->settings_watch, &settings::DictionarySettingsWatch::changed, this, [this] {
         if (!state_->last_query.isEmpty()) {
             run_lookup();
@@ -63,6 +73,52 @@ QString DictionaryPopupModel::html() const {
 
 QString DictionaryPopupModel::error() const {
     return state_->error;
+}
+
+QString DictionaryPopupModel::audio_error() const {
+    return state_->audio_error;
+}
+
+void DictionaryPopupModel::set_audio_error(const QString& error) {
+    if (state_->audio_error != error) {
+        state_->audio_error = error;
+        emit audioErrorChanged();
+    }
+}
+
+void DictionaryPopupModel::playWordAudio(const QString& audioUrl) {
+    const QUrl source(audioUrl, QUrl::StrictMode);
+    if (!source.isValid() || source.host().isEmpty() || !source.userInfo().isEmpty() ||
+        (source.scheme() != QStringLiteral("http") && source.scheme() != QStringLiteral("https"))) {
+        set_audio_error(tr("Could not play word audio"));
+        return;
+    }
+    set_audio_error({});
+    state_->audio_player.stop();
+    if (state_->audio_player.error() != QMediaPlayer::NoError) {
+        state_->audio_player.setSource({});
+    }
+    state_->audio_player.setSource(source);
+    state_->audio_player.play();
+}
+
+void DictionaryPopupModel::showAudioSourceMenu(const QVariantMap& data) {
+    bool valid_entry = false;
+    const int entry = data.value(QStringLiteral("entryIndex")).toInt(&valid_entry);
+    const double x = data.value(QStringLiteral("x")).toDouble();
+    const double y = data.value(QStringLiteral("y")).toDouble();
+    if (!has_results() || !valid_entry || entry < 0 || !std::isfinite(x) || !std::isfinite(y)) {
+        return;
+    }
+    const auto names = data.value(QStringLiteral("names")).toStringList();
+    const int selected = data.value(QStringLiteral("selected"), -1).toInt();
+    emit audioSourceMenuRequested(names, selected, x, y, entry);
+}
+
+void DictionaryPopupModel::selectAudioSource(int entryIndex, int sourceIndex) {
+    if (has_results() && entryIndex >= 0 && sourceIndex >= 0) {
+        emit audioSourceSelected(entryIndex, sourceIndex);
+    }
 }
 
 bool DictionaryPopupModel::has_results() const {
@@ -116,6 +172,7 @@ void DictionaryPopupModel::lookup(const QString& text) {
 }
 
 void DictionaryPopupModel::run_lookup() {
+    set_audio_error({});
     const std::string_view language = state_->settings_watch.language_id();
     if (!state_->query || state_->language_id != language) {
         state_->language_id = std::string(language);
@@ -179,6 +236,7 @@ void DictionaryPopupModel::clear() {
 }
 
 void DictionaryPopupModel::clear_results() {
+    set_audio_error({});
     state_->html.clear();
     state_->error.clear();
     emit errorChanged();

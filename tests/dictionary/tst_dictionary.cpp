@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+#include "services/dictionary/dictionary_media.h"
 #include "services/dictionary/dictionary_query.h"
 #include "services/dictionary/dictionary_store.h"
 #include "services/dictionary/language_id.h"
@@ -26,6 +27,7 @@ class DictionaryTest : public QObject {
     void deinflects_inside_the_library();
     void rejects_zip_without_index();
     void media_and_styles_are_available();
+    void resolves_popup_media_by_dictionary_and_decoded_path();
 };
 
 void DictionaryTest::language_falls_back_to_japanese() {
@@ -137,6 +139,43 @@ void DictionaryTest::media_and_styles_are_available() {
     QCOMPARE(styles.size(), 1u);
     QCOMPARE(styles.front().first, std::string("Probe"));
     QVERIFY(styles.front().second.find(".probe { color: red; }") != std::string::npos);
+}
+
+// PopupWebView.swift: ImageHandler looks up the decoded dictionary and path.
+void DictionaryTest::resolves_popup_media_by_dictionary_and_decoded_path() {
+    using niratan::dictionary::DictionaryMediaService;
+    using niratan::dictionary::MediaStatus;
+
+    QTemporaryDir root;
+    QVERIFY(root.isValid());
+    const auto directory = std::filesystem::path(root.path().toStdString());
+    const auto zip = directory / "dict.zip";
+    const QByteArray audio("WAV\0bytes", 9);
+    write_stored_zip(zip, {{"index.json", minimal_index("Probe + 名")},
+                           {"term_bank_1.json", minimal_term_bank()},
+                           {"assets/picture.png", QByteArray("PNG")},
+                           {"assets/voice %20.WAV", audio}});
+    const auto installed = directory / "installed";
+    DictionaryMediaService media(installed);
+    const QUrl image("dict://?dictionary=Probe%20%2B%20%E5%90%8D&path=assets%2Fpicture.png");
+    QCOMPARE(media.get(image).status, MediaStatus::Missing);
+    const auto imported = DictionaryStore(installed).import_zip(zip);
+    QVERIFY2(imported.ok, imported.error.c_str());
+
+    const auto image_response = media.get(image);
+    QCOMPARE(image_response.status, MediaStatus::Found);
+    QCOMPARE(image_response.mime_type, QByteArray("image/png"));
+    QCOMPARE(image_response.bytes, QByteArray("PNG"));
+    const auto audio_response = media.get(
+        QUrl("dict://?dictionary=Probe%20%2B%20%E5%90%8D&path=assets%2Fvoice%20%2520.WAV"));
+    QCOMPARE(audio_response.status, MediaStatus::Found);
+    QCOMPARE(audio_response.mime_type, QByteArray("audio/wav"));
+    QCOMPARE(audio_response.bytes, audio);
+    QCOMPARE(media.get(QUrl("dict://?dictionary=Other&path=assets/picture.png")).status,
+             MediaStatus::Missing);
+    QCOMPARE(media.get(QUrl("dict://?dictionary=Probe&path=../../etc/passwd")).status,
+             MediaStatus::Missing);
+    QCOMPARE(media.get(QUrl("dict://?dictionary=Probe")).status, MediaStatus::Invalid);
 }
 
 QTEST_APPLESS_MAIN(DictionaryTest)

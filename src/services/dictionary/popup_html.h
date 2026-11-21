@@ -15,6 +15,7 @@
 // data is written as "<\/" so a glossary cannot close the script element;
 // the JSON meaning is unchanged. Strings are UTF-8. The stylesheet and script
 // texts are trusted application assets and are inserted unchanged.
+// Only scripts carrying the shell's per-document nonce can run.
 //
 // Defaults come from Core/UserConfig.swift: maxResults and scanLength 16,
 // Expand All, compact glossaries on, expression tags off, harmonic frequency

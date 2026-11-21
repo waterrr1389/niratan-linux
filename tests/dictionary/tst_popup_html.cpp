@@ -4,6 +4,7 @@
 
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QRegularExpression>
 #include <QtTest>
 
 #include <string>
@@ -61,6 +62,7 @@ class PopupHtmlTest : public QObject {
     void closing_tags_in_data_are_escaped();
     void custom_css_is_embedded_as_a_json_string();
     void stylesheet_and_script_are_inserted();
+    void only_shell_scripts_can_use_the_web_channel();
     void empty_entries_are_an_empty_array();
 };
 
@@ -174,6 +176,15 @@ void PopupHtmlTest::stylesheet_and_script_are_inserted() {
     QVERIFY(html.find("<style>/*CSS*/</style>") != std::string::npos);
     QVERIFY(html.find("//JS") != std::string::npos);
     QVERIFY(html.find("//JS") > html.find("window.lookupEntries"));
+}
+
+void PopupHtmlTest::only_shell_scripts_can_use_the_web_channel() {
+    const auto html = QString::fromStdString(popup_shell_html({}, {}, PopupConfig{}, "", "//JS"));
+    const auto policy = QRegularExpression("script-src 'nonce-([a-f0-9-]+)'").match(html);
+    QVERIFY(policy.hasMatch());
+    QCOMPARE(html.count("<script nonce=\"" + policy.captured(1) + "\">"), 2);
+    QVERIFY(!html.contains("<script>"));
+    QVERIFY(!html.contains("onclick="));
 }
 
 void PopupHtmlTest::empty_entries_are_an_empty_array() {

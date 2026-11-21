@@ -20,6 +20,11 @@
 // and settings and reports edits from other windows, which rerun the last
 // lookup. An invalid live edit retains the last good settings for the same
 // profile; a missing file or an invalid initial file uses defaults.
+// Features/Popup/WordAudioPlayer.swift (play) replaces the current clip with
+// the resolved URL. The web script resolves the configured sources; the
+// model accepts only HTTP(S) clip URLs and reports player errors to the view.
+// PopupWebView.swift (showAudioSourceMenu, audioSourceSelected) keeps the
+// selection in the current web document; the model relays names and indices.
 //
 // The theme properties are pushed from QML's Theme singleton, because colors
 // outside src/views/theme are not allowed.
@@ -29,6 +34,8 @@
 #include <QColor>
 #include <QObject>
 #include <QString>
+#include <QStringList>
+#include <QVariantMap>
 #include <QtQml/qqmlregistration.h>
 
 #include <memory>
@@ -40,6 +47,7 @@ class DictionaryPopupModel : public QObject {
     QML_ELEMENT
     Q_PROPERTY(QString html READ html NOTIFY htmlChanged)
     Q_PROPERTY(QString error READ error NOTIFY errorChanged)
+    Q_PROPERTY(QString audioError READ audio_error NOTIFY audioErrorChanged)
     Q_PROPERTY(bool hasResults READ has_results NOTIFY htmlChanged)
     Q_PROPERTY(bool dark READ dark WRITE setDark NOTIFY themeChanged)
     Q_PROPERTY(QColor background READ background WRITE setBackground NOTIFY themeChanged)
@@ -51,6 +59,7 @@ class DictionaryPopupModel : public QObject {
 
     QString html() const;
     QString error() const;
+    QString audio_error() const;
     bool has_results() const;
 
     bool dark() const;
@@ -63,15 +72,23 @@ class DictionaryPopupModel : public QObject {
     // Empty or whitespace-only input clears the view.
     Q_INVOKABLE void lookup(const QString& text);
     Q_INVOKABLE void clear();
+    Q_INVOKABLE void playWordAudio(const QString& audioUrl);
+    Q_INVOKABLE void showAudioSourceMenu(const QVariantMap& data);
+    Q_INVOKABLE void selectAudioSource(int entryIndex, int sourceIndex);
 
    signals:
     void htmlChanged();
     void errorChanged();
+    void audioErrorChanged();
+    void audioSourceMenuRequested(const QStringList& names, int selected, double x, double y,
+                                  int entryIndex);
+    void audioSourceSelected(int entryIndex, int sourceIndex);
     void themeChanged();
 
    private:
     void run_lookup();
     void clear_results();
+    void set_audio_error(const QString& error);
 
     struct State;
     std::unique_ptr<State> state_;

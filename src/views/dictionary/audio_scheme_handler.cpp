@@ -15,9 +15,15 @@ namespace niratan::ui {
 
 void register_popup_url_schemes() {
     QWebEngineUrlScheme audio("audio");
+    audio.setSyntax(QWebEngineUrlScheme::Syntax::Path);
     audio.setFlags(QWebEngineUrlScheme::SecureScheme | QWebEngineUrlScheme::FetchApiAllowed |
                    QWebEngineUrlScheme::CorsEnabled);
     QWebEngineUrlScheme::registerScheme(audio);
+
+    QWebEngineUrlScheme media("dict");
+    media.setSyntax(QWebEngineUrlScheme::Syntax::Path);
+    media.setFlags(QWebEngineUrlScheme::SecureScheme);
+    QWebEngineUrlScheme::registerScheme(media);
 }
 
 AudioSchemeHandler::AudioSchemeHandler(QObject* parent)

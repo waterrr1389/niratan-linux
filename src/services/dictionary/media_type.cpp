@@ -55,6 +55,24 @@ std::string_view dictionary_media_mime_type(std::string_view path) {
     if (matches("svg")) {
         return "image/svg+xml";
     }
+    if (matches("wav")) {
+        return "audio/wav";
+    }
+    if (matches("mp3")) {
+        return "audio/mpeg";
+    }
+    if (matches("ogg") || matches("oga")) {
+        return "audio/ogg";
+    }
+    if (matches("m4a") || matches("aac")) {
+        return "audio/aac";
+    }
+    if (matches("flac")) {
+        return "audio/flac";
+    }
+    if (matches("opus")) {
+        return "audio/opus";
+    }
     return "application/octet-stream";
 }
 

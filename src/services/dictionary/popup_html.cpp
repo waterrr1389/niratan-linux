@@ -14,6 +14,7 @@
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QString>
+#include <QUuid>
 
 #include <cstddef>
 #include <string>
@@ -66,6 +67,12 @@ std::string popup_shell_html(const QJsonArray& entries, const QJsonObject& dicti
     html += config.theme.dark ? "dark" : "light";
     html += "\">\n<head>\n";
     html += "<meta charset=\"utf-8\" />\n";
+    // Imported structured content can create DOM nodes, but only the shell's
+    // scripts may run in the document that owns the native web channel.
+    const auto nonce = QUuid::createUuid().toString(QUuid::WithoutBraces).toStdString();
+    html += "<meta http-equiv=\"Content-Security-Policy\" content=\"default-src 'none'; "
+            "script-src 'nonce-" + nonce + "'; style-src 'unsafe-inline'; img-src dict: data:; "
+            "media-src dict:; connect-src audio:; base-uri 'none'; form-action 'none'\">\n";
     html += "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0, "
             "maximum-scale=1.0, user-scalable=no\" />\n";
     html += "<title>Dictionary Lookup</title>\n";
@@ -83,10 +90,10 @@ std::string popup_shell_html(const QJsonArray& entries, const QJsonObject& dicti
     html += "<div id=\"popup-error\" style=\"display:none;\"></div>\n";
     html += "<div id=\"entries-container\"></div>\n";
     html += "<div class=\"overlay\">";
-    html += "<div class=\"overlay-close\" onclick=\"closeOverlay()\">x</div>";
+    html += "<div class=\"overlay-close\">x</div>";
     html += "<div class=\"overlay-content\"></div></div>\n";
     html += "</div>\n";
-    html += "<script>\n";
+    html += "<script nonce=\"" + nonce + "\">\n";
 
     html += "window.lookupEntries = ";
     html += escaped_json(QJsonDocument(entries));
@@ -152,7 +159,7 @@ std::string popup_shell_html(const QJsonArray& entries, const QJsonObject& dicti
     html += js_bool(mining.compact_glossaries);
     html += ";\n";
 
-    html += "</script>\n<script>";
+    html += "</script>\n<script nonce=\"" + nonce + "\">";
     html += js;
     html += "</script>\n</body>\n</html>";
 

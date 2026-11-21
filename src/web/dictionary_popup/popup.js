@@ -649,6 +649,10 @@ function constructPhoneticTranscriptionsHtml(pitches) {
 }
 
 // https://github.com/yomidevs/yomitan/blob/d810b2f0842536d24ab82b6cd75d00841710e57b/ext/js/display/structured-content-generator.js#L64
+function dictionaryMediaUrl(dictionary, path) {
+    return `dict://?dictionary=${encodeURIComponent(dictionary)}&path=${encodeURIComponent(path)}`;
+}
+
 function createDefinitionImage(data, dictionary, exporting = false) {
     const {
         path,
@@ -732,7 +736,7 @@ function createDefinitionImage(data, dictionary, exporting = false) {
     }
 
     if (!exporting) {
-        const imageUrl = `image://?dictionary=${encodeURIComponent(dictionary)}&path=${encodeURIComponent(path)}`;
+        const imageUrl = dictionaryMediaUrl(dictionary, path);
         if (shouldRenderDefinitionImageToCanvas(path, appearance, usedWidth, invAspectRatio)) {
             imageContainer.appendChild(createDefinitionImageCanvas(imageUrl, nodeData?.alt || title || '', (canvas, sourceImage) => {
                 renderDefinitionImageToCanvas(canvas, sourceImage, usedWidth, invAspectRatio, appearance);
@@ -997,8 +1001,19 @@ function renderStructuredContent(parent, node, language = null, dictName = null,
         return;
     }
 
-    if (node.tag === 'img') {
+    if (node.tag === 'img' || node.type === 'image') {
         parent.appendChild(createDefinitionImage(node, dictName, exporting));
+        return;
+    }
+
+    if (node.tag === 'audio' || node.type === 'audio') {
+        if (!exporting && typeof node.path === 'string' && node.path) {
+            const audio = document.createElement('audio');
+            audio.controls = true;
+            audio.preload = 'none';
+            audio.src = dictionaryMediaUrl(dictName, node.path);
+            parent.appendChild(audio);
+        }
         return;
     }
 
@@ -1290,7 +1305,15 @@ async function fetchAudioSources(template, expression, reading) {
         if (data.type !== 'audioSourceList') {
             return [];
         }
-        return (data.audioSources || []).filter(source => source.url);
+        return (data.audioSources || []).filter(source => {
+            try {
+                const url = new URL(source?.url);
+                return (url.protocol === 'http:' || url.protocol === 'https:') &&
+                    !url.username && !url.password;
+            } catch {
+                return false;
+            }
+        });
     } catch {
         return [];
     }
@@ -1504,7 +1527,7 @@ async function playEntryAudio(entryIndex, sourceIndex = null) {
     if (sourceIndex !== null) {
         audioUrls[entryIndex] = (await fetchAudioList(entryIndex))[sourceIndex]?.url || null;
     } else if (!audioUrls[entryIndex]) {
-        audioUrls[entryIndex] = await fetchAudioUrl(entry.expression, entry.reading);
+        audioUrls[entryIndex] = await fetchAudioUrl(entry.expression, entry.reading || entry.expression);
     }
     if (!audioUrls[entryIndex] || !playWordAudio(audioUrls[entryIndex])) {
         updateButtonSlot(audioSlot, { state: 'error' });
@@ -2146,6 +2169,8 @@ document.addEventListener('toggle', () => {
     requestAnimationFrame(syncButtonFrames);
     scheduleMasonry();
 }, true);
+
+document.querySelector('.overlay-close')?.addEventListener('click', closeOverlay);
 
 window.renderPopup = function() {
     const container = document.getElementById('entries-container');

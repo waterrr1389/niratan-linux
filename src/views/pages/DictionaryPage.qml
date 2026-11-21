@@ -3,14 +3,14 @@
 // The dictionary page: a search field and the popup rendered by the
 // Yomitan-derived popup script, following Features/Dictionary/
 // DictionarySearchView.swift (performLookup and constructHtml). The model
-// builds the shell; this page only shows it and asks the script to render
-// after the document loads, as PopupWebView does.
+// builds the shell; the audio bridge connects the script and native controls.
 
 pragma ComponentBehavior: Bound
 
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
+import QtWebChannel
 import QtWebEngine
 import Niratan
 
@@ -24,6 +24,19 @@ Item {
         dark: Theme.dark
         background: Theme.popupBackground
         textColor: Theme.popupText
+    }
+
+    QtObject {
+        id: dictionaryBridge
+        WebChannel.id: "dictionaryBridge"
+
+        function playWordAudio(url: string): void {
+            model.playWordAudio(url)
+        }
+
+        function showAudioSourceMenu(data: var): void {
+            model.showAudioSourceMenu(data)
+        }
     }
 
     TextMetrics {
@@ -69,10 +82,62 @@ Item {
                 visible: model.hasResults
                 backgroundColor: Theme.popupBackground
 
+                webChannel: WebChannel {
+                    registeredObjects: [dictionaryBridge]
+                }
+                onNavigationRequested: function(request) {
+                    if (request.url.toString() !== "about:blank")
+                        request.reject()
+                }
                 onLoadingChanged: function(loadRequest) {
                     if (loadRequest.status === WebEngineView.LoadSucceededStatus) {
                         runJavaScript("window.renderPopup();")
                     }
+                }
+            }
+
+            Label {
+                anchors.horizontalCenter: parent.horizontalCenter
+                anchors.bottom: parent.bottom
+                padding: Theme.spacingSm
+                visible: model.hasResults && model.audioError.length > 0
+                text: model.audioError
+                color: Theme.popupDanger
+                background: Rectangle { color: Theme.popupBackground }
+            }
+
+            Menu {
+                id: audioMenu
+                parent: view
+                property list<string> sourceNames
+                property int selectedSource: -1
+                property int entryIndex: -1
+
+                MenuItem {
+                    visible: audioMenu.sourceNames.length === 0
+                    height: visible ? implicitHeight : 0
+                    enabled: false
+                    text: qsTr("No audio found")
+                }
+
+                Instantiator {
+                    model: audioMenu.sourceNames
+                    delegate: MenuItem {
+                        id: sourceItem
+                        required property string modelData
+                        required property int index
+                        contentItem: Label {
+                            text: sourceItem.text
+                            textFormat: Text.PlainText
+                            elide: Text.ElideRight
+                        }
+                        text: modelData
+                        checkable: true
+                        checked: index === audioMenu.selectedSource
+                        onTriggered: model.selectAudioSource(audioMenu.entryIndex, index)
+                    }
+                    onObjectAdded: (index, object) => audioMenu.insertItem(index + 1, object)
+                    onObjectRemoved: (index, object) => audioMenu.removeItem(object)
                 }
             }
 
@@ -90,9 +155,21 @@ Item {
                 target: model
 
                 function onHtmlChanged() {
+                    audioMenu.close()
                     if (model.html.length > 0) {
                         view.loadHtml(model.html, "about:blank")
                     }
+                }
+
+                function onAudioSourceMenuRequested(names, selected, x, y, entryIndex) {
+                    audioMenu.sourceNames = names
+                    audioMenu.selectedSource = selected
+                    audioMenu.entryIndex = entryIndex
+                    audioMenu.popup(view, Qt.point(x * view.zoomFactor, y * view.zoomFactor))
+                }
+
+                function onAudioSourceSelected(entryIndex, sourceIndex) {
+                    view.runJavaScript("playEntryAudio(" + entryIndex + ", " + sourceIndex + ");")
                 }
             }
         }

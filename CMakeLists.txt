@@ -35,6 +35,7 @@ qt_add_library(niratan_core STATIC
     src/services/audio/local_audio.cpp
     src/services/audio/local_file_server.cpp
     src/services/dictionary/dictionary_store.cpp
+    src/services/dictionary/dictionary_media.cpp
     src/services/dictionary/media_type.cpp
     src/services/dictionary/dictionary_query.cpp
     src/services/dictionary/frequency_rank.cpp
@@ -95,6 +96,7 @@ qt_add_resources(niratan_core "dictionary_popup_assets"
     FILES
         src/web/dictionary_popup/popup.css
         src/web/dictionary_popup/popup.js
+        src/web/dictionary_popup/bridge.js
 )
 target_include_directories(niratan_core PUBLIC src)
 target_link_libraries(niratan_core PUBLIC hoshidicts Qt6::Core Qt6::Network SQLite3::SQLite3 libzip::zip)
@@ -132,6 +134,8 @@ qt_add_executable(niratan
     src/views/reader/reader_scheme_handler.h
     src/views/dictionary/audio_scheme_handler.cpp
     src/views/dictionary/audio_scheme_handler.h
+    src/views/dictionary/dictionary_media_scheme_handler.cpp
+    src/views/dictionary/dictionary_media_scheme_handler.h
     src/views/theme/theme_state.cpp
     src/views/theme/theme_state.h
 )
