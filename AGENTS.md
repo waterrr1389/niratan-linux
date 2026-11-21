@@ -172,6 +172,10 @@ Unicode rules, do the same rather than assuming ASCII.
 - `scripts/check-style.sh` enforces the SPDX line, no TODO markers or debug
   output, no tool or progress words, theme-only colours in QML and the
   include direction (models, then services, then view models, then views).
+- `scripts/check-format.sh` runs `git clang-format --diff HEAD` over C++ files
+  under `src/` and `tests/`, so changed lines must match `.clang-format`;
+  existing files need no reformat, and compressing statements onto one line to
+  fit the 500-line limit is rejected.
 - `scripts/check-wired.sh` requires every service header to be reached from a
   view model, a view or a flow test, directly or through another wired
   service; `scripts/wired-baseline.txt` lists today's unwired headers and may

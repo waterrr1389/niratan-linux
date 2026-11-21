@@ -1,0 +1,43 @@
+# Formatting for src/ and tests/. scripts/check-format.sh only checks lines
+# changed since HEAD, so this need not reformat existing files.
+BasedOnStyle: LLVM
+Language: Cpp
+Standard: c++23
+IndentWidth: 4
+ContinuationIndentWidth: 4
+ColumnLimit: 100
+
+PointerAlignment: Left
+ReferenceAlignment: Left
+AccessModifierOffset: -1
+SpacesBeforeTrailingComments: 2
+
+# Includes keep their current grouping; only sort inside a group.
+IncludeBlocks: Preserve
+SortIncludes: Never
+
+AllowShortFunctionsOnASingleLine: Inline
+AllowShortIfStatementsOnASingleLine: Never
+AllowShortLoopsOnASingleLine: false
+AllowShortCaseLabelsOnASingleLine: false
+AllowShortBlocksOnASingleLine: Never
+
+BreakBeforeBraces: Attach
+BraceWrapping:
+  AfterControlStatement: Never
+  AfterEnum: false
+  AfterStruct: false
+  AfterClass: false
+  AfterFunction: false
+  AfterNamespace: false
+  SplitEmptyFunction: true
+
+IndentCaseLabels: true
+NamespaceIndentation: None
+
+BinPackArguments: true
+BinPackParameters: true
+AlignAfterOpenBracket: Align
+AlignOperands: DontAlign
+AllowAllParametersOfDeclarationOnNextLine: true
+PenaltyBreakAssignment: 0
