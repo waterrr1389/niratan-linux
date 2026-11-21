@@ -77,6 +77,17 @@ Replies are a few lines: results, deviations, open questions. A delegated
 agent that needs a product decision stops and reports it; only the
 coordinator asks the owner.
 
+A delegated agent also stops and reports, rather than working around it,
+when a frozen test looks wrong, when the files it may edit are not enough
+(a needed split, a missing helper), or when Swift and the task file
+disagree in a way no Decision covers. The coordinator then widens the file
+list, adds a Decision or sends the test back to `Audit`.
+
+The coordinator keeps the working tree to one intent at a time, so each
+commit is just `git add` and `git commit`. It does not use `git stash` to
+split work into commits: a stash also captures the index and can restore
+stale copies of staged files.
+
 ## Layout
 
 - `src/models/`: plain data and pure functions shared by every layer.
