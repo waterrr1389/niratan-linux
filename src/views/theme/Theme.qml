@@ -53,6 +53,9 @@ QtObject {
     readonly property color popupDanger: dark ? "#DD6755" : "#C83C28"
     readonly property color popupDangerLight: dark ? "#C83C28" : "#DD6755"
     readonly property color popupSuccess: dark ? "#75CF54" : "#51AB30"
+    // AnkiMiningToastView.tint uses orange for duplicates and blue for pending.
+    readonly property color popupWarning: dark ? "#FF9F0A" : "#FF9500"
+    readonly property color popupInfo: dark ? "#0A84FF" : "#007AFF"
     readonly property color popupOverlay: dark ? "#222222" : "#FFFFFF"
 
     readonly property color menuBackground: popupBackground

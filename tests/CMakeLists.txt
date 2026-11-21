@@ -6,6 +6,14 @@ target_link_libraries(tst_local_audio PRIVATE niratan_core Qt6::Test)
 target_compile_options(tst_local_audio PRIVATE -Wall -Wextra -Wpedantic -Werror)
 add_test(NAME local_audio COMMAND tst_local_audio)
 
+qt_add_executable(tst_web_audio_download
+    audio/tst_web_audio_download.cpp
+)
+target_include_directories(tst_web_audio_download PRIVATE ${CMAKE_SOURCE_DIR}/src)
+target_link_libraries(tst_web_audio_download PRIVATE niratan_core Qt6::Test)
+target_compile_options(tst_web_audio_download PRIVATE -Wall -Wextra -Wpedantic -Werror)
+add_test(NAME web_audio_download COMMAND tst_web_audio_download)
+
 qt_add_executable(tst_local_file_server
     audio/tst_local_file_server.cpp
 )
@@ -495,6 +503,14 @@ add_test(NAME dictionary_settings_watch COMMAND tst_dictionary_settings_watch)
 # Application-layer tests. View models build their services internally and
 # read the data root from the environment, so these run with HOME and the XDG
 # directories pointed at a temporary directory and with Qt offscreen.
+
+qt_add_executable(tst_mining_view_model
+    viewmodels/tst_mining_view_model.cpp
+)
+target_include_directories(tst_mining_view_model PRIVATE ${CMAKE_SOURCE_DIR}/src)
+target_link_libraries(tst_mining_view_model PRIVATE niratan_app Qt6::Test)
+target_compile_options(tst_mining_view_model PRIVATE -Wall -Wextra -Wpedantic -Werror)
+add_test(NAME mining_view_model COMMAND tst_mining_view_model)
 
 qt_add_executable(tst_dictionary_popup_model
     viewmodels/tst_dictionary_popup_model.cpp

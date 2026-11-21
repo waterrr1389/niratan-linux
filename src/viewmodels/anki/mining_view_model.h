@@ -1,0 +1,92 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+//
+// Follows Features/Popup/PopupWebView.swift (Coordinator.userContentController
+// and updateUIView), Features/Popup/PopupView.swift (buildContent, onMine,
+// onMiningFeedback, mineEntry, showMiningToast and showAnkiNoteButton),
+// Features/Popup/AnkiMining.swift (preflightAnkiMining, mineAnkiEntry and
+// webPayload), Core/AnkiManager.swift (duplicateLookup, openNotesInAnki) and
+// Features/Popup/popup.js (mineEntry, mineEntryAtIndex, openAnkiNoteAtIndex,
+// createEntryHeader and applyAnkiDuplicateLookup).
+//
+// Mining accepts any string-to-string map, including absent or extra keys.
+// Capture the active profile and the host context for the attempt. The
+// services own profile activation, deck/model and duplicate preflight, and
+// the add; the add must not repeat preflight. Publish the result toast before
+// replying. Request IDs correlate replies with the page's promises; an
+// invalid mine or duplicate body completes without a payload.
+//
+// Opening Anki is one-way on Linux: parse the string array as decimal int64,
+// then browse once for the distinct positive IDs in order. The page releases
+// text focus before dispatch; there is no AppKit activation here. Feedback is
+// also one-way; ignore malformed bodies and unknown statuses. A missing message
+// is empty and an invalid note ID is absent. Pending is only a toast status.
+// A new toast replaces the current toast and restarts its 2.2-second lifetime.
+// Linux omits the failed-feedback log and the native overlay buttons.
+//
+// The dictionary page has no document context. The reader supplies its
+// available context: until the reader mining context is wired, the sentence
+// and cover are empty and the title is the library display title rather than
+// the EPUB title. The ordered term dictionaries remain empty
+// until the dictionary settings supply them, so glossary fallback fields
+// that depend on dictionary categories differ. The cover URL is for rendered
+// text; an attachment needs a separate local cover path.
+
+#pragma once
+
+#include <QObject>
+#include <QString>
+#include <QVariant>
+#include <QtQml/qqmlregistration.h>
+
+#include <memory>
+#include <vector>
+
+#include "models/anki/mining_context.h"
+
+namespace niratan::viewmodels {
+
+class MiningViewModel : public QObject {
+    Q_OBJECT
+    QML_ELEMENT
+    Q_PROPERTY(QString toastStatus READ toast_status NOTIFY toastChanged)
+    Q_PROPERTY(QString toastMessage READ toast_message NOTIFY toastChanged)
+    Q_PROPERTY(QString toastNoteId READ toast_note_id NOTIFY toastChanged)
+
+   public:
+    explicit MiningViewModel(QObject* parent = nullptr);
+    ~MiningViewModel() override;
+
+    // Empty status means hidden. A note ID, if present, is a decimal string.
+    QString toast_status() const;
+    QString toast_message() const;
+    QString toast_note_id() const;
+
+    Q_INVOKABLE void setContext(const QString& sentence, const QString& documentTitle,
+                                const QString& coverUrl, const QString& coverPath);
+    void set_term_dictionaries(std::vector<anki::TermDictionary> dictionaries);
+
+    // Popup script globals from the active profile, before rendering entries.
+    Q_INVOKABLE QVariantMap popupMiningOptions();
+
+    Q_INVOKABLE void mineEntry(int requestId, const QVariant& content);
+    Q_INVOKABLE void duplicateCheck(int requestId, const QVariant& word);
+    Q_INVOKABLE void openAnkiNote(const QVariant& noteIds);
+    Q_INVOKABLE void miningFeedback(const QVariant& result);
+
+    // Context-mining confirmation can publish the note command to the host.
+    void show_anki_note_button(int entry_index, qint64 note_id);
+
+   signals:
+    // Mine: status (added, duplicate or failed), message and optional decimal
+    // string noteID. Duplicate: isDuplicate (bool) and noteIDs (decimal string
+    // array). An invalid request body has no payload.
+    void replyReady(int requestId, const QVariant& payload);
+    void toastChanged();
+    void ankiNoteButtonRequested(int entryIndex, const QString& noteId);
+
+   private:
+    struct State;
+    std::unique_ptr<State> state_;
+};
+
+}  // namespace niratan::viewmodels

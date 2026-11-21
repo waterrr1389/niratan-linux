@@ -14,6 +14,7 @@
 #include <QElapsedTimer>
 #include <QEventLoop>
 #include <QJsonArray>
+#include <QJsonDocument>
 #include <QJsonObject>
 #include <QSignalSpy>
 #include <QTemporaryDir>
@@ -69,11 +70,64 @@ class DictionaryBridgeProbe : public QObject {
     void audioReceived(const QString& url);
 };
 
+class MiningBridgeProbe : public QObject {
+    Q_OBJECT
+
+   public slots:
+    void mineEntry(int id, const QVariant& data) { emit mineReceived(id, data); }
+    void duplicateCheck(int id, const QVariant& word) { emit duplicateReceived(id, word); }
+    void openAnkiNote(const QVariant& ids) { emit openReceived(ids); }
+    void miningFeedback(const QVariant& data) { emit feedbackReceived(data); }
+
+   signals:
+    void mineReceived(int id, const QVariant& data);
+    void duplicateReceived(int id, const QVariant& word);
+    void openReceived(const QVariant& ids);
+    void feedbackReceived(const QVariant& data);
+    void replyReady(int id, const QVariant& payload);
+};
+
+namespace {
+
+struct MiningPopup {
+    MiningBridgeProbe probe;
+    QWebEnginePage page;
+    QWebChannel channel{&page};
+
+    bool load(QObject* bridge = nullptr) {
+        const auto assets = niratan::dictionary::load_popup_assets();
+        if (assets.js.empty() || assets.web_channel.empty() || assets.bridge.empty()) {
+            return false;
+        }
+        const auto shell = niratan::dictionary::popup_shell_html(
+            entries_fixture(), {}, niratan::dictionary::PopupConfig{}, assets.css, assets.js);
+        channel.registerObject(QStringLiteral("dictionaryBridge"), bridge ? bridge : &probe);
+        page.setWebChannel(&channel);
+        QSignalSpy loaded(&page, &QWebEnginePage::loadFinished);
+        page.setHtml(QString::fromStdString(shell));
+        if (!loaded.wait(15000) || !loaded.last().at(0).toBool()) {
+            return false;
+        }
+        js(QString::fromStdString(assets.web_channel) + "\n" +
+           QString::fromStdString(assets.bridge));
+        return true;
+    }
+
+    QString js(const QString& script) { return evaluate(page, script); }
+};
+
+}  // namespace
+
 class PopupBridgeTest : public QObject {
     Q_OBJECT
 
    private slots:
     void play_word_audio_reaches_the_bridge();
+    void mine_entry_posts_a_string_map_and_awaits_its_payload();
+    void duplicate_check_awaits_its_payload_and_reveals_note_button();
+    void open_anki_note_posts_the_button_ids();
+    void mining_feedback_posts_pending_before_mining();
+    void missing_mine_callback_resolves_with_failure();
 };
 
 void PopupBridgeTest::play_word_audio_reaches_the_bridge() {
@@ -122,6 +176,174 @@ void PopupBridgeTest::play_word_audio_reaches_the_bridge() {
     QTRY_COMPARE_WITH_TIMEOUT(audio_spy.count(), 1, 10000);
     QCOMPARE(audio_spy.first().first().toString(),
              QStringLiteral("https://example.test/audio.mp3"));
+}
+
+// B1, B2, B6, B23: PopupWebView.Coordinator.userContentController (async),
+// AnkiMiningResult.webPayload and popup.js miningContent/mineEntry.
+void PopupBridgeTest::mine_entry_posts_a_string_map_and_awaits_its_payload() {
+    MiningPopup popup;
+    QSignalSpy received(&popup.probe, &MiningBridgeProbe::mineReceived);
+    QVERIFY(popup.load());
+    QTRY_COMPARE_WITH_TIMEOUT(popup.js("typeof window.webkit?.messageHandlers?.mineEntry"),
+                              QStringLiteral("object"), 2000);
+    popup.js(QStringLiteral(R"JS(
+        window.mineReply = 'waiting';
+        const mineHandler = window.webkit.messageHandlers.mineEntry;
+        const postMine = mineHandler.postMessage.bind(mineHandler);
+        mineHandler.postMessage = content => {
+            const reply = postMine(content);
+            window.mineIsPromise = typeof reply?.then === 'function';
+            return reply;
+        };
+        mineEntry('decide', 'decide', [], [], [], 'decided', 0, 'selection')
+            .then(reply => { window.mineReply = JSON.stringify(reply) ?? 'missing'; });
+        'sent';
+    )JS"));
+    QTRY_COMPARE_WITH_TIMEOUT(received.size(), 1, 2000);
+    const auto body = QJsonValue::fromVariant(received.first().at(1)).toObject();
+    QStringList keys{"expression",         "reading",         "matched",
+                     "furiganaPlain",      "frequenciesHtml", "freqHarmonicRank",
+                     "glossary",           "glossaryFirst",   "singleGlossaries",
+                     "pitchPositions",     "pitchCategories", "phoneticTranscriptions",
+                     "popupSelectionText", "audio",           "selectedDictionary",
+                     "dictionaryMedia"};
+    keys.sort();
+    QCOMPARE(body.keys(), keys);
+    for (const auto& value : body) {
+        QVERIFY(value.isString());
+    }
+    QCOMPARE(body.value("expression"), QJsonValue("decide"));
+    QCOMPARE(body.value("matched"), QJsonValue("decided"));
+    QCOMPARE(body.value("popupSelectionText"), QJsonValue("selection"));
+    QCOMPARE(popup.js("String(window.mineIsPromise)"), QStringLiteral("true"));
+    QCOMPARE(popup.js("window.mineReply"), QStringLiteral("waiting"));
+
+    const QVariantMap payload{{"status", QStringLiteral("added")},
+                              {"message", QStringLiteral("Added to Anki.")},
+                              {"noteID", QStringLiteral("9007199254740993")}};
+    emit popup.probe.replyReady(received.first().at(0).toInt(), payload);
+    QTRY_VERIFY_WITH_TIMEOUT(popup.js("window.mineReply") != "waiting", 2000);
+    QCOMPARE(QJsonDocument::fromJson(popup.js("window.mineReply").toUtf8()).object(),
+             QJsonObject::fromVariantMap(payload));
+}
+
+// B1, B3, B16, B17, B23: PopupWebView.Coordinator.userContentController,
+// AnkiDuplicateLookupResult.webPayload and popup.js createEntryHeader/applyAnkiDuplicateLookup.
+void PopupBridgeTest::duplicate_check_awaits_its_payload_and_reveals_note_button() {
+    MiningPopup popup;
+    QSignalSpy received(&popup.probe, &MiningBridgeProbe::duplicateReceived);
+    QVERIFY(popup.load());
+    QTRY_COMPARE_WITH_TIMEOUT(received.size(), 1, 2000);
+    QCOMPARE(received.first().at(1).metaType(), QMetaType::fromType<QString>());
+    QCOMPARE(received.first().at(1).toString(), QStringLiteral("decide"));
+    QCOMPARE(popup.js("String(document.querySelector('[data-kind=viewNote]').hidden)"),
+             QStringLiteral("true"));
+    QCOMPARE(popup.js("String(document.querySelector('[data-kind=viewNote]').disabled)"),
+             QStringLiteral("true"));
+
+    const QVariantMap duplicate{{"isDuplicate", true},
+                                {"noteIDs", QStringList{"9007199254740993", "18"}}};
+    emit popup.probe.replyReady(received.first().at(0).toInt(), duplicate);
+    QTRY_COMPARE_WITH_TIMEOUT(
+        popup.js("document.querySelector('[data-kind=viewNote]').dataset.noteIds"),
+        QStringLiteral("9007199254740993 18"), 2000);
+    QCOMPARE(popup.js("String(document.querySelector('[data-kind=viewNote]').hidden)"),
+             QStringLiteral("false"));
+    QCOMPARE(popup.js("String(document.querySelector('[data-kind=viewNote]').disabled)"),
+             QStringLiteral("false"));
+    QCOMPARE(popup.js("String(document.querySelector('[data-kind=mine]').disabled)"),
+             QStringLiteral("true"));
+
+    popup.js(QStringLiteral(R"JS(
+        window.duplicateReply = 'waiting';
+        window.webkit.messageHandlers.duplicateCheck.postMessage('unknown')
+            .then(reply => { window.duplicateReply = JSON.stringify(reply) ?? 'missing'; });
+        'sent';
+    )JS"));
+    QTRY_COMPARE_WITH_TIMEOUT(received.size(), 2, 2000);
+    QCOMPARE(received.last().at(1).toString(), QStringLiteral("unknown"));
+    QCOMPARE(popup.js("window.duplicateReply"), QStringLiteral("waiting"));
+    const QVariantMap absent{{"isDuplicate", false}, {"noteIDs", QStringList{}}};
+    emit popup.probe.replyReady(received.last().at(0).toInt(), absent);
+    QTRY_VERIFY_WITH_TIMEOUT(popup.js("window.duplicateReply") != "waiting", 2000);
+    QCOMPARE(QJsonDocument::fromJson(popup.js("window.duplicateReply").toUtf8()).object(),
+             QJsonObject::fromVariantMap(absent));
+}
+
+// B1, B4, B18, B19: PopupWebView.updateUIView/userContentController
+// and popup.js showAnkiNoteButton/openAnkiNoteAtIndex.
+void PopupBridgeTest::open_anki_note_posts_the_button_ids() {
+    MiningPopup popup;
+    QSignalSpy received(&popup.probe, &MiningBridgeProbe::openReceived);
+    QVERIFY(popup.load());
+    QTRY_COMPARE_WITH_TIMEOUT(popup.js("typeof window.webkit?.messageHandlers?.openAnkiNote"),
+                              QStringLiteral("object"), 2000);
+    popup.js("window.hoshiShowAnkiNoteButton(0, '9007199254740993');");
+    QCOMPARE(popup.js("document.querySelector('[data-kind=viewNote]').dataset.noteIds"),
+             QStringLiteral("9007199254740993"));
+    const auto disabled_during_open = popup.js(QStringLiteral(R"JS(
+        window.hoshiShowAnkiNoteButton(0, ['9007199254740993', '18']);
+        const button = document.querySelector('[data-kind=viewNote]');
+        button.click();
+        String(button.disabled);
+    )JS"));
+    QCOMPARE(disabled_during_open, QStringLiteral("true"));
+    QTRY_COMPARE_WITH_TIMEOUT(received.size(), 1, 2000);
+    QCOMPARE(QJsonValue::fromVariant(received.first().at(0)),
+             (QJsonValue(QJsonArray{"9007199254740993", "18"})));
+    QTRY_COMPARE_WITH_TIMEOUT(
+        popup.js("String(document.querySelector('[data-kind=viewNote]').disabled)"),
+        QStringLiteral("false"), 2000);
+}
+
+// B1, B5, B11, B17, B24: PopupWebView.Coordinator.userContentController (one-way),
+// PopupView.onMiningFeedback and popup.js mineEntryAtIndex/showAnkiNoteButton.
+void PopupBridgeTest::mining_feedback_posts_pending_before_mining() {
+    MiningPopup popup;
+    QStringList order;
+    connect(&popup.probe, &MiningBridgeProbe::feedbackReceived, this,
+            [&] { order.append("feedback"); });
+    connect(&popup.probe, &MiningBridgeProbe::mineReceived, this, [&] { order.append("mine"); });
+    QSignalSpy received(&popup.probe, &MiningBridgeProbe::feedbackReceived);
+    QSignalSpy mine(&popup.probe, &MiningBridgeProbe::mineReceived);
+    QSignalSpy duplicate(&popup.probe, &MiningBridgeProbe::duplicateReceived);
+    QVERIFY(popup.load());
+    QTRY_COMPARE_WITH_TIMEOUT(popup.js("typeof window.webkit?.messageHandlers?.miningFeedback"),
+                              QStringLiteral("object"), 2000);
+    QTRY_COMPARE_WITH_TIMEOUT(duplicate.size(), 1, 2000);
+    popup.js("mineEntryAtIndex(0); 'sent';");
+    QTRY_COMPARE_WITH_TIMEOUT(order, (QStringList{"feedback", "mine"}), 2000);
+    QCOMPARE(received.size(), 1);
+    const QJsonObject pending{{"status", "pending"},
+                              {"message", QString::fromUtf8("Preparing card…")}};
+    QCOMPARE(QJsonValue::fromVariant(received.first().at(0)).toObject(), pending);
+    QCOMPARE(mine.size(), 1);
+    const QVariantMap added{{"status", QStringLiteral("added")},
+                            {"message", QStringLiteral("Added to Anki.")},
+                            {"noteID", QStringLiteral("9007199254740993")}};
+    emit popup.probe.replyReady(mine.first().at(0).toInt(), added);
+    QTRY_COMPARE_WITH_TIMEOUT(duplicate.size(), 2, 2000);
+    QCOMPARE(duplicate.last().at(1).toString(), QStringLiteral("decide"));
+    QCOMPARE(popup.js("document.querySelector('[data-kind=viewNote]').dataset.noteIds"),
+             QStringLiteral("9007199254740993"));
+}
+
+// B21: PopupWebView.Coordinator.userContentController returns a failure when onMine is nil.
+void PopupBridgeTest::missing_mine_callback_resolves_with_failure() {
+    DictionaryBridgeProbe audio_only;
+    MiningPopup popup;
+    QVERIFY(popup.load(&audio_only));
+    QTRY_COMPARE_WITH_TIMEOUT(popup.js("typeof window.webkit?.messageHandlers?.mineEntry"),
+                              QStringLiteral("object"), 2000);
+    popup.js(QStringLiteral(R"JS(
+        window.mineReply = 'waiting';
+        window.webkit.messageHandlers.mineEntry.postMessage({expression: 'decide'})
+            .then(reply => { window.mineReply = JSON.stringify(reply) ?? 'missing'; });
+        'sent';
+    )JS"));
+    QTRY_VERIFY_WITH_TIMEOUT(popup.js("window.mineReply") != "waiting", 2000);
+    const QJsonObject expected{{"status", "failed"}, {"message", "Unable to add card."}};
+    QCOMPARE(QJsonDocument::fromJson(popup.js("window.mineReply").toUtf8()).object(), expected);
 }
 
 int main(int argc, char* argv[]) {

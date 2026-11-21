@@ -3,7 +3,8 @@
 // The dictionary page: a search field and the popup rendered by the
 // Yomitan-derived popup script, following Features/Dictionary/
 // DictionarySearchView.swift (performLookup and constructHtml). The model
-// builds the shell; the audio bridge connects the script and native controls.
+// builds the shell. Features/Popup/PopupWebView.swift and PopupView.swift
+// supply the mining bridge and the toast displayed above the search results.
 
 pragma ComponentBehavior: Bound
 
@@ -26,9 +27,18 @@ Item {
         textColor: Theme.popupText
     }
 
+    MiningViewModel {
+        id: mining
+        onReplyReady: (requestId, payload) => dictionaryBridge.replyReady(requestId, payload)
+        onAnkiNoteButtonRequested: (entryIndex, noteId) => {
+            view.runJavaScript("window.hoshiShowAnkiNoteButton?.(" + entryIndex + ", '" + noteId + "');")
+        }
+    }
+
     QtObject {
         id: dictionaryBridge
         WebChannel.id: "dictionaryBridge"
+        signal replyReady(int requestId, var payload)
 
         function playWordAudio(url: string): void {
             model.playWordAudio(url)
@@ -36,6 +46,24 @@ Item {
 
         function showAudioSourceMenu(data: var): void {
             model.showAudioSourceMenu(data)
+        }
+
+        function mineEntry(requestId: int, content: var): void {
+            view.lastMiningRequest = Math.max(view.lastMiningRequest, requestId)
+            mining.mineEntry(requestId, content)
+        }
+
+        function duplicateCheck(requestId: int, word: var): void {
+            view.lastMiningRequest = Math.max(view.lastMiningRequest, requestId)
+            mining.duplicateCheck(requestId, word)
+        }
+
+        function openAnkiNote(noteIds: var): void {
+            mining.openAnkiNote(noteIds)
+        }
+
+        function miningFeedback(result: var): void {
+            mining.miningFeedback(result)
         }
     }
 
@@ -79,6 +107,8 @@ Item {
             WebEngineView {
                 id: view
                 property bool loadingPopupDocument: false
+                // A new document must not consume outstanding replies for the old one.
+                property int lastMiningRequest: 0
                 anchors.fill: parent
                 visible: model.hasResults
                 backgroundColor: Theme.popupBackground
@@ -96,8 +126,11 @@ Item {
                         request.reject()
                 }
                 onLoadingChanged: function(loadRequest) {
-                    if (loadRequest.status === WebEngineView.LoadSucceededStatus && view.visible)
-                        view.runJavaScript(model.bridgeScript)
+                    if (loadRequest.status === WebEngineView.LoadSucceededStatus && view.visible) {
+                        view.runJavaScript("window.hoshiMiningRequestBase = " + lastMiningRequest
+                            + "; window.hoshiMiningOptions = " + JSON.stringify(mining.popupMiningOptions())
+                            + ";\n" + model.bridgeScript)
+                    }
                 }
             }
 
@@ -179,5 +212,11 @@ Item {
                 }
             }
         }
+    }
+
+    AnkiMiningToast {
+        status: mining.toastStatus
+        message: mining.toastMessage
+        topInset: dictionaryHeader.height
     }
 }

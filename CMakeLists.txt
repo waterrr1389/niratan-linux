@@ -40,6 +40,7 @@ qt_add_library(niratan_core STATIC
     src/services/audio/audio_request.cpp
     src/services/audio/local_audio.cpp
     src/services/audio/local_file_server.cpp
+    src/services/audio/web_audio_download.cpp
     src/services/dictionary/dictionary_store.cpp
     src/services/dictionary/dictionary_media.cpp
     src/services/dictionary/media_type.cpp
@@ -111,6 +112,8 @@ target_compile_options(niratan_core PRIVATE -Wall -Wextra -Wpedantic -Werror)
 # The application layer above niratan_core: view models, view C++ types and
 # the Niratan QML module. It is a static library so tests can link it.
 qt_add_library(niratan_app STATIC
+    src/viewmodels/anki/mining_view_model.cpp
+    src/viewmodels/anki/mining_view_model.h
     src/viewmodels/dictionary/dictionary_popup_model.cpp
     src/viewmodels/dictionary/dictionary_popup_model.h
     src/viewmodels/library/library_view_model.cpp
@@ -162,6 +165,7 @@ qt_add_qml_module(niratan_app
     QML_FILES
         src/views/MainWindow.qml
         src/views/components/PageHeader.qml
+        src/views/dictionary/AnkiMiningToast.qml
         src/views/pages/DictionaryPage.qml
         src/views/pages/LibraryPage.qml
         src/views/pages/LibraryShelfSidebar.qml
@@ -193,7 +197,7 @@ target_link_libraries(niratan_app PUBLIC niratan_core Qt6::Quick Qt6::QuickContr
     Qt6::WebEngineQuick Qt6::WebChannelQuick Qt6::QuickDialogs2 Qt6::OpenGL
     Qt6::Multimedia PkgConfig::MPV)
 target_include_directories(niratan_app PUBLIC src/views/theme src/viewmodels/dictionary
-    src/viewmodels/reader src/views/reader src/viewmodels/library src/views/player
+    src/viewmodels/anki src/viewmodels/reader src/views/reader src/viewmodels/library src/views/player
     src/viewmodels/profiles src/viewmodels/sasayaki src/viewmodels/statistics
     src/viewmodels/player src/viewmodels/settings)
 target_compile_options(niratan_app PRIVATE -Wall -Wextra -Wpedantic -Werror)

@@ -1,15 +1,21 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
+//
+// Follows Features/Popup/PopupView.swift (popupContent) and
+// PopupWebView.swift (Coordinator.userContentController, updateUIView).
 
 pragma ComponentBehavior: Bound
 
 import QtQuick
 import QtQuick.Controls
+import QtWebChannel
 import QtWebEngine
 import Niratan
 
 Item {
     id: surface
 
+    required property DictionaryPopupModel popupModel
+    required property MiningViewModel miningModel
     property rect selectionAnchor
     signal dismissRequested()
 
@@ -31,7 +37,47 @@ Item {
     property bool swipeDismissed: false
 
     function showResults(html: string): void {
+        miningModel.setContext("", ReaderViewModel.title, "", "")
+        results.loadingPopupDocument = true
         results.loadHtml(html, "about:blank")
+    }
+
+    Connections {
+        target: surface.miningModel
+        function onReplyReady(requestId, payload) {
+            dictionaryBridge.replyReady(requestId, payload)
+        }
+        function onAnkiNoteButtonRequested(entryIndex, noteId) {
+            results.runJavaScript("window.hoshiShowAnkiNoteButton?.(" + entryIndex + ", '" + noteId + "');")
+        }
+    }
+
+    QtObject {
+        id: dictionaryBridge
+        WebChannel.id: "dictionaryBridge"
+        signal replyReady(int requestId, var payload)
+
+        function playWordAudio(url: string): void {
+            surface.popupModel.playWordAudio(url)
+        }
+
+        function mineEntry(requestId: int, content: var): void {
+            results.lastMiningRequest = Math.max(results.lastMiningRequest, requestId)
+            surface.miningModel.mineEntry(requestId, content)
+        }
+
+        function duplicateCheck(requestId: int, word: var): void {
+            results.lastMiningRequest = Math.max(results.lastMiningRequest, requestId)
+            surface.miningModel.duplicateCheck(requestId, word)
+        }
+
+        function openAnkiNote(noteIds: var): void {
+            surface.miningModel.openAnkiNote(noteIds)
+        }
+
+        function miningFeedback(result: var): void {
+            surface.miningModel.miningFeedback(result)
+        }
     }
 
     width: Math.max(1, fullWidth ? insetWidth : Math.min(ReaderViewModel.popupWidth, vertical
@@ -73,6 +119,9 @@ Item {
 
     WebEngineView {
         id: results
+        property bool loadingPopupDocument: false
+        // A new document must not consume outstanding replies for the old one.
+        property int lastMiningRequest: 0
         anchors.top: actionBar.bottom
         anchors.bottom: parent.bottom
         width: parent.width
@@ -80,9 +129,25 @@ Item {
         property real popupScale: ReaderViewModel.popupScale
         onPopupScaleChanged: runJavaScript("document.documentElement.style.zoom = " + popupScale)
 
+        webChannel: WebChannel {
+            registeredObjects: [dictionaryBridge]
+        }
+        onNavigationRequested: function(request) {
+            // The generated shell is the only document that may own the bridge.
+            const popupDocument = results.loadingPopupDocument && request.isMainFrame
+                && request.url.toString().startsWith("data:text/html;charset=UTF-8,")
+            if (popupDocument)
+                results.loadingPopupDocument = false
+            else if (request.url.toString() !== "about:blank")
+                request.reject()
+        }
         onLoadingChanged: function(loadRequest) {
-            if (loadRequest.status === WebEngineView.LoadSucceededStatus && visible)
-                runJavaScript("document.documentElement.style.zoom = " + popupScale + "; window.renderPopup();")
+            if (loadRequest.status === WebEngineView.LoadSucceededStatus && visible) {
+                runJavaScript("document.documentElement.style.zoom = " + popupScale
+                    + "; window.hoshiMiningRequestBase = " + lastMiningRequest
+                    + "; window.hoshiMiningOptions = " + JSON.stringify(surface.miningModel.popupMiningOptions())
+                    + ";\n" + surface.popupModel.bridgeScript)
+            }
         }
 
         DragHandler {

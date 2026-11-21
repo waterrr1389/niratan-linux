@@ -181,6 +181,16 @@ Item {
         }
     }
 
+    // PopupView.swift topToast belongs to the owning page, not the lookup frame.
+    MiningViewModel {
+        id: mining
+    }
+
+    AnkiMiningToast {
+        status: mining.toastStatus
+        message: mining.toastMessage
+    }
+
     SasayakiViewModel {
         id: sasayaki
     }
@@ -321,6 +331,8 @@ Item {
 
             ReaderLookupSurface {
                 id: lookupSurface
+                popupModel: lookupModel
+                miningModel: mining
                 z: 1
                 visible: ReaderViewModel.hasBook && lookupModel.hasResults
                 onDismissRequested: page.dismissLookup()
