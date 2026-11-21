@@ -3,6 +3,7 @@
 #include "book_storage.h"
 
 #include <QChar>
+#include <QJsonObject>
 #include <QString>
 #include <QUuid>
 
@@ -30,6 +31,8 @@ constexpr const char* kSasayakiMatchFile = "sasayaki_match.json";
 constexpr const char* kBookInfoFile = "bookinfo.json";
 constexpr const char* kBookOrderFile = "book_order.json";
 constexpr const char* kShelvesFile = "shelves.json";
+constexpr const char* kLibraryPrefsFile = "library_prefs.json";
+constexpr auto kBookshelfSortOption = "bookshelfSortOption";
 
 // Foundation's reference date, 2001-01-01T00:00:00Z.
 constexpr double kReferenceDateOffset = 978307200.0;
@@ -366,6 +369,17 @@ std::vector<BookShelf> BookStorage::load_shelves() const {
 
 bool BookStorage::save_shelves(const std::vector<BookShelf>& shelves) const {
     return storage::write_json_file(books_directory_ / kShelvesFile, shelves_to_json(shelves));
+}
+
+int BookStorage::load_library_prefs() const {
+    const auto document = read_document(app_directory_ / kLibraryPrefsFile);
+    const int option = document ? document->object().value(kBookshelfSortOption).toInt() : 0;
+    return option >= 0 && option <= 2 ? option : 0;
+}
+
+void BookStorage::save_library_prefs(int sort_option) const {
+    storage::write_json_file(app_directory_ / kLibraryPrefsFile,
+                             QJsonDocument(QJsonObject{{kBookshelfSortOption, sort_option}}));
 }
 
 ImportResult BookStorage::import_book(std::string_view source_path) const {

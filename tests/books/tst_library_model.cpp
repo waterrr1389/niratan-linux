@@ -2,6 +2,7 @@
 
 #include "models/books/library_model.h"
 
+#include <QLocale>
 #include <QtTest>
 
 #include <cstddef>
@@ -44,8 +45,7 @@ using niratan::books::unshelved_books;
 // Features/Bookshelf/BookshelfViewModel.swift and LibraryShelfSelection.swift
 // state the ordering, shelving and progress rules. Each test names the rule it
 // holds, including the places where the port deliberately differs from macOS:
-// code-point title order instead of localizedStandardCompare, a clamped
-// progress quotient, and byte-equal shelf keys where Swift compares
+// a clamped progress quotient and byte-equal shelf keys where Swift compares
 // canonically equivalent spellings as the same name.
 namespace {
 
@@ -119,7 +119,7 @@ class LibraryModelTest : public QObject {
 
    private slots:
     void recent_sort_keeps_the_newest_first_and_breaks_ties_by_title();
-    void title_sort_uses_code_point_order();
+    void title_sort_uses_localized_numeric_display_titles();
     void manual_sort_keeps_known_ids_first_and_breaks_unknown_ties_by_id();
     void normalized_order_drops_unknown_and_duplicate_ids();
     void normalized_shelves_drop_unknown_and_duplicate_ids();
@@ -167,26 +167,26 @@ void LibraryModelTest::recent_sort_keeps_the_newest_first_and_breaks_ties_by_tit
     QCOMPARE(ids_of(sorted), expected);
 }
 
-void LibraryModelTest::title_sort_uses_code_point_order() {
-    const std::vector<LibraryBook> input{
-        library_book("u", "\xE3\x81\x82"),  // HIRAGANA LETTER A
-        library_book("k", "\xE3\x82\xA2"),  // KATAKANA LETTER A
-        library_book("l", "apple"),
-        library_book("U", "Apple"),
+void LibraryModelTest::title_sort_uses_localized_numeric_display_titles() {
+    std::vector<LibraryBook> input{
+        library_book("b", "Banana"),
+        library_book("a", "Zebra"),
         library_book("v10", "Vol 10"),
         library_book("v2", "Vol 2"),
-        library_book("a", "A"),
         library_book("zz", "Same"),
         library_book("bb", "Same"),
     };
-    const std::vector<std::string> manual_order;
+    input[1].metadata.renamed_title = "Äpple";
+    const QLocale original;
+    QLocale::setDefault(QLocale(QLocale::English));
+    const auto english_ids = ids_of(sort_books(input, SortOption::title, {}));
+    QLocale::setDefault(QLocale::c());
+    const auto fallback_ids = ids_of(sort_books(input, SortOption::title, {}));
+    QLocale::setDefault(original);
 
-    const std::vector<LibraryBook> sorted = sort_books(input, SortOption::title, manual_order);
-
-    // Uppercase before lowercase, "10" before "2", kana after both, and an
-    // equal title falls to the identifier.
-    const std::vector<std::string> expected{"a", "U", "bb", "zz", "v10", "v2", "l", "u", "k"};
-    QCOMPARE(ids_of(sorted), expected);
+    const std::vector<std::string> expected{"a", "b", "bb", "zz", "v2", "v10"};
+    QCOMPARE(english_ids, expected);
+    QCOMPARE(fallback_ids, expected);
 }
 
 void LibraryModelTest::manual_sort_keeps_known_ids_first_and_breaks_unknown_ties_by_id() {

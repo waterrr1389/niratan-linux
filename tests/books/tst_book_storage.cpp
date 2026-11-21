@@ -1,7 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "services/books/book_storage.h"
+#include "services/storage/json_file.h"
 
+#include <QJsonObject>
 #include <QTemporaryDir>
 #include <QtTest>
 
@@ -107,6 +109,7 @@ class BookStorageTest : public QObject {
     void importing_a_broken_epub_reports_an_error();
     void metadata_bookmarks_and_info_round_trip();
     void book_order_and_shelves_round_trip();
+    void library_sort_preference_defaults_to_recent_and_round_trips();
     void unsafe_folders_are_rejected();
     void books_without_metadata_are_skipped();
     void book_directories_must_exist();
@@ -120,6 +123,26 @@ void BookStorageTest::file_names_replace_forbidden_characters() {
     QCOMPARE(sanitize_file_name("  spaced  "), std::string("spaced"));
     QCOMPARE(sanitize_file_name("line\nbreak"), std::string("line_break"));
     QCOMPARE(sanitize_file_name("日本語"), std::string("日本語"));
+}
+
+// Core/UserConfig.swift (bookshelfSortOption) restores the user's last choice.
+void BookStorageTest::library_sort_preference_defaults_to_recent_and_round_trips() {
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    const auto root = app_dir(directory);
+    const auto path = root / "library_prefs.json";
+    const BookStorage storage(root);
+    QCOMPARE(storage.load_library_prefs(), 0);
+
+    for (int option : {1, 2, 0}) {
+        storage.save_library_prefs(option);
+        QCOMPARE(BookStorage(root).load_library_prefs(), option);
+    }
+    QVERIFY(niratan::storage::write_json_file(path, QJsonDocument(QJsonObject{})));
+    QCOMPARE(storage.load_library_prefs(), 0);
+    QVERIFY(niratan::storage::write_json_file(
+        path, QJsonDocument(QJsonObject{{QStringLiteral("bookshelfSortOption"), 3}})));
+    QCOMPARE(storage.load_library_prefs(), 0);
 }
 
 void BookStorageTest::importing_a_book_writes_its_files() {

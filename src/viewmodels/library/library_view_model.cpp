@@ -194,6 +194,7 @@ struct LibraryViewModel::State {
 
 LibraryViewModel::LibraryViewModel(QObject* parent)
     : QObject(parent), state_(std::make_unique<State>()) {
+    state_->sort_option = state_->storage.load_library_prefs();
     refresh();
 }
 
@@ -227,6 +228,7 @@ void LibraryViewModel::setSortOption(int option) {
         return;
     }
     state_->sort_option = clamped;
+    state_->storage.save_library_prefs(clamped);
     state_->rebuild_views();
     emit booksChanged();
     emit sortChanged();
@@ -275,14 +277,12 @@ void LibraryViewModel::importBooks(const QList<QUrl>& files) {
             imported = true;
         } else if (!result.already_exists) {
             failures.append(QFileInfo(file.toLocalFile()).fileName());
-            state_->error = QString::fromStdString(result.error);
-            emit errorChanged();
         }
     }
     if (imported) {
         refresh();
     }
-    if (!failures.isEmpty() && state_->error.isEmpty()) {
+    if (!failures.isEmpty()) {
         state_->error = tr("Failed to import: %1").arg(failures.join(QStringLiteral(", ")));
         emit errorChanged();
     }
@@ -335,6 +335,8 @@ void LibraryViewModel::deleteBook(const QString& folder) {
     }
     const std::string id = state_->library.books[*index].metadata.id;
     if (!state_->storage.delete_book(folder_name)) {
+        state_->error = tr("Could not delete the book.");
+        emit errorChanged();
         return;
     }
     // A deleted book is off every shelf, and the model helper is what takes an
@@ -346,12 +348,20 @@ void LibraryViewModel::deleteBook(const QString& folder) {
     refresh();
 }
 
+bool LibraryViewModel::isLocalBook(const QString& folder) const {
+    const auto index = state_->find_book(folder.toStdString());
+    return index && !state_->library.books[*index].metadata.external_source_id;
+}
+
 void LibraryViewModel::markRead(const QString& folder) {
     const auto index = state_->find_book(folder.toStdString());
     if (!index.has_value()) {
         return;
     }
     LibraryBook& book = state_->library.books[*index];
+    if (book.metadata.external_source_id) {
+        return;
+    }
     const std::optional<Bookmark> bookmark = read_bookmark(book, books::reference_now());
     if (!bookmark.has_value()) {
         return;

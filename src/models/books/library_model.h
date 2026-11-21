@@ -20,13 +20,10 @@
 // equivalent spellings (NFC and NFD) are different shelves here where Swift's
 // String equality would merge them. Only the uniqueness checks fold case.
 //
-// Titles compare by Unicode code point. UTF-8 byte order is code point order,
-// so the comparison needs no locale and is reproducible. macOS sorts with
-// localizedStandardCompare, which follows the user's locale, ignores case and
-// reads digit runs as numbers ("Vol 2" before "Vol 10"); the port keeps the
-// deterministic order instead. Swift's sorted(by:) leaves equal keys in no
-// defined order, so ties here fall to the display title and then the
-// identifier.
+// Display titles use Qt's locale collation with numeric ordering ("Vol 2"
+// before "Vol 10"), following localizedStandardCompare. Qt and Foundation may
+// order some spellings differently. The C locale uses English collation so
+// numeric ordering remains available. Equal titles fall to the identifier.
 //
 // Progress divides the bookmark's character count by the book's total
 // character count and is clamped to [0, 1]; Swift keeps the raw quotient.

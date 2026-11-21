@@ -150,6 +150,7 @@ qt_add_qml_module(niratan
         src/views/components/PageHeader.qml
         src/views/pages/DictionaryPage.qml
         src/views/pages/LibraryPage.qml
+        src/views/pages/LibraryShelfSidebar.qml
         src/views/pages/PlayerPage.qml
         src/views/pages/ProfilesPage.qml
         src/views/pages/StatisticsPage.qml

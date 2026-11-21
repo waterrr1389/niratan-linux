@@ -74,6 +74,20 @@ Item {
     }
 
     Dialog {
+        id: markReadDialog
+        property string folder
+        title: qsTr("Mark as Read")
+        modal: true
+        anchors.centerIn: parent
+        standardButtons: Dialog.Yes | Dialog.No
+        Label {
+            text: qsTr("This will update your reading progress to the end of the book.")
+            color: Theme.textPrimary
+        }
+        onAccepted: library.markRead(markReadDialog.folder)
+    }
+
+    Dialog {
         id: deleteDialog
         title: qsTr("Delete Book")
         modal: true
@@ -108,6 +122,23 @@ Item {
     }
 
     Dialog {
+        id: renameShelfDialog
+        property string fromName
+        title: qsTr("Rename Shelf")
+        modal: true
+        anchors.centerIn: parent
+        standardButtons: Dialog.Ok | Dialog.Cancel
+        TextField {
+            id: renameShelfField
+            width: 240
+            onAccepted: renameShelfDialog.accept()
+        }
+        onAboutToShow: renameShelfField.text = renameShelfDialog.fromName
+        onOpened: renameShelfField.forceActiveFocus()
+        onAccepted: library.renameShelf(renameShelfDialog.fromName, renameShelfField.text)
+    }
+
+    Dialog {
         id: moveDialog
         title: qsTr("Move to Shelf")
         modal: true
@@ -138,75 +169,14 @@ Item {
     RowLayout {
         anchors.fill: parent
         spacing: 0
-        Rectangle {
+        LibraryShelfSidebar {
             Layout.fillHeight: true
             Layout.preferredWidth: 208
-            color: Theme.cardBackground
-            border.width: 1
-            border.color: Theme.cardStroke
-            ColumnLayout {
-                anchors.fill: parent
-                anchors.margins: 8
-                spacing: 2
-                Label {
-                    Layout.margins: 8
-                    text: "Niratan"
-                    color: Theme.textPrimary
-                    font.pixelSize: 20
-                    font.bold: true
-                }
-
-                Repeater {
-                    model: [
-                        { key: "all", label: qsTr("All Books") },
-                        { key: "reading", label: qsTr("Currently Reading") },
-                        { key: "unshelved", label: qsTr("Unshelved") }
-                    ]
-                    delegate: ItemDelegate {
-                        id: smartRow
-                        required property var modelData
-                        Layout.fillWidth: true
-                        text: smartRow.modelData.label
-                        highlighted: library.selectedShelf === smartRow.modelData.key
-                        onClicked: library.selectedShelf = smartRow.modelData.key
-                    }
-                }
-
-                Label {
-                    Layout.margins: 8
-                    text: qsTr("Shelves")
-                    color: Theme.textSecondary
-                    font.pixelSize: 12
-                }
-
-                Repeater {
-                    model: library.shelves
-                    delegate: ItemDelegate {
-                        id: shelfRow
-                        required property var modelData
-                        Layout.fillWidth: true
-                        text: shelfRow.modelData.name + " (" + shelfRow.modelData.count + ")"
-                        highlighted: library.selectedShelf === "shelf:" + shelfRow.modelData.name
-                        onClicked: library.selectedShelf = "shelf:" + shelfRow.modelData.name
-                        TapHandler {
-                            acceptedButtons: Qt.RightButton
-                            onTapped: shelfMenu.popup()
-                        }
-                        Menu {
-                            id: shelfMenu
-                            MenuItem {
-                                text: qsTr("Delete Shelf")
-                                onClicked: library.deleteShelf(shelfRow.modelData.name)
-                            }
-                        }
-                    }
-                }
-                Item { Layout.fillHeight: true }
-                Button {
-                    Layout.fillWidth: true
-                    text: qsTr("New Shelf")
-                    onClicked: shelfDialog.open()
-                }
+            model: library
+            onCreateRequested: shelfDialog.open()
+            onRenameRequested: name => {
+                renameShelfDialog.fromName = name
+                renameShelfDialog.open()
             }
         }
 
@@ -470,7 +440,11 @@ Item {
                             }
                             MenuItem {
                                 text: qsTr("Mark Read")
-                                onClicked: library.markRead(bookMenu.folder)
+                                enabled: library.isLocalBook(bookMenu.folder)
+                                onClicked: {
+                                    markReadDialog.folder = bookMenu.folder
+                                    markReadDialog.open()
+                                }
                             }
                             MenuSeparator {}
                             MenuItem {

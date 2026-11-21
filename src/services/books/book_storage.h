@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
 // The books directory, following Core/BookStorage.swift and
-// Features/Bookshelf/BookshelfViewModel.swift (processImport, finalizeImport).
+// Features/Bookshelf/BookshelfViewModel.swift (processImport, finalizeImport),
+// and Core/UserConfig.swift (bookshelfSortOption, defaulting to Recent).
 //
 // Layout under the app directory:
 //   Books/<folder>/metadata.json    BookMetadata
@@ -13,6 +14,7 @@
 //   Books/<folder>/sasayaki_match.json     SasayakiMatchData
 //   Books/book_order.json           [] of book IDs
 //   Books/shelves.json              [] of BookShelf
+//   library_prefs.json              bookshelfSortOption preference
 //
 // Import copies the source EPUB into a folder named after the sanitized title,
 // reads its title, language, cover and chapter counts, and writes metadata and
@@ -104,6 +106,10 @@ class BookStorage {
 
     std::vector<BookShelf> load_shelves() const;
     bool save_shelves(const std::vector<BookShelf>& shelves) const;
+
+    // 0 = Recent, 1 = Title, 2 = Manual. Missing or invalid values load as Recent.
+    int load_library_prefs() const;
+    void save_library_prefs(int sort_option) const;
 
     ImportResult import_book(std::string_view source) const;
 

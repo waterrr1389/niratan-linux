@@ -68,6 +68,7 @@ class LibraryViewModel : public QObject {
     Q_INVOKABLE void recordBookAccess(const QString& folder);
     Q_INVOKABLE void renameBook(const QString& folder, const QString& title);
     Q_INVOKABLE void deleteBook(const QString& folder);
+    Q_INVOKABLE bool isLocalBook(const QString& folder) const;
     Q_INVOKABLE void markRead(const QString& folder);
 
     Q_INVOKABLE QString createShelf(const QString& name);

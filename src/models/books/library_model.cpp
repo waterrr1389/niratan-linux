@@ -2,6 +2,8 @@
 
 #include "models/books/library_model.h"
 
+#include <QCollator>
+#include <QLocale>
 #include <QString>
 
 #include <algorithm>
@@ -29,20 +31,18 @@ bool same_id(const std::string& id, std::string_view value) {
     return std::string_view(id) == value;
 }
 
-// Title order is UTF-8 byte order, which is code point order. Equal titles fall
-// to the identifier so the result does not depend on the sort implementation.
-bool title_before(const LibraryBook& left, const LibraryBook& right) {
-    const std::string left_title = left.metadata.display_title();
-    const std::string right_title = right.metadata.display_title();
-    if (left_title != right_title) {
-        return left_title < right_title;
+bool title_before(const LibraryBook& left, const LibraryBook& right, const QCollator& collator) {
+    const int order = collator.compare(QString::fromStdString(left.metadata.display_title()),
+                                       QString::fromStdString(right.metadata.display_title()));
+    if (order != 0) {
+        return order < 0;
     }
     return left.metadata.id < right.metadata.id;
 }
 
 // Newest first. A NaN timestamp sorts after every real one instead of making
 // the comparison unordered.
-bool recent_before(const LibraryBook& left, const LibraryBook& right) {
+bool recent_before(const LibraryBook& left, const LibraryBook& right, const QCollator& collator) {
     const double left_time = left.metadata.last_access;
     const double right_time = right.metadata.last_access;
     const bool left_nan = std::isnan(left_time);
@@ -53,7 +53,7 @@ bool recent_before(const LibraryBook& left, const LibraryBook& right) {
     if (!left_nan && left_time != right_time) {
         return left_time > right_time;
     }
-    return title_before(left, right);
+    return title_before(left, right, collator);
 }
 
 std::vector<std::string> book_ids(const std::vector<LibraryBook>& books) {
@@ -146,14 +146,23 @@ std::string unique_shelf_name(std::string_view base, const std::vector<std::stri
 }
 
 std::vector<LibraryBook> sort_books(const std::vector<LibraryBook>& books, SortOption option,
-                                    const std::vector<std::string>& manual_order) {
+                                     const std::vector<std::string>& manual_order) {
+    const QLocale locale = QLocale().collation();
+    // Qt disables numeric collation in the C locale.
+    QCollator collator(locale == QLocale::c() ? QLocale(QLocale::English) : locale);
+    collator.setCaseSensitivity(Qt::CaseInsensitive);
+    collator.setNumericMode(true);
     std::vector<LibraryBook> sorted = books;
     switch (option) {
         case SortOption::recent:
-            std::stable_sort(sorted.begin(), sorted.end(), recent_before);
+            std::stable_sort(sorted.begin(), sorted.end(), [&collator](const auto& left, const auto& right) {
+                return recent_before(left, right, collator);
+            });
             break;
         case SortOption::title:
-            std::stable_sort(sorted.begin(), sorted.end(), title_before);
+            std::stable_sort(sorted.begin(), sorted.end(), [&collator](const auto& left, const auto& right) {
+                return title_before(left, right, collator);
+            });
             break;
         case SortOption::manual: {
             // The first occurrence of an identifier fixes its position, as
@@ -165,7 +174,7 @@ std::vector<LibraryBook> sort_books(const std::vector<LibraryBook>& books, SortO
             }
             std::stable_sort(
                 sorted.begin(), sorted.end(),
-                [&positions](const LibraryBook& left, const LibraryBook& right) {
+                [&positions, &collator](const LibraryBook& left, const LibraryBook& right) {
                     const auto left_position = positions.find(left.metadata.id);
                     const auto right_position = positions.find(right.metadata.id);
                     const bool left_known = left_position != positions.end();
@@ -176,7 +185,7 @@ std::vector<LibraryBook> sort_books(const std::vector<LibraryBook>& books, SortO
                     if (left_known) {
                         return left_position->second < right_position->second;
                     }
-                    return title_before(left, right);
+                    return title_before(left, right, collator);
                 });
             break;
         }
