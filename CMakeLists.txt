@@ -51,6 +51,7 @@ qt_add_library(niratan_core STATIC
     src/services/reader/reader_shell.cpp
     src/services/reader/reading_tracker.cpp
     src/models/statistics/dashboard_models.cpp
+    src/models/statistics/reader_statistics.cpp
     src/models/books/book.cpp
     src/models/books/library_model.cpp
     src/services/books/book_storage.cpp

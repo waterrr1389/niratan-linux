@@ -388,6 +388,14 @@ target_link_libraries(tst_reading_tracker PRIVATE niratan_core Qt6::Test)
 target_compile_options(tst_reading_tracker PRIVATE -Wall -Wextra -Wpedantic -Werror)
 add_test(NAME reading_tracker COMMAND tst_reading_tracker)
 
+qt_add_executable(tst_reader_statistics
+    reader/tst_reader_statistics.cpp
+)
+target_include_directories(tst_reader_statistics PRIVATE ${CMAKE_SOURCE_DIR}/src)
+target_link_libraries(tst_reader_statistics PRIVATE niratan_core Qt6::Test)
+target_compile_options(tst_reader_statistics PRIVATE -Wall -Wextra -Wpedantic -Werror)
+add_test(NAME reader_statistics COMMAND tst_reader_statistics)
+
 qt_add_executable(tst_dashboard_models
     statistics/tst_dashboard_models.cpp
 )
