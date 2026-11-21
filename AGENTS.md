@@ -123,6 +123,10 @@ Unicode rules, do the same rather than assuming ASCII.
 - `scripts/check-style.sh` enforces the SPDX line, no TODO markers or debug
   output, no tool or progress words, theme-only colours in QML and the
   include direction (models, then services, then view models, then views).
+- `scripts/check-wired.sh` requires every service header to be reached from a
+  view model, a view or a flow test, directly or through another wired
+  service; `scripts/wired-baseline.txt` lists today's unwired headers and may
+  only shrink.
 - `scripts/hooks/commit-msg` enforces Conventional Commits, at most 72
   characters and the same banned words.
 - Install the hooks once per clone: `git config core.hooksPath scripts/hooks`.
@@ -153,6 +157,13 @@ Unicode rules, do the same rather than assuming ASCII.
   and symbols followed. Code copied from Niratan or Niratan-win names its
   source file and commit.
 - One intent per commit; every commit builds and passes. Linear history.
+- Never bypass the hooks (`--no-verify`, `core.hooksPath` changes). A failing
+  gate is fixed, not skipped.
+- Only the coordinating agent commits, after review. Delegated agents edit
+  the files they are given and never run `git commit`, `git add` or
+  `git stash`.
+- Work on one first-release flow at a time; the next starts when the
+  current one's flow test passes.
 - Never commit `build/`, `cache/`, zip fixtures, media or user data.
 - No AI tool names and no progress words (Step, Phase, FIXED, AC-x) in code,
   comments, commit messages or PR text. Comments explain intent and

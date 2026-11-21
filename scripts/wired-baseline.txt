@@ -1,0 +1,13 @@
+# Service headers no view model, view or flow test reaches today; the list may
+# only shrink. Format: <src-relative header path>
+
+services/anki/anki_connect.h
+services/anki/duplicate_query.h
+services/anki/duplicate_scope.h
+services/anki/field_content.h
+services/anki/field_mapping.h
+services/anki/glossary_markup.h
+services/anki/media_naming.h
+services/anki/mining_gate.h
+services/dictionary/frequency_rank.h
+services/dictionary/text_selection.h

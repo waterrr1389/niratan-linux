@@ -8,7 +8,7 @@ cd "$(git rev-parse --show-toplevel)"
 if ! git diff --quiet || [ -n "$(git ls-files --others --exclude-standard)" ]; then
     echo "pre-commit: unstaged or untracked changes would be checked but not committed:" >&2
     git status --short | grep -v '^[MADRC] ' >&2 || true
-    echo "pre-commit: stage them, stash them, or commit with --no-verify." >&2
+    echo "pre-commit: stage or stash them, then commit again." >&2
     exit 1
 fi
 
