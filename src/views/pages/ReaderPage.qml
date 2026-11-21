@@ -22,7 +22,7 @@ Item {
     signal backRequested()
     readonly property bool readerWindowActive: Window.window ? Window.window.active : true
     readonly property bool statisticsContextActive: visible && readerWindowActive
-        && (statisticsPanel.visible || (!toc.visible && !sasayakiPanel.visible))
+        && (statisticsPanel.visible || (!toc.visible && !sasayakiPanel.opened))
 
     function dismissLookup() {
         lookupModel.clear()
@@ -130,7 +130,7 @@ Item {
             forward = false
         } else if (event.key === Qt.Key_T && event.modifiers === Qt.NoModifier
                    && ReaderViewModel.statisticsEnabled
-                   && !statisticsPanel.visible && !toc.visible && !sasayakiPanel.visible) {
+                   && !statisticsPanel.visible && !toc.visible && !sasayakiPanel.opened) {
             ReaderViewModel.toggleTracking()
             event.accepted = true
             return

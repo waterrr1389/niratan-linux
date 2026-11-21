@@ -9,7 +9,7 @@
 // the panel from the toolbar. Cue ranges and the active highlight are applied
 // by the page through window.hoshiReader after each chapter loads. The panel is
 // a right-side drawer, so it opens over the page and leaves the text behind it
-// visible.
+// visible; `opened` tells the page when it covers the text.
 //
 // The rate and delay sliders write through the model, which clamps and
 // persists them. The scrubber is bound to the model's position and only seeks
@@ -28,7 +28,7 @@ Item {
 
     // The page's model; the panel never creates its own.
     required property SasayakiViewModel player
-
+    readonly property bool opened: panel.visible
     signal closed
 
     function open() {
