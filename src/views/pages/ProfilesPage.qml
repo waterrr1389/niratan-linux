@@ -69,37 +69,9 @@ Item {
         anchors.fill: parent
         spacing: 0
 
-        Rectangle {
-            Layout.fillWidth: true
-            Layout.preferredHeight: 48
-            color: Theme.cardBackground
-            border.width: 1
-            border.color: Theme.cardStroke
-
-            RowLayout {
-                anchors.fill: parent
-                anchors.leftMargin: 8
-                anchors.rightMargin: 12
-                spacing: 8
-
-                Button {
-                    implicitWidth: 36
-                    implicitHeight: 36
-                    text: "\u2039"
-                    onClicked: page.backRequested()
-
-                    ToolTip.visible: hovered
-                    ToolTip.text: qsTr("Back")
-                }
-
-                Label {
-                    Layout.fillWidth: true
-                    text: qsTr("Profiles")
-                    color: Theme.textPrimary
-                    font.pixelSize: 16
-                    font.bold: true
-                }
-            }
+        PageHeader {
+            title: qsTr("Profiles")
+            onBackRequested: page.backRequested()
         }
 
         Rectangle {

@@ -63,4 +63,29 @@ QtObject {
 
     readonly property color textPrimary: popupText
     readonly property color textSecondary: popupTextSecondary
+
+    // The metrics below are a platform-neutral scale, not macOS values. They
+    // keep the density of the source layouts without copying any AppKit or
+    // glass geometry, so views stop spelling the same spacing, duration and
+    // text sizes as bare numbers.
+
+    // Spacing steps, in pixels.
+    readonly property int spacingXs: 4
+    readonly property int spacingSm: 8
+    readonly property int spacingMd: 12
+    readonly property int spacingLg: 16
+    readonly property int spacingXl: 24
+
+    // Transition durations, in milliseconds.
+    readonly property int motionFast: 120
+    readonly property int motionNormal: 180
+    readonly property int motionSlow: 220
+
+    // Text sizes, in pixels.
+    readonly property int fontLargeTitle: 22
+    readonly property int fontTitle: 17
+    readonly property int fontBody: 14
+    readonly property int fontCaption: 12
+
+    readonly property int controlRadius: 8
 }

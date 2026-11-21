@@ -24,6 +24,39 @@
 // Reader settings come from the active profile's reader_settings.json; the
 // page edits them through the setters, which rebuild the injected document.
 //
+// Reading statistics
+// ------------------
+// Following the statistics section of NativeReaderView.swift (configure,
+// loadBook's On autostart, updateStats, handleManualNavigation, flushStats,
+// saveStats, prepareForReaderLifecycleClose) and
+// Features/Reader/ReaderStatisticsPersistencePolicy.swift, the model owns one
+// reader::BookStatisticsStore and one reader::ReadingTracker for the open book.
+// They are created in openBook after the session is open and destroyed in
+// closeBook. openBook reads the statistics keys from
+// <data root>/settings.json:
+//   enableStatistics         bool   default false
+//   statisticsAutostartMode  "Off" | "Page Turn" | "On", default "Off"
+//   statisticsResetTime      int    clamped to 0..1439, default 0
+// The file is only read here; the statistics page owns writing those keys.
+// The tracker is configured with the local time zone, and On mode starts
+// tracking at the open instant. Page Turn mode starts on the first page turn.
+//
+// Time and characters are credited by updateChapterProgress(): it maps the
+// reported chapter progress to BookSession::character_offset and passes the
+// global offset to the tracker. A chapter change credits the jump to the new
+// chapter's boundary before saving. The tracker gets no position from loading
+// or restoring a chapter, so the restore target and the chapter's initial
+// position never count as read; a position that equals the current progress is
+// ignored before the tracker is called. closeBook stops and saves the live
+// session, and leaving the chapter saves it so the stored bookmark the
+// persistence policy compares against is the position the session ended at.
+// Page turns do not save. setReaderActive() feeds the tracker's context
+// predicate (isStatisticsContextActive): a hidden page pauses time, while the
+// statistics sheet keeps the reader page visible.
+//
+// The four read-only properties below are cached when the tracker changes, so
+// a QML binding does no work until statisticsChanged() fires.
+//
 // bookFolder is the open book's folder name under Books/, exposed so a model
 // that reads sidecar files (Sasayaki) can resolve them without matching the
 // display title. It is empty when no book is open.
@@ -69,6 +102,11 @@ class ReaderViewModel : public QObject {
                    settingsChanged)
     Q_PROPERTY(int verticalPadding READ vertical_padding WRITE setVerticalPadding NOTIFY
                    settingsChanged)
+    Q_PROPERTY(int statisticsTodayCharacters READ statistics_today_characters NOTIFY
+                   statisticsChanged)
+    Q_PROPERTY(int statisticsTodaySeconds READ statistics_today_seconds NOTIFY statisticsChanged)
+    Q_PROPERTY(int statisticsSessionSpeed READ statistics_session_speed NOTIFY statisticsChanged)
+    Q_PROPERTY(bool statisticsEnabled READ statistics_enabled NOTIFY statisticsChanged)
 
    public:
     explicit ReaderViewModel(QObject* parent = nullptr);
@@ -106,6 +144,13 @@ class ReaderViewModel : public QObject {
     int vertical_padding() const;
     void setVerticalPadding(int padding);
 
+    // Cached totals of the open book: today's characters and whole seconds,
+    // the live session's truncating speed and whether statistics is enabled.
+    int statistics_today_characters() const;
+    int statistics_today_seconds() const;
+    int statistics_session_speed() const;
+    bool statistics_enabled() const;
+
     // Imports the EPUB into Books and opens it. The title names the folder.
     Q_INVOKABLE bool importAndOpen(const QUrl& file);
     // Opens an already imported book folder.
@@ -129,6 +174,11 @@ class ReaderViewModel : public QObject {
     Q_INVOKABLE void updateChapterProgress(double progress);
     Q_INVOKABLE void saveBookmark();
 
+    // The reader page's visibility, matching NativeReaderView's
+    // isReaderWindowActive. A hidden page pauses time; the statistics sheet
+    // does not hide the page.
+    Q_INVOKABLE void setReaderActive(bool active);
+
     // QWebChannel entry point for window.hoshiSend.
     Q_INVOKABLE void message(const QString& name, const QString& payload);
 
@@ -146,6 +196,7 @@ class ReaderViewModel : public QObject {
     void errorChanged();
     void settingsChanged();
     void paletteChanged();
+    void statisticsChanged();
     void pageChanged(int index);
     // The page should run navigation for this direction ("forward"/"backward").
     void pageTurnRequested(const QString& direction);
@@ -157,6 +208,12 @@ class ReaderViewModel : public QObject {
     void load_chapter(int index, double progress);
     void reload_document();
     void persist_bookmark();
+    // Credits the elapsed time without characters and writes the live
+    // session. Called before a chapter change; never on a page turn.
+    void save_statistics();
+    // Recomputes the cached totals from the tracker and fires
+    // statisticsChanged() when one of them changed.
+    void refresh_statistics();
     std::string shell_document(const std::string& path);
 };
 

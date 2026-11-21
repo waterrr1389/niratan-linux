@@ -2,7 +2,8 @@
 //
 // The Sasayaki inspector for the reader page, following
 // Features/Sasayaki/SasayakiSheet.swift (the playback header, the audio and
-// subtitle pickers, the cue list and the rate and delay controls).
+// subtitle pickers, the cue list and the rate and delay controls) and
+// Features/Sasayaki/SasayakiMatchView.swift (the subtitle match section).
 //
 // ReaderPage owns the Sasayaki model and points this panel at it, then opens
 // the panel from the toolbar. Cue ranges and the active highlight are applied
@@ -58,7 +59,7 @@ Item {
     }
 
     Connections {
-        target: player
+        target: root.player
 
         function onCuesChanged() {
             cueList.syncCurrent();
@@ -67,20 +68,28 @@ Item {
         function onCurrentCueChanged() {
             cueList.syncCurrent();
         }
+
+        function onMatchApplied() {
+            // ReaderPage owns this panel. Its apply path also highlights the
+            // current cue after installing the ranges in the web view.
+            var readerPage = root.parent;
+            if (readerPage && typeof readerPage.applySasayakiCues === "function")
+                readerPage.applySasayakiCues();
+        }
     }
 
     FileDialog {
         id: audioDialog
         title: qsTr("Load Audio")
         nameFilters: [qsTr("Audiobooks (*.mp3 *.m4b)"), qsTr("All files (*)")]
-        onAccepted: player.openAudio(selectedFile)
+        onAccepted: root.player.openAudio(audioDialog.selectedFile)
     }
 
     FileDialog {
         id: subtitleDialog
         title: qsTr("Load Subtitles")
         nameFilters: [qsTr("SubRip subtitles (*.srt)"), qsTr("All files (*)")]
-        onAccepted: player.openSubtitles(selectedFile)
+        onAccepted: root.player.openSubtitles(subtitleDialog.selectedFile)
     }
 
     Drawer {
@@ -91,6 +100,8 @@ Item {
         modal: true
         padding: 0
         closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
+        onAboutToShow: root.player.matchSearchWindow = undefined
+        onAboutToHide: root.player.cancelSubtitleMatch()
         onOpened: {
             cueList.syncCurrent();
         }
@@ -352,16 +363,111 @@ Item {
                 }
             }
 
-            Label {
+            ColumnLayout {
                 Layout.fillWidth: true
                 Layout.leftMargin: 16
                 Layout.rightMargin: 16
-                Layout.topMargin: 8
-                visible: player.hasAudio && !player.hasMatch
-                text: qsTr("No cue match file for this book. Subtitles still play the current cue, but the reader cannot highlight it.")
-                color: Theme.textSecondary
-                font.pixelSize: 12
-                wrapMode: Text.WordWrap
+                Layout.topMargin: 12
+                spacing: 4
+                visible: root.player.hasAudio
+
+                Label {
+                    text: qsTr("Subtitle Match")
+                    color: Theme.textPrimary
+                    font.bold: true
+                }
+
+                RowLayout {
+                    Layout.fillWidth: true
+
+                    Label {
+                        Layout.fillWidth: true
+                        text: root.player.subtitleName || qsTr("No subtitle file selected")
+                        color: Theme.textSecondary
+                        font.pixelSize: 12
+                        elide: Text.ElideMiddle
+                    }
+
+                    Button {
+                        text: root.player.matching ? qsTr("Matching…") : qsTr("Match")
+                        enabled: root.player.subtitleName.length > 0 && !root.player.matching
+                        onClicked: root.player.matchSubtitles(root.player.matchSearchWindow)
+                    }
+                }
+
+                RowLayout {
+                    Layout.fillWidth: true
+
+                    Label {
+                        text: qsTr("Search Window")
+                        color: Theme.textSecondary
+                        font.pixelSize: 12
+                    }
+
+                    Slider {
+                        id: searchWindowSlider
+                        Layout.fillWidth: true
+                        from: 50
+                        to: 1000
+                        stepSize: 50
+                        snapMode: Slider.SnapAlways
+                        value: root.player.matchSearchWindow
+                        enabled: !root.player.matching
+                        Accessible.name: qsTr("Search Window")
+                        onMoved: root.player.matchSearchWindow = searchWindowSlider.value
+                    }
+
+                    Label {
+                        Layout.preferredWidth: 48
+                        horizontalAlignment: Text.AlignRight
+                        text: root.player.matchSearchWindow.toString()
+                        color: Theme.textPrimary
+                        font.pixelSize: 11
+                    }
+                }
+
+                ProgressBar {
+                    Layout.fillWidth: true
+                    visible: root.player.matching
+                    indeterminate: true
+                    Accessible.name: qsTr("Matching subtitles")
+                }
+
+                Label {
+                    Layout.fillWidth: true
+                    visible: root.player.hasMatch
+                    text: qsTr("Match rate: %1").arg(root.player.matchRateLabel)
+                    color: Theme.textPrimary
+                    font.pixelSize: 12
+                    wrapMode: Text.WordWrap
+                }
+
+                Label {
+                    Layout.fillWidth: true
+                    visible: root.player.hasMatch && root.player.inferredCount > 0
+                    text: qsTr("%n inferred from surrounding narration; highlights may be approximate.", "", root.player.inferredCount)
+                    color: Theme.textSecondary
+                    font.pixelSize: 12
+                    wrapMode: Text.WordWrap
+                }
+
+                Label {
+                    Layout.fillWidth: true
+                    visible: root.player.matchError.length > 0
+                    text: root.player.matchError
+                    color: Theme.popupDanger
+                    font.pixelSize: 12
+                    wrapMode: Text.WordWrap
+                }
+
+                Label {
+                    Layout.fillWidth: true
+                    visible: !root.player.hasMatch
+                    text: qsTr("Match the subtitles to this book to highlight narration in the reader.")
+                    color: Theme.textSecondary
+                    font.pixelSize: 12
+                    wrapMode: Text.WordWrap
+                }
             }
 
             ListView {

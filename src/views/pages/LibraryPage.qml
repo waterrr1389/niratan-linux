@@ -20,6 +20,7 @@ Item {
     signal videoRequested()
     signal profilesRequested()
     signal statisticsRequested()
+    signal settingsRequested()
 
     property bool selecting: false
     property var selectedFolders: ({})
@@ -310,6 +311,10 @@ Item {
                     Button {
                         text: qsTr("Statistics")
                         onClicked: page.statisticsRequested()
+                    }
+                    Button {
+                        text: qsTr("Settings")
+                        onClicked: page.settingsRequested()
                     }
                     Button {
                         text: qsTr("Import")

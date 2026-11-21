@@ -2,7 +2,9 @@
 
 #include "reader_view_model.h"
 
+#include <QDateTime>
 #include <QFile>
+#include <QJsonObject>
 
 #include <algorithm>
 #include <cmath>
@@ -11,8 +13,10 @@
 
 #include "models/profiles/profile_index.h"
 #include "models/profiles/reader_settings.h"
+#include "models/statistics/statistics.h"
 #include "services/books/book_storage.h"
 #include "services/profiles/profile_repository.h"
+#include "services/reader/reading_tracker.h"
 #include "services/storage/app_paths.h"
 #include "services/storage/json_file.h"
 
@@ -24,9 +28,15 @@ using niratan::books::Bookmark;
 using niratan::profiles::ProfileRepository;
 using niratan::profiles::ReaderProfileSettings;
 using niratan::reader::BookSession;
+using niratan::reader::BookStatisticsStore;
 using niratan::reader::PageSize;
 using niratan::reader::ReaderScripts;
+using niratan::reader::ReadingTracker;
 using niratan::reader::ShellInput;
+using niratan::statistics::ReadingTotal;
+using niratan::statistics::StatisticsAutostartMode;
+
+std::int64_t now_milliseconds() { return QDateTime::currentMSecsSinceEpoch(); }
 
 std::string read_resource(const QString& path) {
     QFile file(path.startsWith(QStringLiteral(":/qtwebchannel/"))
@@ -39,6 +49,46 @@ std::string read_resource(const QString& path) {
 }
 
 double clamp_progress(double progress) { return std::min(std::max(progress, 0.0), 1.0); }
+
+StatisticsAutostartMode parse_autostart_mode(const QString& raw) {
+    if (raw == QString::fromStdString(std::string(
+                   niratan::statistics::autostart_mode_id(StatisticsAutostartMode::page_turn)))) {
+        return StatisticsAutostartMode::page_turn;
+    }
+    if (raw == QString::fromStdString(
+                   std::string(niratan::statistics::autostart_mode_id(
+                       StatisticsAutostartMode::on)))) {
+        return StatisticsAutostartMode::on;
+    }
+    return StatisticsAutostartMode::off;
+}
+
+// The statistics keys of <data root>/settings.json. Reads never write: the
+// statistics page owns the stored values. A missing or damaged file is the
+// default configuration, as UserConfig's synthesized decode would fall back.
+struct ReaderStatisticsSettings {
+    bool enabled = false;
+    StatisticsAutostartMode autostart_mode = StatisticsAutostartMode::off;
+    int reset_minutes = 0;
+};
+
+ReaderStatisticsSettings load_statistics_settings(const std::filesystem::path& path) {
+    ReaderStatisticsSettings settings;
+    const storage::JsonReadResult read = storage::read_json_file(path);
+    if (read.status != storage::JsonReadStatus::success || !read.document.isObject()) {
+        return settings;
+    }
+    const QJsonObject object = read.document.object();
+    settings.enabled = object.value(QStringLiteral("enableStatistics")).toBool(false);
+    settings.autostart_mode = parse_autostart_mode(
+        object.value(QStringLiteral("statisticsAutostartMode")).toString(QStringLiteral("Off")));
+    // normalizedResetMinutes clamps the same range, so the stored value never
+    // reaches the tracker out of range.
+    settings.reset_minutes =
+        std::clamp(object.value(QStringLiteral("statisticsResetTime")).toInt(0), 0,
+                   niratan::statistics::minutes_per_day - 1);
+    return settings;
+}
 
 std::string resolve_furigana(const ReaderProfileSettings& settings) {
     if (settings.furigana_mode.has_value()) {
@@ -86,6 +136,14 @@ struct ReaderViewModel::State {
     std::optional<BookSession> session;
     books::BookMetadata book;
     bool has_book = false;
+
+    // The store must outlive the tracker that borrows it.
+    std::unique_ptr<BookStatisticsStore> statistics_store;
+    std::unique_ptr<ReadingTracker> tracker;
+    bool statistics_enabled = false;
+    int statistics_today_characters = 0;
+    int statistics_today_seconds = 0;
+    int statistics_session_speed = 0;
     int chapter_index = 0;
     double chapter_progress = 0.0;
     int page_width = 800;
@@ -238,6 +296,25 @@ void ReaderViewModel::setVerticalPadding(int padding) {
     reload_document();
 }
 
+int ReaderViewModel::statistics_today_characters() const {
+    return state_->statistics_today_characters;
+}
+
+int ReaderViewModel::statistics_today_seconds() const { return state_->statistics_today_seconds; }
+
+int ReaderViewModel::statistics_session_speed() const {
+    return state_->statistics_session_speed;
+}
+
+bool ReaderViewModel::statistics_enabled() const { return state_->statistics_enabled; }
+
+void ReaderViewModel::setReaderActive(bool active) {
+    if (state_->tracker) {
+        state_->tracker->set_context_active(active, now_milliseconds());
+    }
+    refresh_statistics();
+}
+
 bool ReaderViewModel::importAndOpen(const QUrl& file) {
     const std::filesystem::path source = file.toLocalFile().toStdString();
     const books::ImportResult imported = state_->storage.import_book(source);
@@ -280,6 +357,29 @@ bool ReaderViewModel::openBook(const QString& folder) {
     state_->error.clear();
     emit errorChanged();
 
+    // Statistics is configured for this book, after the session is open so a
+    // failed open leaves no tracker behind. The settings file is read on every
+    // open; the reader never writes it.
+    const ReaderStatisticsSettings statistics_settings =
+        load_statistics_settings(state_->storage.app_directory() / "settings.json");
+    state_->statistics_enabled = statistics_settings.enabled;
+    // Replacing an open book must not leave a tracker borrowing a destroyed
+    // store; the tracker goes first.
+    state_->tracker.reset();
+    state_->statistics_store.reset();
+    if (const auto book_root = state_->storage.book_directory(folder_id);
+        book_root.has_value()) {
+        state_->statistics_store = std::make_unique<BookStatisticsStore>(*book_root);
+        state_->tracker = std::make_unique<ReadingTracker>(*state_->statistics_store,
+                                                           QTimeZone(QTimeZone::LocalTime));
+        state_->tracker->configure(statistics_settings.enabled,
+                                   statistics_settings.autostart_mode,
+                                   statistics_settings.reset_minutes);
+        if (statistics_settings.autostart_mode == StatisticsAutostartMode::on) {
+            state_->tracker->start(now_milliseconds());
+        }
+    }
+
     int chapter = 0;
     double progress = 0.0;
     if (const auto bookmark = state_->storage.load_bookmark(folder_id)) {
@@ -293,6 +393,7 @@ bool ReaderViewModel::openBook(const QString& folder) {
     reload_document();
     emit chapterChanged();
     emit progressChanged();
+    refresh_statistics();
     return true;
 }
 
@@ -301,6 +402,14 @@ void ReaderViewModel::closeBook() {
         return;
     }
     persist_bookmark();
+    if (state_->tracker) {
+        const std::int64_t now = now_milliseconds();
+        state_->tracker->stop(now);
+        state_->tracker->save(now, state_->book.display_title());
+    }
+    state_->tracker.reset();
+    state_->statistics_store.reset();
+    state_->statistics_enabled = false;
     state_->session.reset();
     state_->book = books::BookMetadata{};
     state_->has_book = false;
@@ -311,6 +420,7 @@ void ReaderViewModel::closeBook() {
     emit chapterChanged();
     emit progressChanged();
     emit chapterUrlChanged();
+    refresh_statistics();
 }
 
 void ReaderViewModel::setPageSize(int width, int height) {
@@ -332,6 +442,7 @@ void ReaderViewModel::goToChapter(int index) {
         return;
     }
     persist_bookmark();
+    save_statistics();
     load_chapter(index, 0.0);
 }
 
@@ -346,6 +457,7 @@ void ReaderViewModel::goToProgress(double progress) {
         return;
     }
     persist_bookmark();
+    save_statistics();
     load_chapter(position->first, position->second);
 }
 
@@ -363,6 +475,11 @@ void ReaderViewModel::handlePageTurnResult(bool forward, const QVariant& result)
     if (!state_->session.has_value()) {
         return;
     }
+    // NativeReaderView's onPageTurn: Page Turn mode starts here, before the
+    // result moves the position.
+    if (state_->tracker) {
+        state_->tracker->on_manual_navigation(now_milliseconds());
+    }
     if (result.typeId() == QMetaType::Double || result.typeId() == QMetaType::Int) {
         updateChapterProgress(result.toDouble());
         return;
@@ -370,11 +487,26 @@ void ReaderViewModel::handlePageTurnResult(bool forward, const QVariant& result)
     if (result.toString() == QStringLiteral("limit")) {
         if (forward) {
             if (state_->chapter_index + 1 < state_->session->spine_count()) {
+                // Moving to the next chapter's start is the last page's
+                // forward jump, so the characters read up to the boundary are
+                // credited before the session is stored.
+                if (state_->tracker) {
+                    state_->tracker->update_position(
+                        state_->session->character_offset(state_->chapter_index + 1, 0.0),
+                        now_milliseconds());
+                }
                 persist_bookmark();
+                save_statistics();
                 load_chapter(state_->chapter_index + 1, 0.0);
             }
         } else if (state_->chapter_index > 0) {
+            if (state_->tracker) {
+                state_->tracker->update_position(
+                    state_->session->character_offset(state_->chapter_index - 1, 1.0),
+                    now_milliseconds());
+            }
             persist_bookmark();
+            save_statistics();
             load_chapter(state_->chapter_index - 1, 1.0);
         }
     }
@@ -386,8 +518,17 @@ void ReaderViewModel::updateChapterProgress(double progress) {
         return;
     }
     state_->chapter_progress = clamped;
+    if (state_->tracker) {
+        // The tracker works on the book's global character offset, as
+        // statisticsCharacterPosition does. The unchanged-progress guard above
+        // is what keeps a chapter load or restore from crediting anything.
+        state_->tracker->update_position(
+            state_->session->character_offset(state_->chapter_index, clamped),
+            now_milliseconds());
+    }
     emit progressChanged();
     persist_bookmark();
+    refresh_statistics();
 }
 
 void ReaderViewModel::saveBookmark() { persist_bookmark(); }
@@ -402,6 +543,11 @@ void ReaderViewModel::message(const QString& name, const QString& payload) {
     } else if (name == QStringLiteral("pageChanged")) {
         emit pageChanged(payload.toInt());
     } else if (name == QStringLiteral("wheelNavigation")) {
+        // The wheel is a manual page turn; Page Turn mode starts here, before
+        // the page runs the navigation the signal asks for.
+        if (state_->tracker) {
+            state_->tracker->on_manual_navigation(now_milliseconds());
+        }
         emit pageTurnRequested(payload);
     }
 }
@@ -434,6 +580,7 @@ void ReaderViewModel::load_chapter(int index, double progress) {
     reload_document();
     emit chapterChanged();
     emit progressChanged();
+    refresh_statistics();
 }
 
 void ReaderViewModel::reload_document() {
@@ -459,6 +606,44 @@ void ReaderViewModel::persist_bookmark() {
         state_->session->character_offset(state_->chapter_index, state_->chapter_progress);
     bookmark.last_modified = books::reference_now();
     state_->storage.save_bookmark(state_->book.folder, bookmark);
+}
+
+void ReaderViewModel::save_statistics() {
+    if (!state_->tracker) {
+        return;
+    }
+    // flushStats(): credit the elapsed time up to the position the bookmark
+    // was just persisted at, then store the session. The tracker's save()
+    // reloads the records, so the bookmark written above is the snapshot the
+    // persistence policy compares against.
+    const std::int64_t now = now_milliseconds();
+    state_->tracker->flush(now);
+    state_->tracker->save(now, state_->book.display_title());
+}
+
+void ReaderViewModel::refresh_statistics() {
+    ReadingTotal today;
+    ReadingTotal session;
+    if (state_->tracker) {
+        const std::int64_t now = now_milliseconds();
+        today = state_->tracker->today_total(now);
+        session = state_->tracker->session_total();
+    }
+    const int today_characters = std::max(today.characters_read, 0);
+    const int today_seconds = static_cast<int>(std::max(today.reading_time, 0.0));
+    const int session_speed = session.reading_speed();
+    const bool enabled = state_->statistics_enabled;
+    if (state_->statistics_today_characters == today_characters &&
+        state_->statistics_today_seconds == today_seconds &&
+        state_->statistics_session_speed == session_speed &&
+        state_->statistics_enabled == enabled) {
+        return;
+    }
+    state_->statistics_today_characters = today_characters;
+    state_->statistics_today_seconds = today_seconds;
+    state_->statistics_session_speed = session_speed;
+    state_->statistics_enabled = enabled;
+    emit statisticsChanged();
 }
 
 std::string ReaderViewModel::shell_document(const std::string& path) {

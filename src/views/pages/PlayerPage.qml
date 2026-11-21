@@ -21,15 +21,11 @@
 // but stays visible while paused, while the pointer is over the bar or the
 // speed panel, and while the timeline is being scrubbed.
 //
-// Deferred because MpvItem exposes no API for them: the chapter list, chapter
-// markers and chapter menu (only chapterChanged(int) exists), subtitle track
-// names and the engine's subtitle visibility, transcript, subtitle mining,
-// inspector and mining history, ambient backdrop, remote and media-server
-// sources, playlist navigation, screenshots, subtitle file loading,
-// drag-and-drop, remembered playback position, playback history and the full
-// subtitle appearance settings. Because the engine reports no subtitle
-// visibility or A-B state, the page tracks the values it requested locally;
-// they reset when a new file loads. The floating bar cannot be dragged, the
+// Chapters, subtitle transcripts and mining history live in the docked study
+// sidebar. Timeline chapter markers, an inspector, an ambient backdrop,
+// remote and media-server sources, playlist navigation, screenshot UI,
+// drag-and-drop, playback history and full subtitle styling are not included.
+// The page tracks its requested A-B state. The floating bar cannot be dragged, the
 // compact-bottom layout and the density switching are not reproduced, and the
 // pointer cursor is not hidden.
 
@@ -89,8 +85,7 @@ Item {
     property real scrubTime: 0
     property bool speedPanelOpen: false
     property bool speedPanelHovered: false
-    // Requested subtitle visibility; the engine has no readable property.
-    property bool subtitlesVisible: true
+    property bool studyOpen: false
     // Requested A-B points; the engine only exposes the commands.
     property bool loopASet: false
     property bool loopBSet: false
@@ -283,9 +278,8 @@ Item {
         if (!mpv.loaded)
             return
         mpv.toggleSubtitles()
-        page.subtitlesVisible = !page.subtitlesVisible
         page.showOSD(qsTr("Subtitles"),
-                     page.subtitlesVisible ? qsTr("On") : qsTr("Off"))
+                     mpv.subtitlesVisible ? qsTr("On") : qsTr("Off"))
     }
 
     function cycleSubtitles() {
@@ -370,9 +364,27 @@ Item {
         page.osdTitle = ""
         page.osdValue = ""
         osdTimer.stop()
+        studyModel.setVideo(url)
         mpv.open(url)
         page.forceActiveFocus()
         page.notePointerMovement()
+    }
+
+    function toggleTranscript() {
+        if (page.studyOpen && studySidebar.selectedTab === 1) {
+            page.studyOpen = false
+            page.forceActiveFocus()
+        } else {
+            studySidebar.selectedTab = 1
+            page.studyOpen = true
+        }
+    }
+
+    function loadSubtitle(file: url): bool {
+        if (mpv.loadExternalSubtitle(file))
+            return true
+        studyModel.reportSubtitleLoadFailure()
+        return false
     }
 
     function textFieldFocused() {
@@ -404,6 +416,14 @@ Item {
         var shift = (event.modifiers & Qt.ShiftModifier) !== 0
         var control = (event.modifiers & Qt.ControlModifier) !== 0
         var meta = (event.modifiers & Qt.MetaModifier) !== 0
+        if (event.key === Qt.Key_Z && control && shift && !alt && !meta) {
+            event.accepted = true
+            if (!event.isAutoRepeat) {
+                studyModel.mineCurrentSubtitle()
+                page.showOSD(qsTr("Mining History"), studyModel.lastMiningNotice)
+            }
+            return
+        }
         if (control || meta)
             return
 
@@ -435,6 +455,9 @@ Item {
         } else if (event.key === Qt.Key_S && plain) {
             if (!event.isAutoRepeat)
                 page.cycleSubtitles()
+        } else if (event.key === Qt.Key_T && plain) {
+            if (!event.isAutoRepeat)
+                page.toggleTranscript()
         } else if (event.key === Qt.Key_Comma && alt) {
             if (shift)
                 page.adjustAudioDelay(-0.5)
@@ -467,6 +490,40 @@ Item {
             event.accepted = true
     }
 
+    PlayerStudyViewModel {
+        id: studyModel
+        chapters: mpv.chapters
+        onSeekRequested: function(seconds) { mpv.seek(seconds) }
+        onChapterRequested: function(id) { mpv.seekToChapter(id) }
+        onVideoRequested: function(file) { page.openVideo(file) }
+        onHistorySubtitleRequested: function(file, trackId, seconds) {
+            if (file.toString().length > 0) {
+                page.loadSubtitle(file)
+            } else if (trackId > 0) {
+                mpv.selectSubtitleTrack(trackId)
+            }
+            mpv.subtitlesVisible = true
+            mpv.seek(seconds)
+        }
+    }
+
+    StudySidebar {
+        id: studySidebar
+        visible: page.studyOpen
+        anchors.top: page.top
+        anchors.right: page.right
+        anchors.bottom: page.bottom
+        width: Math.min(studySidebar.preferredWidth,
+                        Math.max(studySidebar.minimumWidth, page.width - 340))
+        study: studyModel
+        playbackReady: mpv.loaded
+        onSubtitleFileRequested: function(file) { page.loadSubtitle(file) }
+        onCloseRequested: {
+            page.studyOpen = false
+            page.forceActiveFocus()
+        }
+    }
+
     Component.onCompleted: {
         // UserConfig defaults: 36 pt, 0.9 vertical position, weight 700, no
         // background. Applying them explicitly keeps the engine defaults from
@@ -496,7 +553,10 @@ Item {
     // the theme module.
     Rectangle {
         id: stage
-        anchors.fill: parent
+        anchors.top: parent.top
+        anchors.bottom: parent.bottom
+        anchors.left: parent.left
+        anchors.right: page.studyOpen ? studySidebar.left : parent.right
         color: "#000000"
 
         MpvItem {
@@ -504,9 +564,9 @@ Item {
             anchors.fill: parent
 
             onLoadedChanged: {
+                studyModel.setPlaybackReady(mpv.loaded)
                 if (!mpv.loaded)
                     return
-                page.subtitlesVisible = true
                 page.loopASet = false
                 page.loopBSet = false
                 page.speedPanelOpen = false
@@ -514,6 +574,15 @@ Item {
                 page.chromeVisible = true
                 page.forceActiveFocus()
                 page.notePointerMovement()
+            }
+            onPositionChanged: studyModel.updatePlayback(mpv.position, mpv.subtitleDelay)
+            onSubtitleDelayChanged: studyModel.updatePlayback(mpv.position, mpv.subtitleDelay)
+            onTracksChanged: studyModel.setTracks(mpv.tracks)
+            onSubtitlesVisibleChanged: studyModel.setSubtitlesVisible(mpv.subtitlesVisible)
+            onSubtitleCueChanged: studyModel.updateNativeCue(mpv.subtitleText, mpv.subtitleStart,
+                                                             mpv.subtitleEnd)
+            onSubtitleDocumentChanged: function(file, bytes, readable) {
+                studyModel.setSubtitleDocument(file, bytes, readable)
             }
             onPausedChanged: {
                 if (!mpv.paused)
@@ -529,7 +598,7 @@ Item {
     // Hover only: clicks are not part of the player surface in this port, and
     // the bar and the empty state sit above this layer.
     MouseArea {
-        anchors.fill: parent
+        anchors.fill: stage
         acceptedButtons: Qt.NoButton
         hoverEnabled: true
         onPositionChanged: page.notePointerMovement()
@@ -538,8 +607,8 @@ Item {
 
     Rectangle {
         id: emptyState
-        anchors.centerIn: parent
-        width: Math.min(440, Math.max(0, page.width - 64))
+        anchors.centerIn: stage
+        width: Math.min(440, Math.max(0, stage.width - 64))
         height: emptyColumn.implicitHeight + 40
         visible: !mpv.loaded
         radius: Theme.cardRadius
@@ -594,8 +663,8 @@ Item {
     // themes over the black stage.
     Rectangle {
         id: osd
-        anchors.top: parent.top
-        anchors.left: parent.left
+        anchors.top: stage.top
+        anchors.left: stage.left
         anchors.topMargin: 30
         anchors.leftMargin: 28
         width: osdRow.implicitWidth + 24
@@ -635,11 +704,11 @@ Item {
 
     Rectangle {
         id: bar
-        anchors.horizontalCenter: parent.horizontalCenter
-        anchors.bottom: parent.bottom
+        anchors.horizontalCenter: stage.horizontalCenter
+        anchors.bottom: stage.bottom
         anchors.bottomMargin: page.chromeBottomInset
         width: Math.min(page.chromeMaxWidth,
-                        Math.max(0, page.width - page.chromeSideInset * 2))
+                        Math.max(0, stage.width - page.chromeSideInset * 2))
         height: page.chromeHeight
         radius: 24
         color: Theme.floatingBackground
@@ -749,11 +818,25 @@ Item {
                 }
             }
 
-            RowLayout {
+            Flickable {
+                id: controlScroller
                 width: parent.width
                 height: 42
-                spacing: 2
+                contentWidth: Math.max(width, controlRow.implicitWidth)
+                contentHeight: height
+                clip: true
+                boundsBehavior: Flickable.StopAtBounds
+                flickableDirection: Flickable.HorizontalFlick
+                interactive: contentWidth > width
+                ScrollBar.horizontal: ScrollBar {}
+            }
 
+            RowLayout {
+                id: controlRow
+                parent: controlScroller.contentItem
+                width: controlScroller.contentWidth
+                height: controlScroller.height
+                spacing: 2
                 BarButton {
                     glyph: "\u2039"
                     tip: qsTr("Close Player")
@@ -1080,6 +1163,22 @@ Item {
                     }
                 }
             }
+        }
+    }
+
+    BarButton {
+        anchors.top: stage.top
+        anchors.right: stage.right
+        anchors.margins: Theme.spacingMd
+        visible: mpv.loaded && (page.chromeShown || page.studyOpen)
+        glyph: qsTr("Study")
+        tip: qsTr("Toggle Study Sidebar")
+        active: page.studyOpen
+        buttonWidth: 58
+        onClicked: {
+            page.studyOpen = !page.studyOpen
+            page.forceActiveFocus()
+            page.notePointerMovement()
         }
     }
 

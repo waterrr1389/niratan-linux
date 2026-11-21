@@ -64,6 +64,7 @@ qt_add_library(niratan_core STATIC
     src/models/statistics/statistics.cpp
     src/services/sasayaki/srt_parser.cpp
     src/services/sasayaki/cue_timeline.cpp
+    src/services/sasayaki/matcher.cpp
     src/services/statistics/statistics_storage.cpp
     src/services/novels/epub_book.cpp
     src/services/player/mining_history.cpp
@@ -94,6 +95,10 @@ qt_add_executable(niratan
     src/viewmodels/sasayaki/sasayaki_view_model.h
     src/viewmodels/statistics/statistics_view_model.cpp
     src/viewmodels/statistics/statistics_view_model.h
+    src/viewmodels/player/player_study_view_model.cpp
+    src/viewmodels/player/player_study_view_model.h
+    src/viewmodels/settings/settings_view_model.cpp
+    src/viewmodels/settings/settings_view_model.h
     src/viewmodels/reader/reader_view_model.cpp
     src/viewmodels/reader/reader_view_model.h
     src/views/player/mpv_item.cpp
@@ -120,12 +125,15 @@ qt_add_qml_module(niratan
     URI Niratan
     QML_FILES
         src/views/MainWindow.qml
+        src/views/components/PageHeader.qml
         src/views/pages/DictionaryPage.qml
         src/views/pages/LibraryPage.qml
         src/views/pages/PlayerPage.qml
         src/views/pages/ProfilesPage.qml
         src/views/pages/StatisticsPage.qml
+        src/views/pages/SettingsPage.qml
         src/views/reader/SasayakiPanel.qml
+        src/views/player/StudySidebar.qml
         src/views/pages/ReaderPage.qml
         src/views/theme/Theme.qml
         src/views/theme/ThemePreview.qml
@@ -135,7 +143,8 @@ target_link_libraries(niratan PRIVATE niratan_core Qt6::Quick Qt6::QuickControls
     Qt6::Multimedia PkgConfig::MPV)
 target_include_directories(niratan PRIVATE src/views/theme src/viewmodels/dictionary
     src/viewmodels/reader src/views/reader src/viewmodels/library src/views/player
-    src/viewmodels/profiles src/viewmodels/sasayaki src/viewmodels/statistics)
+    src/viewmodels/profiles src/viewmodels/sasayaki src/viewmodels/statistics
+    src/viewmodels/player src/viewmodels/settings)
 target_compile_options(niratan PRIVATE -Wall -Wextra -Wpedantic -Werror)
 
 enable_testing()

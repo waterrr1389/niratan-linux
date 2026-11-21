@@ -18,6 +18,8 @@
 #include <QByteArray>
 #include <QChar>
 #include <QDebug>
+#include <QFile>
+#include <QFileInfo>
 #include <QMetaObject>
 #include <QMutex>
 #include <QMutexLocker>
@@ -52,6 +54,45 @@ constexpr int kMinSubtitleSize = 12;
 constexpr int kMaxSubtitleSize = 72;
 constexpr int kMinSubtitleWeight = 100;
 constexpr int kMaxSubtitleWeight = 900;
+constexpr quint64 kChaptersObservation = 1;
+constexpr quint64 kTracksObservation = 2;
+constexpr quint64 kDurationObservation = 3;
+constexpr qint64 kMaxSubtitleDocumentBytes = 16 * 1024 * 1024;
+
+QVariantMap node_fields(const mpv_node& node) {
+    QVariantMap fields;
+    if (node.format != MPV_FORMAT_NODE_MAP || node.u.list == nullptr) {
+        return fields;
+    }
+    for (int i = 0; i < node.u.list->num; ++i) {
+        const QString key = QString::fromUtf8(node.u.list->keys[i]);
+        const mpv_node& value = node.u.list->values[i];
+        switch (value.format) {
+            case MPV_FORMAT_STRING: fields.insert(key, QString::fromUtf8(value.u.string)); break;
+            case MPV_FORMAT_FLAG: fields.insert(key, value.u.flag != 0); break;
+            case MPV_FORMAT_INT64: fields.insert(key, qlonglong(value.u.int64)); break;
+            case MPV_FORMAT_DOUBLE: fields.insert(key, value.u.double_); break;
+            default: break;
+        }
+    }
+    return fields;
+}
+
+QVariantList node_list(mpv_handle* handle, const char* name) {
+    mpv_node node{};
+    if (mpv_get_property(handle, name, MPV_FORMAT_NODE, &node) < 0) {
+        return {};
+    }
+    QVariantList list;
+    if (node.format == MPV_FORMAT_NODE_ARRAY && node.u.list != nullptr) {
+        list.reserve(node.u.list->num);
+        for (int i = 0; i < node.u.list->num; ++i) {
+            list.append(node_fields(node.u.list->values[i]));
+        }
+    }
+    mpv_free_node_contents(&node);
+    return list;
+}
 
 // Qt keeps the renderer, which owns the render context, alive in the scene
 // graph node after the item is destroyed at window teardown. Both sides
@@ -264,6 +305,9 @@ MpvItem::MpvItem(QQuickItem* parent) : QQuickFramebufferObject(parent) {
     set_property("pause", false);
     set_property("volume", 100.0);
     set_property("speed", 1.0);
+    mpv_observe_property(handle_, kChaptersObservation, "chapter-list", MPV_FORMAT_NONE);
+    mpv_observe_property(handle_, kTracksObservation, "track-list", MPV_FORMAT_NONE);
+    mpv_observe_property(handle_, kDurationObservation, "duration", MPV_FORMAT_NONE);
 
     poll_timer_.setInterval(kPollIntervalMs);
     connect(&poll_timer_, &QTimer::timeout, this, &MpvItem::poll);
@@ -411,6 +455,21 @@ QString MpvItem::error() const {
     return error_;
 }
 
+QVariantList MpvItem::chapters() const { return chapters_; }
+QVariantList MpvItem::tracks() const { return tracks_; }
+QString MpvItem::subtitleText() const { return subtitle_text_; }
+qreal MpvItem::subtitleStart() const { return subtitle_start_; }
+qreal MpvItem::subtitleEnd() const { return subtitle_end_; }
+bool MpvItem::subtitlesVisible() const { return subtitles_visible_; }
+
+void MpvItem::setSubtitlesVisible(bool visible) {
+    set_property("sub-visibility", visible);
+    if (subtitles_visible_ != visible) {
+        subtitles_visible_ = visible;
+        emit subtitlesVisibleChanged();
+    }
+}
+
 void MpvItem::open(const QUrl& file) {
     if (handle_ == nullptr) {
         if (error_.isEmpty()) {
@@ -420,17 +479,34 @@ void MpvItem::open(const QUrl& file) {
         return;
     }
 
-    const QString source = file.isLocalFile() ? file.toLocalFile() : file.toString();
-    if (source.isEmpty()) {
+    if (file.isEmpty()) {
         return;
     }
+    const quint64 generation = ++load_generation_;
 
     // A-B loop and chapter belong to the previous file until mpv reports the
     // new ones, and a stale loop would immediately cut the new file.
     ab_loop_start_ = -1.0;
     chapter_index_ = -1;
+    file_ready_ = false;
+    chapters_dirty_ = tracks_dirty_ = true;
+    if (!chapters_.isEmpty()) {
+        chapters_.clear();
+        emit chaptersChanged();
+    }
+    if (!tracks_.isEmpty()) {
+        tracks_.clear();
+        emit tracksChanged();
+    }
+    if (!subtitle_document_.isEmpty()) {
+        subtitle_document_.clear();
+        emit subtitleDocumentChanged({}, {}, false);
+    }
+    set_subtitle_cue({}, -1.0, -1.0);
     set_property("ab-loop-a", QStringLiteral("no"));
     set_property("ab-loop-b", QStringLiteral("no"));
+    set_property("sid", QStringLiteral("no"));
+    setSubtitlesVisible(true);
     g_ended_items.erase(this);
 
     if (position_ != 0.0) {
@@ -449,7 +525,13 @@ void MpvItem::open(const QUrl& file) {
         error_.clear();
         emit errorChanged();
     }
+    open_when_ready(file, generation);
+}
 
+void MpvItem::open_when_ready(const QUrl& file, quint64 generation) {
+    if (generation != load_generation_) {
+        return;
+    }
     // mpv aborts a file whose vo=libmpv starts before a render context exists,
     // which happens when the item is asked to play before its first frame.
     bool context_ready = false;
@@ -458,13 +540,16 @@ void MpvItem::open(const QUrl& file) {
         context_ready = render_context_ != nullptr;
     }
     if (!context_ready) {
-        QTimer::singleShot(kLoadRetryMs, this, [this, file] { open(file); });
+        QTimer::singleShot(kLoadRetryMs, this,
+                           [this, file, generation] { open_when_ready(file, generation); });
         return;
     }
 
     // mpv takes the path as one argument, never as a parsed command line, so a
     // path with spaces or quotes needs no escaping.
-    const QByteArray path = source.toUtf8();
+    while (mpv_wait_event(handle_, 0)->event_id != MPV_EVENT_NONE) {
+    }
+    const QByteArray path = (file.isLocalFile() ? file.toLocalFile() : file.toString()).toUtf8();
     const char* args[] = {"loadfile", path.constData(), "replace", nullptr};
     const int status = mpv_command(handle_, args);
     if (status < 0) {
@@ -512,17 +597,92 @@ void MpvItem::seekToChapter(int index) {
     set_property("chapter", index);
 }
 
+bool MpvItem::loadExternalSubtitle(const QUrl& file) {
+    if (handle_ == nullptr || !file.isLocalFile() || file.toLocalFile().isEmpty()) {
+        return false;
+    }
+    const QByteArray path = file.toLocalFile().toUtf8();
+    const char* args[] = {"sub-add", path.constData(), "select", nullptr};
+    if (mpv_command(handle_, args) < 0) {
+        return false;
+    }
+    setSubtitlesVisible(true);
+    tracks_dirty_ = true;
+    set_subtitle_cue({}, -1.0, -1.0);
+    return true;
+}
+
+void MpvItem::selectSubtitleTrack(int id) {
+    if (id <= 0) {
+        return;
+    }
+    set_property("sid", id);
+    setSubtitlesVisible(true);
+    tracks_dirty_ = true;
+    set_subtitle_cue({}, -1.0, -1.0);
+}
+
+void MpvItem::disableSubtitles() {
+    set_property("sid", QStringLiteral("no"));
+    setSubtitlesVisible(false);
+    tracks_dirty_ = true;
+    set_subtitle_cue({}, -1.0, -1.0);
+}
+
+bool MpvItem::screenshot(const QUrl& file) {
+    if (handle_ == nullptr || !file.isLocalFile() || file.toLocalFile().isEmpty()) {
+        return false;
+    }
+    const QByteArray path = file.toLocalFile().toUtf8();
+    const char* args[] = {"screenshot-to-file", path.constData(), "video", nullptr};
+    // A capture can wait for the render thread; do not block the GUI thread.
+    return mpv_command_async(handle_, 0, args) >= 0;
+}
+
 void MpvItem::cycleSubtitles() {
-    // Cycling needs the track list to pick the next subtitle track. Until the
-    // engine owns track selection, this only shows or hides the current track.
-    toggleSubtitles();
+    if (handle_ == nullptr) {
+        return;
+    }
+    int first_id = -1;
+    const int selected_id = static_cast<int>(get_double("sid", -1.0));
+    bool next = false;
+    for (const QVariant& entry : tracks_) {
+        const QVariantMap track = entry.toMap();
+        if (track.value(QStringLiteral("type")).toString() != QStringLiteral("sub")) {
+            continue;
+        }
+        const int id = track.value(QStringLiteral("id")).toInt();
+        if (first_id < 0) {
+            first_id = id;
+        }
+        if (!subtitles_visible_ && id == selected_id) {
+            setSubtitlesVisible(true);
+            return;
+        }
+        if (next) {
+            selectSubtitleTrack(id);
+            return;
+        }
+        next = subtitles_visible_ && id == selected_id;
+    }
+    if (next) {
+        disableSubtitles();
+    } else if (first_id >= 0) {
+        selectSubtitleTrack(first_id);
+    } else {
+        setSubtitlesVisible(!subtitles_visible_);
+    }
 }
 
 void MpvItem::toggleSubtitles() {
     if (handle_ == nullptr) {
         return;
     }
-    set_property("sub-visibility", !get_bool("sub-visibility", true));
+    if (!subtitles_visible_ && get_double("sid", -1.0) <= 0) {
+        cycleSubtitles();
+        return;
+    }
+    setSubtitlesVisible(!subtitles_visible_);
 }
 
 void MpvItem::setABLoopStart() {
@@ -624,13 +784,139 @@ void MpvItem::requestUpdate() {
     update();
 }
 
+void MpvItem::refresh_chapters() {
+    QVariantList chapters;
+    const QVariantList nodes = node_list(handle_, "chapter-list");
+    for (qsizetype i = 0; i < nodes.size(); ++i) {
+        const QVariantMap fields = nodes[i].toMap();
+        const auto start_key = QStringLiteral("time");
+        if (!fields.contains(start_key)) {
+            continue;
+        }
+        const double start = fields.value(start_key).toDouble();
+        QVariantMap entry{
+            {QStringLiteral("id"), int(i)},
+            {QStringLiteral("title"), fields.value(QStringLiteral("title")).toString()},
+            {QStringLiteral("start"), start},
+        };
+        // As in the study list, use the next strictly later start, then
+        // fall back to the file duration for the last chapter.
+        double end = start;
+        for (const QVariant& other : nodes) {
+            const double candidate = other.toMap().value(start_key).toDouble();
+            if (candidate > start && (end <= start || candidate < end)) {
+                end = candidate;
+            }
+        }
+        if (end <= start && duration_ > start) {
+            end = duration_;
+        }
+        if (end > start) {
+            entry.insert(QStringLiteral("duration"), end - start);
+        }
+        chapters.append(entry);
+    }
+    if (chapters_ != chapters) {
+        chapters_ = std::move(chapters);
+        emit chaptersChanged();
+    }
+}
+
+void MpvItem::refresh_tracks() {
+    QVariantList tracks;
+    QUrl subtitle_document;
+    const int sid = static_cast<int>(get_double("sid", -1.0));
+    for (const QVariant& node : node_list(handle_, "track-list")) {
+        const QVariantMap fields = node.toMap();
+        const QString type = fields.value(QStringLiteral("type")).toString();
+        const int id = fields.value(QStringLiteral("id")).toInt();
+        const QString external = fields.value(QStringLiteral("external-filename")).toString();
+        if (type == QStringLiteral("sub") && id == sid && !external.isEmpty()) {
+            // The player only imports local subtitle documents. A subtitle
+            // URL supplied by mpv must not turn into a local file read.
+            if (external.startsWith(QLatin1Char('/'))) {
+                subtitle_document = QUrl::fromLocalFile(external);
+            }
+        }
+        tracks.append(QVariantMap{
+            {QStringLiteral("type"), type},
+            {QStringLiteral("id"), id},
+            {QStringLiteral("title"), fields.value(QStringLiteral("title")).toString()},
+            {QStringLiteral("language"), fields.value(QStringLiteral("lang")).toString()},
+            {QStringLiteral("codec"), fields.value(QStringLiteral("codec")).toString()},
+            {QStringLiteral("isImage"), fields.value(QStringLiteral("image")).toBool()},
+            {QStringLiteral("isSelected"), fields.value(QStringLiteral("selected")).toBool()},
+            {QStringLiteral("externalFilename"), external},
+        });
+    }
+    if (tracks_ != tracks) {
+        tracks_ = std::move(tracks);
+        emit tracksChanged();
+    }
+    if (subtitle_document_ != subtitle_document) {
+        subtitle_document_ = subtitle_document;
+        if (subtitle_document_.isEmpty()) {
+            emit subtitleDocumentChanged({}, {}, false);
+        } else {
+            QFile file(subtitle_document_.toLocalFile());
+            const bool opened = QFileInfo(file).isFile() && file.open(QIODevice::ReadOnly);
+            const QByteArray bytes = opened ? file.read(kMaxSubtitleDocumentBytes + 1)
+                                            : QByteArray{};
+            const bool readable = opened && file.error() == QFile::NoError &&
+                                  bytes.size() <= kMaxSubtitleDocumentBytes;
+            emit subtitleDocumentChanged(subtitle_document_, readable ? bytes : QByteArray{},
+                                         readable);
+        }
+    }
+}
+
+void MpvItem::set_subtitle_cue(const QString& text, double start, double end) {
+    if (subtitle_text_ != text || subtitle_start_ != start || subtitle_end_ != end) {
+        subtitle_text_ = text;
+        subtitle_start_ = start;
+        subtitle_end_ = end;
+        emit subtitleCueChanged();
+    }
+}
+
 void MpvItem::poll() {
     if (handle_ == nullptr) {
         return;
     }
 
-    const double time_pos = get_double("time-pos", position_);
-    const double duration = get_double("duration", 0.0);
+    for (mpv_event* event = mpv_wait_event(handle_, 0); event->event_id != MPV_EVENT_NONE;
+         event = mpv_wait_event(handle_, 0)) {
+        switch (event->event_id) {
+            case MPV_EVENT_START_FILE:
+                file_ready_ = false;
+                break;
+            case MPV_EVENT_FILE_LOADED:
+                file_ready_ = true;
+                chapters_dirty_ = tracks_dirty_ = true;
+                break;
+            case MPV_EVENT_END_FILE: {
+                const auto* end = static_cast<const mpv_event_end_file*>(event->data);
+                if (!file_ready_ && end != nullptr && end->reason == MPV_END_FILE_REASON_ERROR) {
+                    error_ = QString::fromUtf8(mpv_error_string(end->error));
+                    emit errorChanged();
+                }
+                break;
+            }
+            case MPV_EVENT_PROPERTY_CHANGE:
+                if (event->reply_userdata == kTracksObservation) {
+                    tracks_dirty_ = true;
+                } else if (event->reply_userdata == kChaptersObservation ||
+                           event->reply_userdata == kDurationObservation) {
+                    chapters_dirty_ = true;
+                }
+                break;
+            default:
+                break;
+        }
+    }
+
+    const double time_pos = file_ready_ ? get_double("time-pos", position_) : position_;
+    const double duration = file_ready_ ? get_double("duration", 0.0) : 0.0;
     const bool paused = get_bool("pause", paused_);
     const bool loaded = duration > 0.0 && error_.isEmpty();
     const double volume = get_double("volume", volume_);
@@ -638,7 +924,7 @@ void MpvItem::poll() {
     const double speed = get_double("speed", speed_);
     const double subtitle_delay = get_double("sub-delay", subtitle_delay_);
     const double audio_delay = get_double("audio-delay", audio_delay_);
-    const int chapter = static_cast<int>(std::lround(get_double("chapter", -1.0)));
+    const int chapter = file_ready_ ? static_cast<int>(get_double("chapter", -1.0)) : -1;
 
     const bool loaded_changed = loaded != loaded_;
     const bool paused_changed = paused != paused_;
@@ -653,6 +939,21 @@ void MpvItem::poll() {
     if (std::abs(duration - duration_) > kValueEpsilon) {
         duration_ = duration;
         emit durationChanged();
+    }
+    if (file_ready_) {
+        if (chapters_dirty_ || chapter != chapter_index_) {
+            chapters_dirty_ = false;
+            refresh_chapters();
+        }
+        if (tracks_dirty_) {
+            tracks_dirty_ = false;
+            refresh_tracks();
+        }
+        const QString text = get_string("sub-text");
+        const double start = text.isEmpty() ? -1.0 : get_double("sub-start", -1.0);
+        const double end = text.isEmpty() ? -1.0 : get_double("sub-end", -1.0);
+        set_subtitle_cue(text, std::isfinite(start) ? start : -1.0,
+                        std::isfinite(end) ? end : -1.0);
     }
     if (loaded_changed) {
         loaded_ = loaded;
@@ -687,7 +988,7 @@ void MpvItem::poll() {
         emit chapterChanged(chapter_index_);
     }
 
-    if (get_bool("eof-reached", false)) {
+    if (file_ready_ && get_bool("eof-reached", false)) {
         if (g_ended_items.insert(this).second) {
             emit ended();
         }

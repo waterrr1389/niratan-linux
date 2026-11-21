@@ -9,22 +9,28 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QMediaPlayer>
+#include <QMetaObject>
 #include <QTimer>
 #include <QVariantMap>
 
 #include <algorithm>
 #include <cmath>
+#include <exception>
 #include <filesystem>
 #include <optional>
 #include <string>
 #include <string_view>
 #include <system_error>
+#include <thread>
 #include <utility>
 #include <vector>
 
 #include "models/sasayaki/sasayaki.h"
 #include "services/books/book_storage.h"
+#include "services/reader/book_session.h"
+#include "services/reader/character_normalizer.h"
 #include "services/sasayaki/cue_timeline.h"
+#include "services/sasayaki/matcher.h"
 #include "services/sasayaki/srt_parser.h"
 #include "services/storage/app_paths.h"
 #include "services/storage/json_file.h"
@@ -43,6 +49,10 @@ constexpr double kMinimumRate = 0.5;
 constexpr double kMaximumRate = 2.5;
 constexpr double kMinimumDelay = -2.0;
 constexpr double kMaximumDelay = 2.0;
+constexpr int kDefaultSearchWindow = 200;
+constexpr int kMinimumSearchWindow = 50;
+constexpr int kMaximumSearchWindow = 1000;
+constexpr int kSearchWindowIncrement = 50;
 constexpr const char* kPlaybackFileName = "sasayaki_playback.json";
 constexpr const char* kMatchFileName = "sasayaki_match.json";
 
@@ -90,6 +100,8 @@ struct SasayakiViewModel::State {
 
     QString audio_path;
     QString audio_name;
+    QString subtitle_name;
+    QString match_error;
     QString error;
     QString current_cue_id;
     QString current_cue_text;
@@ -99,6 +111,10 @@ struct SasayakiViewModel::State {
     double duration = 0.0;
     double rate = 1.0;
     double delay = 0.0;
+    double match_progress = 0.0;
+    int match_search_window = kDefaultSearchWindow;
+    std::optional<int> pending_match_window;
+    std::jthread match_worker;
 
     bool has_audio = false;
     bool has_match = false;
@@ -196,6 +212,12 @@ SasayakiViewModel::SasayakiViewModel(QObject* parent)
 }
 
 SasayakiViewModel::~SasayakiViewModel() {
+    if (state_->match_worker.joinable()) {
+        // The worker may still queue a completion. Join while this QObject
+        // can receive it; QObject destruction removes the unprocessed event.
+        state_->match_worker.request_stop();
+        state_->match_worker.join();
+    }
     // Swift's flushPlayback samples the player only while it is playing;
     // otherwise currentTime already holds the last tick or seek target.
     if (state_->has_audio && state_->playing && state_->player != nullptr) {
@@ -235,6 +257,53 @@ QVariantList SasayakiViewModel::chapters() const { return {}; }
 QString SasayakiViewModel::error() const { return state_->error; }
 
 QString SasayakiViewModel::audio_name() const { return state_->audio_name; }
+
+QString SasayakiViewModel::subtitle_name() const { return state_->subtitle_name; }
+
+bool SasayakiViewModel::matching() const { return state_->match_worker.joinable(); }
+
+double SasayakiViewModel::match_progress() const { return state_->match_progress; }
+
+int SasayakiViewModel::matched_count() const {
+    return state_->match ? static_cast<int>(state_->match->matches.size()) : 0;
+}
+
+int SasayakiViewModel::unmatched_count() const {
+    return state_->match ? state_->match->unmatched : 0;
+}
+
+int SasayakiViewModel::inferred_count() const {
+    if (!state_->match) {
+        return 0;
+    }
+    return static_cast<int>(std::ranges::count_if(state_->match->matches,
+                                                &sasayaki::SasayakiMatch::context_inferred));
+}
+
+QString SasayakiViewModel::match_rate_label() const {
+    const int matched = matched_count();
+    const auto total = static_cast<qint64>(matched) + unmatched_count();
+    const double percentage = total > 0 ? 100.0 * matched / static_cast<double>(total) : 0.0;
+    return tr("%1/%2 (%3%)").arg(matched).arg(total).arg(percentage, 0, 'f', 1);
+}
+
+QString SasayakiViewModel::match_error() const { return state_->match_error; }
+
+int SasayakiViewModel::match_search_window() const { return state_->match_search_window; }
+
+void SasayakiViewModel::set_match_search_window(int value) {
+    const int clamped = std::clamp(value, kMinimumSearchWindow, kMaximumSearchWindow);
+    const int rounded =
+        ((clamped + kSearchWindowIncrement / 2) / kSearchWindowIncrement) * kSearchWindowIncrement;
+    if (rounded != state_->match_search_window) {
+        state_->match_search_window = rounded;
+        emit matchSearchWindowChanged();
+    }
+}
+
+void SasayakiViewModel::reset_match_search_window() {
+    set_match_search_window(kDefaultSearchWindow);
+}
 
 bool SasayakiViewModel::openAudio(const QUrl& file) {
     QString path;
@@ -290,10 +359,133 @@ bool SasayakiViewModel::openSubtitles(const QUrl& file) {
         return false;
     }
 
+    cancelSubtitleMatch();
     state_->subtitle_cues = std::move(cues);
+    state_->subtitle_name = QFileInfo(path).fileName();
+    set_match_error({});
+    emit subtitleNameChanged();
     rebuild_timeline();
     set_error(QString());
     return true;
+}
+
+void SasayakiViewModel::matchSubtitles(int searchWindow) {
+    if (matching()) {
+        // A programmatic retry supersedes the current run without overlapping it.
+        cancelSubtitleMatch();
+        state_->pending_match_window = searchWindow;
+        return;
+    }
+    if (state_->subtitle_cues.empty()) {
+        set_match_error(tr("Load a subtitle file first."));
+        return;
+    }
+    if (!state_->has_root) {
+        set_match_error(tr("The EPUB for the open book could not be found."));
+        return;
+    }
+
+    set_match_search_window(searchWindow);
+    const int window = state_->match_search_window;
+    const auto folder = ReaderViewModel::instance()->book_folder().toStdString();
+    const auto data_root = niratan::storage::data_root();
+    set_match_error({});
+    set_match_progress(0.0);
+
+    try {
+        state_->match_worker = std::jthread(
+            [this, folder, data_root, window, cues = state_->subtitle_cues](std::stop_token stop) {
+                std::optional<SasayakiMatchData> result;
+                QString error;
+                try {
+                    const niratan::books::BookStorage storage(data_root);
+                    const auto metadata = storage.load_metadata(folder);
+                    const auto epub = metadata ? storage.epub_path(*metadata) : std::nullopt;
+                    const auto book = epub && !stop.stop_requested()
+                                          ? niratan::reader::BookSession::open(*epub)
+                                          : std::nullopt;
+                    if (!book) {
+                        error = tr("The EPUB for the open book could not be opened.");
+                    } else {
+                        std::vector<sasayaki::MatchChapter> chapters;
+                        for (int index = 0; index < book->spine_count() && !stop.stop_requested();
+                             ++index) {
+                            if (const auto entry = book->book().read(book->spine_path(index))) {
+                                chapters.push_back({index, reader::filtered_text(*entry)});
+                            }
+                        }
+                        if (!stop.stop_requested()) {
+                            QMetaObject::invokeMethod(
+                                this,
+                                [this, stop]() {
+                                    if (!stop.stop_requested()) {
+                                        set_match_progress(0.5);
+                                    }
+                                },
+                                Qt::QueuedConnection);
+                            result = sasayaki::match_cues(
+                                cues, chapters, window, [&stop]() { return stop.stop_requested(); });
+                        }
+                    }
+                } catch (const std::exception&) {
+                    error = tr("Could not match subtitles.");
+                }
+
+                QMetaObject::invokeMethod(
+                    this,
+                    [this, stop, result = std::move(result), error = std::move(error)]() {
+                        // Keep one worker at a time even while it is unwinding
+                        // after cancellation. Never save a stale result.
+                        if (!stop.stop_requested()) {
+                            if (!result || !error.isEmpty()) {
+                                set_match_error(error.isEmpty() ? tr("Could not match subtitles.")
+                                                               : error);
+                            } else {
+                                apply_match_result(*result);
+                            }
+                        }
+                        if (state_->match_progress != 1.0) {
+                            set_match_progress(0.0);
+                        }
+                        state_->match_worker.join();
+                        emit matchingChanged();
+                        if (const auto pending = std::exchange(state_->pending_match_window,
+                                                               std::nullopt)) {
+                            matchSubtitles(*pending);
+                        }
+                    },
+                    Qt::QueuedConnection);
+            });
+    } catch (const std::system_error&) {
+        set_match_error(tr("Could not start subtitle matching."));
+        return;
+    }
+    emit matchingChanged();
+}
+
+void SasayakiViewModel::cancelSubtitleMatch() {
+    state_->pending_match_window.reset();
+    state_->match_worker.request_stop();
+    set_match_progress(0.0);
+}
+
+void SasayakiViewModel::apply_match_result(const SasayakiMatchData& result) {
+    if (result.matches.empty()) {
+        set_match_error(tr("No subtitles matched the book. Existing matches were kept."));
+        return;
+    }
+    std::string reason;
+    if (!niratan::storage::write_json_file(state_->root / kMatchFileName,
+                                         sasayaki::match_data_to_json(result), &reason)) {
+        set_match_error(tr("Could not save subtitle matches: %1").arg(QString::fromStdString(reason)));
+    } else if (!load_match()) {
+        set_match_error(tr("Could not reload saved subtitle matches."));
+    } else {
+        rebuild_timeline(true);
+        emit hasMatchChanged();
+        emit matchDataChanged();
+        set_match_progress(1.0);
+    }
 }
 
 void SasayakiViewModel::play() {
@@ -445,6 +637,7 @@ QString SasayakiViewModel::applyCuesJson() const {
 }
 
 void SasayakiViewModel::reload_book() {
+    cancelSubtitleMatch();
     state_->reloading = true;
     if (state_->has_root) {
         save_playback();
@@ -458,6 +651,8 @@ void SasayakiViewModel::reload_book() {
     state_->match.reset();
     state_->match_cues.clear();
     state_->subtitle_cues.clear();
+    state_->subtitle_name.clear();
+    state_->match_error.clear();
     state_->timeline = CueTimeline();
     state_->audio_path.clear();
     state_->audio_name.clear();
@@ -495,6 +690,9 @@ void SasayakiViewModel::reload_book() {
 
     emit hasAudioChanged();
     emit hasMatchChanged();
+    emit matchDataChanged();
+    emit matchErrorChanged();
+    emit subtitleNameChanged();
     emit playingChanged();
     emit positionChanged();
     emit durationChanged();
@@ -526,19 +724,17 @@ void SasayakiViewModel::load_playback() {
     state_->last_second = static_cast<int>(std::floor(state_->position));
 }
 
-void SasayakiViewModel::load_match() {
-    state_->match_cues.clear();
+bool SasayakiViewModel::load_match() {
     const niratan::storage::JsonReadResult read =
         niratan::storage::read_json_file(state_->root / kMatchFileName);
     if (read.status != niratan::storage::JsonReadStatus::success) {
-        return;
+        return false;
     }
-    const auto decoded = niratan::sasayaki::match_data_from_json(read.document);
+    auto decoded = niratan::sasayaki::match_data_from_json(read.document);
     if (!decoded.has_value()) {
-        return;
+        return false;
     }
-    state_->match = *decoded;
-    state_->has_match = true;
+    state_->match_cues.clear();
     state_->match_cues.reserve(decoded->matches.size());
     for (const niratan::sasayaki::SasayakiMatch& match : decoded->matches) {
         SasayakiCue cue;
@@ -548,6 +744,9 @@ void SasayakiViewModel::load_match() {
         cue.text = match.text;
         state_->match_cues.push_back(std::move(cue));
     }
+    state_->has_match = !decoded->matches.empty();
+    state_->match = std::move(decoded);
+    return state_->has_match;
 }
 
 void SasayakiViewModel::restore_audio() {
@@ -577,12 +776,10 @@ void SasayakiViewModel::open_audio_source() {
     state_->player->setPlaybackRate(state_->rate);
 }
 
-void SasayakiViewModel::rebuild_timeline() {
+void SasayakiViewModel::rebuild_timeline(bool refresh_highlight) {
     state_->timeline = CueTimeline(state_->has_match ? state_->match_cues : state_->subtitle_cues);
-    state_->current_cue_id.clear();
-    state_->current_cue_text.clear();
     rebuild_cue_list();
-    update_cue();
+    update_cue(refresh_highlight);
 }
 
 void SasayakiViewModel::rebuild_cue_list() {
@@ -609,7 +806,7 @@ void SasayakiViewModel::rebuild_cue_list() {
     emit cuesChanged();
 }
 
-void SasayakiViewModel::update_cue() {
+void SasayakiViewModel::update_cue(bool refresh_highlight) {
     QString id;
     QString text;
     if (state_->has_audio && !state_->timeline.empty()) {
@@ -619,13 +816,19 @@ void SasayakiViewModel::update_cue() {
             text = QString::fromStdString(cue->text);
         }
     }
-    if (id == state_->current_cue_id) {
-        return;
+    const bool changed = id != state_->current_cue_id || text != state_->current_cue_text;
+    if (changed) {
+        state_->current_cue_id = id;
+        state_->current_cue_text = text;
+        emit currentCueChanged();
     }
-    state_->current_cue_id = id;
-    state_->current_cue_text = text;
-    emit currentCueChanged();
-    emit activeCueChanged(id);
+    if (refresh_highlight) {
+        // Install new ranges even if the playback cue still has the same ID.
+        emit matchApplied();
+    }
+    if (changed || refresh_highlight) {
+        emit activeCueChanged(id);
+    }
 }
 
 void SasayakiViewModel::apply_position(double seconds, bool persist) {
@@ -695,6 +898,20 @@ void SasayakiViewModel::set_error(const QString& message) {
     }
     state_->error = message;
     emit errorChanged();
+}
+
+void SasayakiViewModel::set_match_error(const QString& message) {
+    if (state_->match_error != message) {
+        state_->match_error = message;
+        emit matchErrorChanged();
+    }
+}
+
+void SasayakiViewModel::set_match_progress(double progress) {
+    if (state_->match_progress != progress) {
+        state_->match_progress = progress;
+        emit matchProgressChanged();
+    }
 }
 
 bool SasayakiViewModel::take_local_file(const QUrl& file, QString* path) {

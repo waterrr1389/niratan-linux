@@ -489,34 +489,10 @@ Item {
             width: Math.max(page.width - page.outerMargin * 2, 240)
             spacing: page.cardSpacing
 
-            RowLayout {
-                Layout.fillWidth: true
-                spacing: 12
-
-                Button {
-                    text: qsTr("Back")
-                    onClicked: page.backRequested()
-                }
-
-                ColumnLayout {
-                    Layout.fillWidth: true
-                    spacing: 2
-
-                    Label {
-                        Layout.fillWidth: true
-                        text: qsTr("Statistics")
-                        color: Theme.textPrimary
-                        font.pixelSize: 26
-                        font.bold: true
-                    }
-                    Label {
-                        Layout.fillWidth: true
-                        text: page.rangeTitle()
-                        color: Theme.textSecondary
-                        font.pixelSize: 13
-                        elide: Text.ElideRight
-                    }
-                }
+            PageHeader {
+                title: qsTr("Statistics")
+                subtitle: page.rangeTitle()
+                onBackRequested: page.backRequested()
             }
 
             Card {

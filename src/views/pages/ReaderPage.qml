@@ -72,9 +72,14 @@ Item {
         }
     }
 
-    Component.onCompleted: ReaderViewModel.setPageSize(Math.round(width), Math.round(height))
+    Component.onCompleted: {
+        ReaderViewModel.setPageSize(Math.round(width), Math.round(height))
+        ReaderViewModel.setReaderActive(true)
+    }
     onWidthChanged: ReaderViewModel.setPageSize(Math.round(width), Math.round(height))
     onHeightChanged: ReaderViewModel.setPageSize(Math.round(width), Math.round(height))
+    // A hidden reader page pauses reading time; becoming visible resumes it.
+    onVisibleChanged: ReaderViewModel.setReaderActive(visible)
 
     Keys.onPressed: function (event) {
         var forward = false
@@ -86,6 +91,7 @@ Item {
                    || event.key === Qt.Key_PageUp) {
             forward = false
         } else if (event.key === Qt.Key_Escape) {
+            ReaderViewModel.setReaderActive(false)
             backRequested()
             event.accepted = true
             return
@@ -130,59 +136,39 @@ Item {
         anchors.fill: parent
         spacing: 0
 
-        Rectangle {
-            Layout.fillWidth: true
-            Layout.preferredHeight: 48
-            color: Theme.cardBackground
-            border.width: 1
-            border.color: Theme.cardStroke
+        PageHeader {
+            title: ReaderViewModel.hasBook ? ReaderViewModel.chapterTitle
+                                          : qsTr("No book open")
+            subtitle: ReaderViewModel.hasBook ? ReaderViewModel.title : ""
+            onBackRequested: {
+                ReaderViewModel.setReaderActive(false)
+                page.backRequested()
+            }
 
-            RowLayout {
-                anchors.fill: parent
-                anchors.leftMargin: 8
-                anchors.rightMargin: 8
-                spacing: 4
-
-                ToolButton {
-                    text: "\u2039"
-                    font.pixelSize: 22
-                    onClicked: page.backRequested()
-                }
-
-                Label {
-                    Layout.fillWidth: true
-                    text: ReaderViewModel.hasBook ? ReaderViewModel.chapterTitle
-                                              : qsTr("No book open")
-                    elide: Text.ElideRight
-                    color: Theme.textPrimary
-                    font.pixelSize: 15
-                }
-
-                ToolButton {
-                    text: "A-"
-                    onClicked: ReaderViewModel.fontSize = Math.max(10, ReaderViewModel.fontSize - 2)
-                }
-                ToolButton {
-                    text: "A+"
-                    onClicked: ReaderViewModel.fontSize = Math.min(72, ReaderViewModel.fontSize + 2)
-                }
-                ToolButton {
-                    text: ReaderViewModel.verticalWriting ? qsTr("Vertical") : qsTr("Horizontal")
-                    font.pixelSize: 12
-                    onClicked: ReaderViewModel.verticalWriting = !ReaderViewModel.verticalWriting
-                }
-                ToolButton {
-                    text: qsTr("Contents")
-                    font.pixelSize: 12
-                    enabled: ReaderViewModel.hasBook
-                    onClicked: toc.open()
-                }
-                ToolButton {
-                    text: qsTr("Sasayaki")
-                    font.pixelSize: 12
-                    enabled: ReaderViewModel.hasBook
-                    onClicked: sasayakiPanel.open()
-                }
+            ToolButton {
+                text: "A-"
+                onClicked: ReaderViewModel.fontSize = Math.max(10, ReaderViewModel.fontSize - 2)
+            }
+            ToolButton {
+                text: "A+"
+                onClicked: ReaderViewModel.fontSize = Math.min(72, ReaderViewModel.fontSize + 2)
+            }
+            ToolButton {
+                text: ReaderViewModel.verticalWriting ? qsTr("Vertical") : qsTr("Horizontal")
+                font.pixelSize: 12
+                onClicked: ReaderViewModel.verticalWriting = !ReaderViewModel.verticalWriting
+            }
+            ToolButton {
+                text: qsTr("Contents")
+                font.pixelSize: 12
+                enabled: ReaderViewModel.hasBook
+                onClicked: toc.open()
+            }
+            ToolButton {
+                text: qsTr("Sasayaki")
+                font.pixelSize: 12
+                enabled: ReaderViewModel.hasBook
+                onClicked: sasayakiPanel.open()
             }
         }
 

@@ -1,0 +1,110 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+//
+// Study state follows VideoMiningHistorySidebar.swift (chapter and history
+// lists), Models/Subtitle.swift (SubtitleTranscript and its window),
+// VideoMiningHistoryStore.swift (record and pruning), and
+// VideoMiningHistoryNavigation.swift (local history destinations).
+// Transcript time is playback position minus subtitle delay; both cue
+// endpoints are inclusive. Chapter time is independent of subtitle delay.
+// The playback surface supplies external subtitle bytes and native cue state
+// and performs playback commands. Embedded-track extraction and remote
+// history resolution are not part of this model.
+
+#pragma once
+
+#include <QByteArray>
+#include <QObject>
+#include <QString>
+#include <QUrl>
+#include <QVariantList>
+#include <QtQml/qqmlregistration.h>
+
+#include <memory>
+
+namespace niratan::viewmodels {
+
+class PlayerStudyViewModel : public QObject {
+    Q_OBJECT
+    QML_ELEMENT
+    Q_PROPERTY(QVariantList transcript READ transcript NOTIFY transcriptChanged)
+    Q_PROPERTY(QString transcriptError READ transcript_error NOTIFY transcriptChanged)
+    Q_PROPERTY(int currentRow READ current_row NOTIFY currentRowChanged)
+    Q_PROPERTY(int currentVisibleRow READ current_visible_row NOTIFY currentVisibleRowChanged)
+    Q_PROPERTY(QString search READ search WRITE set_search NOTIFY searchChanged)
+    Q_PROPERTY(bool canShowEarlier READ can_show_earlier NOTIFY transcriptChanged)
+    Q_PROPERTY(bool canShowLater READ can_show_later NOTIFY transcriptChanged)
+    Q_PROPERTY(QVariantList history READ history NOTIFY historyChanged)
+    Q_PROPERTY(QVariantList chapters READ chapters WRITE set_chapters NOTIFY chaptersChanged)
+    Q_PROPERTY(int currentChapter READ current_chapter NOTIFY currentChapterChanged)
+    Q_PROPERTY(QString lastMiningNotice READ last_mining_notice NOTIFY lastMiningNoticeChanged)
+    Q_PROPERTY(int historyLimit READ history_limit NOTIFY historyChanged)
+    Q_PROPERTY(bool canMine READ can_mine NOTIFY canMineChanged)
+
+public:
+    explicit PlayerStudyViewModel(QObject* parent = nullptr);
+    ~PlayerStudyViewModel() override;
+
+    QVariantList transcript() const;
+    QString transcript_error() const;
+    int current_row() const;
+    int current_visible_row() const;
+    QString search() const;
+    void set_search(const QString& query);
+    bool can_show_earlier() const;
+    bool can_show_later() const;
+    QVariantList history() const;
+    QVariantList chapters() const;
+    void set_chapters(const QVariantList& chapters);
+    int current_chapter() const;
+    QString last_mining_notice() const;
+    int history_limit() const;
+    bool can_mine() const;
+    Q_INVOKABLE void setTracks(const QVariantList& tracks);
+    Q_INVOKABLE void setSubtitlesVisible(bool visible);
+
+    Q_INVOKABLE void setVideo(const QUrl& video);
+    Q_INVOKABLE void setPlaybackReady(bool ready);
+    Q_INVOKABLE void updatePlayback(double position, double subtitleDelay);
+    Q_INVOKABLE void updateNativeCue(const QString& text, double start, double end);
+    Q_INVOKABLE void setSubtitleDocument(const QUrl& file, const QByteArray& bytes, bool readable);
+    Q_INVOKABLE void seekToRow(int index);
+    Q_INVOKABLE void showEarlier();
+    Q_INVOKABLE void showLater();
+    Q_INVOKABLE void playChapter(int index);
+    Q_INVOKABLE void mineCurrentSubtitle();
+    Q_INVOKABLE void jumpToHistory(const QString& id);
+    Q_INVOKABLE void copyHistory(const QString& id) const;
+    Q_INVOKABLE void removeHistory(const QString& id);
+    Q_INVOKABLE void clearHistory();
+    Q_INVOKABLE void refreshHistory();
+    Q_INVOKABLE void reportSubtitleLoadFailure();
+
+signals:
+    void transcriptChanged();
+    void currentRowChanged();
+    void currentVisibleRowChanged();
+    void searchChanged();
+    void historyChanged();
+    void chaptersChanged();
+    void currentChapterChanged();
+    void lastMiningNoticeChanged();
+    void canMineChanged();
+    void seekRequested(double seconds);
+    void chapterRequested(int id);
+    void videoRequested(const QUrl& file);
+    void historySubtitleRequested(const QUrl& file, int trackId, double seconds);
+
+private:
+    struct State;
+    std::unique_ptr<State> state_;
+
+    void update_current();
+    void update_can_mine();
+    void rebuild_filter();
+    void reset_window(int focus);
+    void publish_window();
+    void set_notice(const QString& notice);
+    void complete_jump();
+};
+
+}  // namespace niratan::viewmodels

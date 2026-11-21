@@ -3,7 +3,8 @@
 // State and commands for the Sasayaki audiobook player, following
 // Features/Sasayaki/SasayakiPlayer.swift (SasayakiPlayer) and
 // Features/Sasayaki/SasayakiSheet.swift (the playback header, the audio and
-// subtitle pickers, the cue list and the rate and delay settings).
+// subtitle pickers, the cue list and the rate and delay settings), and
+// Features/Sasayaki/SasayakiMatchView.swift (matchFile and matchRate).
 //
 // The model owns one QMediaPlayer and plays a file the user picks from outside
 // the book folder. It does not decode subtitles or match text: parse_cues()
@@ -25,12 +26,10 @@
 // representation, which is the port's analogue of the bookmark data: a
 // bookmark for a file that moved is reported as missing instead of resolved.
 //
-// No text matcher is ported. sasayaki_match.json is read when it exists and is
-// otherwise absent, and there is no way to create it from the model. Without
-// it a loaded SRT still drives playback and the cue list, but the reader's cue
-// ranges and highlight come from the match data only, because an SRT cue has
-// neither a chapter index nor character offsets. applyCuesJson() therefore
-// returns [] when no match file was loaded.
+// The matching worker aligns loaded SRT cues against filtered EPUB chapters.
+// Only a nonempty, uncancelled result replaces sasayaki_match.json. Without a
+// match file the SRT still drives playback and the cue list, but it has no
+// chapter index or character offsets, so applyCuesJson() returns [].
 //
 // Persistence mirrors SasayakiPlayer.savePlayback: the position is written on
 // each whole-second tick, on seek and on pause, with the delay and rate; the
@@ -46,7 +45,9 @@
 // The reader side is driven from ReaderPage, which owns this model: the page
 // passes applyCuesJson() to window.hoshiReader.applySasayakiCues after each
 // chapter loads, and forwards activeCueChanged to highlightSasayakiCue or
-// clearSasayakiCue. The model itself never touches the web view.
+// clearSasayakiCue. After matching, the panel asks the page to install the
+// current chapter's new ranges, and the model re-emits activeCueChanged even
+// if the current cue ID is unchanged. The model never touches the web view.
 
 #pragma once
 
@@ -60,6 +61,7 @@
 
 namespace niratan::sasayaki {
 struct SasayakiCue;
+struct SasayakiMatchData;
 }
 
 namespace niratan::viewmodels {
@@ -80,6 +82,16 @@ class SasayakiViewModel : public QObject {
     Q_PROPERTY(QVariantList chapters READ chapters NOTIFY chaptersChanged)
     Q_PROPERTY(QString error READ error NOTIFY errorChanged)
     Q_PROPERTY(QString audioName READ audio_name NOTIFY audioNameChanged)
+    Q_PROPERTY(QString subtitleName READ subtitle_name NOTIFY subtitleNameChanged)
+    Q_PROPERTY(bool matching READ matching NOTIFY matchingChanged)
+    Q_PROPERTY(double matchProgress READ match_progress NOTIFY matchProgressChanged)
+    Q_PROPERTY(int matchedCount READ matched_count NOTIFY matchDataChanged)
+    Q_PROPERTY(int unmatchedCount READ unmatched_count NOTIFY matchDataChanged)
+    Q_PROPERTY(int inferredCount READ inferred_count NOTIFY matchDataChanged)
+    Q_PROPERTY(QString matchRateLabel READ match_rate_label NOTIFY matchDataChanged)
+    Q_PROPERTY(QString matchError READ match_error NOTIFY matchErrorChanged)
+    Q_PROPERTY(int matchSearchWindow READ match_search_window WRITE set_match_search_window
+                   RESET reset_match_search_window NOTIFY matchSearchWindowChanged)
 
    public:
     explicit SasayakiViewModel(QObject* parent = nullptr);
@@ -98,6 +110,18 @@ class SasayakiViewModel : public QObject {
     QVariantList chapters() const;
     QString error() const;
     QString audio_name() const;
+    QString subtitle_name() const;
+    bool matching() const;
+    // Reports EPUB preparation and completion milestones, not per-cue progress.
+    double match_progress() const;
+    int matched_count() const;
+    int unmatched_count() const;
+    int inferred_count() const;
+    QString match_rate_label() const;
+    QString match_error() const;
+    int match_search_window() const;
+    void set_match_search_window(int value);
+    void reset_match_search_window();
 
     // Sets the audio source and stores its absolute path as the bookmark.
     // Keeps the current cue state when the file cannot be opened.
@@ -106,6 +130,8 @@ class SasayakiViewModel : public QObject {
     // while sasayaki_match.json supplied cues, which keep the chapter and
     // character offsets the reader needs.
     Q_INVOKABLE bool openSubtitles(const QUrl& file);
+    Q_INVOKABLE void matchSubtitles(int searchWindow);
+    Q_INVOKABLE void cancelSubtitleMatch();
 
     Q_INVOKABLE void play();
     Q_INVOKABLE void pause();
@@ -138,6 +164,13 @@ class SasayakiViewModel : public QObject {
     void chaptersChanged();
     void errorChanged();
     void audioNameChanged();
+    void subtitleNameChanged();
+    void matchingChanged();
+    void matchProgressChanged();
+    void matchDataChanged();
+    void matchErrorChanged();
+    void matchSearchWindowChanged();
+    void matchApplied();
     // The cue to highlight, or an empty id to clear the highlight.
     void activeCueChanged(const QString& id);
 
@@ -147,17 +180,20 @@ class SasayakiViewModel : public QObject {
 
     void reload_book();
     void load_playback();
-    void load_match();
+    bool load_match();
+    void apply_match_result(const sasayaki::SasayakiMatchData& result);
     void restore_audio();
     void open_audio_source();
-    void rebuild_timeline();
+    void rebuild_timeline(bool refresh_highlight = false);
     void rebuild_cue_list();
-    void update_cue();
+    void update_cue(bool refresh_highlight = false);
     void apply_position(double seconds, bool persist);
     void persist_position(double seconds);
     void save_playback();
     void navigate_to_cue(const sasayaki::SasayakiCue& cue);
     void set_error(const QString& message);
+    void set_match_error(const QString& message);
+    void set_match_progress(double progress);
     bool take_local_file(const QUrl& file, QString* path);
 };
 

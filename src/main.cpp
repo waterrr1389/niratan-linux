@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include <QGuiApplication>
+
+#include <clocale>
 #include <QQmlApplicationEngine>
 #include <QQmlContext>
 #include <QQuickStyle>
@@ -42,6 +44,9 @@ int main(int argc, char* argv[]) {
     niratan::ui::register_reader_url_schemes();
     QtWebEngineQuick::initialize();
     QGuiApplication app(argc, argv);
+    // libmpv rejects a non-C numeric locale; Qt keeps its own locale for
+    // formatting, so pinning the C library's numeric locale is safe.
+    std::setlocale(LC_NUMERIC, "C");
     QGuiApplication::setApplicationName("Niratan");
     QGuiApplication::setOrganizationName("niratan");
 

@@ -357,3 +357,11 @@ target_include_directories(tst_cue_timeline PRIVATE ${CMAKE_SOURCE_DIR}/src)
 target_link_libraries(tst_cue_timeline PRIVATE niratan_core Qt6::Test)
 target_compile_options(tst_cue_timeline PRIVATE -Wall -Wextra -Wpedantic -Werror)
 add_test(NAME cue_timeline COMMAND tst_cue_timeline)
+
+qt_add_executable(tst_matcher
+    sasayaki/tst_matcher.cpp
+)
+target_include_directories(tst_matcher PRIVATE ${CMAKE_SOURCE_DIR}/src)
+target_link_libraries(tst_matcher PRIVATE niratan_core Qt6::Test)
+target_compile_options(tst_matcher PRIVATE -Wall -Wextra -Wpedantic -Werror)
+add_test(NAME matcher COMMAND tst_matcher)

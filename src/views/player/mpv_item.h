@@ -13,6 +13,8 @@
 // the render thread and reports frames through the update callback. Property
 // polling runs at 10 Hz and emits only when a value the UI shows changes,
 // which keeps the QML bindings quiet while mpv plays.
+// Cue times are in the subtitle timeline (before delay); missing times read
+// as -1. Track types use mpv's video, audio and sub identifiers.
 //
 // The handle is created with the same safety options as HSMpvClient:
 // config=no, osc=no, input-default-bindings=no, keep-open=yes, vo=libmpv.
@@ -22,10 +24,12 @@
 #pragma once
 
 #include <QQuickFramebufferObject>
+#include <QByteArray>
 #include <QSize>
 #include <QString>
 #include <QTimer>
 #include <QUrl>
+#include <QVariantList>
 #include <QtQml/qqmlregistration.h>
 
 #include <mpv/client.h>
@@ -45,6 +49,13 @@ class MpvItem : public QQuickFramebufferObject {
     Q_PROPERTY(qreal audioDelay READ audioDelay WRITE setAudioDelay NOTIFY audioDelayChanged)
     Q_PROPERTY(bool looping READ looping WRITE setLooping NOTIFY loopingChanged)
     Q_PROPERTY(QString error READ error NOTIFY errorChanged)
+    Q_PROPERTY(QVariantList chapters READ chapters NOTIFY chaptersChanged)
+    Q_PROPERTY(QVariantList tracks READ tracks NOTIFY tracksChanged)
+    Q_PROPERTY(QString subtitleText READ subtitleText NOTIFY subtitleCueChanged)
+    Q_PROPERTY(qreal subtitleStart READ subtitleStart NOTIFY subtitleCueChanged)
+    Q_PROPERTY(qreal subtitleEnd READ subtitleEnd NOTIFY subtitleCueChanged)
+    Q_PROPERTY(bool subtitlesVisible READ subtitlesVisible WRITE setSubtitlesVisible NOTIFY
+                   subtitlesVisibleChanged)
 
    public:
     explicit MpvItem(QQuickItem* parent = nullptr);
@@ -70,12 +81,24 @@ class MpvItem : public QQuickFramebufferObject {
     bool looping() const;
     void setLooping(bool looping);
     QString error() const;
+    QVariantList chapters() const;
+    QVariantList tracks() const;
+    QString subtitleText() const;
+    qreal subtitleStart() const;
+    qreal subtitleEnd() const;
+    bool subtitlesVisible() const;
+    void setSubtitlesVisible(bool visible);
 
     Q_INVOKABLE void open(const QUrl& file);
     Q_INVOKABLE void togglePause();
     Q_INVOKABLE void seek(qreal seconds);
     Q_INVOKABLE void skip(qreal delta);
     Q_INVOKABLE void seekToChapter(int index);
+    Q_INVOKABLE bool loadExternalSubtitle(const QUrl& file);
+    Q_INVOKABLE void selectSubtitleTrack(int id);
+    Q_INVOKABLE void disableSubtitles();
+    // Reports whether mpv accepted the asynchronous request.
+    Q_INVOKABLE bool screenshot(const QUrl& file);
     Q_INVOKABLE void cycleSubtitles();
     Q_INVOKABLE void toggleSubtitles();
     Q_INVOKABLE void setABLoopStart();
@@ -109,9 +132,18 @@ class MpvItem : public QQuickFramebufferObject {
     void errorChanged();
     void ended();
     void chapterChanged(int index);
+    void chaptersChanged();
+    void tracksChanged();
+    void subtitleCueChanged();
+    void subtitlesVisibleChanged();
+    void subtitleDocumentChanged(const QUrl& file, const QByteArray& bytes, bool readable);
 
    private:
     void poll();
+    void open_when_ready(const QUrl& file, quint64 generation);
+    void refresh_chapters();
+    void refresh_tracks();
+    void set_subtitle_cue(const QString& text, double start, double end);
     void command(const QByteArray& name);
     void set_property(const char* name, const QString& value);
     void set_property(const char* name, double value);
@@ -137,4 +169,15 @@ class MpvItem : public QQuickFramebufferObject {
     QString error_;
     qreal ab_loop_start_ = -1.0;
     int chapter_index_ = -1;
+    quint64 load_generation_ = 0;
+    bool file_ready_ = false;
+    bool chapters_dirty_ = true;
+    bool tracks_dirty_ = true;
+    QVariantList chapters_;
+    QVariantList tracks_;
+    QUrl subtitle_document_;
+    QString subtitle_text_;
+    qreal subtitle_start_ = -1.0;
+    qreal subtitle_end_ = -1.0;
+    bool subtitles_visible_ = true;
 };

@@ -6,8 +6,11 @@
 // builds the shell; this page only shows it and asks the script to render
 // after the document loads, as PopupWebView does.
 
+pragma ComponentBehavior: Bound
+
 import QtQuick
 import QtQuick.Controls
+import QtQuick.Layouts
 import QtWebEngine
 import Niratan
 
@@ -23,37 +26,42 @@ Item {
         textColor: Theme.popupText
     }
 
+    TextMetrics {
+        id: titleMetrics
+        text: dictionaryHeader.title
+        font.pixelSize: 16
+        font.weight: Font.DemiBold
+    }
+
     Column {
         anchors.fill: parent
         spacing: 0
 
-        Row {
+        PageHeader {
+            id: dictionaryHeader
             width: parent.width
-            height: 48
-            spacing: 4
-
-            Button {
-                width: 40
-                height: parent.height
-                text: "\u2039"
-                onClicked: page.backRequested()
-            }
+            title: qsTr("Dictionary")
+            onBackRequested: page.backRequested()
 
             TextField {
                 id: search
-                width: parent.width - 44
-                height: parent.height
+                // The trailing row sizes to its controls; leave room for the
+                // shared header's back target, title and horizontal spacing.
+                Layout.fillWidth: true
+                Layout.preferredWidth: Math.max(0, dictionaryHeader.width
+                    - 40 - Math.ceil(titleMetrics.advanceWidth)
+                    - 2 * (Theme.spacingMd + Theme.spacingSm))
                 placeholderText: qsTr("Look up a word")
                 selectByMouse: true
-                onAccepted: model.lookup(text)
+                onAccepted: model.lookup(search.text)
 
-                Component.onCompleted: forceActiveFocus()
+                Component.onCompleted: search.forceActiveFocus()
             }
         }
 
         Item {
             width: parent.width
-            height: parent.height - search.height
+            height: parent.height - dictionaryHeader.height
 
             WebEngineView {
                 id: view
