@@ -20,10 +20,16 @@
 // chapter_title() prefers the first table of contents entry that points at the
 // chapter path without a fragment, else the chapter's own path. This is the
 // label the chapter list shows when the table of contents has no entry.
+// contents() preserves navigation order and nesting, following
+// ChapterListViewModel's TOC-to-spine mapping. Unmapped entries are omitted;
+// only a missing TOC falls back to the spine. Fragment IDs are decoded for the DOM.
 
 #pragma once
 
+#include <QFileSystemWatcher>
+
 #include <filesystem>
+#include <functional>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -31,6 +37,7 @@
 #include <vector>
 
 #include "models/books/book.h"
+#include "models/profiles/reader_settings.h"
 #include "services/novels/epub_book.h"
 #include "services/reader/reader_shell.h"
 
@@ -39,6 +46,13 @@ namespace niratan::reader {
 struct SessionResource {
     std::string bytes;
     std::string mime_type;
+};
+
+struct ContentsEntry {
+    int spine_index;
+    int level;
+    std::string title;
+    std::string fragment;
 };
 
 class BookSession {
@@ -52,6 +66,7 @@ class BookSession {
     int spine_count() const;
     std::string spine_path(int spine_index) const;
     std::string chapter_title(int spine_index) const;
+    const std::vector<ContentsEntry>& contents() const;
 
     // The chapter with the stylesheet and script inserted, or an empty string
     // when the index is out of range or the entry cannot be read.
@@ -71,13 +86,28 @@ class BookSession {
 
    private:
     BookSession(niratan::novels::EpubBook book, niratan::books::BookInfo info,
-                std::vector<std::string> spine_paths,
-                std::vector<std::optional<std::string>> spine_titles);
+                 std::vector<std::string> spine_paths,
+                 std::vector<std::optional<std::string>> spine_titles,
+                 std::vector<ContentsEntry> contents);
 
     niratan::novels::EpubBook book_;
     niratan::books::BookInfo info_;
     std::vector<std::string> spine_paths_;
     std::vector<std::optional<std::string>> spine_titles_;
+    std::vector<ContentsEntry> contents_;
+};
+
+// Resolves the active profile from profiles.json on every read. Directory
+// watches cover atomic replacement and settings files not yet created.
+class ReaderSettingsWatch {
+   public:
+    ReaderSettingsWatch(std::filesystem::path root, std::function<void()> changed);
+    std::optional<profiles::ReaderProfileSettings> read();
+
+   private:
+    std::filesystem::path root_;
+    std::filesystem::path settings_path_;
+    QFileSystemWatcher watcher_;
 };
 
 // The container MIME type for a path: the reference EPUB types by extension,

@@ -21,20 +21,23 @@ Item {
     signal backRequested()
 
     function turnPage(forward) {
-        if (!ReaderViewModel.hasBook)
+        const script = ReaderViewModel.pageTurnScript(forward)
+        if (script.length === 0)
             return
-        web.runJavaScript(ReaderViewModel.pageTurnScript(forward), function (result) {
+        const url = ReaderViewModel.chapterUrl
+        web.runJavaScript(script, function (result) {
+            if (url !== ReaderViewModel.chapterUrl)
+                return
             ReaderViewModel.handlePageTurnResult(forward, result)
-            syncProgress()
+            if (url === ReaderViewModel.chapterUrl)
+                syncProgress(url)
         })
     }
 
-    function syncProgress() {
-        if (!ReaderViewModel.hasBook)
-            return
-        web.runJavaScript("window.hoshiReader ? window.hoshiReader.calculateProgress() : 0",
+    function syncProgress(url) {
+        web.runJavaScript("window.hoshiReader?.calculateProgress()",
                           function (result) {
-                              if (typeof result === "number")
+                              if (url === ReaderViewModel.chapterUrl && typeof result === "number")
                                   ReaderViewModel.updateChapterProgress(result)
                           })
     }
@@ -42,7 +45,7 @@ Item {
     // Re-applies the current chapter's cue ranges. The model's JSON is an
     // array literal, so it is inserted as an expression like the Swift reader
     // does; anything else is dropped rather than evaluated.
-    function applySasayakiCues() {
+    function applySasayakiCues(reveal) {
         if (!ReaderViewModel.hasBook || !sasayaki.hasMatch)
             return
         var cues = sasayaki.applyCuesJson()
@@ -53,18 +56,21 @@ Item {
         } catch (error) {
             return
         }
+        const url = ReaderViewModel.chapterUrl
         web.runJavaScript("window.hoshiReader.applySasayakiCues(" + cues + ");", function () {
-            page.highlightSasayakiCue(sasayaki.currentCueId)
+            if (url === ReaderViewModel.chapterUrl)
+                page.highlightSasayakiCue(sasayaki.currentCueId, reveal)
         })
     }
 
-    function highlightSasayakiCue(cueId) {
+    function highlightSasayakiCue(cueId, reveal) {
         if (!ReaderViewModel.hasBook || !sasayaki.hasMatch)
             return
         if (cueId && cueId.length > 0) {
+            const url = ReaderViewModel.chapterUrl
             web.runJavaScript("window.hoshiReader.highlightSasayakiCue("
-                              + JSON.stringify(cueId) + ", true)", function (result) {
-                                  if (typeof result === "number")
+                              + JSON.stringify(cueId) + ", " + JSON.stringify(reveal) + ")", function (result) {
+                                  if (url === ReaderViewModel.chapterUrl && typeof result === "number")
                                       ReaderViewModel.updateChapterProgress(result)
                               })
         } else {
@@ -109,8 +115,8 @@ Item {
         function onPageTurnRequested(direction) {
             page.turnPage(direction === "forward")
         }
-        function onChapterUrlChanged() {
-            chapter.visible = false
+        function onDocumentRestored(revealCue) {
+            page.applySasayakiCues(revealCue)
         }
     }
 
@@ -118,10 +124,19 @@ Item {
         id: sasayaki
     }
 
+    QtObject {
+        id: readerBridge
+        WebChannel.id: "readerBridge"
+
+        function message(name: string, payload: string): void {
+            ReaderViewModel.message(name, payload)
+        }
+    }
+
     Connections {
         target: sasayaki
         function onActiveCueChanged(cueId) {
-            page.highlightSasayakiCue(cueId)
+            page.highlightSasayakiCue(cueId, true)
         }
     }
 
@@ -184,13 +199,7 @@ Item {
                 backgroundColor: Theme.windowBackground
                 webChannel: WebChannel {
                     id: channel
-                    registeredObjects: [ReaderViewModel]
-                }
-                onLoadingChanged: function (request) {
-                    if (request.status === WebEngineView.LoadSucceededStatus) {
-                        page.syncProgress()
-                        page.applySasayakiCues()
-                    }
+                    registeredObjects: [readerBridge]
                 }
             }
 
@@ -217,13 +226,6 @@ Item {
                 }
             }
 
-            Label {
-                id: chapter
-                anchors.centerIn: parent
-                text: qsTr("Restoring position\u2026")
-                color: Theme.textSecondary
-                visible: false
-            }
         }
 
         Rectangle {
@@ -246,7 +248,11 @@ Item {
                 anchors.right: parent.right
                 anchors.rightMargin: 12
                 anchors.verticalCenter: parent.verticalCenter
-                text: Math.round(ReaderViewModel.progress * 100) + "%"
+                text: ReaderViewModel.showsPageCount
+                      ? (ReaderViewModel.pageCount > 0
+                         ? qsTr("%1 / %2").arg(ReaderViewModel.pageIndex).arg(ReaderViewModel.chapterPageCount)
+                         : "")
+                      : Math.round(ReaderViewModel.progress * 100) + "%"
                 color: Theme.textSecondary
                 font.pixelSize: 11
             }
@@ -285,16 +291,18 @@ Item {
                 Layout.fillHeight: true
                 clip: true
                 model: ReaderViewModel.chapters
-                currentIndex: ReaderViewModel.chapterIndex
+                currentIndex: ReaderViewModel.chapters.findIndex(
+                                  row => row.index === ReaderViewModel.chapterIndex)
                 delegate: ItemDelegate {
                     id: chapterItem
-                    required property int index
                     required property var modelData
                     width: ListView.view.width
+                    leftPadding: padding + 12 * chapterItem.modelData.level
                     text: chapterItem.modelData.title
-                    highlighted: chapterItem.index === ReaderViewModel.chapterIndex
+                    highlighted: chapterItem.modelData.index === ReaderViewModel.chapterIndex
                     onClicked: {
-                        ReaderViewModel.goToChapter(chapterItem.index)
+                        ReaderViewModel.goToContentsEntry(chapterItem.modelData.index,
+                                                          chapterItem.modelData.fragment)
                         toc.close()
                     }
                 }

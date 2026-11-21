@@ -4,6 +4,7 @@
 
 #include <QDateTime>
 #include <QFile>
+#include <QJsonArray>
 #include <QJsonObject>
 
 #include <algorithm>
@@ -11,11 +12,9 @@
 #include <filesystem>
 #include <utility>
 
-#include "models/profiles/profile_index.h"
 #include "models/profiles/reader_settings.h"
 #include "models/statistics/statistics.h"
 #include "services/books/book_storage.h"
-#include "services/profiles/profile_repository.h"
 #include "services/reader/reading_tracker.h"
 #include "services/storage/app_paths.h"
 #include "services/storage/json_file.h"
@@ -25,7 +24,6 @@ namespace {
 
 using niratan::books::BookStorage;
 using niratan::books::Bookmark;
-using niratan::profiles::ProfileRepository;
 using niratan::profiles::ReaderProfileSettings;
 using niratan::reader::BookSession;
 using niratan::reader::BookStatisticsStore;
@@ -49,6 +47,13 @@ std::string read_resource(const QString& path) {
 }
 
 double clamp_progress(double progress) { return std::min(std::max(progress, 0.0), 1.0); }
+
+std::string script_string(const QString& value) {
+    QByteArray array = QJsonDocument(QJsonArray{value}).toJson(QJsonDocument::Compact);
+    // An EPUB identifier is data even when embedded in an inline script.
+    array.replace("<", "\\u003c");
+    return array.mid(1, array.size() - 2).toStdString();
+}
 
 StatisticsAutostartMode parse_autostart_mode(const QString& raw) {
     if (raw == QString::fromStdString(std::string(
@@ -100,9 +105,9 @@ std::string resolve_furigana(const ReaderProfileSettings& settings) {
 }  // namespace
 
 struct ReaderViewModel::State {
-    State()
+    explicit State(std::function<void()> on_settings_changed)
         : storage(storage::data_root()),
-          profiles(storage::data_root()),
+          settings_watch(storage.app_directory(), std::move(on_settings_changed)),
           assets(load_assets()) {}
 
     static ReaderScripts load_assets() {
@@ -116,23 +121,11 @@ struct ReaderViewModel::State {
         return scripts;
     }
 
-    ReaderProfileSettings load_settings() {
-        const std::string profile_id = profiles.active_profile().id;
-        const std::filesystem::path path =
-            storage::data_root() / "Profiles" / profile_id / "reader_settings.json";
-        const storage::JsonReadResult read = storage::read_json_file(path);
-        if (read.status == storage::JsonReadStatus::success) {
-            if (const auto decoded = profiles::reader_settings_from_json(read.document)) {
-                return *decoded;
-            }
-        }
-        return profiles::default_reader_settings();
-    }
-
     BookStorage storage;
-    ProfileRepository profiles;
+    reader::ReaderSettingsWatch settings_watch;
     ReaderScripts assets;
     ReaderProfileSettings settings = profiles::default_reader_settings();
+    std::optional<ReaderProfileSettings> loaded_settings;
     std::optional<BookSession> session;
     books::BookMetadata book;
     bool has_book = false;
@@ -148,7 +141,12 @@ struct ReaderViewModel::State {
     double chapter_progress = 0.0;
     int page_width = 800;
     int page_height = 600;
+    int page_count = 0;
+    int page_index = 0;
     int revision = 0;
+    bool restoring = false;
+    bool reveal_cue_after_restore = false;
+    QString fragment;
     QString error;
     QString chapter_url;
     bool dark = false;
@@ -168,10 +166,9 @@ ReaderViewModel* ReaderViewModel::create(QQmlEngine*, QJSEngine*) {
     return model;
 }
 
-ReaderViewModel::ReaderViewModel(QObject* parent)
-    : QObject(parent), state_(std::make_unique<State>()) {
-    state_->settings = state_->load_settings();
-    setObjectName(QStringLiteral("readerBridge"));
+ReaderViewModel::ReaderViewModel()
+    : state_(std::make_unique<State>([this] { reload_settings(true); })) {
+    reload_settings(false);
 }
 
 ReaderViewModel::~ReaderViewModel() = default;
@@ -211,6 +208,14 @@ double ReaderViewModel::progress() const {
 
 double ReaderViewModel::chapter_progress() const { return state_->chapter_progress; }
 
+int ReaderViewModel::page_count() const { return state_->page_count; }
+
+int ReaderViewModel::page_index() const { return state_->page_index; }
+
+bool ReaderViewModel::shows_page_count() const {
+    return !state_->settings.continuous_mode && state_->settings.progress_count == "Pages";
+}
+
 QString ReaderViewModel::chapter_url() const { return state_->chapter_url; }
 
 QVariantList ReaderViewModel::chapters() const {
@@ -218,12 +223,11 @@ QVariantList ReaderViewModel::chapters() const {
     if (!state_->session.has_value()) {
         return result;
     }
-    for (int index = 0; index < state_->session->spine_count(); ++index) {
-        const QString title =
-            QString::fromStdString(state_->session->chapter_title(index)).isEmpty()
-                ? QString::fromStdString(state_->session->spine_path(index))
-                : QString::fromStdString(state_->session->chapter_title(index));
-        result.append(QVariantMap{{QStringLiteral("index"), index}, {QStringLiteral("title"), title}});
+    for (const auto& entry : state_->session->contents()) {
+        result.append(QVariantMap{{QStringLiteral("index"), entry.spine_index},
+                                  {QStringLiteral("level"), entry.level},
+                                  {QStringLiteral("title"), QString::fromStdString(entry.title)},
+                                  {QStringLiteral("fragment"), QString::fromStdString(entry.fragment)}});
     }
     return result;
 }
@@ -388,6 +392,9 @@ bool ReaderViewModel::openBook(const QString& folder) {
     }
     state_->chapter_index = std::min(std::max(chapter, 0), state_->session->spine_count() - 1);
     state_->chapter_progress = clamp_progress(progress);
+    state_->fragment.clear();
+    state_->reveal_cue_after_restore = true;
+    reload_settings(false);
 
     emit bookChanged();
     reload_document();
@@ -415,7 +422,10 @@ void ReaderViewModel::closeBook() {
     state_->has_book = false;
     state_->chapter_index = 0;
     state_->chapter_progress = 0.0;
+    state_->restoring = false;
+    state_->fragment.clear();
     state_->chapter_url.clear();
+    set_pagination(0, 0);
     emit bookChanged();
     emit chapterChanged();
     emit progressChanged();
@@ -446,6 +456,15 @@ void ReaderViewModel::goToChapter(int index) {
     load_chapter(index, 0.0);
 }
 
+void ReaderViewModel::goToContentsEntry(int index, const QString& fragment) {
+    if (!state_->session || index < 0 || index >= state_->session->spine_count()) {
+        return;
+    }
+    persist_bookmark();
+    save_statistics();
+    load_chapter(index, 0.0, fragment);
+}
+
 void ReaderViewModel::goToProgress(double progress) {
     if (!state_->session.has_value()) {
         return;
@@ -462,12 +481,12 @@ void ReaderViewModel::goToProgress(double progress) {
 }
 
 QString ReaderViewModel::pageTurnScript(bool forward) const {
-    if (!state_->has_book) {
+    if (!state_->has_book || state_->restoring) {
         return {};
     }
     return QStringLiteral(
                "(function() { window.hoshiParagraph?.finishTextAnimation(); return "
-               "window.hoshiReader.paginate('%1'); })()")
+                "window.hoshiReader?.paginate?.('%1'); })()")
         .arg(forward ? QStringLiteral("forward") : QStringLiteral("backward"));
 }
 
@@ -513,6 +532,9 @@ void ReaderViewModel::handlePageTurnResult(bool forward, const QVariant& result)
 }
 
 void ReaderViewModel::updateChapterProgress(double progress) {
+    if (!state_->session || state_->restoring || !std::isfinite(progress)) {
+        return;
+    }
     const double clamped = clamp_progress(progress);
     if (std::abs(clamped - state_->chapter_progress) < 1e-6) {
         return;
@@ -520,8 +542,7 @@ void ReaderViewModel::updateChapterProgress(double progress) {
     state_->chapter_progress = clamped;
     if (state_->tracker) {
         // The tracker works on the book's global character offset, as
-        // statisticsCharacterPosition does. The unchanged-progress guard above
-        // is what keeps a chapter load or restore from crediting anything.
+        // statisticsCharacterPosition does. Restores bypass this path.
         state_->tracker->update_position(
             state_->session->character_offset(state_->chapter_index, clamped),
             now_milliseconds());
@@ -534,21 +555,46 @@ void ReaderViewModel::updateChapterProgress(double progress) {
 void ReaderViewModel::saveBookmark() { persist_bookmark(); }
 
 void ReaderViewModel::message(const QString& name, const QString& payload) {
-    if (name == QStringLiteral("progressChanged")) {
-        bool ok = false;
-        const double progress = payload.toDouble(&ok);
-        if (ok) {
-            updateChapterProgress(progress);
+    if (!state_->session) {
+        return;
+    }
+    const auto data = QJsonDocument::fromJson(payload.toUtf8()).object();
+    if (data.value(QStringLiteral("token")).toString() != QString::number(state_->revision)) {
+        return;
+    }
+    if (name == QStringLiteral("wheelNavigation")) {
+        const QString direction = data.value(QStringLiteral("direction")).toString();
+        if (state_->restoring ||
+            (direction != QStringLiteral("forward") && direction != QStringLiteral("backward"))) {
+            return;
         }
-    } else if (name == QStringLiteral("pageChanged")) {
-        emit pageChanged(payload.toInt());
-    } else if (name == QStringLiteral("wheelNavigation")) {
         // The wheel is a manual page turn; Page Turn mode starts here, before
         // the page runs the navigation the signal asks for.
         if (state_->tracker) {
             state_->tracker->on_manual_navigation(now_milliseconds());
         }
-        emit pageTurnRequested(payload);
+        emit pageTurnRequested(direction);
+    } else if (name == QStringLiteral("restoreCompleted") && state_->restoring) {
+        state_->restoring = false;
+        if (!state_->fragment.isEmpty()) {
+            state_->fragment.clear();
+            // An explicit jump records the destination without counting it as read.
+            state_->chapter_progress =
+                clamp_progress(data.value(QStringLiteral("fragmentProgress")).toDouble());
+            emit progressChanged();
+            persist_bookmark();
+        }
+        const bool reveal = std::exchange(state_->reveal_cue_after_restore, false);
+        emit documentRestored(reveal);
+    } else if (name == QStringLiteral("progressChanged")) {
+        updateChapterProgress(
+            data.value(QStringLiteral("progress")).toDouble(state_->chapter_progress));
+    } else if (name == QStringLiteral("pageChanged") && !state_->restoring) {
+        const int count = data.value(QStringLiteral("pageCount")).toInt();
+        const int index = data.value(QStringLiteral("pageIndex")).toInt();
+        if (count > 0 && index >= 1 && index <= count) {
+            set_pagination(index, count);
+        }
     }
 }
 
@@ -574,9 +620,11 @@ std::string ReaderViewModel::document_for(const std::string& path) {
     return {};
 }
 
-void ReaderViewModel::load_chapter(int index, double progress) {
+void ReaderViewModel::load_chapter(int index, double progress, const QString& fragment) {
     state_->chapter_index = index;
     state_->chapter_progress = clamp_progress(progress);
+    state_->fragment = fragment;
+    state_->reveal_cue_after_restore = fragment.isEmpty();
     reload_document();
     emit chapterChanged();
     emit progressChanged();
@@ -588,11 +636,43 @@ void ReaderViewModel::reload_document() {
         return;
     }
     ++state_->revision;
+    state_->restoring = true;
     const std::string path = state_->session->spine_path(state_->chapter_index);
-    state_->chapter_url = QStringLiteral("reader://book/%1?v=%2")
-                              .arg(QString::fromStdString(path))
-                              .arg(state_->revision);
+    QUrl url(QStringLiteral("reader://book"));
+    url.setPath(QLatin1Char('/') + QString::fromStdString(path));
+    url.setQuery(QStringLiteral("v=%1").arg(state_->revision));
+    state_->chapter_url = QString::fromUtf8(url.toEncoded());
+    set_pagination(0, 0);
     emit chapterUrlChanged();
+}
+
+void ReaderViewModel::reload_settings(bool reflow) {
+    const auto settings = state_->settings_watch.read();
+    if (!settings || (reflow && settings == state_->loaded_settings)) {
+        return;
+    }
+    state_->loaded_settings = settings;
+    if (*settings == state_->settings) {
+        return;
+    }
+    state_->settings = *settings;
+    emit settingsChanged();
+    if (reflow) {
+        state_->reveal_cue_after_restore = false;
+        reload_document();
+    }
+}
+
+void ReaderViewModel::set_pagination(int index, int count) {
+    if (index == state_->page_index && count == state_->page_count) {
+        return;
+    }
+    state_->page_index = index;
+    state_->page_count = count;
+    emit paginationChanged();
+    if (count > 0) {
+        emit pageChanged(index - 1);
+    }
 }
 
 void ReaderViewModel::persist_bookmark() {
@@ -675,10 +755,13 @@ std::string ReaderViewModel::shell_document(const std::string& path) {
     input.colors.sasayaki_text = state_->text;
     input.colors.sasayaki_background = "#00000000";
     input.restore_token = std::to_string(state_->revision);
-    if (state_->chapter_progress > 0.0) {
+    if (!state_->fragment.isEmpty()) {
+        input.initial_restore_expression =
+            "window.hoshiReader.jumpToFragment(" + script_string(state_->fragment) + ")";
+    } else {
         input.initial_restore_expression =
             "window.hoshiReader.restoreProgress(" +
-            std::to_string(state_->chapter_progress) + ")";
+            QString::number(state_->chapter_progress, 'g', 17).toStdString() + ")";
     }
 
     for (int index = 0; index < state_->session->spine_count(); ++index) {

@@ -328,8 +328,12 @@ window.hoshiReader = {
         return window.hoshiSelection?.selection?.text?.trim() || '';
     },
     
-    notifyRestoreComplete() {
-        window.webkit?.messageHandlers?.restoreCompleted?.postMessage(window.hoshiReaderRestoreToken ?? null);
+    notifyRestoreComplete(fragmentFound = false) {
+        this.restoreComplete = true;
+        window.webkit?.messageHandlers?.restoreCompleted?.postMessage({
+            token: window.hoshiReaderRestoreToken,
+            fragmentProgress: fragmentFound ? this.calculateProgress() : 0
+        });
     },
 
     async restoreProgress(progress) {
@@ -411,18 +415,27 @@ window.hoshiReader = {
     
     async jumpToFragment(fragment) {
         await document.fonts.ready;
-        var rawFragment = (fragment || '').trim();
-        var target = rawFragment && (document.getElementById(rawFragment) || document.getElementsByName(rawFragment)[0]);
+        var target = fragment && (document.getElementById(fragment) || document.getElementsByName(fragment)[0]);
         
-        if (!target) {
+        if (!target?.getClientRects().length) {
             this.notifyRestoreComplete();
             return false;
         }
         
-        target.scrollIntoView();
+        target.scrollIntoView({ behavior: 'instant' });
         requestAnimationFrame(() => {
-            requestAnimationFrame(() => this.notifyRestoreComplete());
+            requestAnimationFrame(() => this.notifyRestoreComplete(true));
         });
         return true;
     }
 };
+
+// Only a scroll after restore can change the bookmark or count as reading.
+if (window.webkit?.messageHandlers?.progressChanged) {
+    const sendProgress = window.webkit.messageHandlers.progressChanged.postMessage;
+    window.webkit.messageHandlers.progressChanged.postMessage = progress => {
+        if (window.hoshiReader.restoreComplete) {
+            sendProgress({ token: window.hoshiReaderRestoreToken, progress });
+        }
+    };
+}

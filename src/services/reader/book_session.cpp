@@ -3,9 +3,11 @@
 #include "book_session.h"
 
 #include <QByteArray>
+#include <QFile>
 #include <QHash>
 #include <QRegularExpression>
 #include <QString>
+#include <QStringList>
 #include <QUrl>
 
 #include <algorithm>
@@ -19,7 +21,11 @@
 #include <utility>
 #include <vector>
 
+#include "models/profiles/profile_index_json.h"
+#include "models/profiles/profile_ops.h"
+#include "services/profiles/profile_repository.h"
 #include "services/reader/character_normalizer.h"
+#include "services/storage/json_file.h"
 
 namespace niratan::reader {
 namespace {
@@ -242,6 +248,7 @@ std::optional<BookSession> BookSession::open(const std::filesystem::path& path,
 
     std::map<std::string, std::set<std::string>> fragments_by_path;
     std::vector<std::optional<std::string>> spine_titles(spine_paths.size());
+    std::vector<ContentsEntry> contents;
     for (const niratan::novels::EpubTocEntry& entry : book->toc()) {
         const TocTarget target = split_target(entry.href);
         if (target.fragment.has_value()) {
@@ -251,9 +258,18 @@ std::optional<BookSession> BookSession::open(const std::filesystem::path& path,
         if (spine_index == first_spine_index.end()) {
             continue;
         }
+        contents.push_back(ContentsEntry{
+            static_cast<int>(spine_index->second), entry.level, entry.title,
+            target.fragment ? decoded_character_references(percent_decoded(*target.fragment))
+                            : std::string()});
         // The first entry naming the chapter supplies its label.
         if (!spine_titles[spine_index->second].has_value()) {
             spine_titles[spine_index->second] = entry.title;
+        }
+    }
+    if (book->toc().empty()) {
+        for (std::size_t index = 0; index < spine_paths.size(); ++index) {
+            contents.push_back(ContentsEntry{static_cast<int>(index), 0, spine_paths[index], {}});
         }
     }
 
@@ -282,16 +298,18 @@ std::optional<BookSession> BookSession::open(const std::filesystem::path& path,
     info.character_count = running_total;
 
     return BookSession(std::move(*book), std::move(info), std::move(spine_paths),
-                       std::move(spine_titles));
+                       std::move(spine_titles), std::move(contents));
 }
 
 BookSession::BookSession(niratan::novels::EpubBook book, niratan::books::BookInfo info,
                          std::vector<std::string> spine_paths,
-                         std::vector<std::optional<std::string>> spine_titles)
+                         std::vector<std::optional<std::string>> spine_titles,
+                         std::vector<ContentsEntry> contents)
     : book_(std::move(book)),
       info_(std::move(info)),
       spine_paths_(std::move(spine_paths)),
-      spine_titles_(std::move(spine_titles)) {}
+      spine_titles_(std::move(spine_titles)),
+      contents_(std::move(contents)) {}
 
 const niratan::novels::EpubBook& BookSession::book() const { return book_; }
 const niratan::books::BookInfo& BookSession::info() const { return info_; }
@@ -311,6 +329,8 @@ std::string BookSession::chapter_title(int spine_index) const {
     }
     return spine_titles_[static_cast<std::size_t>(spine_index)].value_or(std::string{});
 }
+
+const std::vector<ContentsEntry>& BookSession::contents() const { return contents_; }
 
 std::string BookSession::chapter_document(int spine_index, const ShellInput& input,
                                           const ReaderScripts& scripts) const {
@@ -352,6 +372,62 @@ int BookSession::character_offset(int spine_index, double progress) const {
 
 std::optional<std::pair<int, double>> BookSession::position_for_character(int characters) const {
     return info_.resolve_character_position(characters);
+}
+
+ReaderSettingsWatch::ReaderSettingsWatch(std::filesystem::path root,
+                                         std::function<void()> changed)
+    : root_(std::move(root)) {
+    if (!root_.empty()) {
+        const profiles::ProfileRepository repository(root_);
+    }
+    QObject::connect(&watcher_, &QFileSystemWatcher::fileChanged, &watcher_, changed);
+    QObject::connect(&watcher_, &QFileSystemWatcher::directoryChanged, &watcher_, changed);
+}
+
+std::optional<profiles::ReaderProfileSettings> ReaderSettingsWatch::read() {
+    if (root_.empty()) {
+        return std::nullopt;
+    }
+    const auto profiles_dir = root_ / "Profiles";
+    const auto index_path = profiles_dir / "profiles.json";
+    const auto index_read = storage::read_json_file(index_path);
+    auto index = index_read.status == storage::JsonReadStatus::missing
+                     ? std::optional(profiles::ProfileIndex::initial())
+                     : profiles::profile_index_from_json(index_read.document);
+    auto path = settings_path_;
+    if (index) {
+        const std::string id = profiles::resolve_profile(profiles::normalize_profile_index(*index)).id;
+        if (profiles::is_safe_profile_id(id)) {
+            path = profiles_dir / id / "reader_settings.json";
+        }
+    }
+    const bool profile_changed = path != settings_path_;
+    settings_path_ = path;
+
+    QStringList wanted{QFile(profiles_dir).fileName(), QFile(index_path).fileName()};
+    if (!path.empty()) {
+        wanted.append(QFile(path.parent_path()).fileName());
+        wanted.append(QFile(path).fileName());
+    }
+    const auto watched = watcher_.files() + watcher_.directories();
+    for (const QString& old_path : watched) {
+        if (!wanted.contains(old_path)) {
+            watcher_.removePath(old_path);
+        }
+    }
+    for (const QString& new_path : wanted) {
+        if (!watched.contains(new_path) && QFile::exists(new_path)) {
+            watcher_.addPath(new_path);
+        }
+    }
+    if (path.empty()) {
+        return std::nullopt;
+    }
+    const auto settings = storage::read_json_file(path);
+    if (settings.status == storage::JsonReadStatus::missing && profile_changed) {
+        return profiles::default_reader_settings();
+    }
+    return profiles::reader_settings_from_json(settings.document);
 }
 
 std::string container_mime_type(std::string_view path) {

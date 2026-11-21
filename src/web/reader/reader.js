@@ -229,7 +229,10 @@ window.hoshiReader = {
             const direction = event.deltaY > 0 ? 'forward' : 'backward';
             window.hoshiLastWheelNavigationTime = now;
             event.preventDefault();
-            window.webkit?.messageHandlers?.wheelNavigation?.postMessage(direction);
+            window.webkit?.messageHandlers?.wheelNavigation?.postMessage({
+                token: window.hoshiReaderRestoreToken,
+                direction
+            });
         }, { passive: false });
     },
 
@@ -247,8 +250,11 @@ window.hoshiReader = {
         return window.hoshiSelection?.selection?.text?.trim() || '';
     },
     
-    notifyRestoreComplete() {
-        window.webkit?.messageHandlers?.restoreCompleted?.postMessage(window.hoshiReaderRestoreToken ?? null);
+    notifyRestoreComplete(fragmentFound = false) {
+        window.webkit?.messageHandlers?.restoreCompleted?.postMessage({
+            token: window.hoshiReaderRestoreToken,
+            fragmentProgress: fragmentFound ? this.calculateProgress() : 0
+        });
         this.registerPageTracking();
     },
 
@@ -260,12 +266,10 @@ window.hoshiReader = {
         return Math.ceil((context.maxScroll - context.limitTolerance) / context.pageSize) + 1;
     },
 
-    currentPageIndex() {
-        const context = this.getScrollContext();
+    currentPageIndex(context = this.getScrollContext(), pageCount = this.pageCount(context)) {
         if (context.pageSize <= 0) {
             return 0;
         }
-        const pageCount = this.pageCount(context);
         const scroll = context.vertical ? context.scrollEl.scrollTop : context.scrollEl.scrollLeft;
         if (scroll >= context.maxScroll - context.limitTolerance) {
             return pageCount - 1;
@@ -274,7 +278,13 @@ window.hoshiReader = {
     },
 
     notifyPageChanged() {
-        window.webkit?.messageHandlers?.pageChanged?.postMessage(this.currentPageIndex());
+        const context = this.getScrollContext();
+        const count = this.pageCount(context);
+        window.webkit?.messageHandlers?.pageChanged?.postMessage({
+            token: window.hoshiReaderRestoreToken,
+            pageIndex: this.currentPageIndex(context, count) + 1,
+            pageCount: count
+        });
     },
 
     registerPageTracking() {
@@ -901,10 +911,10 @@ window.hoshiReader = {
     async jumpToFragment(fragment) {
         await document.fonts.ready;
         var context = this.getScrollContext();
-        var rawFragment = (fragment || '').trim();
-        var target = rawFragment && (document.getElementById(rawFragment) || document.getElementsByName(rawFragment)[0]);
+        var target = fragment && (document.getElementById(fragment) || document.getElementsByName(fragment)[0]);
         
-        if (context.pageSize <= 0 || !target) {
+        // A missing or non-rendered anchor leaves a fresh chapter at its start.
+        if (context.pageSize <= 0 || !target?.getClientRects().length) {
             this.registerSnapScroll(0);
             this.notifyRestoreComplete();
             return false;
@@ -920,7 +930,7 @@ window.hoshiReader = {
         requestAnimationFrame(() => {
             this.setScrollOffset(context, targetScroll);
             this.registerSnapScroll(targetScroll);
-            requestAnimationFrame(() => this.notifyRestoreComplete());
+            requestAnimationFrame(() => this.notifyRestoreComplete(true));
         });
         
         return true;

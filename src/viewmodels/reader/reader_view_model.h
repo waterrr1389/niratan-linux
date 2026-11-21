@@ -21,8 +21,13 @@
 // progress number instead. Chapter changes save the bookmark of the chapter
 // that is left, and the bookmark is also saved when the reader closes.
 //
-// Reader settings come from the active profile's reader_settings.json; the
-// page edits them through the setters, which rebuild the injected document.
+// Appearance settings from the active profile's reader_settings.json apply
+// live. The chapter reloads at its recorded progress because layout can
+// change which scripts are injected. This restore neither saves the bookmark
+// nor credits statistics. Dictionary settings still require reopening.
+// TOC fragment jumps use the document's anchor; a missing anchor leaves the
+// reader at the start of that spine item. Page numbers are local to that item
+// and unavailable in continuous mode, as in NativeReaderView.showsPageCount.
 //
 // Reading statistics
 // ------------------
@@ -90,6 +95,10 @@ class ReaderViewModel : public QObject {
     Q_PROPERTY(QString bookFolder READ book_folder NOTIFY bookChanged)
     Q_PROPERTY(double progress READ progress NOTIFY progressChanged)
     Q_PROPERTY(double chapterProgress READ chapter_progress NOTIFY progressChanged)
+    Q_PROPERTY(int pageCount READ page_count NOTIFY paginationChanged)
+    Q_PROPERTY(int pageIndex READ page_index NOTIFY paginationChanged)
+    Q_PROPERTY(int chapterPageCount READ page_count NOTIFY paginationChanged)
+    Q_PROPERTY(bool showsPageCount READ shows_page_count NOTIFY settingsChanged)
     Q_PROPERTY(QString chapterUrl READ chapter_url NOTIFY chapterUrlChanged)
     Q_PROPERTY(QVariantList chapters READ chapters NOTIFY bookChanged)
     Q_PROPERTY(QString error READ error NOTIFY errorChanged)
@@ -109,7 +118,6 @@ class ReaderViewModel : public QObject {
     Q_PROPERTY(bool statisticsEnabled READ statistics_enabled NOTIFY statisticsChanged)
 
    public:
-    explicit ReaderViewModel(QObject* parent = nullptr);
     ~ReaderViewModel() override;
 
     // The process-wide reader. The page and the reader:// scheme handler must
@@ -124,6 +132,9 @@ class ReaderViewModel : public QObject {
     QString book_folder() const;
     double progress() const;
     double chapter_progress() const;
+    int page_count() const;
+    int page_index() const;
+    bool shows_page_count() const;
     QString chapter_url() const;
     QVariantList chapters() const;
     QString error() const;
@@ -161,6 +172,7 @@ class ReaderViewModel : public QObject {
     Q_INVOKABLE void setPageSize(int width, int height);
 
     Q_INVOKABLE void goToChapter(int index);
+    Q_INVOKABLE void goToContentsEntry(int index, const QString& fragment);
     Q_INVOKABLE void goToProgress(double progress);
 
     // A JavaScript expression for the page to run, or empty when no book is
@@ -197,16 +209,23 @@ class ReaderViewModel : public QObject {
     void settingsChanged();
     void paletteChanged();
     void statisticsChanged();
+    void paginationChanged();
     void pageChanged(int index);
+    void documentRestored(bool revealCue);
     // The page should run navigation for this direction ("forward"/"backward").
     void pageTurnRequested(const QString& direction);
 
    private:
+    // A default-constructible singleton would let QML bypass create().
+    ReaderViewModel();
+
     struct State;
     std::unique_ptr<State> state_;
 
-    void load_chapter(int index, double progress);
+    void load_chapter(int index, double progress, const QString& fragment = {});
     void reload_document();
+    void reload_settings(bool reflow);
+    void set_pagination(int index, int count);
     void persist_bookmark();
     // Credits the elapsed time without characters and writes the live
     // session. Called before a chapter change; never on a page turn.
