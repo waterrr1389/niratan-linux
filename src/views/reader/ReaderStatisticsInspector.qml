@@ -17,6 +17,10 @@
 // models/statistics/reader_statistics.h formats, so this file only lays the
 // values out. The count column is named for the profile's unit: raw characters
 // for Japanese, approximate words for English.
+//
+// The SF Symbol icons beside the two remaining-time rows are omitted; the row
+// labels carry the meaning. The rest keeps the source order: session, book
+// progress, then the history table.
 
 pragma ComponentBehavior: Bound
 

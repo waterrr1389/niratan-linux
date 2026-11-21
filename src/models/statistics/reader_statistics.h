@@ -43,11 +43,11 @@
 //
 // Known deviations from the Swift source
 // --------------------------------------
-// * Number text uses the locale's digits and group separator, but not its
-//   numbering system for non-Latin locales. Duration digits and the ":"
-//   separators are ASCII.
-// * The percent sign always follows the number. A locale that separates the
-//   sign with a space or prefixes it is not reproduced.
+// * Number text takes the locale's digits, group separator and decimal
+//   separator, as .formatted(.number) does. Duration digits and the ":"
+//   separators stay ASCII.
+// * The percent sign follows the number. A locale that prefixes the sign or
+//   separates it with a space is not reproduced.
 // * A non-finite reading time is treated as zero, while Swift's Duration
 //   conversion of such a value traps. A tracker cannot produce one.
 
