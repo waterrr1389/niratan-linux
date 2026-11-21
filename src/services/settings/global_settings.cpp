@@ -29,6 +29,14 @@ const auto kTargetType = QStringLiteral("dailyStatisticsTargetType");
 const auto kCharacterTarget = QStringLiteral("dailyStatisticsCharacterTarget");
 const auto kDurationTarget = QStringLiteral("dailyStatisticsDurationTargetMinutes");
 const auto kWeeklyDays = QStringLiteral("weeklyStatisticsTargetDays");
+const auto kEnableSasayaki = QStringLiteral("enableSasayaki");
+const auto kSasayakiAutoScroll = QStringLiteral("sasayakiAutoScroll");
+const auto kSasayakiAutoPause = QStringLiteral("sasayakiAutoPause");
+const auto kSasayakiSkipControls = QStringLiteral("sasayakiSkipControls");
+const auto kSasayakiTextColor = QStringLiteral("sasayakiTextColor");
+const auto kSasayakiBackgroundColor = QStringLiteral("sasayakiBackgroundColor");
+const auto kSasayakiDarkTextColor = QStringLiteral("sasayakiDarkTextColor");
+const auto kSasayakiDarkBackgroundColor = QStringLiteral("sasayakiDarkBackgroundColor");
 
 QString id_text(std::string_view id) { return QString::fromUtf8(id.data(), qsizetype(id.size())); }
 
@@ -71,6 +79,27 @@ std::optional<int> int_value(const QJsonObject& object, const QString& key) {
         return std::nullopt;
     }
     return integer;
+}
+
+// UserConfig.loadColor: a stored string is normalized with ColorHexCodec; a
+// missing key or any other JSON type gives the key's default.
+std::string color_value(const QJsonObject& object, const QString& key,
+                        const std::string& fallback) {
+    const QJsonValue value = object.value(key);
+    if (!value.isString()) {
+        return fallback;
+    }
+    return sasayaki::sasayaki_color_hex(value.toString().toStdString()).value_or(fallback);
+}
+
+// The value a colour save writes: the codec's normalization of the input, or
+// nothing when it does not decode, in which case the save fails.
+std::optional<QString> normalized_color(std::string_view hex) {
+    const std::optional<std::string> normalized = sasayaki::sasayaki_color_hex(hex);
+    if (!normalized.has_value()) {
+        return std::nullopt;
+    }
+    return QString::fromStdString(*normalized);
 }
 
 }  // namespace
@@ -145,6 +174,71 @@ StoreError GlobalSettings::save_statistics_targets(const StatisticsTargetSetting
         {kDurationTarget, clamped.daily_duration_target_minutes},
         {kWeeklyDays, clamped.weekly_target_days},
     });
+}
+
+sasayaki::SasayakiSettings GlobalSettings::sasayaki_settings() const {
+    const QJsonObject object = read_document(file_).object;
+    sasayaki::SasayakiSettings settings;
+    settings.enable = object.value(kEnableSasayaki).toBool(settings.enable);
+    settings.auto_scroll = object.value(kSasayakiAutoScroll).toBool(settings.auto_scroll);
+    settings.auto_pause = object.value(kSasayakiAutoPause).toBool(settings.auto_pause);
+    settings.skip_controls = object.value(kSasayakiSkipControls).toBool(settings.skip_controls);
+    settings.text_color = color_value(object, kSasayakiTextColor, settings.text_color);
+    settings.background_color =
+        color_value(object, kSasayakiBackgroundColor, settings.background_color);
+    settings.dark_text_color =
+        color_value(object, kSasayakiDarkTextColor, settings.dark_text_color);
+    settings.dark_background_color =
+        color_value(object, kSasayakiDarkBackgroundColor, settings.dark_background_color);
+    return settings;
+}
+
+StoreError GlobalSettings::save_enable_sasayaki(bool enabled) {
+    return write(QJsonObject{{kEnableSasayaki, enabled}});
+}
+
+StoreError GlobalSettings::save_sasayaki_auto_scroll(bool enabled) {
+    return write(QJsonObject{{kSasayakiAutoScroll, enabled}});
+}
+
+StoreError GlobalSettings::save_sasayaki_auto_pause(bool enabled) {
+    return write(QJsonObject{{kSasayakiAutoPause, enabled}});
+}
+
+StoreError GlobalSettings::save_sasayaki_skip_controls(bool enabled) {
+    return write(QJsonObject{{kSasayakiSkipControls, enabled}});
+}
+
+StoreError GlobalSettings::save_sasayaki_text_color(std::string_view hex) {
+    const std::optional<QString> normalized = normalized_color(hex);
+    if (!normalized.has_value()) {
+        return StoreError::io_error;
+    }
+    return write(QJsonObject{{kSasayakiTextColor, *normalized}});
+}
+
+StoreError GlobalSettings::save_sasayaki_background_color(std::string_view hex) {
+    const std::optional<QString> normalized = normalized_color(hex);
+    if (!normalized.has_value()) {
+        return StoreError::io_error;
+    }
+    return write(QJsonObject{{kSasayakiBackgroundColor, *normalized}});
+}
+
+StoreError GlobalSettings::save_sasayaki_dark_text_color(std::string_view hex) {
+    const std::optional<QString> normalized = normalized_color(hex);
+    if (!normalized.has_value()) {
+        return StoreError::io_error;
+    }
+    return write(QJsonObject{{kSasayakiDarkTextColor, *normalized}});
+}
+
+StoreError GlobalSettings::save_sasayaki_dark_background_color(std::string_view hex) {
+    const std::optional<QString> normalized = normalized_color(hex);
+    if (!normalized.has_value()) {
+        return StoreError::io_error;
+    }
+    return write(QJsonObject{{kSasayakiDarkBackgroundColor, *normalized}});
 }
 
 StoreError GlobalSettings::write(const QJsonObject& values) {

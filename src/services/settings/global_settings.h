@@ -5,7 +5,8 @@
 // the didSet observers of enableStatistics, statisticsAutostartMode,
 // statisticsResetTime, dailyStatisticsTargetType,
 // dailyStatisticsCharacterTarget, dailyStatisticsDurationTargetMinutes and
-// weeklyStatisticsTargetDays) and StatisticsResetTimePreference.load/save in
+// weeklyStatisticsTargetDays, the four sasayaki booleans and the four sasayaki
+// colours) and StatisticsResetTimePreference.load/save in
 // Models/Statistics.swift.
 //
 // This is the only code that reads or writes the statistics keys of
@@ -24,6 +25,20 @@
 //   dailyStatisticsCharacterTarget        int, default 5000, snapped
 //   dailyStatisticsDurationTargetMinutes  int, default 30, snapped
 //   weeklyStatisticsTargetDays            int, default 4, clamped to 1..7
+//   enableSasayaki                        bool, default false
+//   sasayakiAutoScroll                    bool, default true
+//   sasayakiAutoPause                     bool, default true
+//   sasayakiSkipControls                  bool, default false
+//   sasayakiTextColor                     hex string, default "#000000"
+//   sasayakiBackgroundColor               hex string, default "#87CFFA66"
+//   sasayakiDarkTextColor                 hex string, default "#FFFFFF"
+//   sasayakiDarkBackgroundColor           hex string, default "#87CFFA66"
+//
+// The colour keys hold strings; sasayaki_settings() normalizes them with
+// sasayaki::sasayaki_color_hex and applies the key's default when one does not
+// decode. A colour save writes the normalized value of its input, not the
+// input string; an input that does not decode writes nothing and fails. That
+// rejection has no Swift counterpart, where a Color always encodes.
 //
 // A key holding the wrong JSON type reads as absent, as `as? Int` and
 // `as? Bool` do. A missing document reads as the defaults. A damaged document,
@@ -43,7 +58,9 @@
 
 #include <filesystem>
 #include <string>
+#include <string_view>
 
+#include "models/sasayaki/sasayaki_settings.h"
 #include "models/statistics/statistics.h"
 #include "services/settings/settings_status.h"
 
@@ -87,6 +104,19 @@ class GlobalSettings {
     StoreError save_statistics_reset_minutes(int minutes);
     // Clamps before writing; the four target keys are written together.
     StoreError save_statistics_targets(const statistics::StatisticsTargetSettings& targets);
+
+    // Always the B1-B4 defaults of a missing or damaged document.
+    sasayaki::SasayakiSettings sasayaki_settings() const;
+    StoreError save_enable_sasayaki(bool enabled);
+    StoreError save_sasayaki_auto_scroll(bool enabled);
+    StoreError save_sasayaki_auto_pause(bool enabled);
+    StoreError save_sasayaki_skip_controls(bool enabled);
+    // Writes the normalized hex value of `hex`; a value that does not decode
+    // is rejected without writing.
+    StoreError save_sasayaki_text_color(std::string_view hex);
+    StoreError save_sasayaki_background_color(std::string_view hex);
+    StoreError save_sasayaki_dark_text_color(std::string_view hex);
+    StoreError save_sasayaki_dark_background_color(std::string_view hex);
 
    private:
     StoreError write(const QJsonObject& values);

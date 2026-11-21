@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
 // Tests for GlobalSettings, following UserConfig.init and the didSet
-// observers of the statistics keys in Core/UserConfig.swift, and
-// StatisticsResetTimePreference.save in Models/Statistics.swift.
+// observers of the statistics and sasayaki keys in Core/UserConfig.swift,
+// ColorHexCodec (sasayaki colours), and StatisticsResetTimePreference.save in
+// Models/Statistics.swift.
 
 #include "services/settings/global_settings.h"
 
@@ -16,8 +17,10 @@
 #include <iterator>
 #include <string>
 
+#include "models/sasayaki/sasayaki_settings.h"
 #include "models/statistics/statistics.h"
 
+using niratan::sasayaki::SasayakiSettings;
 using niratan::settings::autostart_mode_from_id;
 using niratan::settings::GlobalSettings;
 using niratan::settings::LoadStatus;
@@ -243,6 +246,192 @@ class GlobalSettingsTest : public QObject {
         write_text(settings_file(dir), "[1]");
         QCOMPARE(settings.save_statistics_reset_minutes(10), StoreError::io_error);
         QCOMPARE(read_text(settings_file(dir)), std::string("[1]"));
+    }
+
+    // B1, B2, B8: a missing document reads as the UserConfig.init defaults and
+    // is not created.
+    void sasayaki_missingFileGivesDefaults() {
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        QCOMPARE(GlobalSettings(settings_file(dir)).sasayaki_settings(), SasayakiSettings{});
+        QVERIFY(!std::filesystem::exists(settings_file(dir)));
+    }
+
+    void sasayaki_storedValues() {
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        const QJsonObject stored{
+            {"enableSasayaki", true},
+            {"sasayakiAutoScroll", false},
+            {"sasayakiAutoPause", false},
+            {"sasayakiSkipControls", true},
+            {"sasayakiTextColor", "#112233"},
+            {"sasayakiBackgroundColor", "#44556677"},
+            {"sasayakiDarkTextColor", "#FFFFFF"},
+            {"sasayakiDarkBackgroundColor", "#00000000"},
+            {"other", 1},
+        };
+        write_text(settings_file(dir),
+                   QJsonDocument(stored).toJson(QJsonDocument::Compact).toStdString());
+        const SasayakiSettings settings = GlobalSettings(settings_file(dir)).sasayaki_settings();
+        QCOMPARE(settings.enable, true);
+        QCOMPARE(settings.auto_scroll, false);
+        QCOMPARE(settings.auto_pause, false);
+        QCOMPARE(settings.skip_controls, true);
+        QCOMPARE(QString::fromStdString(settings.text_color), QStringLiteral("#112233"));
+        QCOMPARE(QString::fromStdString(settings.background_color), QStringLiteral("#44556677"));
+        QCOMPARE(QString::fromStdString(settings.dark_text_color), QStringLiteral("#FFFFFF"));
+        QCOMPARE(QString::fromStdString(settings.dark_background_color),
+                 QStringLiteral("#00000000"));
+    }
+
+    // B1, B2, B3: `as? Bool` and a non-string colour read as absent.
+    void sasayaki_wrongTypesFallBack() {
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        write_text(settings_file(dir),
+                   R"({"enableSasayaki":"true","sasayakiAutoScroll":1,)"
+                   R"("sasayakiAutoPause":null,"sasayakiSkipControls":0,)"
+                   R"("sasayakiTextColor":12,"sasayakiBackgroundColor":{},)"
+                   R"("sasayakiDarkTextColor":true,"sasayakiDarkBackgroundColor":[]})");
+        QCOMPARE(GlobalSettings(settings_file(dir)).sasayaki_settings(), SasayakiSettings{});
+    }
+
+    // B3, B8: stored colours are normalized on read and the file is not
+    // rewritten.
+    void sasayaki_colorsAreNormalized() {
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        const QJsonObject source{
+            {"sasayakiTextColor", "  #abc\n"},
+            {"sasayakiBackgroundColor", "#112233FF"},
+            {"sasayakiDarkTextColor", "ffff"},
+            {"sasayakiDarkBackgroundColor", "1234"},
+        };
+        const std::string text = QJsonDocument(source).toJson(QJsonDocument::Compact).toStdString();
+        write_text(settings_file(dir), text);
+        const SasayakiSettings settings = GlobalSettings(settings_file(dir)).sasayaki_settings();
+        QCOMPARE(QString::fromStdString(settings.text_color), QStringLiteral("#AABBCC"));
+        QCOMPARE(QString::fromStdString(settings.background_color), QStringLiteral("#112233"));
+        QCOMPARE(QString::fromStdString(settings.dark_text_color), QStringLiteral("#FFFFFF"));
+        QCOMPARE(QString::fromStdString(settings.dark_background_color),
+                 QStringLiteral("#11223344"));
+        QCOMPARE(read_text(settings_file(dir)), text);
+
+        const QJsonObject invalidColors{
+            {"sasayakiTextColor", "nope"},
+            {"sasayakiDarkTextColor", "#1234567"},
+        };
+        write_text(settings_file(dir),
+                   QJsonDocument(invalidColors).toJson(QJsonDocument::Compact).toStdString());
+        const SasayakiSettings fallback = GlobalSettings(settings_file(dir)).sasayaki_settings();
+        QCOMPARE(QString::fromStdString(fallback.text_color), QStringLiteral("#000000"));
+        QCOMPARE(QString::fromStdString(fallback.dark_text_color), QStringLiteral("#FFFFFF"));
+    }
+
+    // B1-B4, B8: a damaged or non-object document reads as the defaults and is
+    // never rewritten.
+    void sasayaki_damagedFileGivesDefaultsAndKeepsBytes() {
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        write_text(settings_file(dir), "{bad json");
+        QCOMPARE(GlobalSettings(settings_file(dir)).sasayaki_settings(), SasayakiSettings{});
+        QCOMPARE(read_text(settings_file(dir)), std::string("{bad json"));
+
+        write_text(settings_file(dir), "[1,2]");
+        QCOMPARE(GlobalSettings(settings_file(dir)).sasayaki_settings(), SasayakiSettings{});
+        QCOMPARE(read_text(settings_file(dir)), std::string("[1,2]"));
+    }
+
+    // B6: each toggle writes its own JSON boolean and keeps every other key.
+    void saveSasayakiToggles_createDocumentAndKeepOtherKeys() {
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        write_text(settings_file(dir), R"({"customCSS":"p{}"})");
+        GlobalSettings settings(settings_file(dir));
+        QCOMPARE(settings.save_enable_sasayaki(true), StoreError::none);
+        QCOMPARE(settings.save_sasayaki_auto_scroll(false), StoreError::none);
+        QCOMPARE(settings.save_sasayaki_auto_pause(false), StoreError::none);
+        QCOMPARE(settings.save_sasayaki_skip_controls(true), StoreError::none);
+        const QJsonObject object = read_object(settings_file(dir));
+        QVERIFY(object.value(QStringLiteral("enableSasayaki")).isBool());
+        QCOMPARE(object.value(QStringLiteral("enableSasayaki")).toBool(), true);
+        QVERIFY(object.value(QStringLiteral("sasayakiAutoScroll")).isBool());
+        QCOMPARE(object.value(QStringLiteral("sasayakiAutoScroll")).toBool(), false);
+        QVERIFY(object.value(QStringLiteral("sasayakiAutoPause")).isBool());
+        QCOMPARE(object.value(QStringLiteral("sasayakiAutoPause")).toBool(), false);
+        QVERIFY(object.value(QStringLiteral("sasayakiSkipControls")).isBool());
+        QCOMPARE(object.value(QStringLiteral("sasayakiSkipControls")).toBool(), true);
+        QCOMPARE(object.value(QStringLiteral("customCSS")).toString(), QStringLiteral("p{}"));
+        const SasayakiSettings stored = settings.sasayaki_settings();
+        QCOMPARE(stored.enable, true);
+        QCOMPARE(stored.auto_scroll, false);
+        QCOMPARE(stored.auto_pause, false);
+        QCOMPARE(stored.skip_controls, true);
+    }
+
+    // B6: a toggle save fails on a damaged or non-object document and leaves
+    // its bytes alone.
+    void saveSasayakiToggles_damagedFileFailsAndKeepsBytes() {
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        write_text(settings_file(dir), "{bad json");
+        GlobalSettings settings(settings_file(dir));
+        QCOMPARE(settings.save_enable_sasayaki(true), StoreError::io_error);
+        QCOMPARE(settings.save_sasayaki_auto_scroll(true), StoreError::io_error);
+        QCOMPARE(settings.save_sasayaki_auto_pause(true), StoreError::io_error);
+        QCOMPARE(settings.save_sasayaki_skip_controls(true), StoreError::io_error);
+        QCOMPARE(read_text(settings_file(dir)), std::string("{bad json"));
+
+        write_text(settings_file(dir), "[1]");
+        QCOMPARE(settings.save_enable_sasayaki(true), StoreError::io_error);
+        QCOMPARE(read_text(settings_file(dir)), std::string("[1]"));
+    }
+
+    // B7: a colour save writes the normalized value, not its input, and keeps
+    // every other key.
+    void saveSasayakiColors_writeNormalizedValues() {
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        write_text(settings_file(dir), R"({"customCSS":"p{}"})");
+        GlobalSettings settings(settings_file(dir));
+        QCOMPARE(settings.save_sasayaki_text_color("  #abc\n"), StoreError::none);
+        QCOMPARE(settings.save_sasayaki_background_color("#112233FF"), StoreError::none);
+        QCOMPARE(settings.save_sasayaki_dark_text_color("ffff"), StoreError::none);
+        QCOMPARE(settings.save_sasayaki_dark_background_color("#00000000"), StoreError::none);
+        const QJsonObject object = read_object(settings_file(dir));
+        QCOMPARE(object.value(QStringLiteral("sasayakiTextColor")).toString(),
+                 QStringLiteral("#AABBCC"));
+        QCOMPARE(object.value(QStringLiteral("sasayakiBackgroundColor")).toString(),
+                 QStringLiteral("#112233"));
+        QCOMPARE(object.value(QStringLiteral("sasayakiDarkTextColor")).toString(),
+                 QStringLiteral("#FFFFFF"));
+        QCOMPARE(object.value(QStringLiteral("sasayakiDarkBackgroundColor")).toString(),
+                 QStringLiteral("#00000000"));
+        QCOMPARE(object.value(QStringLiteral("customCSS")).toString(), QStringLiteral("p{}"));
+        QCOMPARE(settings.sasayaki_settings(),
+                 (SasayakiSettings{false, true, true, false, "#AABBCC", "#112233", "#FFFFFF",
+                                   "#00000000"}));
+    }
+
+    // B7: an input that does not decode writes nothing and fails.
+    void saveSasayakiColors_rejectUndecodableValues() {
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        const std::string text = R"({"customCSS":"p{}"})";
+        write_text(settings_file(dir), text);
+        GlobalSettings settings(settings_file(dir));
+        QCOMPARE(settings.save_sasayaki_text_color("nope"), StoreError::io_error);
+        QCOMPARE(settings.save_sasayaki_background_color("#12345"), StoreError::io_error);
+        QCOMPARE(settings.save_sasayaki_dark_text_color("#GGGGGG"), StoreError::io_error);
+        QCOMPARE(settings.save_sasayaki_dark_background_color(""), StoreError::io_error);
+        QCOMPARE(read_text(settings_file(dir)), text);
+
+        QTemporaryDir empty;
+        QVERIFY(empty.isValid());
+        GlobalSettings fresh(settings_file(empty));
+        QCOMPARE(fresh.save_sasayaki_text_color("#1234567"), StoreError::io_error);
+        QVERIFY(!std::filesystem::exists(settings_file(empty)));
     }
 };
 

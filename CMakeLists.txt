@@ -81,6 +81,7 @@ qt_add_library(niratan_core STATIC
     src/models/profiles/profile_ops.cpp
     src/models/profiles/reader_settings.cpp
     src/models/sasayaki/sasayaki.cpp
+    src/models/sasayaki/sasayaki_settings.cpp
     src/models/statistics/statistics.cpp
     src/services/sasayaki/srt_parser.cpp
     src/services/sasayaki/cue_timeline.cpp

@@ -16,6 +16,7 @@
 #include <utility>
 
 #include "reader_view_model_state.h"
+#include "models/sasayaki/sasayaki_settings.h"
 #include "services/reader/book_search.h"
 #include "services/reader/theme.h"
 #include "services/settings/global_settings.h"
@@ -870,10 +871,16 @@ std::string ReaderViewModel::shell_document(const std::string& path) {
     input.hover_delay_ms = state_->settings.desktop_lookup_hover_delay_ms;
 
     input.page = PageSize{state_->page_width, state_->page_height};
+    // The cue colours are user preferences in the global settings document,
+    // read per document build; the reader never writes the file.
+    const sasayaki::SasayakiColors cue_colors = sasayaki::sasayaki_colors(
+        settings::GlobalSettings(state_->storage.app_directory() / "settings.json")
+            .sasayaki_settings(),
+        state_->dark);
     input.colors.text = state_->text;
     input.colors.background = state_->background;
-    input.colors.sasayaki_text = state_->text;
-    input.colors.sasayaki_background = "#00000000";
+    input.colors.sasayaki_text = cue_colors.text;
+    input.colors.sasayaki_background = cue_colors.background;
     input.restore_token = std::to_string(state_->revision);
     const auto highlights = books::highlights_in_range(
         state_->highlights, state_->session->character_offset(state_->chapter_index, 0),
