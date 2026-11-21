@@ -46,6 +46,7 @@ class DictionaryPopupModel : public QObject {
     Q_OBJECT
     QML_ELEMENT
     Q_PROPERTY(QString html READ html NOTIFY htmlChanged)
+    Q_PROPERTY(QString bridgeScript READ bridge_script CONSTANT)
     Q_PROPERTY(QString error READ error NOTIFY errorChanged)
     Q_PROPERTY(QString audioError READ audio_error NOTIFY audioErrorChanged)
     Q_PROPERTY(bool hasResults READ has_results NOTIFY htmlChanged)
@@ -58,6 +59,7 @@ class DictionaryPopupModel : public QObject {
     ~DictionaryPopupModel() override;
 
     QString html() const;
+    QString bridge_script() const;
     QString error() const;
     QString audio_error() const;
     bool has_results() const;

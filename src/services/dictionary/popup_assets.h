@@ -16,6 +16,8 @@ namespace niratan::dictionary {
 struct PopupAssets {
     std::string css;
     std::string js;
+    std::string web_channel;
+    std::string bridge;
 };
 
 PopupAssets load_popup_assets();

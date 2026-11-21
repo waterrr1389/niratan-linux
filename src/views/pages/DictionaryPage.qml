@@ -78,6 +78,7 @@ Item {
 
             WebEngineView {
                 id: view
+                property bool loadingPopupDocument: false
                 anchors.fill: parent
                 visible: model.hasResults
                 backgroundColor: Theme.popupBackground
@@ -86,13 +87,17 @@ Item {
                     registeredObjects: [dictionaryBridge]
                 }
                 onNavigationRequested: function(request) {
-                    if (request.url.toString() !== "about:blank")
+                    // loadHtml sends the generated document as a data URL.
+                    const popupDocument = view.loadingPopupDocument && request.isMainFrame
+                        && request.url.toString().startsWith("data:text/html;charset=UTF-8,")
+                    if (popupDocument)
+                        view.loadingPopupDocument = false
+                    else if (request.url.toString() !== "about:blank")
                         request.reject()
                 }
                 onLoadingChanged: function(loadRequest) {
-                    if (loadRequest.status === WebEngineView.LoadSucceededStatus) {
-                        runJavaScript("window.renderPopup();")
-                    }
+                    if (loadRequest.status === WebEngineView.LoadSucceededStatus && view.visible)
+                        view.runJavaScript(model.bridgeScript)
                 }
             }
 
@@ -157,6 +162,7 @@ Item {
                 function onHtmlChanged() {
                     audioMenu.close()
                     if (model.html.length > 0) {
+                        view.loadingPopupDocument = true
                         view.loadHtml(model.html, "about:blank")
                     }
                 }

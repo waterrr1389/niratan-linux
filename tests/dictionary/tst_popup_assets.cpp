@@ -28,10 +28,14 @@ void PopupAssetsTest::the_stylesheet_and_script_are_available() {
     QVERIFY(!assets.js.empty());
     QVERIFY(assets.js.find("window.lookupEntries") != std::string::npos);
     QVERIFY(assets.js.find("renderPopup") != std::string::npos);
+    QVERIFY(assets.bridge.find("channel.objects.dictionaryBridge") != std::string::npos);
+    QVERIFY(assets.bridge.find("messageHandlers.playWordAudio") != std::string::npos);
+    QVERIFY(assets.bridge.find("messageHandlers.audioSourceMenu") != std::string::npos);
 
     const PopupAssets again = load_popup_assets();
     QCOMPARE(again.css, assets.css);
     QCOMPARE(again.js, assets.js);
+    QCOMPARE(again.bridge, assets.bridge);
 }
 
 QTEST_APPLESS_MAIN(PopupAssetsTest)

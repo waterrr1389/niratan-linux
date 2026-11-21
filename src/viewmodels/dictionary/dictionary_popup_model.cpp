@@ -71,6 +71,10 @@ QString DictionaryPopupModel::html() const {
     return state_->html;
 }
 
+QString DictionaryPopupModel::bridge_script() const {
+    return QString::fromStdString(state_->assets.web_channel + '\n' + state_->assets.bridge);
+}
+
 QString DictionaryPopupModel::error() const {
     return state_->error;
 }
