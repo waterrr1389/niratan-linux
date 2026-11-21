@@ -83,7 +83,6 @@ SettingsViewModel::SettingsViewModel(QObject* parent)
         return;
     }
 
-    // Load reader settings for the active profile.
     {
         const auto result = store->active_reader();
         if (result.status == settings::LoadStatus::invalid) {
@@ -96,7 +95,6 @@ SettingsViewModel::SettingsViewModel(QObject* parent)
         }
     }
 
-    // Load dictionary settings for the active profile.
     {
         const auto result = store->active_dictionary();
         if (result.status == settings::LoadStatus::invalid) {
@@ -109,7 +107,6 @@ SettingsViewModel::SettingsViewModel(QObject* parent)
         }
     }
 
-    // Load the three global statistics keys.
     {
         GlobalSettings global = GlobalSettings::at_data_root();
         const auto load = global.statistics_preferences();
@@ -188,6 +185,18 @@ void SettingsViewModel::setUiTheme(const QString& value) {
     }
 }
 
+bool SettingsViewModel::sepiaInvertInDark() const { return state_->reader.sepia_invert_in_dark; }
+
+void SettingsViewModel::setSepiaInvertInDark(bool value) {
+    update_reader(state_->reader.sepia_invert_in_dark, value);
+}
+
+bool SettingsViewModel::systemLightSepia() const { return state_->reader.system_light_sepia; }
+
+void SettingsViewModel::setSystemLightSepia(bool value) {
+    update_reader(state_->reader.system_light_sepia, value);
+}
+
 bool SettingsViewModel::verticalWriting() const { return state_->reader.vertical_writing; }
 
 void SettingsViewModel::setVerticalWriting(bool value) {
@@ -219,11 +228,7 @@ QString SettingsViewModel::furiganaMode() const {
 void SettingsViewModel::setFuriganaMode(const QString& value) {
     const auto raw = value.toStdString();
     if (is_furigana_mode(raw)) {
-        if (state_->reader.furigana_mode != raw) {
-            state_->reader.furigana_mode = raw;
-            save_reader();
-            emit readerChanged();
-        }
+        update_reader(state_->reader.furigana_mode, raw);
     }
 }
 
@@ -238,11 +243,19 @@ bool SettingsViewModel::paragraphMode() const {
 }
 
 void SettingsViewModel::setParagraphMode(bool value) {
-    if (state_->reader.paragraph_mode != value) {
-        state_->reader.paragraph_mode = value;
-        save_reader();
-        emit readerChanged();
-    }
+    update_reader(state_->reader.paragraph_mode, value);
+}
+
+bool SettingsViewModel::textAnimation() const { return state_->reader.text_animation.value_or(false); }
+
+void SettingsViewModel::setTextAnimation(bool value) {
+    update_reader(state_->reader.text_animation, value);
+}
+
+int SettingsViewModel::textSpeed() const { return state_->reader.text_speed.value_or(35); }
+
+void SettingsViewModel::setTextSpeed(int value) {
+    update_reader(state_->reader.text_speed, std::clamp(value, 25, 100));
 }
 
 bool SettingsViewModel::twoColumnHorizontalPages() const {
@@ -250,11 +263,7 @@ bool SettingsViewModel::twoColumnHorizontalPages() const {
 }
 
 void SettingsViewModel::setTwoColumnHorizontalPages(bool value) {
-    if (state_->reader.two_column_horizontal_pages != value) {
-        state_->reader.two_column_horizontal_pages = value;
-        save_reader();
-        emit readerChanged();
-    }
+    update_reader(state_->reader.two_column_horizontal_pages, value);
 }
 
 int SettingsViewModel::horizontalPadding() const { return state_->reader.horizontal_padding; }
@@ -322,11 +331,7 @@ bool SettingsViewModel::showProgress() const {
 }
 
 void SettingsViewModel::setShowProgress(bool value) {
-    if (state_->reader.show_progress != value) {
-        state_->reader.show_progress = value;
-        save_reader();
-        emit readerChanged();
-    }
+    update_reader(state_->reader.show_progress, value);
 }
 
 bool SettingsViewModel::showChapterProgress() const {
@@ -334,11 +339,7 @@ bool SettingsViewModel::showChapterProgress() const {
 }
 
 void SettingsViewModel::setShowChapterProgress(bool value) {
-    if (state_->reader.show_chapter_progress != value) {
-        state_->reader.show_chapter_progress = value;
-        save_reader();
-        emit readerChanged();
-    }
+    update_reader(state_->reader.show_chapter_progress, value);
 }
 
 QString SettingsViewModel::progressCount() const {
@@ -350,10 +351,8 @@ QString SettingsViewModel::progressCount() const {
 
 void SettingsViewModel::setProgressCount(const QString& value) {
     const auto raw = value.toStdString();
-    if (is_progress_count(raw) && state_->reader.progress_count != raw) {
-        state_->reader.progress_count = raw;
-        save_reader();
-        emit readerChanged();
+    if (is_progress_count(raw)) {
+        update_reader(state_->reader.progress_count, raw);
     }
 }
 

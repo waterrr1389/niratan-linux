@@ -96,30 +96,6 @@ Page {
         wrapMode: Text.WordWrap
     }
 
-    component SettingRow: RowLayout {
-        id: settingRow
-
-        required property string label
-        default property alias controls: field.data
-
-        Layout.fillWidth: true
-        spacing: Theme.spacingMd
-
-        Label {
-            Layout.fillWidth: true
-            Layout.minimumWidth: 0
-            text: settingRow.label
-            color: Theme.textPrimary
-            font.pixelSize: Theme.fontBody
-            wrapMode: Text.Wrap
-        }
-
-        RowLayout {
-            id: field
-            spacing: Theme.spacingSm
-        }
-    }
-
     component ToggleRow: SettingRow {
         id: toggleRow
 
@@ -172,38 +148,6 @@ Page {
             editable: true
             value: integerRow.value
             onValueModified: integerRow.edited(integerInput.value)
-        }
-    }
-
-    component DecimalRow: SettingRow {
-        id: decimalRow
-
-        required property real from
-        required property real to
-        required property real stepSize
-        required property int decimals
-        required property real value
-        signal edited(real value)
-
-        Slider {
-            id: slider
-
-            Accessible.name: decimalRow.label
-            Layout.preferredWidth: 8 * Theme.spacingLg
-            Layout.minimumWidth: 4 * Theme.spacingLg
-            from: decimalRow.from
-            to: decimalRow.to
-            stepSize: decimalRow.stepSize
-            snapMode: Slider.SnapAlways
-            value: decimalRow.value
-            onMoved: decimalRow.edited(slider.value)
-        }
-
-        Label {
-            Layout.minimumWidth: 3 * Theme.spacingMd
-            text: slider.value.toLocaleString(Qt.locale(), "f", decimalRow.decimals)
-            color: Theme.textSecondary
-            horizontalAlignment: Text.AlignRight
         }
     }
 
@@ -371,6 +315,24 @@ Page {
                 }
 
                 ToggleRow {
+                    visible: settings.theme === "Sepia"
+                    label: qsTr("Invert Sepia in Dark Mode")
+                    checked: settings.sepiaInvertInDark
+                    onEdited: value => {
+                        settings.sepiaInvertInDark = value;
+                    }
+                }
+
+                ToggleRow {
+                    visible: settings.theme === "System"
+                    label: qsTr("Use Sepia as Light Theme")
+                    checked: settings.systemLightSepia
+                    onEdited: value => {
+                        settings.systemLightSepia = value;
+                    }
+                }
+
+                ToggleRow {
                     label: qsTr("Vertical writing")
                     checked: settings.verticalWriting
                     onEdited: value => {
@@ -451,6 +413,29 @@ Page {
                 }
 
                 ToggleRow {
+                    visible: !settings.continuousMode && settings.paragraphMode
+                    enabled: visible
+                    label: qsTr("Animate Text Reveal")
+                    checked: settings.textAnimation
+                    onEdited: value => {
+                        settings.textAnimation = value;
+                    }
+                }
+
+                SettingsSliderRow {
+                    visible: !settings.continuousMode && settings.paragraphMode && settings.textAnimation
+                    label: qsTr("Text Speed")
+                    from: 25
+                    to: 100
+                    stepSize: 5
+                    decimals: 0
+                    value: settings.textSpeed
+                    onEdited: value => {
+                        settings.textSpeed = value;
+                    }
+                }
+
+                ToggleRow {
                     label: qsTr("Two-column horizontal pages")
                     enabled: !settings.continuousMode && !settings.verticalWriting && !settings.paragraphMode
                     checked: settings.twoColumnHorizontalPages
@@ -511,7 +496,7 @@ Page {
                     }
                 }
 
-                DecimalRow {
+                SettingsSliderRow {
                     visible: settings.layoutAdvanced
                     label: qsTr("Line height")
                     from: 1.0
@@ -524,7 +509,7 @@ Page {
                     }
                 }
 
-                DecimalRow {
+                SettingsSliderRow {
                     visible: settings.layoutAdvanced
                     label: qsTr("Character spacing")
                     from: -10
@@ -537,7 +522,7 @@ Page {
                     }
                 }
 
-                DecimalRow {
+                SettingsSliderRow {
                     visible: settings.layoutAdvanced
                     label: qsTr("Paragraph spacing")
                     from: 0

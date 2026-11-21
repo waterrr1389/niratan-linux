@@ -33,6 +33,7 @@ Item {
 
     property string title
     property string subtitle
+    property color subtitleColor: Theme.textSecondary
     property bool showBack: true
     default property alias trailing: trailingRow.data
 
@@ -151,7 +152,7 @@ Item {
                 Layout.fillWidth: true
                 visible: header.subtitle.length > 0
                 text: header.subtitle
-                color: Theme.textSecondary
+                color: header.subtitleColor
                 font.pixelSize: Theme.fontCaption
                 elide: Text.ElideRight
             }

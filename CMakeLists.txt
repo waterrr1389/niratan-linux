@@ -155,6 +155,8 @@ qt_add_qml_module(niratan
         src/views/pages/ProfilesPage.qml
         src/views/pages/StatisticsPage.qml
         src/views/pages/SettingsPage.qml
+        src/views/pages/SettingRow.qml
+        src/views/pages/SettingsSliderRow.qml
         src/views/reader/SasayakiPanel.qml
         src/views/reader/ReaderStatisticsInspector.qml
         src/views/reader/ReaderProgress.qml

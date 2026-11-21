@@ -20,6 +20,8 @@
 // other result leaves the chapter in place. Continuous reading reports a
 // progress number instead. Chapter changes save the bookmark of the chapter
 // that is left, and the bookmark is also saved when the reader closes.
+// NativeReaderView.navigate and textAnimationScript reveal text only after a
+// successful forward turn in paginated paragraph mode with animation enabled.
 //
 // Appearance settings from the active profile's reader_settings.json apply
 // live. The chapter reloads at its recorded progress because layout can
@@ -129,6 +131,7 @@ class ReaderViewModel : public QObject {
     Q_PROPERTY(bool dark READ dark WRITE setDark NOTIFY paletteChanged)
     Q_PROPERTY(QColor pageBackground READ page_background NOTIFY paletteChanged)
     Q_PROPERTY(QColor infoColor READ info_color NOTIFY paletteChanged)
+    Q_PROPERTY(bool usesCustomInfoColor READ uses_custom_info_color NOTIFY paletteChanged)
     Q_PROPERTY(bool restoring READ restoring NOTIFY restoreStateChanged)
     Q_PROPERTY(bool verticalWriting READ vertical_writing WRITE setVerticalWriting NOTIFY
                    settingsChanged)
@@ -201,6 +204,7 @@ class ReaderViewModel : public QObject {
     Q_INVOKABLE void setDark(bool dark);
     QColor page_background() const;
     QColor info_color() const;
+    bool uses_custom_info_color() const;
     bool restoring() const;
     Q_INVOKABLE void revealAfterLoadFailure(const QString& url);
     Q_INVOKABLE void setReaderColors(const QString& background, const QString& text);

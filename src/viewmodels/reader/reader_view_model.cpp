@@ -15,7 +15,6 @@
 #include <string>
 #include <utility>
 
-#include "models/profiles/reader_settings.h"
 #include "reader_view_model_state.h"
 #include "services/reader/book_search.h"
 #include "services/reader/theme.h"
@@ -25,11 +24,9 @@ namespace niratan::viewmodels {
 namespace {
 
 using niratan::books::Bookmark;
-using niratan::profiles::ReaderProfileSettings;
 using niratan::reader::BookSession;
 using niratan::reader::BookStatisticsStore;
 using niratan::reader::PageSize;
-using niratan::reader::ReadingTracker;
 using niratan::reader::ShellInput;
 using niratan::statistics::StatisticsAutostartMode;
 
@@ -40,13 +37,6 @@ std::string script_string(const QString& value) {
     // An EPUB identifier is data even when embedded in an inline script.
     array.replace("<", "\\u003c");
     return array.mid(1, array.size() - 2).toStdString();
-}
-
-std::string resolve_furigana(const ReaderProfileSettings& settings) {
-    if (settings.furigana_mode.has_value()) {
-        return *settings.furigana_mode;
-    }
-    return settings.hide_furigana ? "Hidden" : "Off";
 }
 
 QColor qcolor_from_css(const std::string& css) {
@@ -361,6 +351,7 @@ void ReaderViewModel::setReaderColors(const QString& background, const QString& 
 QColor ReaderViewModel::page_background() const { return qcolor_from_css(state_->background); }
 
 QColor ReaderViewModel::info_color() const { return qcolor_from_css(state_->info_color); }
+bool ReaderViewModel::uses_custom_info_color() const { return state_->settings.theme == "Custom"; }
 
 void ReaderViewModel::update_palette() {
     const auto& settings = state_->settings;
@@ -501,8 +492,8 @@ bool ReaderViewModel::openBook(const QString& folder) {
     if (const auto book_root = state_->storage.book_directory(folder_id);
         book_root.has_value()) {
         state_->statistics_store = std::make_unique<BookStatisticsStore>(*book_root);
-        state_->tracker = std::make_unique<ReadingTracker>(*state_->statistics_store,
-                                                           QTimeZone(QTimeZone::LocalTime));
+        state_->tracker = std::make_unique<reader::ReadingTracker>(
+            *state_->statistics_store, QTimeZone(QTimeZone::LocalTime));
         state_->tracker->configure(statistics_settings.enabled,
                                    statistics_settings.autostart_mode,
                                    statistics_settings.reset_minutes);
@@ -612,10 +603,16 @@ QString ReaderViewModel::pageTurnScript(bool forward) const {
     if (!state_->has_book || state_->restoring) {
         return {};
     }
-    return QStringLiteral(
-               "(function() { window.hoshiParagraph?.finishTextAnimation(); return "
-                "window.hoshiReader?.paginate?.('%1'); })()")
-        .arg(forward ? QStringLiteral("forward") : QStringLiteral("backward"));
+    const auto& settings = state_->settings;
+    QString reveal;
+    if (forward && !settings.continuous_mode && settings.paragraph_mode.value_or(false) &&
+        settings.text_animation.value_or(false)) {
+        reveal = QStringLiteral("if (result === 'scrolled') window.hoshiParagraph?.animateText(%1);")
+                     .arg(settings.text_speed.value_or(35));
+    }
+    return QStringLiteral("(function() { window.hoshiParagraph?.finishTextAnimation(); "
+                          "const result = window.hoshiReader?.paginate?.('%1'); %2 return result; })()")
+        .arg(forward ? QStringLiteral("forward") : QStringLiteral("backward"), reveal);
 }
 
 void ReaderViewModel::handlePageTurnResult(bool forward, const QVariant& result) {
@@ -872,7 +869,8 @@ std::string ReaderViewModel::shell_document(const std::string& path) {
     input.appearance.line_height = state_->settings.line_height;
     input.appearance.character_spacing = state_->settings.character_spacing;
     input.appearance.paragraph_spacing = state_->settings.paragraph_spacing;
-    input.appearance.furigana_mode = resolve_furigana(state_->settings);
+    input.appearance.furigana_mode =
+        state_->settings.furigana_mode.value_or(state_->settings.hide_furigana ? "Hidden" : "Off");
     input.scan_length = state_->scan_length;
     input.scan_non_japanese_text = state_->scan_non_japanese;
     input.content_language = state_->content_language;

@@ -212,13 +212,13 @@ Item {
         anchors.fill: parent
         columns: 1
         rowSpacing: 0
-
         PageHeader {
             Layout.row: 0
             Layout.column: 0
             title: ReaderViewModel.hasBook ? ReaderViewModel.chapterTitle
                                           : qsTr("No book open")
             subtitle: ReaderViewModel.hasBook && ReaderViewModel.showTitle ? ReaderViewModel.title : ""
+            subtitleColor: ReaderViewModel.usesCustomInfoColor ? ReaderViewModel.infoColor : Theme.textSecondary
             onBackRequested: {
                 ReaderViewModel.setReaderActive(false)
                 page.backRequested()

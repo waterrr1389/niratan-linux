@@ -61,6 +61,7 @@ class ReaderShellTest : public QObject {
     void the_reader_selection_follows_the_mode();
     void paragraph_script_is_only_included_in_paragraph_mode();
     void the_restore_runs_after_the_fonts_are_ready();
+    void paragraph_layout_runs_between_font_readiness_and_restore();
     void the_bridge_shim_is_installed_before_the_scripts();
     void the_language_and_lookup_settings_are_passed();
 };
@@ -164,6 +165,30 @@ void ReaderShellTest::the_bridge_shim_is_installed_before_the_scripts() {
     QVERIFY(webchannel != std::string::npos);
     QVERIFY(webchannel < shim);
     QVERIFY(shim < selection);
+}
+
+void ReaderShellTest::paragraph_layout_runs_between_font_readiness_and_restore() {
+    ShellInput shell = input();
+    const ReaderScripts sources = scripts();
+    const std::string call = "window.hoshiParagraph.layoutParagraphs();";
+    QVERIFY(!has(reader_script_block(shell, sources), call));
+
+    shell.appearance.paragraph_mode = true;
+    shell.highlights_json = "[]";
+    const std::string block = reader_script_block(shell, sources);
+    const auto ready = block.find("Promise.all([document.fonts.ready, ...readyImages])");
+    const auto layout = block.find(call);
+    const auto highlights = block.find("window.hoshiHighlights.applyHighlights([])");
+    const auto restore = block.find("return window.hoshiReader.restoreProgress(0.25)");
+    QVERIFY(ready != std::string::npos);
+    QVERIFY(layout != std::string::npos);
+    QVERIFY(highlights != std::string::npos);
+    QVERIFY(restore != std::string::npos);
+    QVERIFY(ready < layout && layout < highlights && highlights < restore);
+
+    shell.appearance.continuous = true;
+    QVERIFY(!has(reader_script_block(shell, sources), call));
+    QVERIFY(!has(reader_script_block(shell, sources), "/* paragraph */"));
 }
 
 void ReaderShellTest::the_language_and_lookup_settings_are_passed() {

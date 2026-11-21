@@ -225,6 +225,7 @@ std::string reader_style_block(const ShellInput& input) {
 
 std::string reader_script_block(const ShellInput& input, const ReaderScripts& scripts) {
     const Appearance& appearance = input.appearance;
+    const bool paragraph_mode = appearance.paragraph_mode && !appearance.continuous;
     const bool spread = is_horizontal_spread(appearance);
     const int columns = spread ? 2 : 1;
     const double spread_page_size =
@@ -306,7 +307,7 @@ std::string reader_script_block(const ShellInput& input, const ReaderScripts& sc
         script += '\n';
     }
 
-    if (appearance.paragraph_mode) {
+    if (paragraph_mode) {
         script += scripts.paragraph;
         if (!script.empty() && script.back() != '\n') {
             script += '\n';
@@ -361,6 +362,9 @@ std::string reader_script_block(const ShellInput& input, const ReaderScripts& sc
     Promise.all([document.fonts.ready, ...readyImages]).then(() => {
         if (timedOut) { return; }
 )js";
+        if (paragraph_mode) {
+            script += "        window.hoshiParagraph.layoutParagraphs();\n";
+        }
         if (!input.highlights_json.empty()) {
             script += "        window.hoshiHighlights.applyHighlights(" + input.highlights_json +
                       ");\n";

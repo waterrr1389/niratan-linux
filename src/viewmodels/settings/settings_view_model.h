@@ -7,6 +7,8 @@
 // three statistics keys are global. Older optional reader fields use Swift's
 // legacy furigana and count flags or the corresponding defaults. Enum values
 // are the untranslated Swift raw strings; only the UI labels are translated.
+// The text reveal speed defaults to 35 and edits are limited to AppearanceView's
+// 25–100 range; the editor supplies its increment of 5.
 // Changes are saved on edit and do not reload any running consumer. Consumers
 // should load the reader preferences on book open and the reset minute on
 // dashboard refresh rather than subscribing to settings-change signals.
@@ -32,12 +34,16 @@ class SettingsViewModel : public QObject {
 
     Q_PROPERTY(QString theme READ theme WRITE setTheme NOTIFY readerChanged)
     Q_PROPERTY(QString uiTheme READ uiTheme WRITE setUiTheme NOTIFY readerChanged)
+    Q_PROPERTY(bool sepiaInvertInDark READ sepiaInvertInDark WRITE setSepiaInvertInDark NOTIFY readerChanged)
+    Q_PROPERTY(bool systemLightSepia READ systemLightSepia WRITE setSystemLightSepia NOTIFY readerChanged)
     Q_PROPERTY(bool verticalWriting READ verticalWriting WRITE setVerticalWriting NOTIFY readerChanged)
     Q_PROPERTY(QString selectedFont READ selectedFont WRITE setSelectedFont NOTIFY readerChanged)
     Q_PROPERTY(int fontSize READ fontSize WRITE setFontSize NOTIFY readerChanged)
     Q_PROPERTY(QString furiganaMode READ furiganaMode WRITE setFuriganaMode NOTIFY readerChanged)
     Q_PROPERTY(bool continuousMode READ continuousMode WRITE setContinuousMode NOTIFY readerChanged)
     Q_PROPERTY(bool paragraphMode READ paragraphMode WRITE setParagraphMode NOTIFY readerChanged)
+    Q_PROPERTY(bool textAnimation READ textAnimation WRITE setTextAnimation NOTIFY readerChanged)
+    Q_PROPERTY(int textSpeed READ textSpeed WRITE setTextSpeed NOTIFY readerChanged)
     Q_PROPERTY(bool twoColumnHorizontalPages READ twoColumnHorizontalPages WRITE setTwoColumnHorizontalPages NOTIFY readerChanged)
     Q_PROPERTY(int horizontalPadding READ horizontalPadding WRITE setHorizontalPadding NOTIFY readerChanged)
     Q_PROPERTY(int verticalPadding READ verticalPadding WRITE setVerticalPadding NOTIFY readerChanged)
@@ -80,6 +86,10 @@ class SettingsViewModel : public QObject {
     void setTheme(const QString& value);
     QString uiTheme() const;
     void setUiTheme(const QString& value);
+    bool sepiaInvertInDark() const;
+    void setSepiaInvertInDark(bool value);
+    bool systemLightSepia() const;
+    void setSystemLightSepia(bool value);
     bool verticalWriting() const;
     void setVerticalWriting(bool value);
     QString selectedFont() const;
@@ -92,6 +102,10 @@ class SettingsViewModel : public QObject {
     void setContinuousMode(bool value);
     bool paragraphMode() const;
     void setParagraphMode(bool value);
+    bool textAnimation() const;
+    void setTextAnimation(bool value);
+    int textSpeed() const;
+    void setTextSpeed(int value);
     bool twoColumnHorizontalPages() const;
     void setTwoColumnHorizontalPages(bool value);
     int horizontalPadding() const;

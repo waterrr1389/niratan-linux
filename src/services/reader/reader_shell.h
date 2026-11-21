@@ -22,8 +22,8 @@
 //   restore token, writing mode through the stylesheet, and the initial
 //   restore call (a fragment jump or a progress restore).
 //
-// The initial restore expression is executed after document.fonts.ready, as
-// injectReader does, so restoring never measures an unfonted layout.
+// After fonts and images are ready, paginated paragraph mode prepares its
+// layout before highlights and the initial restore expression are applied.
 
 #pragma once
 
