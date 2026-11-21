@@ -86,6 +86,14 @@ target_link_libraries(tst_duplicate_lookup PRIVATE niratan_core Qt6::Test)
 target_compile_options(tst_duplicate_lookup PRIVATE -Wall -Wextra -Wpedantic -Werror)
 add_test(NAME duplicate_lookup COMMAND tst_duplicate_lookup)
 
+qt_add_executable(tst_mining
+    anki/tst_mining.cpp
+)
+target_include_directories(tst_mining PRIVATE ${CMAKE_SOURCE_DIR}/src)
+target_link_libraries(tst_mining PRIVATE niratan_core Qt6::Test)
+target_compile_options(tst_mining PRIVATE -Wall -Wextra -Wpedantic -Werror)
+add_test(NAME mining COMMAND tst_mining)
+
 qt_add_executable(tst_glossary_markup
     anki/tst_glossary_markup.cpp
 )

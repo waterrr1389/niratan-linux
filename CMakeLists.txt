@@ -35,6 +35,8 @@ qt_add_library(niratan_core STATIC
     src/services/anki/anki_config_codec.cpp
     src/services/anki/anki_requests.cpp
     src/services/anki/mining_gate.cpp
+    src/services/anki/mining.cpp
+    src/services/anki/mining_card.cpp
     src/services/audio/audio_request.cpp
     src/services/audio/local_audio.cpp
     src/services/audio/local_file_server.cpp

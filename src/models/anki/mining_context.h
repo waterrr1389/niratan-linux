@@ -1,13 +1,12 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
-// What card field rendering and the mining gate read from the mining
-// session, matching MiningContext and VideoMiningContext in Models/Anki.swift
-// and DictionaryInfo and DictionaryCategory in Models/Dictionary.swift. Only
-// the members those two use are kept.
+// What card field rendering and mining read from the mining session,
+// matching MiningContext and VideoMiningContext in Models/Anki.swift
+// and DictionaryInfo and DictionaryCategory in Models/Dictionary.swift.
 //
 // Swift serves the book cover and the Sasayaki audio from LocalFileServer
-// while it renders. That side effect belongs to the caller: it passes the
-// resulting URLs, and an empty string means there is nothing to serve.
+// while it renders. The caller supplies the served URLs for rendering and
+// a separate local cover path for attachments. An empty string means absent.
 
 #pragma once
 
@@ -49,6 +48,8 @@ struct MiningContext {
     std::string cover_url;
     std::string sasayaki_audio_url;
     std::optional<VideoMiningContext> video;
+    // Empty means no cover attachment source, even when cover_url is set.
+    std::string cover_path;
 };
 
 }  // namespace niratan::anki

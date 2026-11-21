@@ -12,6 +12,7 @@ services/anki/field_content.h
 services/anki/field_mapping.h
 services/anki/glossary_markup.h
 services/anki/media_naming.h
+services/anki/mining.h
 services/anki/mining_gate.h
 services/dictionary/frequency_rank.h
 services/dictionary/text_selection.h
