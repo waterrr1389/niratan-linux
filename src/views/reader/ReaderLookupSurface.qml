@@ -37,7 +37,6 @@ Item {
     property bool swipeDismissed: false
 
     function showResults(html: string): void {
-        miningModel.setContext("", ReaderViewModel.title, "", "")
         results.loadingPopupDocument = true
         results.loadHtml(html, "about:blank")
     }
