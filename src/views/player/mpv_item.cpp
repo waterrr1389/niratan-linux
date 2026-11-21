@@ -282,7 +282,7 @@ void MpvItem::setSubtitlesVisible(bool visible) {
     }
 }
 
-void MpvItem::open(const QUrl& file) {
+void MpvItem::open(const QUrl& file, bool fromBeginning) {
     if (handle_ == nullptr) {
         if (error_.isEmpty()) {
             error_ = QStringLiteral("The video engine is unavailable");
@@ -294,7 +294,7 @@ void MpvItem::open(const QUrl& file) {
     if (file.isEmpty()) {
         return;
     }
-    replace_file(file);
+    replace_file(file, fromBeginning);
 }
 
 void MpvItem::unload() {
@@ -303,12 +303,14 @@ void MpvItem::unload() {
     }
 }
 
-void MpvItem::replace_file(const QUrl& file) {
+void MpvItem::replace_file(const QUrl& file, bool from_beginning) {
     const QString next_path = file.isLocalFile() && !file.toLocalFile().isEmpty()
         ? QFileInfo(file.toLocalFile()).absoluteFilePath() : QString{};
     // Persist the outgoing file before the path changes.
     save_playback_position();
     local_video_path_ = next_path;
+    pending_playback_ = playback_history_.prepare_open(local_video_path_,
+        video_settings_.value("videoRememberPlaybackPosition").toBool(), from_beginning);
     set_resume_position(0.0);
     resume_save_timer_.invalidate();
     const quint64 generation = ++load_generation_;
@@ -387,65 +389,6 @@ void MpvItem::open_when_ready(const QUrl& file, quint64 generation) {
     if (status < 0) {
         error_ = QString::fromUtf8(mpv_error_string(status));
         emit errorChanged();
-    }
-}
-
-void MpvItem::save_playback_position() {
-    if (!video_settings_.value("videoRememberPlaybackPosition").toBool()
-        || !file_ready_ || ended_ || local_video_path_.isEmpty()) {
-        return;
-    }
-    if (get_bool("eof-reached", false)) {
-        record_finished_playback();
-        return;
-    }
-    const double position = get_double("time-pos", position_);
-    if (!std::isfinite(position) || !std::isfinite(duration_)) {
-        return;
-    }
-    playback_history_.save(local_video_path_, position, duration_);
-}
-
-void MpvItem::record_finished_playback() {
-    if (video_settings_.value("videoRememberPlaybackPosition").toBool()
-        && !local_video_path_.isEmpty() && std::isfinite(duration_)) {
-        playback_history_.save(local_video_path_, duration_, duration_);
-    }
-}
-
-void MpvItem::clear_playback_position() {
-    if (!local_video_path_.isEmpty()) {
-        playback_history_.clear(local_video_path_);
-    }
-}
-
-void MpvItem::set_resume_position(double position) {
-    if (resume_position_ != position) {
-        resume_position_ = position;
-        emit resumeChanged();
-    }
-}
-
-void MpvItem::restore_playback_position() {
-    if (!video_settings_.value("videoRememberPlaybackPosition").toBool()
-        || local_video_path_.isEmpty()) {
-        return;
-    }
-    const auto position = playback_history_.resume_position(local_video_path_);
-    if (!position) {
-        return;
-    }
-    const double target = duration_ > 0.0 ? std::min(*position, duration_) : *position;
-    seek(target);
-    set_resume_position(target);
-}
-
-void MpvItem::restartFromBeginning() {
-    if (loaded_) {
-        seek(0.0);
-        clear_playback_position();
-        resume_save_timer_.start();
-        set_resume_position(0.0);
     }
 }
 
@@ -709,9 +652,13 @@ bool MpvItem::save_video_settings(const QJsonObject& changes) {
     if (!niratan::player::store_video_settings(root, changes)) {
         return false;
     }
+    const bool remembered = video_settings_.value("videoRememberPlaybackPosition").toBool();
     video_settings_ = niratan::player::load_video_settings(root);
     apply_video_settings();
     if (!video_settings_.value("videoRememberPlaybackPosition").toBool()) {
+        if (remembered) {
+            pending_playback_ = {};
+        }
         set_resume_position(0.0);
     }
     emit videoSettingsChanged();
@@ -794,11 +741,15 @@ void MpvItem::refresh_chapters() {
     }
 }
 
+QVariantList MpvItem::current_track_fields() const {
+    return node_list(handle_, "track-list");
+}
+
 void MpvItem::refresh_tracks() {
     QVariantList tracks;
     QUrl subtitle_document;
     const int sid = static_cast<int>(get_double("sid", -1.0));
-    for (const QVariant& node : node_list(handle_, "track-list")) {
+    for (const QVariant& node : current_track_fields()) {
         const QVariantMap fields = node.toMap();
         const QString type = fields.value(QStringLiteral("type")).toString();
         const int id = fields.value(QStringLiteral("id")).toInt();
@@ -920,9 +871,6 @@ void MpvItem::poll() {
     const bool loaded = duration > 0.0 && error_.isEmpty();
     const double volume = get_double("volume", volume_);
     const bool muted = get_bool("mute", muted_);
-    const double speed = get_double("speed", speed_);
-    const double subtitle_delay = get_double("sub-delay", subtitle_delay_);
-    const double audio_delay = get_double("audio-delay", audio_delay_);
     const int chapter = file_ready_ ? static_cast<int>(get_double("chapter", -1.0)) : -1;
 
     const bool loaded_changed = loaded != loaded_;
@@ -974,6 +922,9 @@ void MpvItem::poll() {
         muted_ = muted;
         emit mutedChanged();
     }
+    const double speed = get_double("speed", speed_);
+    const double subtitle_delay = get_double("sub-delay", subtitle_delay_);
+    const double audio_delay = get_double("audio-delay", audio_delay_);
     if (std::abs(speed - speed_) > kValueEpsilon) {
         speed_ = speed;
         emit speedChanged();

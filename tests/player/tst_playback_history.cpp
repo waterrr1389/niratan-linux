@@ -3,7 +3,8 @@
 // Tests for PlaybackHistory, following script/test_video_playback_history.swift
 // and VideoPlaybackHistoryStore.updatePlaybackState, markWatched,
 // clearProgress and VideoPlaybackState.isResumable/progress in
-// Features/Video/VideoPlaybackHistoryStore.swift.
+// Features/Video/VideoPlaybackHistoryStore.swift. Open and restore follow
+// VideoPlayerViewModel.openPlaylistItem and script/test_video_playback_model.swift.
 
 #include "services/player/playback_history.h"
 
@@ -21,6 +22,7 @@
 
 using niratan::player::PlaybackHistory;
 using niratan::player::PlaybackState;
+using niratan::player::ResumeOptions;
 
 namespace {
 
@@ -119,7 +121,7 @@ class PlaybackHistoryTest : public QObject {
         QCOMPARE(state->duration, std::optional<double>(100.0));
         QCOMPARE(state->updated_at, kDate);
         QVERIFY(!state->finished);
-        QVERIFY(state->resume_options.isEmpty());
+        QVERIFY(state->resume_options.empty());
         QCOMPARE(history.resume_position(kShow), std::optional<double>(45.0));
     }
 
@@ -208,7 +210,7 @@ class PlaybackHistoryTest : public QObject {
         const auto read = history.state(kShow);
         QVERIFY(read.has_value());
         QVERIFY(!read->finished);
-        QVERIFY(read->resume_options.isEmpty());
+        QVERIFY(read->resume_options.empty());
         QCOMPARE(read->updated_at, kDate);
         QCOMPARE(history.resume_position(kShow), std::optional<double>(12.0));
     }
@@ -302,6 +304,48 @@ class PlaybackHistoryTest : public QObject {
         PlaybackHistory history{std::filesystem::path{}};
         QVERIFY(!history.save(kShow, 45, 100, kDate));
         QCOMPARE(history.state(kShow), std::nullopt);
+    }
+
+    void openFromBeginning_clearsOutgoingProgressButKeepsSubtitleSelection() {
+        QTemporaryDir dir;
+        PlaybackHistory history(path_in(dir, "history.json"));
+        const QJsonObject selections{{kShow, QJsonObject{{"off", QJsonObject{}}}}};
+        write_object(history.file(), {{"subtitleSelections", selections}});
+        const ResumeOptions options{1.6, 0.45, -0.35, niratan::player::AudioOff{}};
+        QVERIFY(history.save(kShow, 73, 120, options, kDate));
+        const auto opened = history.prepare_open(kShow, false, true);
+        QCOMPARE(opened.position, std::optional<double>(0));
+        QVERIFY(opened.options.empty());
+        QCOMPARE(history.state(kShow), std::nullopt);
+        QCOMPARE(read_object(history.file()).value("subtitleSelections").toObject(), selections);
+    }
+
+    void openWithHistory_restoresPerVideoOptionsAndPosition() {
+        QTemporaryDir dir;
+        PlaybackHistory history(path_in(dir, "history.json"));
+        const ResumeOptions options{1.6, 0.45, -0.35, niratan::player::AudioOff{}};
+        QVERIFY(history.save(kShow, 64, 120, options, kDate));
+        const auto opened = history.prepare_open(kShow, true, false);
+        QCOMPARE(opened.position, std::optional<double>(64));
+        QCOMPARE(opened.options, options);
+        QCOMPARE(history.prepare_open(kShow, false, false), niratan::player::PlaybackOpenState{});
+        QCOMPARE(history.prepare_open(QStringLiteral("/tmp/Other.mkv"), true, false),
+                 niratan::player::PlaybackOpenState{});
+    }
+
+    void saveOptions_finishingClearsThem() {
+        QTemporaryDir dir;
+        PlaybackHistory history(path_in(dir, "history.json"));
+        const ResumeOptions options{1.6, 0.45, -0.35, niratan::player::AudioOff{}};
+        QVERIFY(history.save(kShow, 64, 120, options, kDate));
+        const auto saved = history.state(kShow);
+        QVERIFY(saved);
+        QCOMPARE(saved->resume_options, options);
+        QVERIFY(history.save(kShow, 119, 120, options, kDate));
+        const auto finished = history.state(kShow);
+        QVERIFY(finished);
+        QVERIFY(finished->finished);
+        QVERIFY(finished->resume_options.empty());
     }
 };
 

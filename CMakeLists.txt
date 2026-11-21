@@ -71,6 +71,7 @@ qt_add_library(niratan_core STATIC
     src/services/player/mining_history.cpp
     src/services/player/playback_controls.cpp
     src/services/player/playback_history.cpp
+    src/services/player/resume_options.cpp
     src/services/player/transcript_extractor.cpp
     src/services/player/transcript_extractor.h
     src/services/player/video_settings.cpp
@@ -113,6 +114,7 @@ qt_add_executable(niratan
     src/viewmodels/reader/reader_view_model.h
     src/views/player/mpv_item.cpp
     src/views/player/mpv_item.h
+    src/views/player/mpv_playback_history.cpp
     src/views/player/mpv_renderer.cpp
     src/views/player/mpv_renderer.h
     src/views/reader/reader_scheme_handler.cpp
@@ -146,6 +148,7 @@ qt_add_qml_module(niratan
         src/views/pages/SettingsPage.qml
         src/views/reader/SasayakiPanel.qml
         src/views/player/StudySidebar.qml
+        src/views/player/VideoOpenMenu.qml
         src/views/player/VideoSettingsPanel.qml
         src/views/pages/ReaderPage.qml
         src/views/theme/Theme.qml

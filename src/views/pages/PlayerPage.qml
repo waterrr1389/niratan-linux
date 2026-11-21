@@ -31,7 +31,6 @@ pragma ComponentBehavior: Bound
 
 import QtQuick
 import QtQuick.Controls
-import QtQuick.Dialogs
 import QtQuick.Layouts
 import QtQuick.Window
 import Niratan
@@ -346,7 +345,7 @@ Item {
         page.backRequested()
     }
 
-    function openVideo(url) {
+    function openVideo(url, fromBeginning) {
         if (!url || url.toString().length === 0)
             return
         page.speedPanelOpen = false
@@ -356,7 +355,7 @@ Item {
         page.osdValue = ""
         osdTimer.stop()
         studyModel.setVideo(url)
-        mpv.open(url)
+        mpv.open(url, fromBeginning === true)
         page.forceActiveFocus()
         page.notePointerMovement()
     }
@@ -645,7 +644,7 @@ Item {
             Button {
                 width: parent.width
                 text: qsTr("Open a video")
-                onClicked: openDialog.open()
+                onClicked: openMenu.popup()
             }
 
             Button {
@@ -1168,7 +1167,7 @@ Item {
                     glyph: qsTr("Open")
                     tip: qsTr("Open a Video")
                     buttonWidth: 38
-                    onClicked: openDialog.open()
+                    onClicked: openMenu.popup()
                 }
                 BarButton {
                     glyph: "\u2699"
@@ -1348,16 +1347,11 @@ Item {
         onClosed: page.forceActiveFocus()
     }
 
-    FileDialog {
-        id: openDialog
-        title: qsTr("Open Video")
-        nameFilters: [
-            qsTr("Video and audio files (%1)").arg(page.extensionPattern),
-            qsTr("All files (*)")
-        ]
-        fileMode: FileDialog.OpenFile
-        onAccepted: page.openVideo(openDialog.selectedFile)
-        onRejected: page.forceActiveFocus()
+    VideoOpenMenu {
+        id: openMenu
+        extensionPattern: page.extensionPattern
+        onVideoChosen: (file, fromBeginning) => page.openVideo(file, fromBeginning)
+        onSelectionCanceled: page.forceActiveFocus()
     }
 
     component BarButton: Button {

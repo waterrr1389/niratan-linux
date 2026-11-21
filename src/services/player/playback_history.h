@@ -14,14 +14,13 @@
 //   externalSubtitlePaths  { key: path }               kept, not interpreted
 // VideoPlaybackState encodes position, duration (omitted when unknown),
 // updatedAt as seconds since 2001-01-01 UTC (Foundation's default Date
-// coding), isFinished and resumeOptions. resumeOptions is kept as stored and
-// written as {} for a new state; the per-video speed, delays and audio track
-// it holds are not restored yet.
+// coding), isFinished and resumeOptions. Resume options contain the per-video
+// speed, delays and audio selection (VideoPlaybackResumeOptions).
 //
 // Saving follows updatePlaybackState: a position under 2 s or an unknown
 // duration removes the entry, a position within 5 s of the end records a
-// finished state at the duration, anything else records a resumable state
-// and its legacy position. A state is resumable when it is not finished, is
+// finished state at the duration without resume options, and anything else
+// records the options and legacy position. A state is resumable when it is not finished, is
 // at least 2 s in and, with a known duration, under 98 % of it.
 //
 // Swift migrates UserDefaults positions once into the file. The Linux
@@ -32,6 +31,8 @@
 // where Swift would start over.
 
 #pragma once
+
+#include "services/player/resume_options.h"
 
 #include <QDateTime>
 #include <QJsonObject>
@@ -47,7 +48,7 @@ struct PlaybackState {
     std::optional<double> duration;
     QDateTime updated_at;
     bool finished = false;
-    QJsonObject resume_options;
+    ResumeOptions resume_options;
 
     // VideoPlaybackState.progress: 1 when finished, else position over a
     // positive duration clamped to 0..1, else none.
@@ -56,6 +57,13 @@ struct PlaybackState {
     bool resumable() const;
 
     bool operator==(const PlaybackState&) const = default;
+};
+
+struct PlaybackOpenState {
+    std::optional<double> position;
+    ResumeOptions options;
+
+    bool operator==(const PlaybackOpenState&) const = default;
 };
 
 class PlaybackHistory {
@@ -73,8 +81,14 @@ class PlaybackHistory {
     // position, else none.
     std::optional<double> resume_position(const QString& key) const;
 
+    // VideoPlayerViewModel.openPlaylistItem: call after saving the outgoing
+    // file. Explicit starts clear progress even when remembering is disabled.
+    PlaybackOpenState prepare_open(const QString& key, bool remember, bool from_beginning);
+
     // savePlaybackState. Returns whether the document changed.
     bool save(const QString& key, double position, double duration,
+              const QDateTime& now = QDateTime::currentDateTimeUtc());
+    bool save(const QString& key, double position, double duration, const ResumeOptions& options,
               const QDateTime& now = QDateTime::currentDateTimeUtc());
     // markWatched: a finished state at the duration (0 when unknown).
     bool mark_watched(const QString& key, std::optional<double> duration,

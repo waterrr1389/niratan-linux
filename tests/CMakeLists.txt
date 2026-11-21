@@ -350,6 +350,12 @@ target_link_libraries(tst_playback_history PRIVATE niratan_core Qt6::Test)
 target_compile_options(tst_playback_history PRIVATE -Wall -Wextra -Wpedantic -Werror)
 add_test(NAME playback_history COMMAND tst_playback_history)
 
+qt_add_executable(tst_resume_options player/tst_resume_options.cpp)
+target_include_directories(tst_resume_options PRIVATE ${CMAKE_SOURCE_DIR}/src)
+target_link_libraries(tst_resume_options PRIVATE niratan_core Qt6::Test)
+target_compile_options(tst_resume_options PRIVATE -Wall -Wextra -Wpedantic -Werror)
+add_test(NAME resume_options COMMAND tst_resume_options)
+
 qt_add_executable(tst_transcript_extractor
     player/tst_transcript_extractor.cpp
 )

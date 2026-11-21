@@ -14,10 +14,10 @@ src/viewmodels/sasayaki/sasayaki_view_model.cpp 908
 src/viewmodels/settings/settings_view_model.cpp 511
 src/viewmodels/statistics/statistics_view_model.cpp 757
 src/views/pages/LibraryPage.qml 516
-src/views/pages/PlayerPage.qml 1401
+src/views/pages/PlayerPage.qml 1395
 src/views/pages/ReaderPage.qml 705
 src/views/pages/SettingsPage.qml 815
 src/views/pages/StatisticsPage.qml 1800
 src/views/player/StudySidebar.qml 569
-src/views/player/mpv_item.cpp 1082
+src/views/player/mpv_item.cpp 1033
 src/views/reader/SasayakiPanel.qml 516

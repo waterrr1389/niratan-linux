@@ -43,12 +43,14 @@ bool valid_state(const QJsonValue& value) {
     }
     const auto state = value.toObject();
     const auto optional_is = [&state](const char* key, bool (QJsonValue::*test)() const) {
-        return !state.contains(QLatin1String(key)) || (state.value(QLatin1String(key)).*test)();
+        const auto field = state.value(QLatin1String(key));
+        return field.isUndefined() || field.isNull() || (field.*test)();
     };
     return state.value("position").isDouble() && state.value("updatedAt").isDouble() &&
            optional_is("duration", &QJsonValue::isDouble) &&
            optional_is("isFinished", &QJsonValue::isBool) &&
-           optional_is("resumeOptions", &QJsonValue::isObject);
+           optional_is("resumeOptions", &QJsonValue::isObject) &&
+           decode_resume_options(state.value("resumeOptions").toObject()).has_value();
 }
 
 // Whether the document decodes as a Swift Snapshot; one bad member fails the
@@ -70,12 +72,12 @@ bool valid_snapshot(const QJsonObject& document) {
 PlaybackState decode_state(const QJsonObject& object) {
     PlaybackState state;
     state.position = object.value("position").toDouble();
-    if (object.contains("duration")) {
+    if (object.value("duration").isDouble()) {
         state.duration = object.value("duration").toDouble();
     }
     state.updated_at = date_from_reference(object.value("updatedAt").toDouble());
     state.finished = object.value("isFinished").toBool(false);
-    state.resume_options = object.value("resumeOptions").toObject();
+    state.resume_options = *decode_resume_options(object.value("resumeOptions").toObject());
     return state;
 }
 
@@ -83,7 +85,7 @@ QJsonObject encode_state(const PlaybackState& state) {
     QJsonObject object{{"position", state.position},
                        {"updatedAt", reference_from_date(state.updated_at)},
                        {"isFinished", state.finished},
-                       {"resumeOptions", state.resume_options}};
+                       {"resumeOptions", encode_resume_options(state.resume_options)}};
     if (state.duration) {
         object.insert("duration", *state.duration);
     }
@@ -109,12 +111,8 @@ QJsonObject legacy_positions(const std::filesystem::path& legacy_file) {
     return positions;
 }
 
-// Replaces the state for key, keeping the resume options already stored.
-void put_state(QJsonObject& document, const QString& key, PlaybackState state) {
+void put_state(QJsonObject& document, const QString& key, const PlaybackState& state) {
     auto states = document.value(kStates).toObject();
-    if (states.contains(key)) {
-        state.resume_options = decode_state(states.value(key).toObject()).resume_options;
-    }
     states.insert(key, encode_state(state));
     document.insert(kStates, states);
 }
@@ -189,8 +187,30 @@ std::optional<double> PlaybackHistory::resume_position(const QString& key) const
     return std::nullopt;
 }
 
+PlaybackOpenState PlaybackHistory::prepare_open(const QString& key, bool remember,
+                                                bool from_beginning) {
+    if (from_beginning) {
+        if (!key.isEmpty()) {
+            clear(key);
+        }
+        return {0.0, {}};
+    }
+    if (remember && !key.isEmpty()) {
+        if (const auto stored = state(key)) {
+            return {stored->resumable() ? std::optional(stored->position) : std::nullopt,
+                    normalize_resume_options(stored->resume_options)};
+        }
+    }
+    return {};
+}
+
 bool PlaybackHistory::save(const QString& key, double position, double duration,
                            const QDateTime& now) {
+    return save(key, position, duration, ResumeOptions{}, now);
+}
+
+bool PlaybackHistory::save(const QString& key, double position, double duration,
+                           const ResumeOptions& options, const QDateTime& now) {
     const auto before = read();
     auto document = before;
     if (duration <= 0 || position < kMinimumPosition) {
@@ -200,7 +220,7 @@ bool PlaybackHistory::save(const QString& key, double position, double duration,
         put_state(document, key, {duration, duration, now, true, {}});
         remove_member_entry(document, kPositions, key);
     } else {
-        put_state(document, key, {position, duration, now, false, {}});
+        put_state(document, key, {position, duration, now, false, normalize_resume_options(options)});
         auto positions = document.value(kPositions).toObject();
         positions.insert(key, position);
         document.insert(kPositions, positions);

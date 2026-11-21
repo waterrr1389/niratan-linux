@@ -16,7 +16,8 @@
 // Local resume follows VideoPlayerViewModel.swift's save and loaded-restore
 // order through player::PlaybackHistory: saved every 5 s while playing and
 // when the file changes or the item goes away, recorded as finished at the
-// end, restored when resumable, with no remote history.
+// end. Opening from the beginning clears progress after saving the outgoing
+// file. The position and per-video options are applied once duration is known.
 // Embedded transcripts follow VideoPlayerScreen+Subtitles.swift's track
 // lifecycle: the item picks the selected text track and hands mpv's ff-index
 // (not its subtitle selection ID) to player::TranscriptExtractor, and cancels
@@ -112,7 +113,7 @@ class MpvItem : public QQuickFramebufferObject {
     bool subtitlesVisible() const;
     void setSubtitlesVisible(bool visible);
 
-    Q_INVOKABLE void open(const QUrl& file);
+    Q_INVOKABLE void open(const QUrl& file, bool fromBeginning = false);
     Q_INVOKABLE void unload();
     Q_INVOKABLE void restartFromBeginning();
     Q_INVOKABLE void togglePause();
@@ -171,12 +172,12 @@ class MpvItem : public QQuickFramebufferObject {
 
    private:
     void poll();
-    void replace_file(const QUrl& file);
+    void replace_file(const QUrl& file, bool from_beginning = false);
     void open_when_ready(const QUrl& file, quint64 generation);
     void save_playback_position();
     void record_finished_playback();
-    void clear_playback_position();
     void restore_playback_position();
+    QVariantList current_track_fields() const;
     void set_resume_position(double position);
     void cancel_transcript();
     void refresh_chapters();
@@ -216,6 +217,7 @@ class MpvItem : public QQuickFramebufferObject {
     QString local_video_path_;
     QElapsedTimer resume_save_timer_;
     double resume_position_ = 0.0;
+    niratan::player::PlaybackOpenState pending_playback_;
     niratan::player::PlaybackHistory playback_history_ = niratan::player::PlaybackHistory::at_data_root();
     int selected_subtitle_id_ = -1;
     niratan::player::TranscriptExtractor transcript_extractor_{
