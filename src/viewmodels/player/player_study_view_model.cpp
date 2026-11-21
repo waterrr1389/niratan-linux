@@ -2,14 +2,11 @@
 
 #include "player_study_view_model.h"
 
-#include "services/player/mining_history.h"
-#include "services/player/video_settings.h"
+#include "services/player/mining_history_store.h"
 #include "services/sasayaki/srt_parser.h"
-#include "services/storage/app_paths.h"
 
 #include <QClipboard>
 #include <QDateTime>
-#include <QDir>
 #include <QGuiApplication>
 #include <QJsonObject>
 #include <QRegularExpression>
@@ -27,7 +24,6 @@ namespace {
 using player::MiningHistoryItem;
 
 constexpr double kFoundationEpoch = 978307200.0;
-constexpr int kHistoryDefaultLimit = 25;
 constexpr int kWindowSize = 80;
 constexpr int kWindowExtension = 40;
 
@@ -174,7 +170,7 @@ QList<Cue> parse_document(const QByteArray& bytes, const QString& format) {
 }
 
 QUrl local_url(const std::string& path) {
-    return QUrl::fromLocalFile(QDir::cleanPath(QString::fromStdString(path)));
+    return QUrl::fromLocalFile(QString::fromStdString(path));
 }
 
 QString search_key(const QString& text) {
@@ -185,8 +181,7 @@ QString search_key(const QString& text) {
 }  // namespace
 
 struct PlayerStudyViewModel::State {
-    const std::filesystem::path data_root = storage::data_root();
-    int limit = kHistoryDefaultLimit;
+    player::MiningHistoryStore history_store = player::MiningHistoryStore::at_data_root();
     QUrl video;
     QUrl subtitle_file;
     QString subtitle_format;
@@ -211,7 +206,7 @@ struct PlayerStudyViewModel::State {
     QVariantList history;
     QVariantList chapters;
     QVariantMap track;
-    std::vector<MiningHistoryItem> items;
+    player::MiningHistoryStore::Snapshot snapshot;
     std::optional<MiningHistoryItem> pending_jump;
 
     auto first_after(double time) const {
@@ -232,7 +227,7 @@ struct PlayerStudyViewModel::State {
 
     auto find_item(const QString& id) const {
         const std::string key = id.toStdString();
-        return std::ranges::find(items, key, &MiningHistoryItem::id);
+        return std::ranges::find(snapshot.items, key, &MiningHistoryItem::id);
     }
 };
 
@@ -254,7 +249,7 @@ QVariantList PlayerStudyViewModel::history() const { return state_->history; }
 QVariantList PlayerStudyViewModel::chapters() const { return state_->chapters; }
 int PlayerStudyViewModel::current_chapter() const { return state_->current_chapter; }
 QString PlayerStudyViewModel::last_mining_notice() const { return state_->notice; }
-int PlayerStudyViewModel::history_limit() const { return state_->limit; }
+int PlayerStudyViewModel::history_limit() const { return state_->snapshot.limit; }
 bool PlayerStudyViewModel::can_mine() const { return state_->can_mine; }
 
 void PlayerStudyViewModel::set_search(const QString& query) {
@@ -495,7 +490,7 @@ void PlayerStudyViewModel::playChapter(int index) {
 }
 
 void PlayerStudyViewModel::update_can_mine() {
-    const bool can_mine = state_->ready && state_->visible && state_->limit > 0 &&
+    const bool can_mine = state_->ready && state_->visible && state_->snapshot.limit > 0 &&
         !state_->video.isEmpty() && (state_->cues.isEmpty()
             ? !state_->native.text.isEmpty() && state_->native.start >= 0.0
             : state_->current >= 0);
@@ -508,7 +503,7 @@ void PlayerStudyViewModel::update_can_mine() {
 void PlayerStudyViewModel::mineCurrentSubtitle() {
     refreshHistory();
     if (!state_->can_mine) {
-        set_notice(state_->limit == 0 ? tr("Mining history is disabled.") : tr("No current subtitle."));
+        set_notice(state_->snapshot.limit == 0 ? tr("Mining history is disabled.") : tr("No current subtitle."));
         return;
     }
     QList<Cue> active;
@@ -569,7 +564,7 @@ void PlayerStudyViewModel::mineCurrentSubtitle() {
         lines.append(cue.text);
     }
     item.subtitle_text = lines.join(QLatin1Char('\n')).toStdString();
-    if (state_->data_root.empty() || !player::add(state_->data_root, item, state_->limit)) {
+    if (!state_->history_store.add(item, state_->snapshot.limit)) {
         set_notice(tr("Could not save the subtitle to mining history."));
         return;
     }
@@ -579,7 +574,7 @@ void PlayerStudyViewModel::mineCurrentSubtitle() {
 
 void PlayerStudyViewModel::jumpToHistory(const QString& id) {
     const auto item = state_->find_item(id);
-    if (item == state_->items.cend()) {
+    if (item == state_->snapshot.items.cend()) {
         return;
     }
     if (item->remote_video_identity) {
@@ -613,7 +608,7 @@ void PlayerStudyViewModel::complete_jump() {
 
 void PlayerStudyViewModel::copyHistory(const QString& id) const {
     const auto item = state_->find_item(id);
-    if (item != state_->items.cend()) {
+    if (item != state_->snapshot.items.cend()) {
         if (auto* clipboard = QGuiApplication::clipboard()) {
             clipboard->setText(QString::fromStdString(item->subtitle_text));
         }
@@ -621,7 +616,7 @@ void PlayerStudyViewModel::copyHistory(const QString& id) const {
 }
 
 void PlayerStudyViewModel::removeHistory(const QString& id) {
-    if (state_->data_root.empty() || !player::remove(state_->data_root, id.toStdString())) {
+    if (!state_->history_store.remove(id.toStdString())) {
         set_notice(tr("Could not delete the saved subtitle."));
     } else {
         refreshHistory();
@@ -630,7 +625,7 @@ void PlayerStudyViewModel::removeHistory(const QString& id) {
 }
 
 void PlayerStudyViewModel::clearHistory() {
-    if (state_->data_root.empty() || !player::clear(state_->data_root)) {
+    if (!state_->history_store.clear()) {
         set_notice(tr("Could not clear mining history."));
     } else {
         refreshHistory();
@@ -639,13 +634,10 @@ void PlayerStudyViewModel::clearHistory() {
 }
 
 void PlayerStudyViewModel::refreshHistory() {
-    const int limit = player::load_video_settings(state_->data_root)
-        .value("videoMiningHistoryLimit").toInt();
-    auto items = state_->data_root.empty() ? std::vector<MiningHistoryItem>{}
-        : player::pruned_items(player::load(state_->data_root), limit);
+    auto snapshot = state_->history_store.load_snapshot();
     QVariantList history;
     const double now = QDateTime::currentMSecsSinceEpoch() / 1000.0 - kFoundationEpoch;
-    for (auto item = items.crbegin(); item != items.crend(); ++item) {
+    for (auto item = snapshot.items.crbegin(); item != snapshot.items.crend(); ++item) {
         const double elapsed = std::max(0.0, now - item->created_at);
         const auto count = [elapsed](int unit) {
             return int(std::min(elapsed / unit, double(std::numeric_limits<int>::max())));
@@ -670,9 +662,9 @@ void PlayerStudyViewModel::refreshHistory() {
             {QStringLiteral("relativeDate"), relative},
         });
     }
-    state_->items = std::move(items);
-    if (state_->limit != limit || state_->history != history) {
-        state_->limit = limit;
+    const bool changed = state_->snapshot.limit != snapshot.limit || state_->history != history;
+    state_->snapshot = std::move(snapshot);
+    if (changed) {
         state_->history = std::move(history);
         emit historyChanged();
     }

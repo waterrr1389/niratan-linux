@@ -4,4 +4,3 @@
 # src/services including a GUI header:
 
 # src/viewmodels touching the filesystem or processes:
-viewmodel-io src/viewmodels/player/player_study_view_model.cpp

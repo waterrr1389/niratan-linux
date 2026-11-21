@@ -334,6 +334,14 @@ target_link_libraries(tst_mining_history PRIVATE niratan_core Qt6::Test)
 target_compile_options(tst_mining_history PRIVATE -Wall -Wextra -Wpedantic -Werror)
 add_test(NAME mining_history COMMAND tst_mining_history)
 
+qt_add_executable(tst_mining_history_store
+    player/tst_mining_history_store.cpp
+)
+target_include_directories(tst_mining_history_store PRIVATE ${CMAKE_SOURCE_DIR}/src)
+target_link_libraries(tst_mining_history_store PRIVATE niratan_core Qt6::Test)
+target_compile_options(tst_mining_history_store PRIVATE -Wall -Wextra -Wpedantic -Werror)
+add_test(NAME mining_history_store COMMAND tst_mining_history_store)
+
 qt_add_executable(tst_playback_controls
     player/tst_playback_controls.cpp
 )
