@@ -65,7 +65,7 @@ Unicode rules, do the same rather than assuming ASCII.
 - `scripts/check.sh` runs the convention gates, configures, builds with
   `-Werror`, runs `ctest` and `all_qmllint`. Every commit must pass it.
 - `scripts/check-layers.sh` keeps services free of GUI headers and view
-  models out of the filesystem; `scripts/layers-baseline.txt` lists today's
+  models and views out of the filesystem; `scripts/layers-baseline.txt` lists today's
   exceptions and may only shrink.
 - `scripts/check-size.sh` caps a source file at 500 lines; files above it are
   frozen in `scripts/size-baseline.txt` and may shrink but not grow.

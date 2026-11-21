@@ -3,6 +3,7 @@
 #
 # R1  src/services must not include a GUI header.
 # R2  src/viewmodels must not touch the filesystem or spawn processes.
+# R3  src/views must not either; views reach files through services.
 #
 # scripts/layers-baseline.txt holds the pairs that violate a rule today. The
 # list only shrinks: a violation that is not listed fails the gate, and an
@@ -35,6 +36,9 @@ check services-gui '#include <Q(Quick|Gui|Widgets)' src/services
 check viewmodel-io \
     '#include <Q(File|Dir|FileSystemWatcher|Process)>|json_file\.h|read_json_file|write_json_file|std::filesystem' \
     src/viewmodels
+check view-io \
+    '#include <Q(File|Dir|FileSystemWatcher|Process|TemporaryFile|SaveFile)>|json_file\.h|read_json_file|write_json_file|std::filesystem' \
+    src/views
 
 # Stale baseline entries: keep the list honest.
 if [ -f "$baseline" ]; then
@@ -43,6 +47,7 @@ if [ -f "$baseline" ]; then
         case "$rule" in
         services-gui) pattern='#include <Q(Quick|Gui|Widgets)' ;;
         viewmodel-io) pattern='#include <Q(File|Dir|FileSystemWatcher|Process)>|json_file\.h|read_json_file|write_json_file|std::filesystem' ;;
+        view-io) pattern='#include <Q(File|Dir|FileSystemWatcher|Process|TemporaryFile|SaveFile)>|json_file\.h|read_json_file|write_json_file|std::filesystem' ;;
         *) echo "unknown rule in baseline: $rule"; fail=1; continue ;;
         esac
         if [ ! -f "$file" ]; then
