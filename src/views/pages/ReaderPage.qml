@@ -177,7 +177,7 @@ Item {
 
         onHtmlChanged: {
             if (hasResults)
-                lookupSurface.loadHtml(html, "about:blank")
+                lookupSurface.showResults(html)
         }
     }
 
@@ -319,41 +319,11 @@ Item {
                 }
             }
 
-            WebEngineView {
+            ReaderLookupSurface {
                 id: lookupSurface
                 z: 1
                 visible: ReaderViewModel.hasBook && lookupModel.hasResults
-                backgroundColor: Theme.popupBackground
-                property rect selectionAnchor
-                readonly property int gap: 4
-                readonly property int borderInset: 6
-                readonly property real leftSpace: selectionAnchor.x - gap
-                readonly property real anchorRight: selectionAnchor.x + selectionAnchor.width
-                readonly property real anchorBottom: selectionAnchor.y + selectionAnchor.height
-                readonly property real rightSpace: web.width - anchorRight - gap
-                readonly property real aboveSpace: selectionAnchor.y - gap
-                readonly property real belowSpace: web.height - anchorBottom - gap
-                readonly property bool placeRight: rightSpace >= leftSpace || rightSpace >= 320
-                readonly property bool placeBelow: belowSpace >= aboveSpace || belowSpace >= 250
-
-                width: Math.max(1, Math.min(320, ReaderViewModel.verticalWriting
-                                ? Math.max(leftSpace, rightSpace) - borderInset
-                                : web.width - 2 * borderInset))
-                height: Math.max(1, Math.min(250, ReaderViewModel.verticalWriting
-                                 ? web.height - 2 * borderInset
-                                 : (placeBelow ? belowSpace : aboveSpace) - borderInset))
-                x: ReaderViewModel.verticalWriting
-                   ? Math.max(0, Math.min(web.width - width, placeRight
-                              ? anchorRight + gap : selectionAnchor.x - gap - width))
-                   : Math.max(borderInset, Math.min(web.width - width - borderInset, selectionAnchor.x))
-                y: Math.max(borderInset, Math.min(web.height - height - borderInset,
-                            ReaderViewModel.verticalWriting ? selectionAnchor.y : placeBelow
-                            ? anchorBottom + gap : selectionAnchor.y - gap - height))
-
-                onLoadingChanged: function(loadRequest) {
-                    if (loadRequest.status === WebEngineView.LoadSucceededStatus && visible)
-                        runJavaScript("window.renderPopup();")
-                }
+                onDismissRequested: page.dismissLookup()
             }
 
             ColumnLayout {

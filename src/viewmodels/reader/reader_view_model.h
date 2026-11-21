@@ -121,6 +121,14 @@ class ReaderViewModel : public QObject {
     Q_PROPERTY(bool showReadingTime READ show_reading_time NOTIFY settingsChanged)
     Q_PROPERTY(bool showSasayakiToggle READ show_sasayaki_toggle NOTIFY settingsChanged)
     Q_PROPERTY(bool showStatisticsToggle READ show_statistics_toggle NOTIFY settingsChanged)
+    Q_PROPERTY(bool popupActionBar READ popup_action_bar NOTIFY settingsChanged)
+    Q_PROPERTY(bool popupDisableTransparency READ popup_disable_transparency NOTIFY settingsChanged)
+    Q_PROPERTY(bool popupFullWidth READ popup_full_width NOTIFY settingsChanged)
+    Q_PROPERTY(int popupHeight READ popup_height NOTIFY settingsChanged)
+    Q_PROPERTY(double popupScale READ popup_scale NOTIFY settingsChanged)
+    Q_PROPERTY(bool popupSwipeToDismiss READ popup_swipe_to_dismiss NOTIFY settingsChanged)
+    Q_PROPERTY(int popupSwipeThreshold READ popup_swipe_threshold NOTIFY settingsChanged)
+    Q_PROPERTY(int popupWidth READ popup_width NOTIFY settingsChanged)
     Q_PROPERTY(QString uiTheme READ ui_theme NOTIFY settingsChanged)
     Q_PROPERTY(bool englishContent READ english_content NOTIFY settingsChanged)
     Q_PROPERTY(QString chapterUrl READ chapter_url NOTIFY chapterUrlChanged)
@@ -186,6 +194,14 @@ class ReaderViewModel : public QObject {
     bool show_reading_time() const;
     bool show_sasayaki_toggle() const;
     bool show_statistics_toggle() const;
+    bool popup_action_bar() const;
+    bool popup_disable_transparency() const;
+    bool popup_full_width() const;
+    int popup_height() const;
+    double popup_scale() const;
+    bool popup_swipe_to_dismiss() const;
+    int popup_swipe_threshold() const;
+    int popup_width() const;
     QString ui_theme() const;
     bool english_content() const;
     QString chapter_url() const;

@@ -165,6 +165,7 @@ qt_add_qml_module(niratan
         src/views/reader/ReaderContents.qml
         src/views/reader/ReaderGallery.qml
         src/views/reader/ReaderChrome.qml
+        src/views/reader/ReaderLookupSurface.qml
         src/views/player/BarButton.qml
         src/views/player/StudySidebar.qml
         src/views/player/StudyLoopMarker.qml

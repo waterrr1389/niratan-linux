@@ -4,8 +4,8 @@
 // Models/Profile.swift: every non-optional key is required and a value of the
 // wrong JSON type rejects the whole document. Optional keys follow
 // decodeIfPresent, so a missing or null value decodes as nil while a wrongly
-// typed one still fails. The Linux wheel setting defaults to true when absent.
-// Extra keys are ignored. Only the Linux hover delay is clamped on read.
+// typed one still fails. Linux-only settings default when absent. Extra keys
+// are ignored. Numeric popup values are clamped to AppearanceView bounds.
 
 #include "reader_settings.h"
 
@@ -134,6 +134,20 @@ std::optional<ReaderProfileSettings> reader_settings_from_json(const QJsonDocume
     constexpr QLatin1StringView hover_key("desktopLookupHoverDelayMs");
     settings.desktop_lookup_hover_delay_ms = static_cast<int>(std::clamp(
         object.value(hover_key).toDouble(settings.desktop_lookup_hover_delay_ms), 0.0, 250.0));
+    settings.popup_action_bar = object.value(QLatin1StringView("popupActionBar")).toBool(false);
+    settings.popup_disable_transparency =
+        object.value(QLatin1StringView("popupDisableTransparency")).toBool(false);
+    settings.popup_full_width = object.value(QLatin1StringView("popupFullWidth")).toBool(false);
+    settings.popup_height = static_cast<int>(std::clamp(
+        object.value(QLatin1StringView("popupHeight")).toDouble(250.0), 100.0, 800.0));
+    settings.popup_scale = std::clamp(
+        object.value(QLatin1StringView("popupScale")).toDouble(1.0), 0.8, 1.5);
+    settings.popup_swipe_to_dismiss =
+        object.value(QLatin1StringView("popupSwipeToDismiss")).toBool(false);
+    settings.popup_swipe_threshold = static_cast<int>(std::clamp(
+        object.value(QLatin1StringView("popupSwipeThreshold")).toDouble(40.0), 20.0, 80.0));
+    settings.popup_width = static_cast<int>(std::clamp(
+        object.value(QLatin1StringView("popupWidth")).toDouble(320.0), 100.0, 1400.0));
     if (!read_string(object, QLatin1StringView("theme"), settings.theme) ||
         !read_string(object, QLatin1StringView("uiTheme"), settings.ui_theme) ||
         !read_bool(object, QLatin1StringView("systemLightSepia"), settings.system_light_sepia) ||
@@ -209,6 +223,14 @@ QJsonDocument reader_settings_to_json(const ReaderProfileSettings& settings) {
     object.insert(QLatin1StringView("wheelPageTurnEnabled"), settings.wheel_page_turn);
     object.insert(QLatin1StringView("desktopLookupHoverDelayMs"),
                   settings.desktop_lookup_hover_delay_ms);
+    object.insert(QLatin1StringView("popupActionBar"), settings.popup_action_bar);
+    object.insert(QLatin1StringView("popupDisableTransparency"), settings.popup_disable_transparency);
+    object.insert(QLatin1StringView("popupFullWidth"), settings.popup_full_width);
+    object.insert(QLatin1StringView("popupHeight"), settings.popup_height);
+    object.insert(QLatin1StringView("popupScale"), settings.popup_scale);
+    object.insert(QLatin1StringView("popupSwipeToDismiss"), settings.popup_swipe_to_dismiss);
+    object.insert(QLatin1StringView("popupSwipeThreshold"), settings.popup_swipe_threshold);
+    object.insert(QLatin1StringView("popupWidth"), settings.popup_width);
     if (settings.two_column_horizontal_pages) {
         object.insert(QLatin1StringView("twoColumnHorizontalPages"),
                       *settings.two_column_horizontal_pages);

@@ -20,6 +20,9 @@
 // speed 35, progress shown as a character count), so an empty optional here
 // means the key was absent from a stored document, not that the default is
 // empty.
+// Linux also stores the popup preferences from Core/UserConfig.swift here.
+// Missing or invalid values use those defaults; numeric values are bounded
+// by the AppearanceView popup controls without rounding to slider increments.
 
 #pragma once
 
@@ -48,6 +51,14 @@ struct ReaderProfileSettings {
     bool wheel_page_turn = true;
     // Core/UserConfig.swift: desktopLookupHoverDelayMs, in milliseconds (0–250).
     int desktop_lookup_hover_delay_ms = 45;
+    bool popup_action_bar = false;
+    bool popup_disable_transparency = false;
+    bool popup_full_width = false;
+    int popup_height = 250;
+    double popup_scale = 1.0;
+    bool popup_swipe_to_dismiss = false;
+    int popup_swipe_threshold = 40;
+    int popup_width = 320;
     std::optional<bool> two_column_horizontal_pages;
     std::optional<bool> paragraph_mode;
     std::optional<bool> text_animation;

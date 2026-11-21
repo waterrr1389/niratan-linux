@@ -39,6 +39,7 @@ class ReaderSettingsTest : public QObject {
     void a_missing_or_wrong_required_key_is_rejected();
     void extra_keys_are_ignored();
     void hover_delay_defaults_and_clamps();
+    void popup_defaults_and_bounds();
 };
 
 void ReaderSettingsTest::the_defaults_match_the_swift_defaults() {
@@ -109,6 +110,14 @@ void ReaderSettingsTest::every_field_round_trips() {
     settings.continuous_mode = true;
     settings.wheel_page_turn = false;
     settings.desktop_lookup_hover_delay_ms = 135;
+    settings.popup_action_bar = true;
+    settings.popup_disable_transparency = true;
+    settings.popup_full_width = true;
+    settings.popup_height = 360;
+    settings.popup_scale = 1.25;
+    settings.popup_swipe_to_dismiss = true;
+    settings.popup_swipe_threshold = 65;
+    settings.popup_width = 450;
     settings.two_column_horizontal_pages = true;
     settings.paragraph_mode = false;
     settings.text_animation = true;
@@ -247,6 +256,36 @@ void ReaderSettingsTest::hover_delay_defaults_and_clamps() {
         settings = reader_settings_from_json(QJsonDocument(object));
         QVERIFY(settings);
         QCOMPARE(settings->desktop_lookup_hover_delay_ms, expected);
+    }
+}
+
+// Core/UserConfig.swift popup defaults and Features/Settings/AppearanceView.swift slider bounds.
+void ReaderSettingsTest::popup_defaults_and_bounds() {
+    auto object = reader_settings_to_json(default_reader_settings()).object();
+    for (const char* key : {"popupActionBar", "popupDisableTransparency", "popupFullWidth",
+                            "popupSwipeToDismiss"}) {
+        QCOMPARE(object.take(QString::fromLatin1(key)), QJsonValue(false));
+    }
+    QCOMPARE(object.take("popupWidth"), QJsonValue(320));
+    QCOMPARE(object.take("popupHeight"), QJsonValue(250));
+    QCOMPARE(object.take("popupScale"), QJsonValue(1.0));
+    QCOMPARE(object.take("popupSwipeThreshold"), QJsonValue(40));
+    const auto defaults = reader_settings_from_json(QJsonDocument(object));
+    QVERIFY(defaults);
+    QCOMPARE(*defaults, default_reader_settings());
+
+    for (const bool upper : {false, true}) {
+        const int out_of_range = upper ? 1500 : -1;
+        object.insert("popupWidth", out_of_range);
+        object.insert("popupHeight", out_of_range);
+        object.insert("popupScale", out_of_range);
+        object.insert("popupSwipeThreshold", out_of_range);
+        const auto settings = reader_settings_from_json(QJsonDocument(object));
+        QVERIFY(settings);
+        QCOMPARE(settings->popup_width, upper ? 1400 : 100);
+        QCOMPARE(settings->popup_height, upper ? 800 : 100);
+        QCOMPARE(settings->popup_scale, upper ? 1.5 : 0.8);
+        QCOMPARE(settings->popup_swipe_threshold, upper ? 80 : 20);
     }
 }
 

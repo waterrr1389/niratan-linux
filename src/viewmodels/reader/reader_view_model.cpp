@@ -148,6 +148,14 @@ bool ReaderViewModel::show_reading_speed() const { return state_->settings.show_
 bool ReaderViewModel::show_reading_time() const { return state_->settings.show_reading_time; }
 bool ReaderViewModel::show_sasayaki_toggle() const { return state_->settings.show_sasayaki_toggle; }
 bool ReaderViewModel::show_statistics_toggle() const { return state_->settings.show_statistics_toggle; }
+bool ReaderViewModel::popup_action_bar() const { return state_->settings.popup_action_bar; }
+bool ReaderViewModel::popup_disable_transparency() const { return state_->settings.popup_disable_transparency; }
+bool ReaderViewModel::popup_full_width() const { return state_->settings.popup_full_width; }
+int ReaderViewModel::popup_height() const { return state_->settings.popup_height; }
+double ReaderViewModel::popup_scale() const { return state_->settings.popup_scale; }
+bool ReaderViewModel::popup_swipe_to_dismiss() const { return state_->settings.popup_swipe_to_dismiss; }
+int ReaderViewModel::popup_swipe_threshold() const { return state_->settings.popup_swipe_threshold; }
+int ReaderViewModel::popup_width() const { return state_->settings.popup_width; }
 QString ReaderViewModel::ui_theme() const { return QString::fromStdString(state_->settings.ui_theme); }
 bool ReaderViewModel::english_content() const { return state_->content_language == "en"; }
 
