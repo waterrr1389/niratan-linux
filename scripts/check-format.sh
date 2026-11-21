@@ -12,11 +12,12 @@ cd "$(dirname "$0")/.."
 fail=0
 
 # Tracked files with staged or unstaged changes. git clang-format compares
-# them with HEAD and prints the hunks it would rewrite.
+# them with HEAD and prints the hunks it would rewrite; --quiet keeps the
+# "did not modify any files" message out of the output when nothing changes.
 changed=$(git diff --name-only --diff-filter=ACMR HEAD -- src tests |
     grep -E '\.(cpp|h)$' || true)
 if [ -n "$changed" ]; then
-    diff=$(git clang-format --diff HEAD -- $changed || true)
+    diff=$(git clang-format --quiet --diff HEAD -- $changed || true)
     if [ -n "$diff" ]; then
         echo "$diff" >&2
         fail=1
