@@ -3,7 +3,7 @@
 #include "player_study_view_model.h"
 
 #include "services/player/mining_history_store.h"
-#include "services/sasayaki/srt_parser.h"
+#include "services/player/subtitle_document.h"
 
 #include <QClipboard>
 #include <QDateTime>
@@ -120,52 +120,13 @@ QList<Cue> parse_ass(const QString& text) {
     return cues;
 }
 
-QList<Cue> parse_document(const QByteArray& bytes, const QString& format) {
-    if (format == QStringLiteral("ass") || format == QStringLiteral("ssa")) {
-        return parse_ass(QString::fromUtf8(bytes).remove(QChar(0xfeff)));
+QList<Cue> cues_from_document(const player::SubtitleDocument& document) {
+    QList<Cue> cues;
+    cues.reserve(document.cues.size());
+    for (const auto& cue : document.cues) {
+        cues.append({cue.start_time, cue.end_time, cue.text});
     }
-    QString text = QString::fromUtf8(bytes);
-    const bool vtt = format == QStringLiteral("webVTT");
-    if (vtt) {
-        // The shared parser accepts hour-qualified timecodes. Expand only
-        // the short WebVTT timecodes on timing lines, not subtitle text.
-        static const QRegularExpression timing(
-            QStringLiteral(R"(^[ \t]*(\d{2,}:\d{2}(?::\d{2})?\.\d{3})([ \t]+-->[ \t]+)(\d{2,}:\d{2}(?::\d{2})?\.\d{3})(?=[ \t\r]|$))"));
-        QStringList lines = text.split(QLatin1Char('\n'));
-        for (QString& line : lines) {
-            const auto match = timing.match(line);
-            if (match.hasMatch()) {
-                for (int group : {3, 1}) {
-                    if (match.capturedView(group).count(QLatin1Char(':')) == 1) {
-                        line.insert(match.capturedStart(group), QStringLiteral("00:"));
-                    }
-                }
-            }
-        }
-        text = lines.join(QLatin1Char('\n'));
-    }
-    const auto parsed = sasayaki::parse_cues(text.toStdString());
-    QList<Cue> result;
-    result.reserve(qsizetype(parsed.size()));
-    static const QRegularExpression tags(QStringLiteral(R"(<[^>\n]+>)"));
-    for (const auto& cue : parsed) {
-        QString plain = QString::fromStdString(cue.text);
-        if (vtt) {
-            plain.remove(tags)
-                .replace(QStringLiteral("&nbsp;"), QStringLiteral(" "))
-                .remove(QStringLiteral("&lrm;"))
-                .remove(QStringLiteral("&rlm;"))
-                .replace(QStringLiteral("&lt;"), QStringLiteral("<"))
-                .replace(QStringLiteral("&gt;"), QStringLiteral(">"))
-                .replace(QStringLiteral("&quot;"), QStringLiteral("\""))
-                .replace(QStringLiteral("&apos;"), QStringLiteral("'"))
-                .replace(QStringLiteral("&amp;"), QStringLiteral("&"));
-        }
-        if (!plain.trimmed().isEmpty()) {
-            result.append({cue.start_time, cue.end_time, plain.trimmed()});
-        }
-    }
-    return result;
+    return cues;
 }
 
 QUrl local_url(const std::string& path) {
@@ -355,9 +316,21 @@ void PlayerStudyViewModel::setSubtitleDocument(const QUrl& file, const QByteArra
             state_->transcript_error = tr("Could not read the subtitle file.");
         } else if (state_->subtitle_format.isEmpty()) {
             state_->transcript_error = tr("This subtitle format is not supported for transcripts.");
-        } else {
-            state_->cues = parse_document(bytes, state_->subtitle_format);
+        } else if (state_->subtitle_format == QStringLiteral("ass") ||
+                   state_->subtitle_format == QStringLiteral("ssa")) {
+            state_->cues = parse_ass(QString::fromUtf8(bytes).remove(QChar(0xfeff)));
             if (state_->cues.isEmpty()) {
+                state_->transcript_error = tr("No readable cues were found in this subtitle file.");
+            }
+        } else {
+            const player::SubtitleFormat format =
+                state_->subtitle_format == QStringLiteral("webVTT")
+                ? player::SubtitleFormat::web_vtt
+                : player::SubtitleFormat::srt;
+            const auto parsed = player::parse_subtitle_document(bytes, file, format);
+            if (parsed.document) {
+                state_->cues = cues_from_document(*parsed.document);
+            } else {
                 state_->transcript_error = tr("No readable cues were found in this subtitle file.");
             }
         }
@@ -370,9 +343,16 @@ void PlayerStudyViewModel::setEmbeddedTranscript(const QByteArray& bytes, const 
         return;
     }
     state_->transcript_error = error;
-    state_->cues = parse_document(bytes, QStringLiteral("srt"));
-    if (!bytes.isEmpty() && state_->cues.isEmpty()) {
-        state_->transcript_error = tr("No readable cues were found in the embedded subtitle track.");
+    state_->cues.clear();
+    if (!bytes.isEmpty()) {
+        const auto parsed =
+            player::parse_subtitle_document(bytes, QUrl{}, player::SubtitleFormat::srt);
+        if (parsed.document) {
+            state_->cues = cues_from_document(*parsed.document);
+        } else {
+            state_->transcript_error =
+                tr("No readable cues were found in the embedded subtitle track.");
+        }
     }
     publish_transcript();
 }
