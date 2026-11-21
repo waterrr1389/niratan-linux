@@ -45,6 +45,7 @@ class LibraryViewModel : public QObject {
     Q_PROPERTY(int sortOption READ sort_option WRITE setSortOption NOTIFY sortChanged)
     Q_PROPERTY(int coverWidth READ cover_width WRITE setCoverWidth NOTIFY layoutChanged)
     Q_PROPERTY(QString error READ error NOTIFY errorChanged)
+    Q_PROPERTY(bool importError READ isImportError NOTIFY errorChanged)
     Q_PROPERTY(int bookCount READ book_count NOTIFY booksChanged)
 
    public:
@@ -60,10 +61,12 @@ class LibraryViewModel : public QObject {
     int cover_width() const;
     void setCoverWidth(int width);
     QString error() const;
+    bool isImportError() const;
     int book_count() const;
 
     Q_INVOKABLE void refresh();
     Q_INVOKABLE void importBooks(const QList<QUrl>& files);
+    Q_INVOKABLE void clearError();
     Q_INVOKABLE void openBook(const QString& folder);
     Q_INVOKABLE void recordBookAccess(const QString& folder);
     Q_INVOKABLE void renameBook(const QString& folder, const QString& title);

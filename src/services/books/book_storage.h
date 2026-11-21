@@ -3,6 +3,8 @@
 // The books directory, following Core/BookStorage.swift and
 // Features/Bookshelf/BookshelfViewModel.swift (processImport, finalizeImport),
 // and Core/UserConfig.swift (bookshelfSortOption, defaulting to Recent).
+// Cover width follows NativeMac/NativeReuseViews.swift (bookshelfCoverWidth)
+// and Features/Bookshelf/BookView.swift (BookshelfLayout).
 //
 // Layout under the app directory:
 //   Books/<folder>/metadata.json    BookMetadata
@@ -14,7 +16,7 @@
 //   Books/<folder>/sasayaki_match.json     SasayakiMatchData
 //   Books/book_order.json           [] of book IDs
 //   Books/shelves.json              [] of BookShelf
-//   library_prefs.json              bookshelfSortOption preference
+//   library_prefs.json              bookshelfSortOption and coverWidth preferences
 //
 // Import copies the source EPUB into a folder named after the sanitized title,
 // reads its title, language, cover and chapter counts, and writes metadata and
@@ -55,6 +57,11 @@ struct ImportResult {
     // Empty unless the import failed.
     std::string error;
     bool already_exists = false;
+};
+
+struct LibraryPrefs {
+    int sort_option = 0;
+    int cover_width = 160;
 };
 
 class BookStorage {
@@ -108,8 +115,9 @@ class BookStorage {
     bool save_shelves(const std::vector<BookShelf>& shelves) const;
 
     // 0 = Recent, 1 = Title, 2 = Manual. Missing or invalid values load as Recent.
-    int load_library_prefs() const;
-    void save_library_prefs(int sort_option) const;
+    // Missing or non-integer cover widths load as 160; integers clamp to 110–240.
+    LibraryPrefs load_library_prefs() const;
+    void save_library_prefs(const LibraryPrefs& prefs) const;
 
     ImportResult import_book(std::string_view source) const;
 

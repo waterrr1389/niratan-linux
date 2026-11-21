@@ -10,12 +10,67 @@ import Niratan
 Rectangle {
     id: sidebar
     required property LibraryViewModel model
-    signal createRequested()
-    signal renameRequested(string name)
 
     color: Theme.cardBackground
     border.width: 1
     border.color: Theme.cardStroke
+
+    Dialog {
+        id: shelfDialog
+        parent: Overlay.overlay
+        title: qsTr("New Shelf")
+        modal: true
+        anchors.centerIn: parent
+        standardButtons: Dialog.Ok | Dialog.Cancel
+        TextField {
+            id: shelfField
+            width: 240
+            placeholderText: qsTr("Shelf name")
+        }
+        onAboutToShow: shelfField.text = qsTr("New Shelf")
+        onAccepted: {
+            const created = sidebar.model.createShelf(shelfField.text)
+            if (created.length > 0)
+                sidebar.model.selectedShelf = "shelf:" + created
+        }
+    }
+
+    Dialog {
+        id: renameShelfDialog
+        property string fromName
+        parent: Overlay.overlay
+        title: qsTr("Rename Shelf")
+        modal: true
+        anchors.centerIn: parent
+        standardButtons: Dialog.Ok | Dialog.Cancel
+        TextField {
+            id: renameShelfField
+            width: 240
+            onAccepted: renameShelfDialog.accept()
+        }
+        onAboutToShow: renameShelfField.text = renameShelfDialog.fromName
+        onOpened: renameShelfField.forceActiveFocus()
+        onAccepted: sidebar.model.renameShelf(renameShelfDialog.fromName, renameShelfField.text)
+    }
+
+    Dialog {
+        id: deleteShelfDialog
+        property string shelfName
+        parent: Overlay.overlay
+        anchors.centerIn: parent
+        width: parent ? Math.min(420, parent.width - 32) : 420
+        title: qsTr("Delete Shelf")
+        modal: true
+        standardButtons: Dialog.Yes | Dialog.No
+        contentItem: Label {
+            text: qsTr("\"%1\" will be deleted. Books on this shelf stay in your library.").arg(deleteShelfDialog.shelfName)
+            color: Theme.textPrimary
+            textFormat: Text.PlainText
+            wrapMode: Text.Wrap
+        }
+        onAccepted: sidebar.model.deleteShelf(deleteShelfDialog.shelfName)
+    }
+
     ColumnLayout {
         anchors.fill: parent
         anchors.margins: 8
@@ -68,11 +123,17 @@ Rectangle {
                     id: shelfMenu
                     MenuItem {
                         text: qsTr("Rename Shelf")
-                        onClicked: sidebar.renameRequested(shelfRow.modelData.name)
+                        onClicked: {
+                            renameShelfDialog.fromName = shelfRow.modelData.name
+                            renameShelfDialog.open()
+                        }
                     }
                     MenuItem {
                         text: qsTr("Delete Shelf")
-                        onClicked: sidebar.model.deleteShelf(shelfRow.modelData.name)
+                        onClicked: {
+                            deleteShelfDialog.shelfName = shelfRow.modelData.name
+                            deleteShelfDialog.open()
+                        }
                     }
                 }
             }
@@ -81,7 +142,7 @@ Rectangle {
         Button {
             Layout.fillWidth: true
             text: qsTr("New Shelf")
-            onClicked: sidebar.createRequested()
+            onClicked: shelfDialog.open()
         }
     }
 }

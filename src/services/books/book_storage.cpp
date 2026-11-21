@@ -33,6 +33,7 @@ constexpr const char* kBookOrderFile = "book_order.json";
 constexpr const char* kShelvesFile = "shelves.json";
 constexpr const char* kLibraryPrefsFile = "library_prefs.json";
 constexpr auto kBookshelfSortOption = "bookshelfSortOption";
+constexpr auto kCoverWidth = "coverWidth";
 
 // Foundation's reference date, 2001-01-01T00:00:00Z.
 constexpr double kReferenceDateOffset = 978307200.0;
@@ -371,15 +372,22 @@ bool BookStorage::save_shelves(const std::vector<BookShelf>& shelves) const {
     return storage::write_json_file(books_directory_ / kShelvesFile, shelves_to_json(shelves));
 }
 
-int BookStorage::load_library_prefs() const {
+LibraryPrefs BookStorage::load_library_prefs() const {
     const auto document = read_document(app_directory_ / kLibraryPrefsFile);
-    const int option = document ? document->object().value(kBookshelfSortOption).toInt() : 0;
-    return option >= 0 && option <= 2 ? option : 0;
+    LibraryPrefs prefs;
+    if (document) {
+        const auto object = document->object();
+        const int option = object.value(kBookshelfSortOption).toInt();
+        prefs.sort_option = option >= 0 && option <= 2 ? option : 0;
+        prefs.cover_width = std::clamp(object.value(kCoverWidth).toInt(prefs.cover_width), 110, 240);
+    }
+    return prefs;
 }
 
-void BookStorage::save_library_prefs(int sort_option) const {
+void BookStorage::save_library_prefs(const LibraryPrefs& prefs) const {
     storage::write_json_file(app_directory_ / kLibraryPrefsFile,
-                             QJsonDocument(QJsonObject{{kBookshelfSortOption, sort_option}}));
+                             QJsonDocument(QJsonObject{{kBookshelfSortOption, prefs.sort_option},
+                                                       {kCoverWidth, prefs.cover_width}}));
 }
 
 ImportResult BookStorage::import_book(std::string_view source_path) const {

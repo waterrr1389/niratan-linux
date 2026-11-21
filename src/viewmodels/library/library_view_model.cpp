@@ -113,9 +113,9 @@ struct LibraryViewModel::State {
     BookStorage storage;
     Library library;
     std::string selected = "all";
-    int sort_option = 0;
-    int cover_width = 160;
+    books::LibraryPrefs prefs;
     QString error;
+    bool import_error = false;
     QVariantList books_view;
     QVariantList shelves_view;
 
@@ -162,7 +162,7 @@ struct LibraryViewModel::State {
     void rebuild_views() {
         books_view.clear();
         const std::vector<LibraryBook> section =
-            section_books(library, selection(), sort_option_of(sort_option));
+            section_books(library, selection(), sort_option_of(prefs.sort_option));
         for (const LibraryBook& book : section) {
             const double value = book_progress(book);
             QVariantMap entry;
@@ -194,7 +194,7 @@ struct LibraryViewModel::State {
 
 LibraryViewModel::LibraryViewModel(QObject* parent)
     : QObject(parent), state_(std::make_unique<State>()) {
-    state_->sort_option = state_->storage.load_library_prefs();
+    state_->prefs = state_->storage.load_library_prefs();
     refresh();
 }
 
@@ -220,32 +220,44 @@ void LibraryViewModel::setSelectedShelf(const QString& shelf) {
     emit selectionChanged();
 }
 
-int LibraryViewModel::sort_option() const { return state_->sort_option; }
+int LibraryViewModel::sort_option() const { return state_->prefs.sort_option; }
 
 void LibraryViewModel::setSortOption(int option) {
     const int clamped = std::clamp(option, 0, 2);
-    if (state_->sort_option == clamped) {
+    if (state_->prefs.sort_option == clamped) {
         return;
     }
-    state_->sort_option = clamped;
-    state_->storage.save_library_prefs(clamped);
+    state_->prefs.sort_option = clamped;
+    state_->storage.save_library_prefs(state_->prefs);
     state_->rebuild_views();
     emit booksChanged();
     emit sortChanged();
 }
 
-int LibraryViewModel::cover_width() const { return state_->cover_width; }
+int LibraryViewModel::cover_width() const { return state_->prefs.cover_width; }
 
 void LibraryViewModel::setCoverWidth(int width) {
     const int clamped = std::clamp(width, 110, 240);
-    if (state_->cover_width == clamped) {
+    if (state_->prefs.cover_width == clamped) {
         return;
     }
-    state_->cover_width = clamped;
+    state_->prefs.cover_width = clamped;
+    state_->storage.save_library_prefs(state_->prefs);
     emit layoutChanged();
 }
 
 QString LibraryViewModel::error() const { return state_->error; }
+
+bool LibraryViewModel::isImportError() const { return state_->import_error; }
+
+void LibraryViewModel::clearError() {
+    if (state_->error.isEmpty()) {
+        return;
+    }
+    state_->error.clear();
+    state_->import_error = false;
+    emit errorChanged();
+}
 
 int LibraryViewModel::book_count() const {
     return books::book_count(state_->library, state_->selection());
@@ -283,7 +295,9 @@ void LibraryViewModel::importBooks(const QList<QUrl>& files) {
         refresh();
     }
     if (!failures.isEmpty()) {
-        state_->error = tr("Failed to import: %1").arg(failures.join(QStringLiteral(", ")));
+        state_->error = tr("Failed to import: %1. Check that the files are readable EPUBs and try again.")
+                            .arg(failures.join(QStringLiteral(", ")));
+        state_->import_error = true;
         emit errorChanged();
     }
 }
@@ -308,7 +322,7 @@ void LibraryViewModel::recordBookAccess(const QString& folder) {
     state_->storage.save_metadata(*metadata);
     if (const auto index = state_->find_book(folder_name)) {
         state_->library.books[*index].metadata.last_access = metadata->last_access;
-        if (sort_option_of(state_->sort_option) == SortOption::recent) {
+        if (sort_option_of(state_->prefs.sort_option) == SortOption::recent) {
             state_->rebuild_views();
             emit booksChanged();
         }
@@ -336,6 +350,7 @@ void LibraryViewModel::deleteBook(const QString& folder) {
     const std::string id = state_->library.books[*index].metadata.id;
     if (!state_->storage.delete_book(folder_name)) {
         state_->error = tr("Could not delete the book.");
+        state_->import_error = false;
         emit errorChanged();
         return;
     }

@@ -43,6 +43,15 @@ Item {
         onBookOpened: folder => page.bookOpened(folder)
     }
     Connections {
+        target: library
+        function onErrorChanged() {
+            if (library.error.length > 0) {
+                importErrorDialog.message = library.error
+                importErrorDialog.open()
+            }
+        }
+    }
+    Connections {
         target: ReaderViewModel
         function onBookChanged() { library.recordBookAccess(ReaderViewModel.bookFolder) }
     }
@@ -53,6 +62,23 @@ Item {
         nameFilters: [qsTr("EPUB books (*.epub)")]
         fileMode: FileDialog.OpenFiles
         onAccepted: library.importBooks(selectedFiles)
+    }
+
+    Dialog {
+        id: importErrorDialog
+        property string message
+        title: library.importError ? qsTr("Import Failed") : qsTr("Error")
+        modal: true
+        anchors.centerIn: parent
+        width: Math.min(420, page.width - 32)
+        standardButtons: Dialog.Ok
+        contentItem: Label {
+            text: importErrorDialog.message
+            textFormat: Text.PlainText
+            wrapMode: Text.Wrap
+            color: Theme.textPrimary
+        }
+        onClosed: library.clearError()
     }
 
     Dialog {
@@ -103,39 +129,21 @@ Item {
     }
 
     Dialog {
-        id: shelfDialog
-        title: qsTr("New Shelf")
+        id: bulkDeleteDialog
+        property var folders: []
+        title: qsTr("Delete Books")
         modal: true
         anchors.centerIn: parent
-        standardButtons: Dialog.Ok | Dialog.Cancel
-        TextField {
-            id: shelfField
-            width: 240
-            placeholderText: qsTr("Shelf name")
+        standardButtons: Dialog.Yes | Dialog.No
+        Label {
+            text: qsTr("Delete %n book(s)? This cannot be undone.", "", bulkDeleteDialog.folders.length)
+            color: Theme.textPrimary
         }
-        onAboutToShow: shelfField.text = qsTr("New Shelf")
         onAccepted: {
-            var created = library.createShelf(shelfField.text)
-            if (created.length > 0)
-                library.selectedShelf = "shelf:" + created
+            for (const folder of bulkDeleteDialog.folders)
+                library.deleteBook(folder)
+            page.clearSelection()
         }
-    }
-
-    Dialog {
-        id: renameShelfDialog
-        property string fromName
-        title: qsTr("Rename Shelf")
-        modal: true
-        anchors.centerIn: parent
-        standardButtons: Dialog.Ok | Dialog.Cancel
-        TextField {
-            id: renameShelfField
-            width: 240
-            onAccepted: renameShelfDialog.accept()
-        }
-        onAboutToShow: renameShelfField.text = renameShelfDialog.fromName
-        onOpened: renameShelfField.forceActiveFocus()
-        onAccepted: library.renameShelf(renameShelfDialog.fromName, renameShelfField.text)
     }
 
     Dialog {
@@ -173,11 +181,6 @@ Item {
             Layout.fillHeight: true
             Layout.preferredWidth: 208
             model: library
-            onCreateRequested: shelfDialog.open()
-            onRenameRequested: name => {
-                renameShelfDialog.fromName = name
-                renameShelfDialog.open()
-            }
         }
 
         ColumnLayout {
@@ -217,6 +220,9 @@ Item {
                     ComboBox {
                         model: [qsTr("Recent"), qsTr("Title"), qsTr("Manual")]
                         currentIndex: library.sortOption
+                        ToolTip.visible: hovered
+                        ToolTip.text: qsTr("Sort Books")
+                        ToolTip.delay: 700
                         onActivated: library.sortOption = currentIndex
                     }
                     Slider {
@@ -229,6 +235,9 @@ Item {
                     }
                     Button {
                         text: page.selecting ? qsTr("Done") : qsTr("Select")
+                        ToolTip.visible: hovered
+                        ToolTip.text: qsTr("Select Books")
+                        ToolTip.delay: 700
                         onClicked: {
                             if (page.selecting)
                                 page.clearSelection()
@@ -250,10 +259,8 @@ Item {
                         visible: page.selecting
                         enabled: page.selectedList().length > 0
                         onClicked: {
-                            var folders = page.selectedList()
-                            for (var i = 0; i < folders.length; ++i)
-                                library.deleteBook(folders[i])
-                            page.clearSelection()
+                            bulkDeleteDialog.folders = page.selectedList()
+                            bulkDeleteDialog.open()
                         }
                     }
                     Button {
@@ -278,6 +285,9 @@ Item {
                     }
                     Button {
                         text: qsTr("Import")
+                        ToolTip.visible: hovered
+                        ToolTip.text: qsTr("Import EPUB")
+                        ToolTip.delay: 700
                         onClicked: importDialog.open()
                     }
                 }
@@ -477,13 +487,6 @@ Item {
                     text: qsTr("Right-click a book and choose Move to Shelf, or use Select.")
                     color: Theme.textSecondary
                 }
-            }
-            Label {
-                Layout.alignment: Qt.AlignHCenter
-                Layout.margins: 8
-                visible: library.error.length > 0
-                text: library.error
-                color: Theme.textSecondary
             }
         }
     }
