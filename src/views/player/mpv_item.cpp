@@ -1,19 +1,11 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
 // The libmpv surface behind MpvItem. The item owns the mpv handle and polls
-// the properties the player UI binds to; the renderer owns the render context
-// and draws into the Quick framebuffer object.
-//
-// Threading: the handle is created and used on the GUI thread, where the
-// polling timer also runs. The render context is created, used and freed on
-// the scene graph thread, the only thread where the OpenGL context of the
-// window is current. Qt creates the renderer during a scene graph sync and
-// destroys it when the node goes away, in an order the item cannot observe, so
-// both objects publish their lifetime in the link table below: the handle is
-// destroyed by whichever object outlives the other, and never before the
-// render context that uses it.
+// the properties the player UI binds to on the GUI thread; mpv_renderer.cpp
+// owns the render context and the lifetime link between the two.
 
 #include "mpv_item.h"
+#include "mpv_renderer.h"
 
 #include "services/player/video_settings.h"
 #include "services/storage/app_paths.h"
@@ -28,11 +20,6 @@
 #include <QFileInfo>
 #include <QJsonObject>
 #include <QMetaObject>
-#include <QMutex>
-#include <QMutexLocker>
-#include <QOpenGLContext>
-#include <QOpenGLFramebufferObject>
-#include <QOpenGLFunctions>
 #include <QProcess>
 #include <QSize>
 #include <QString>
@@ -41,13 +28,10 @@
 #include <QUrl>
 
 #include <mpv/client.h>
-#include <mpv/render.h>
-#include <mpv/render_gl.h>
 
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
-#include <unordered_map>
 #include <utility>
 
 namespace {
@@ -98,181 +82,11 @@ QVariantList node_list(mpv_handle* handle, const char* name) {
     return list;
 }
 
-// Qt keeps the renderer, which owns the render context, alive in the scene
-// graph node after the item is destroyed at window teardown. Both sides
-// register here so the context is always freed before the handle it belongs
-// to, whichever of them survives the other.
-struct SharedLink {
-    bool item_alive = true;
-    bool renderer_alive = false;
-};
-
-QMutex g_links_mutex;
-std::unordered_map<const MpvItem*, SharedLink> g_links;
-
-class MpvRenderer : public QQuickFramebufferObject::Renderer {
-   public:
-    explicit MpvRenderer(MpvItem* item);
-    ~MpvRenderer() override;
-
-    QOpenGLFramebufferObject* createFramebufferObject(const QSize& size) override;
-    void render() override;
-    void synchronize(QQuickFramebufferObject*) override {}
-
-   private:
-    static void* resolve_gl_function(void* context, const char* name);
-    static void report_update(void* data);
-
-    MpvItem* item_ = nullptr;
-    mpv_handle* handle_ = nullptr;
-    mpv_render_context* context_ = nullptr;
-    QOpenGLFunctions* gl_ = nullptr;
-};
-
-MpvRenderer::MpvRenderer(MpvItem* item) : item_(item), handle_(item->handle()) {
-    QOpenGLContext* current = QOpenGLContext::currentContext();
-    if (handle_ == nullptr || current == nullptr) {
-        return;
-    }
-    gl_ = current->functions();
-
-    mpv_opengl_init_params init = {};
-    init.get_proc_address = &MpvRenderer::resolve_gl_function;
-    init.get_proc_address_ctx = nullptr;
-    const char* api_type = MPV_RENDER_API_TYPE_OPENGL;
-    mpv_render_param params[] = {
-        {MPV_RENDER_PARAM_API_TYPE, const_cast<char*>(api_type)},
-        {MPV_RENDER_PARAM_OPENGL_INIT_PARAMS, &init},
-        {MPV_RENDER_PARAM_INVALID, nullptr},
-    };
-
-    mpv_render_context* context = nullptr;
-    const int status = mpv_render_context_create(&context, handle_, params);
-    if (status < 0) {
-        // The item cannot report this: error_ has no setter the renderer may
-        // call, and QML would need a queued round trip to notice.
-        qWarning("mpv: could not create the render context: %s", mpv_error_string(status));
-        return;
-    }
-    context_ = context;
-
-    {
-        QMutexLocker locker(&g_links_mutex);
-        const auto link = g_links.find(item_);
-        if (link != g_links.end()) {
-            link->second.renderer_alive = true;
-        } else {
-            g_links.emplace(item_, SharedLink{.item_alive = true, .renderer_alive = true});
-        }
-    }
-    item_->setRenderContext(context_);
-    mpv_render_context_set_update_callback(context_, &MpvRenderer::report_update, this);
-}
-
-MpvRenderer::~MpvRenderer() {
-    if (context_ == nullptr) {
-        return;
-    }
-
-    // mpv requires the render context to be freed before the core is torn down,
-    // and to be freed with the same OpenGL context that created it.
-    mpv_render_context_set_update_callback(context_, nullptr, nullptr);
-    mpv_render_context_free(context_);
-    context_ = nullptr;
-
-    bool item_alive = false;
-    {
-        QMutexLocker locker(&g_links_mutex);
-        const auto link = g_links.find(item_);
-        if (link != g_links.end()) {
-            link->second.renderer_alive = false;
-            item_alive = link->second.item_alive;
-            if (!item_alive) {
-                g_links.erase(link);
-            }
-        }
-    }
-
-    if (item_alive) {
-        item_->setRenderContext(nullptr);
-        return;
-    }
-
-    // The item is already gone, so its destructor left the handle for us.
-    if (handle_ != nullptr) {
-        mpv_terminate_destroy(handle_);
-        handle_ = nullptr;
-    }
-}
-
-QOpenGLFramebufferObject* MpvRenderer::createFramebufferObject(const QSize& size) {
-    return new QOpenGLFramebufferObject(size);
-}
-
-void MpvRenderer::render() {
-    QOpenGLFramebufferObject* fbo = framebufferObject();
-    if (context_ == nullptr || fbo == nullptr || gl_ == nullptr) {
-        return;
-    }
-
-    // mpv clears the target only when it draws a frame; without this the item
-    // shows uninitialized texture content before the first frame.
-    fbo->bind();
-    gl_->glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
-    gl_->glClear(GL_COLOR_BUFFER_BIT);
-
-    mpv_opengl_fbo target = {};
-    target.fbo = static_cast<int>(fbo->handle());
-    target.w = fbo->width();
-    target.h = fbo->height();
-    target.internal_format = 0;
-    // Qt 6 presents the framebuffer texture without mirroring, so mpv writes
-    // the frame in its normal orientation. Flipping here shows the video
-    // upside down.
-    int flip_y = 0;
-    mpv_render_param params[] = {
-        {MPV_RENDER_PARAM_OPENGL_FBO, &target},
-        {MPV_RENDER_PARAM_FLIP_Y, &flip_y},
-        {MPV_RENDER_PARAM_INVALID, nullptr},
-    };
-    mpv_render_context_render(context_, params);
-    mpv_render_context_report_swap(context_);
-}
-
-void* MpvRenderer::resolve_gl_function(void*, const char* name) {
-    QOpenGLContext* current = QOpenGLContext::currentContext();
-    if (current == nullptr || name == nullptr) {
-        return nullptr;
-    }
-    return reinterpret_cast<void*>(current->getProcAddress(name));
-}
-
-void MpvRenderer::report_update(void* data) {
-    auto* renderer = static_cast<MpvRenderer*>(data);
-    if (renderer == nullptr) {
-        return;
-    }
-
-    // The callback runs on the render thread and the item may already be
-    // destroyed; only the pointer is compared, never dereferenced.
-    {
-        QMutexLocker locker(&g_links_mutex);
-        const auto link = g_links.find(renderer->item_);
-        if (link == g_links.end() || !link->second.item_alive) {
-            return;
-        }
-    }
-    QMetaObject::invokeMethod(renderer->item_, "update", Qt::QueuedConnection);
-}
-
 }  // namespace
 
 MpvItem::MpvItem(QQuickItem* parent) : QQuickFramebufferObject(parent),
     video_settings_(niratan::player::load_video_settings(niratan::storage::data_root())) {
-    {
-        QMutexLocker locker(&g_links_mutex);
-        g_links[this] = SharedLink{};
-    }
+    niratan::player::link_render_item(this);
 
     handle_ = mpv_create();
     if (handle_ == nullptr) {
@@ -319,18 +133,7 @@ MpvItem::~MpvItem() {
     poll_timer_.stop();
     save_playback_position();
 
-    bool renderer_alive = false;
-    {
-        QMutexLocker locker(&g_links_mutex);
-        const auto link = g_links.find(this);
-        if (link != g_links.end()) {
-            link->second.item_alive = false;
-            renderer_alive = link->second.renderer_alive;
-            if (!renderer_alive) {
-                g_links.erase(link);
-            }
-        }
-    }
+    const bool renderer_alive = niratan::player::unlink_render_item(this);
 
     // A live renderer still holds a render context for this handle, and mpv
     // requires that context to be freed first. The renderer destructor then
@@ -342,7 +145,7 @@ MpvItem::~MpvItem() {
 }
 
 QQuickFramebufferObject::Renderer* MpvItem::createRenderer() const {
-    return new MpvRenderer(const_cast<MpvItem*>(this));
+    return niratan::player::create_mpv_renderer(const_cast<MpvItem*>(this), handle_);
 }
 
 qreal MpvItem::position() const {
@@ -565,12 +368,7 @@ void MpvItem::open_when_ready(const QUrl& file, quint64 generation) {
     }
     // mpv aborts a file whose vo=libmpv starts before a render context exists,
     // which happens when the item is asked to play before its first frame.
-    bool context_ready = false;
-    {
-        QMutexLocker locker(&g_links_mutex);
-        context_ready = render_context_ != nullptr;
-    }
-    if (!context_ready) {
+    if (!niratan::player::render_context_ready(this)) {
         QTimer::singleShot(kLoadRetryMs, this,
                            [this, file, generation] { open_when_ready(file, generation); });
         return;
@@ -1050,21 +848,6 @@ void MpvItem::apply_video_settings() {
     set_property("sub-border-size", edges.outline);
     set_property("sub-shadow-offset", edges.shadow);
     set_property("sub-scale-by-window", false);
-}
-
-mpv_handle* MpvItem::handle() const {
-    return handle_;
-}
-
-void MpvItem::setRenderContext(void* context) {
-    // Written by the renderer on the scene graph thread and read by open() on
-    // the GUI thread to know whether mpv may start a file, hence the lock.
-    QMutexLocker locker(&g_links_mutex);
-    render_context_ = context;
-}
-
-void MpvItem::requestUpdate() {
-    update();
 }
 
 void MpvItem::refresh_chapters() {

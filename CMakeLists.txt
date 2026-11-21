@@ -109,6 +109,8 @@ qt_add_executable(niratan
     src/viewmodels/reader/reader_view_model.h
     src/views/player/mpv_item.cpp
     src/views/player/mpv_item.h
+    src/views/player/mpv_renderer.cpp
+    src/views/player/mpv_renderer.h
     src/views/reader/reader_scheme_handler.cpp
     src/views/reader/reader_scheme_handler.h
     src/views/dictionary/audio_scheme_handler.cpp

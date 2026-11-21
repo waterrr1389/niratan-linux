@@ -143,12 +143,6 @@ class MpvItem : public QQuickFramebufferObject {
     Q_INVOKABLE bool changeVideoSetting(const QString& key, const QVariant& value);
     Q_INVOKABLE bool resetSubtitleAppearance();
 
-    // The mpv handle is shared with the renderer, which is created on the
-    // scene graph thread.
-    mpv_handle* handle() const;
-    void setRenderContext(void* context);
-    void requestUpdate();
-
    signals:
     void positionChanged();
     void durationChanged();
@@ -200,7 +194,6 @@ class MpvItem : public QQuickFramebufferObject {
 
     QJsonObject video_settings_;
     mpv_handle* handle_ = nullptr;
-    void* render_context_ = nullptr;
     QTimer poll_timer_;
     qreal position_ = 0.0;
     qreal duration_ = 0.0;
