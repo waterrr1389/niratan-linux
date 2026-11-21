@@ -31,6 +31,9 @@
 // popup options are computed and at the start of an add, then captured in the
 // attempt so the card build does not read them again. The cover URL is for
 // rendered text; an attachment needs a separate local cover path.
+// The next mining, duplicate or browse command uses the shared transport
+// saved by Anki settings. Changing the URL or key replaces the client without
+// canceling requests that already went out on the previous transport.
 
 #pragma once
 

@@ -78,6 +78,22 @@ target_link_libraries(tst_duplicate_scope PRIVATE niratan_core Qt6::Test)
 target_compile_options(tst_duplicate_scope PRIVATE -Wall -Wextra -Wpedantic -Werror)
 add_test(NAME duplicate_scope COMMAND tst_duplicate_scope)
 
+qt_add_executable(tst_fetch_metadata
+    anki/tst_fetch_metadata.cpp
+)
+target_include_directories(tst_fetch_metadata PRIVATE ${CMAKE_SOURCE_DIR}/src)
+target_link_libraries(tst_fetch_metadata PRIVATE niratan_core Qt6::Test)
+target_compile_options(tst_fetch_metadata PRIVATE -Wall -Wextra -Wpedantic -Werror)
+add_test(NAME fetch_metadata COMMAND tst_fetch_metadata)
+
+qt_add_executable(tst_mapping_options
+    anki/tst_mapping_options.cpp
+)
+target_include_directories(tst_mapping_options PRIVATE ${CMAKE_SOURCE_DIR}/src)
+target_link_libraries(tst_mapping_options PRIVATE niratan_core Qt6::Test)
+target_compile_options(tst_mapping_options PRIVATE -Wall -Wextra -Wpedantic -Werror)
+add_test(NAME mapping_options COMMAND tst_mapping_options)
+
 qt_add_executable(tst_duplicate_query
     anki/tst_duplicate_query.cpp
 )
@@ -534,6 +550,14 @@ target_include_directories(tst_mining_view_model PRIVATE ${CMAKE_SOURCE_DIR}/src
 target_link_libraries(tst_mining_view_model PRIVATE niratan_app Qt6::Test)
 target_compile_options(tst_mining_view_model PRIVATE -Wall -Wextra -Wpedantic -Werror)
 add_test(NAME mining_view_model COMMAND tst_mining_view_model)
+
+qt_add_executable(tst_anki_settings_view_model
+    viewmodels/tst_anki_settings_view_model.cpp
+)
+target_include_directories(tst_anki_settings_view_model PRIVATE ${CMAKE_SOURCE_DIR}/src)
+target_link_libraries(tst_anki_settings_view_model PRIVATE niratan_app Qt6::Test)
+target_compile_options(tst_anki_settings_view_model PRIVATE -Wall -Wextra -Wpedantic -Werror)
+add_test(NAME anki_settings_view_model COMMAND tst_anki_settings_view_model)
 
 qt_add_executable(tst_dictionary_popup_model
     viewmodels/tst_dictionary_popup_model.cpp

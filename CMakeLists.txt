@@ -24,6 +24,8 @@ find_package(libzip REQUIRED)
 qt_add_library(niratan_core STATIC
     src/models/dictionary/audio_source.cpp
     src/services/anki/field_mapping.cpp
+    src/services/anki/fetch_metadata.cpp
+    src/services/anki/mapping_options.cpp
     src/services/anki/duplicate_scope.cpp
     src/services/anki/duplicate_query.cpp
     src/services/anki/duplicate_lookup.cpp
@@ -118,6 +120,8 @@ target_compile_options(niratan_core PRIVATE -Wall -Wextra -Wpedantic -Werror)
 qt_add_library(niratan_app STATIC
     src/viewmodels/anki/mining_view_model.cpp
     src/viewmodels/anki/mining_view_model.h
+    src/viewmodels/anki/anki_settings_view_model.cpp
+    src/viewmodels/anki/anki_settings_view_model.h
     src/viewmodels/dictionary/dictionary_popup_model.cpp
     src/viewmodels/dictionary/dictionary_popup_model.h
     src/viewmodels/library/library_view_model.cpp

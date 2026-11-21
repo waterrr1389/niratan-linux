@@ -19,6 +19,10 @@
 #include <string>
 #include <vector>
 
+#include "services/dictionary/dictionary_store.h"
+#include "services/profiles/profile_repository.h"
+#include "services/storage/app_paths.h"
+
 namespace niratan::dictionary {
 namespace {
 
@@ -182,6 +186,16 @@ term_dictionaries(const std::vector<std::filesystem::path>& installed,
         }
     }
     return result;
+}
+
+std::vector<anki::TermDictionary>
+active_term_dictionaries(const profiles::ProfileRepository& repository) {
+    const auto directory = repository.profile_directory(repository.active_profile().id);
+    if (!directory) {
+        return {};
+    }
+    return term_dictionaries(DictionaryStore(storage::dictionaries_root()).installed(),
+                             *directory / "dictionary_config.json");
 }
 
 }  // namespace niratan::dictionary

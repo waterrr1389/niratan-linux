@@ -19,7 +19,6 @@
 #include "services/anki/popup_options.h"
 #include "services/audio/web_audio_download.h"
 #include "services/dictionary/dictionary_media.h"
-#include "services/dictionary/dictionary_store.h"
 #include "services/dictionary/term_dictionaries.h"
 #include "services/profiles/profile_repository.h"
 #include "services/storage/app_paths.h"
@@ -79,22 +78,63 @@ std::optional<QStringList> string_array(const QVariant& body) {
     return strings;
 }
 
+// New requests can move to a different transport without losing callbacks
+// already pending on the previous client.
+class MiningConnection : public anki::AnkiConnectClient {
+   public:
+    using AnkiConnectClient::AnkiConnectClient;
+
+    void send(std::string action, std::optional<QJsonObject> params, Callback callback) {
+        ++pending_;
+        request(std::move(action), std::move(params),
+                [this, callback = std::move(callback)](anki::AnkiConnectResult result) {
+                    --pending_;
+                    if (retired_ && pending_ == 0) {
+                        deleteLater();
+                    }
+                    if (callback) {
+                        callback(std::move(result));
+                    }
+                });
+    }
+
+    void retire() {
+        retired_ = true;
+        if (pending_ == 0) {
+            deleteLater();
+        }
+    }
+
+   private:
+    std::size_t pending_ = 0;
+    bool retired_ = false;
+};
+
 // The two hosts share the saved words, active Anki settings and media cache,
 // like AnkiManager.shared. Toasts and document context belong to each host.
 class MiningBackend {
    public:
     explicit MiningBackend(profiles::ProfileRepository profile_repository)
         : repository(std::move(profile_repository)) {
+        load_settings();
+    }
+
+    void load_settings() {
+        // The settings page persists every edit, so read the current profile
+        // without saving a stale outgoing snapshot.
+        config = anki::AnkiConfigStore(storage::data_root(), repository);
         config.load();
         const auto& transport = config.settings().transport;
-        anki::AnkiConnectConfig connection;
-        if (transport) {
-            connection.url = transport->url.value_or(std::string{});
-            connection.api_key = transport->api_key;
-        } else {
-            connection.url.clear();
+        const auto url = transport && transport->url ? *transport->url : std::string{};
+        const auto api_key = transport ? transport->api_key : std::nullopt;
+        if (!client || connection.url != url || connection.api_key != api_key) {
+            if (client) {
+                client->retire();
+            }
+            connection.url = url;
+            connection.api_key = api_key;
+            client = new MiningConnection(connection, &clients);
         }
-        client.emplace(std::move(connection));
     }
 
     std::string repository_profile_id() {
@@ -104,18 +144,14 @@ class MiningBackend {
         return repository.active_profile().id;
     }
 
-    void refresh_settings() { config.activate_profile(repository_profile_id()); }
+    void refresh_settings() {
+        repository_profile_id();
+        load_settings();
+    }
 
     // The active profile's ordered term list, reloaded from disk on each call.
     std::vector<anki::TermDictionary> load_term_dictionaries() {
-        const std::string profile_id = repository_profile_id();
-        const auto directory = repository.profile_directory(profile_id);
-        if (!directory) {
-            return {};
-        }
-        return dictionary::term_dictionaries(
-            dictionary::DictionaryStore(storage::dictionaries_root()).installed(),
-            *directory / "dictionary_config.json");
+        return dictionary::active_term_dictionaries(repository);
     }
 
     profiles::ProfileRepository repository;
@@ -123,7 +159,7 @@ class MiningBackend {
     anki::DuplicateLookupService duplicates{storage::data_root()};
     dictionary::DictionaryMediaService dictionary_media{storage::dictionaries_root()};
     anki::AnkiRequestFunction request = [this](auto action, auto params, auto callback) {
-        client->request(std::move(action), std::move(params), std::move(callback));
+        client->send(std::move(action), std::move(params), std::move(callback));
     };
     anki::MiningService mining{
         duplicates,
@@ -152,12 +188,19 @@ class MiningBackend {
          .clear_media = [] {},
          .repository_profile_id = [this] { return repository_profile_id(); },
          .anki_profile_id = [this] { return std::string(config.active_profile_id()); },
-         .activate_profile = [this](std::string_view id) { config.activate_profile(id); },
+         .activate_profile =
+             [this](std::string_view id) {
+                 if (config.active_profile_id() != id) {
+                     load_settings();
+                 }
+             },
          .settings = [this]() -> const anki::AnkiSettings& { return config.settings(); }}};
 
     // Dropping the last host cancels pending callbacks before their seams die.
     audio::WebAudioDownload audio_download;
-    std::optional<anki::AnkiConnectClient> client;
+    QObject clients;
+    anki::AnkiConnectConfig connection;
+    MiningConnection* client = nullptr;
 };
 
 std::shared_ptr<MiningBackend> shared_backend() {
@@ -266,6 +309,7 @@ void MiningViewModel::mineEntry(int requestId, const QVariant& content) {
                 std::nullopt});
         return;
     }
+    backend->refresh_settings();
     state_->dictionaries = backend->load_term_dictionaries();
     anki::MiningAttempt attempt{.content = {},
                                 .context = state_->context,
@@ -326,6 +370,7 @@ void MiningViewModel::openAnkiNote(const QVariant& noteIds) {
         }
     }
     if (auto request = anki::gui_browse_request(ids)) {
+        state_->backend->refresh_settings();
         state_->backend->request(std::move(request->action), std::move(request->params), {});
     }
 }

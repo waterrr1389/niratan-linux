@@ -21,6 +21,10 @@
 #include <utility>
 #include <vector>
 
+#include "../viewmodels/data_root.h"
+#include "services/profiles/profile_repository.h"
+#include "services/storage/app_paths.h"
+
 using niratan::anki::DictionaryCategory;
 using niratan::anki::TermDictionary;
 using niratan::dictionary::term_dictionaries;
@@ -89,6 +93,7 @@ class TermDictionariesTest : public QObject {
     void a_missing_config_lists_installed_directories();
     void an_invalid_config_lists_installed_directories_data();
     void an_invalid_config_lists_installed_directories();
+    void active_profile_orders_the_shared_term_dictionaries();
 };
 
 // B1, B2, B3: collectDictionaries sorts by order, matches fileName to the
@@ -259,6 +264,46 @@ void TermDictionariesTest::an_invalid_config_lists_installed_directories() {
     for (const auto& dictionary : entries) {
         QCOMPARE(dictionary.category, DictionaryCategory::none);
     }
+}
+
+// VM17: DictionaryManager.applyActiveProfileDictionaryConfiguration and
+// collectDictionaries use the active profile's dictionary config.
+void TermDictionariesTest::active_profile_orders_the_shared_term_dictionaries() {
+    niratan::test::TempDataRoot data;
+    QVERIFY(data.isValid());
+    const auto dictionaries = niratan::storage::dictionaries_root();
+    make_dictionary(dictionaries, "A");
+    make_dictionary(dictionaries, "B");
+    niratan::profiles::ProfileRepository profiles(niratan::storage::data_root());
+    const auto initial_id = profiles.active_profile().id;
+    const auto initial = profiles.profile_directory(initial_id);
+    QVERIFY(initial);
+    QVERIFY(std::filesystem::create_directories(*initial) ||
+            std::filesystem::is_directory(*initial));
+    QVERIFY(write_config(*initial / "dictionary_config.json",
+                         config({entry("B", 0, "monolingual", false), entry("A", 1, "exclude")})));
+    const auto copy =
+        profiles.create_profile("Other", niratan::profiles::ContentLanguage::japanese, initial_id);
+    QVERIFY(copy.profile);
+    const auto other = profiles.profile_directory(copy.profile->id);
+    QVERIFY(other);
+    QVERIFY(write_config(*other / "dictionary_config.json",
+                         config({entry("A", 0, "bilingual"), entry("B", 1, "none")})));
+
+    QVERIFY(!profiles.set_active_profile(initial_id));
+    const auto first = niratan::dictionary::active_term_dictionaries(profiles);
+    QCOMPARE(first.size(), std::size_t(2));
+    QCOMPARE(title(first.at(0)), QStringLiteral("B"));
+    QCOMPARE(first.at(0).category, DictionaryCategory::monolingual);
+    QCOMPARE(title(first.at(1)), QStringLiteral("A"));
+    QCOMPARE(first.at(1).category, DictionaryCategory::exclude);
+    QVERIFY(!profiles.set_active_profile(copy.profile->id));
+    const auto second = niratan::dictionary::active_term_dictionaries(profiles);
+    QCOMPARE(second.size(), std::size_t(2));
+    QCOMPARE(title(second.at(0)), QStringLiteral("A"));
+    QCOMPARE(second.at(0).category, DictionaryCategory::bilingual);
+    QCOMPARE(title(second.at(1)), QStringLiteral("B"));
+    QCOMPARE(second.at(1).category, DictionaryCategory::none);
 }
 
 QTEST_APPLESS_MAIN(TermDictionariesTest)

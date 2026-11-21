@@ -44,10 +44,19 @@
 
 #include "models/anki/mining_context.h"
 
+namespace niratan::profiles {
+class ProfileRepository;
+}
+
 namespace niratan::dictionary {
 
 std::vector<anki::TermDictionary>
 term_dictionaries(const std::vector<std::filesystem::path>& installed,
                   const std::filesystem::path& config_path);
+
+// Resolve the current profile's configuration and scan the shared term
+// dictionary store, as applyActiveProfileDictionaryConfiguration does.
+std::vector<anki::TermDictionary>
+active_term_dictionaries(const profiles::ProfileRepository& repository);
 
 }  // namespace niratan::dictionary
