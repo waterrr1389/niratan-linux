@@ -174,12 +174,20 @@ double ReaderViewModel::progress() const {
     if (!state_->session.has_value() || state_->session->info().character_count <= 0) {
         return 0.0;
     }
-    const int characters =
-        state_->session->character_offset(state_->chapter_index, state_->chapter_progress);
-    return clamp_progress(static_cast<double>(characters) / state_->session->info().character_count);
+    return clamp_progress(static_cast<double>(character_offset()) / state_->session->info().character_count);
 }
 
 double ReaderViewModel::chapter_progress() const { return state_->chapter_progress; }
+
+double ReaderViewModel::logical_chapter_progress() const {
+    return state_->session
+               ? state_->session->logical_chapter_progress(state_->chapter_index, chapter_progress())
+               : 0.0;
+}
+
+int ReaderViewModel::character_offset() const {
+    return state_->session ? state_->session->character_offset(state_->chapter_index, chapter_progress()) : 0;
+}
 
 int ReaderViewModel::page_count() const { return state_->page_count; }
 
@@ -191,13 +199,23 @@ bool ReaderViewModel::shows_page_count() const {
 
 QString ReaderViewModel::chapter_url() const { return state_->chapter_url; }
 
+bool ReaderViewModel::show_title() const { return state_->settings.show_title; }
+bool ReaderViewModel::show_progress() const { return state_->settings.show_progress.value_or(true); }
+bool ReaderViewModel::show_percentage() const { return state_->settings.show_percentage; }
+bool ReaderViewModel::show_progress_top() const { return state_->settings.show_progress_top; }
+bool ReaderViewModel::show_chapter_progress() const {
+    return state_->settings.show_chapter_progress.value_or(false);
+}
+
 QVariantList ReaderViewModel::chapters() const {
     QVariantList result;
     if (!state_->session.has_value()) {
         return result;
     }
     for (const auto& entry : state_->session->contents()) {
+        const int start = state_->session->contents_character_start(entry).value_or(-1);
         result.append(QVariantMap{{QStringLiteral("index"), entry.spine_index},
+                                  {QStringLiteral("characterStart"), start},
                                   {QStringLiteral("level"), entry.level},
                                   {QStringLiteral("title"), QString::fromStdString(entry.title)},
                                   {QStringLiteral("fragment"), QString::fromStdString(entry.fragment)}});
@@ -431,7 +449,7 @@ void ReaderViewModel::setVerticalWriting(bool vertical) {
 int ReaderViewModel::font_size() const { return state_->settings.font_size; }
 
 void ReaderViewModel::setFontSize(int size) {
-    const int clamped = std::min(std::max(size, 8), 72);
+    const int clamped = std::clamp(size, 16, 40);
     if (state_->settings.font_size == clamped) {
         return;
     }
@@ -926,9 +944,10 @@ void ReaderViewModel::persist_bookmark() {
     Bookmark bookmark;
     bookmark.chapter_index = state_->chapter_index;
     bookmark.progress = state_->chapter_progress;
-    bookmark.character_count =
-        state_->session->character_offset(state_->chapter_index, state_->chapter_progress);
-    bookmark.last_modified = books::reference_now();
+    bookmark.character_count = character_offset();
+    const auto previous = state_->storage.load_bookmark(state_->book.folder);
+    bookmark.last_modified = previous && previous->character_count == bookmark.character_count
+                                 ? previous->last_modified : std::optional{books::reference_now()};
     state_->storage.save_bookmark(state_->book.folder, bookmark);
 }
 
@@ -977,6 +996,7 @@ std::string ReaderViewModel::shell_document(const std::string& path) {
     ShellInput input;
     input.appearance.vertical_writing = state_->settings.vertical_writing;
     input.appearance.continuous = state_->settings.continuous_mode;
+    input.wheel_page_turn = state_->settings.wheel_page_turn;
     input.appearance.paragraph_mode =
         state_->settings.paragraph_mode.value_or(false) && !input.appearance.continuous;
     input.appearance.two_column = state_->settings.two_column_horizontal_pages.value_or(false);

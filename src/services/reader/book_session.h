@@ -68,6 +68,9 @@ class BookSession {
     std::string spine_path(int spine_index) const;
     std::string chapter_title(int spine_index) const;
     const std::vector<ContentsEntry>& contents() const;
+    // ReaderChapterIndex.chapterStart: unknown fragments use the spine start;
+    // a missing chapter count means the entry has no character position.
+    std::optional<int> contents_character_start(const ContentsEntry& entry) const;
 
     // The chapter with the stylesheet and script inserted, or an empty string
     // when the index is out of range or the entry cannot be read.
@@ -95,8 +98,11 @@ class BookSession {
     // reports zero rather than the next chapter's count. A book without
     // characters, or a position with no chapter, has nothing remaining.
     int chapter_characters_remaining(int spine_index, double progress) const;
+    // NativeReaderView.progressString uses the same range for its chapter line.
+    double logical_chapter_progress(int spine_index, double progress) const;
 
    private:
+    std::pair<int, int> logical_chapter_position(int spine_index, double progress) const;
     BookSession(niratan::novels::EpubBook book, niratan::books::BookInfo info,
                  std::vector<std::string> spine_paths,
                  std::vector<std::optional<std::string>> spine_titles,

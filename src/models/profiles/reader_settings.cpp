@@ -4,8 +4,8 @@
 // Models/Profile.swift: every non-optional key is required and a value of the
 // wrong JSON type rejects the whole document. Optional keys follow
 // decodeIfPresent, so a missing or null value decodes as nil while a wrongly
-// typed one still fails. Extra keys are ignored. Values pass through without
-// trimming, clamping or range checks.
+// typed one still fails. The Linux wheel setting defaults to true when absent.
+// Extra keys are ignored. Values pass through without trimming or clamping.
 
 #include "reader_settings.h"
 
@@ -126,6 +126,10 @@ std::optional<ReaderProfileSettings> reader_settings_from_json(const QJsonDocume
     const QJsonObject object = document.object();
 
     ReaderProfileSettings settings;
+    constexpr QLatin1StringView wheel_key("wheelPageTurnEnabled");
+    if (object.contains(wheel_key) && !read_bool(object, wheel_key, settings.wheel_page_turn)) {
+        return std::nullopt;
+    }
     if (!read_string(object, QLatin1StringView("theme"), settings.theme) ||
         !read_string(object, QLatin1StringView("uiTheme"), settings.ui_theme) ||
         !read_bool(object, QLatin1StringView("systemLightSepia"), settings.system_light_sepia) ||
@@ -198,6 +202,7 @@ QJsonDocument reader_settings_to_json(const ReaderProfileSettings& settings) {
         object.insert(QLatin1StringView("furiganaMode"), text(*settings.furigana_mode));
     }
     object.insert(QLatin1StringView("continuousMode"), settings.continuous_mode);
+    object.insert(QLatin1StringView("wheelPageTurnEnabled"), settings.wheel_page_turn);
     if (settings.two_column_horizontal_pages) {
         object.insert(QLatin1StringView("twoColumnHorizontalPages"),
                       *settings.two_column_horizontal_pages);

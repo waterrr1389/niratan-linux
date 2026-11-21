@@ -56,6 +56,7 @@ void ReaderSettingsTest::the_defaults_match_the_swift_defaults() {
     QVERIFY(!defaults.hide_furigana);
     QCOMPARE(defaults.furigana_mode, std::optional<std::string>{std::string("Off")});
     QVERIFY(!defaults.continuous_mode);
+    QVERIFY(defaults.wheel_page_turn);
     QCOMPARE(defaults.two_column_horizontal_pages, std::optional<bool>{false});
     QCOMPARE(defaults.paragraph_mode, std::optional<bool>{false});
     QCOMPARE(defaults.text_animation, std::optional<bool>{false});
@@ -105,6 +106,7 @@ void ReaderSettingsTest::every_field_round_trips() {
     settings.hide_furigana = true;
     settings.furigana_mode = "All";
     settings.continuous_mode = true;
+    settings.wheel_page_turn = false;
     settings.two_column_horizontal_pages = true;
     settings.paragraph_mode = false;
     settings.text_animation = true;
@@ -188,6 +190,7 @@ void ReaderSettingsTest::missing_optional_keys_stay_empty() {
         "\"showReadingTime\":false,\"showSasayakiToggle\":false}");
 
     QVERIFY(settings.has_value());
+    QVERIFY(settings->wheel_page_turn);
     QVERIFY(!settings->furigana_mode.has_value());
     QVERIFY(!settings->two_column_horizontal_pages.has_value());
     QVERIFY(!settings->paragraph_mode.has_value());

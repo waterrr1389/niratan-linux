@@ -23,30 +23,32 @@
 
 namespace niratan::reader {
 
-int BookSession::chapter_characters_remaining(int spine_index, double progress) const {
+std::optional<int> BookSession::contents_character_start(const ContentsEntry& entry) const {
+    const auto chapter = info_.chapter_info.find(spine_path(entry.spine_index));
+    if (chapter == info_.chapter_info.end()) {
+        return std::nullopt;
+    }
+    int offset = 0;
+    if (!entry.fragment.empty() && chapter->second.fragment_offsets.has_value()) {
+        const auto found = chapter->second.fragment_offsets->find(entry.fragment);
+        if (found != chapter->second.fragment_offsets->end()) {
+            offset = found->second;
+        }
+    }
+    return chapter->second.current_total + std::clamp(offset, 0, chapter->second.chapter_count);
+}
+
+std::pair<int, int> BookSession::logical_chapter_position(int spine_index, double progress) const {
     if (info_.character_count <= 0) {
-        return 0;
+        return {0, 0};
     }
     const int character = character_offset(spine_index, progress);
 
     std::set<int> starts{0};
     for (const ContentsEntry& entry : contents_) {
-        const auto chapter = info_.chapter_info.find(spine_path(entry.spine_index));
-        if (chapter == info_.chapter_info.end()) {
-            continue;
-        }
-        int offset = 0;
-        if (!entry.fragment.empty() && chapter->second.fragment_offsets.has_value()) {
-            const auto found = chapter->second.fragment_offsets->find(entry.fragment);
-            if (found != chapter->second.fragment_offsets->end()) {
-                offset = found->second;
-            }
-        }
-        const int start = std::min(
-            std::max(chapter->second.current_total + offset, chapter->second.current_total),
-            chapter->second.current_total + chapter->second.chapter_count);
-        if (start >= 0 && start <= info_.character_count) {
-            starts.insert(start);
+        if (const auto start = contents_character_start(entry);
+            start && *start >= 0 && *start <= info_.character_count) {
+            starts.insert(*start);
         }
     }
     std::vector<int> normalized;
@@ -72,7 +74,17 @@ int BookSession::chapter_characters_remaining(int spine_index, double progress) 
         next_index < normalized.size() ? normalized[next_index] : info_.character_count;
     const int count = std::max(end - start, 0);
     const int local = std::min(std::max(character - start, 0), count);
-    return std::max(count - local, 0);
+    return {local, count};
+}
+
+int BookSession::chapter_characters_remaining(int spine_index, double progress) const {
+    const auto [local, count] = logical_chapter_position(spine_index, progress);
+    return count - local;
+}
+
+double BookSession::logical_chapter_progress(int spine_index, double progress) const {
+    const auto [local, count] = logical_chapter_position(spine_index, progress);
+    return count > 0 ? static_cast<double>(local) / count : 0.0;
 }
 
 }  // namespace niratan::reader

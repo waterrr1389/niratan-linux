@@ -11,10 +11,8 @@ import QtWebChannel
 import QtWebEngine
 import Niratan
 
-// The reading surface: one chapter of the open book in a web view, with the
-// chapter list, the reading controls and the progress footer. The web view
-// only reports through the bridge; page turning and progress polling run here
-// because the model never touches QtWebEngine.
+// The web view reports through the bridge; page turning and progress polling
+// run here because the model never touches QtWebEngine.
 Item {
     id: page
     focus: true
@@ -97,12 +95,9 @@ Item {
     }
 
     Component.onCompleted: {
-        ReaderViewModel.setPageSize(Math.round(width), Math.round(height))
         ReaderViewModel.setReaderActive(statisticsContextActive)
         ReaderViewModel.setDark(Theme.dark)
     }
-    onWidthChanged: ReaderViewModel.setPageSize(Math.round(width), Math.round(height))
-    onHeightChanged: ReaderViewModel.setPageSize(Math.round(width), Math.round(height))
     onStatisticsContextActiveChanged: ReaderViewModel.setReaderActive(statisticsContextActive)
 
     Connections {
@@ -213,14 +208,17 @@ Item {
         onAccepted: ReaderViewModel.importAndOpen(selectedFile)
     }
 
-    ColumnLayout {
+    GridLayout {
         anchors.fill: parent
-        spacing: 0
+        columns: 1
+        rowSpacing: 0
 
         PageHeader {
+            Layout.row: 0
+            Layout.column: 0
             title: ReaderViewModel.hasBook ? ReaderViewModel.chapterTitle
                                           : qsTr("No book open")
-            subtitle: ReaderViewModel.hasBook ? ReaderViewModel.title : ""
+            subtitle: ReaderViewModel.hasBook && ReaderViewModel.showTitle ? ReaderViewModel.title : ""
             onBackRequested: {
                 ReaderViewModel.setReaderActive(false)
                 page.backRequested()
@@ -228,11 +226,11 @@ Item {
 
             ToolButton {
                 text: "A-"
-                onClicked: ReaderViewModel.fontSize = Math.max(10, ReaderViewModel.fontSize - 2)
+                onClicked: ReaderViewModel.fontSize -= 2
             }
             ToolButton {
                 text: "A+"
-                onClicked: ReaderViewModel.fontSize = Math.min(72, ReaderViewModel.fontSize + 2)
+                onClicked: ReaderViewModel.fontSize += 2
             }
             ToolButton {
                 text: ReaderViewModel.verticalWriting ? qsTr("Vertical") : qsTr("Horizontal")
@@ -263,12 +261,16 @@ Item {
         }
 
         Rectangle {
+            Layout.row: 2
+            Layout.column: 0
             Layout.fillWidth: true
             Layout.fillHeight: true
             color: ReaderViewModel.hasBook ? ReaderViewModel.pageBackground : Theme.windowBackground
 
             WebEngineView {
                 id: web
+                readonly property size viewportSize: Qt.size(Math.round(width), Math.round(height))
+                onViewportSizeChanged: ReaderViewModel.setPageSize(viewportSize.width, viewportSize.height)
                 anchors.fill: parent
                 visible: ReaderViewModel.hasBook
                 opacity: ReaderViewModel.restoring ? 0 : 1
@@ -365,37 +367,13 @@ Item {
                     wrapMode: Text.WordWrap
                 }
             }
-
         }
 
-        Rectangle {
+        ReaderProgress {
+            id: readerProgress
+            Layout.row: ReaderViewModel.showProgressTop ? 1 : 3
+            Layout.column: 0
             Layout.fillWidth: true
-            Layout.preferredHeight: 30
-            color: ReaderViewModel.pageBackground
-            border.width: 1
-            border.color: Theme.cardStroke
-            visible: ReaderViewModel.hasBook
-
-            ProgressBar {
-                anchors.fill: parent
-                anchors.margins: 6
-                from: 0
-                to: 1
-                value: ReaderViewModel.progress
-            }
-
-            Label {
-                anchors.right: parent.right
-                anchors.rightMargin: 12
-                anchors.verticalCenter: parent.verticalCenter
-                text: ReaderViewModel.showsPageCount
-                      ? (ReaderViewModel.pageCount > 0
-                         ? qsTr("%1 / %2").arg(ReaderViewModel.pageIndex).arg(ReaderViewModel.chapterPageCount)
-                         : "")
-                      : Math.round(ReaderViewModel.progress * 100) + "%"
-                color: ReaderViewModel.infoColor
-                font.pixelSize: 11
-            }
         }
     }
 
@@ -454,20 +432,32 @@ Item {
             }
 
             ListView {
+                id: chaptersList
                 Layout.fillWidth: true
                 Layout.fillHeight: true
                 visible: navigationTabs.currentIndex === 0
                 clip: true
                 model: ReaderViewModel.chapters
-                currentIndex: ReaderViewModel.chapters.findIndex(
-                                  row => row.index === ReaderViewModel.chapterIndex)
+                currentIndex: {
+                    const offset = ReaderViewModel.characterOffset
+                    let best = -1
+                    let start = 0
+                    for (let i = 0; i < model.length; ++i) {
+                        const candidate = model[i].characterStart
+                        if (candidate >= start && candidate <= offset) {
+                            best = i
+                            start = candidate
+                        }
+                    }
+                    return best
+                }
                 delegate: ItemDelegate {
                     id: chapterItem
                     required property var modelData
                     width: ListView.view.width
                     leftPadding: padding + 12 * chapterItem.modelData.level
                     text: chapterItem.modelData.title
-                    highlighted: chapterItem.modelData.index === ReaderViewModel.chapterIndex
+                    highlighted: ListView.isCurrentItem
                     onClicked: {
                         ReaderViewModel.goToContentsEntry(chapterItem.modelData.index,
                                                           chapterItem.modelData.fragment)

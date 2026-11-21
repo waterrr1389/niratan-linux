@@ -118,12 +118,17 @@ void ReaderShellTest::the_reader_selection_follows_the_mode() {
     const std::string paged = reader_script_block(input(), sources);
     QVERIFY(has(paged, "/* reader */"));
     QVERIFY(!has(paged, "/* scrollreader */"));
+    QVERIFY(has(paged, "registerWheelNavigation?.(true)"));
 
     ShellInput shell = input();
+    shell.wheel_page_turn = false;
+    QVERIFY(has(reader_script_block(shell, sources), "registerWheelNavigation?.(false)"));
+    shell.wheel_page_turn = true;
     shell.appearance.continuous = true;
     const std::string scrolling = reader_script_block(shell, sources);
     QVERIFY(has(scrolling, "/* scrollreader */"));
     QVERIFY(!has(scrolling, "/* reader */"));
+    QVERIFY(has(scrolling, "registerWheelNavigation?.(false)"));
 }
 
 void ReaderShellTest::paragraph_script_is_only_included_in_paragraph_mode() {

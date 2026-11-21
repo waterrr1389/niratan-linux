@@ -100,10 +100,17 @@ class ReaderViewModel : public QObject {
     Q_PROPERTY(QString bookFolder READ book_folder NOTIFY bookChanged)
     Q_PROPERTY(double progress READ progress NOTIFY progressChanged)
     Q_PROPERTY(double chapterProgress READ chapter_progress NOTIFY progressChanged)
+    Q_PROPERTY(double logicalChapterProgress READ logical_chapter_progress NOTIFY progressChanged)
+    Q_PROPERTY(int characterOffset READ character_offset NOTIFY progressChanged)
     Q_PROPERTY(int pageCount READ page_count NOTIFY paginationChanged)
     Q_PROPERTY(int pageIndex READ page_index NOTIFY paginationChanged)
     Q_PROPERTY(int chapterPageCount READ page_count NOTIFY paginationChanged)
     Q_PROPERTY(bool showsPageCount READ shows_page_count NOTIFY settingsChanged)
+    Q_PROPERTY(bool showTitle READ show_title NOTIFY settingsChanged)
+    Q_PROPERTY(bool showProgress READ show_progress NOTIFY settingsChanged)
+    Q_PROPERTY(bool showPercentage READ show_percentage NOTIFY settingsChanged)
+    Q_PROPERTY(bool showProgressTop READ show_progress_top NOTIFY settingsChanged)
+    Q_PROPERTY(bool showChapterProgress READ show_chapter_progress NOTIFY settingsChanged)
     Q_PROPERTY(QString chapterUrl READ chapter_url NOTIFY chapterUrlChanged)
     Q_PROPERTY(QVariantList chapters READ chapters NOTIFY bookChanged)
     Q_PROPERTY(QVariantList searchResults READ search_results NOTIFY searchChanged)
@@ -146,9 +153,16 @@ class ReaderViewModel : public QObject {
     QString book_folder() const;
     double progress() const;
     double chapter_progress() const;
+    double logical_chapter_progress() const;
+    int character_offset() const;
     int page_count() const;
     int page_index() const;
     bool shows_page_count() const;
+    bool show_title() const;
+    bool show_progress() const;
+    bool show_percentage() const;
+    bool show_progress_top() const;
+    bool show_chapter_progress() const;
     QString chapter_url() const;
     QVariantList chapters() const;
     QVariantList search_results() const;

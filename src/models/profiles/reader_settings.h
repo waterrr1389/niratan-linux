@@ -44,6 +44,8 @@ struct ReaderProfileSettings {
     bool hide_furigana = false;
     std::optional<std::string> furigana_mode;
     bool continuous_mode = false;
+    // Linux stores UserConfig.readerWheelPageTurnEnabled with reader appearance.
+    bool wheel_page_turn = true;
     std::optional<bool> two_column_horizontal_pages;
     std::optional<bool> paragraph_mode;
     std::optional<bool> text_animation;

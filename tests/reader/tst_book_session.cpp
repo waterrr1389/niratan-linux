@@ -74,7 +74,7 @@ std::string chapter_two() {
     return "<html><body><p>Second <ruby>漢<rt>かん</rt></ruby>字</p></body></html>";
 }
 
-std::filesystem::path make_book(const QTemporaryDir& directory) {
+std::filesystem::path make_book(const QTemporaryDir& directory, bool nested = false) {
     const std::filesystem::path path =
         std::filesystem::path(directory.path().toStdString()) / "book.epub";
     ZipWriter zip(path);
@@ -99,10 +99,13 @@ std::filesystem::path make_book(const QTemporaryDir& directory) {
     zip.add("OEBPS/nav.xhtml",
             "<html xmlns=\"http://www.w3.org/1999/xhtml\" "
             "xmlns:epub=\"http://www.idpf.org/2007/ops\"><body><nav epub:type=\"toc\"><ol>"
-            "<li><a href=\"text/one.xhtml\">Chapter One</a></li>"
+            "<li><a href=\"text/one.xhtml\">Chapter One</a>" +
+            std::string(nested ? "<ol><li><a href=\"text/one.xhtml#middle\">Part Two</a></li></ol>" : "") +
+            "</li>"
             "<li><a href=\"text/two.xhtml#mark\">Chapter Two</a></li>"
             "</ol></nav></body></html>");
-    zip.add("OEBPS/text/one.xhtml", chapter_one());
+    zip.add("OEBPS/text/one.xhtml", nested ? "<html><body><p>abc</p><p id=\"middle\">defg</p></body></html>"
+                                         : chapter_one());
     zip.add("OEBPS/text/two.xhtml", chapter_two());
     zip.add("OEBPS/styles/book.css", "p { color: #000; }");
     zip.add("OEBPS/images/pic.png", "PNG");
@@ -132,6 +135,7 @@ class BookSessionTest : public QObject {
     void fragment_offsets_are_recorded();
     void chapter_positions_map_to_character_offsets();
     void chapter_remaining_stops_at_the_toc_boundary();
+    void logical_chapter_progress_follows_toc_fragments();
     void resources_are_served_with_mime_types();
     void chapter_documents_are_injected();
     void an_unreadable_chapter_is_skipped();
@@ -214,6 +218,23 @@ void BookSessionTest::chapter_remaining_stops_at_the_toc_boundary() {
     QCOMPARE(session->chapter_characters_remaining(1, 0.0), 8);
     QCOMPARE(session->chapter_characters_remaining(1, 0.5), 4);
     QCOMPARE(session->chapter_characters_remaining(1, 2.0), 0);
+}
+
+// ReaderChapterIndex.chapterStart and NativeReaderView.progressString use TOC
+// fragments, even when two logical chapters share the same spine item.
+void BookSessionTest::logical_chapter_progress_follows_toc_fragments() {
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    const auto session = BookSession::open(make_book(directory, true));
+    QVERIFY(session.has_value());
+    const auto& contents = session->contents();
+    QCOMPARE(contents.size(), 3U);
+    QCOMPARE(session->contents_character_start(contents[0]), std::optional{0});
+    QCOMPARE(session->contents_character_start(contents[1]), std::optional{3});
+    QCOMPARE(session->logical_chapter_progress(0, 0.4), 2.0 / 3.0);
+    QCOMPARE(session->logical_chapter_progress(0, 0.5), 0.0);
+    QCOMPARE(session->logical_chapter_progress(0, 0.75), 0.5);
+    QCOMPARE(session->logical_chapter_progress(0, 1.0), 1.0);
 }
 
 void BookSessionTest::resources_are_served_with_mime_types() {
