@@ -58,7 +58,7 @@ Rectangle {
         property string shelfName
         parent: Overlay.overlay
         anchors.centerIn: parent
-        width: parent ? Math.min(420, parent.width - 32) : 420
+        width: Overlay.overlay ? Math.min(420, Overlay.overlay.width - 32) : 420
         title: qsTr("Delete Shelf")
         modal: true
         standardButtons: Dialog.Yes | Dialog.No

@@ -234,32 +234,17 @@ Item {
         }
     }
 
-    Dialog {
+    StatisticsDeleteDialog {
         id: deleteStats
-        parent: Overlay.overlay
-        anchors.centerIn: parent
-        modal: true
-        standardButtons: Dialog.Cancel | Dialog.Ok
-        property int scope: 0
-        function ask(value) {
-            scope = value
-            open()
-        }
-        title: scope === 0 ? qsTr("Delete This Session") : scope === 1
-            ? qsTr("Delete This Day") : qsTr("Delete All Statistics")
-        contentItem: Label {
-            text: deleteStats.scope === 0 ? qsTr("Delete the selected reading session? This cannot be undone.")
-                : deleteStats.scope === 1 ? qsTr("Delete the selected day's statistics? This cannot be undone.")
-                : qsTr("Delete all statistics for this book? This cannot be undone.")
-            wrapMode: Text.WordWrap
-        }
+        sessionId: bookDetails.sessionId
+        dateKey: bookDetails.dateKey
         onAccepted: {
-            var id = scope === 0 ? bookDetails.sessionId : ""
-            var date = scope === 1 ? bookDetails.dateKey : ""
-            if ((scope === 0 && !id) || (scope === 1 && !date))
+            var id = deleteStats.scope === 0 ? deleteStats.sessionId : ""
+            var date = deleteStats.scope === 1 ? deleteStats.dateKey : ""
+            if ((deleteStats.scope === 0 && !id) || (deleteStats.scope === 1 && !date))
                 return
             if (StatisticsViewModel.deleteBookSessions(id, date))
-                bookDetails.restoreSelection(scope === 0 ? bookDetails.dateKey : "", "")
+                bookDetails.restoreSelection(deleteStats.scope === 0 ? deleteStats.dateKey : "", "")
         }
     }
 

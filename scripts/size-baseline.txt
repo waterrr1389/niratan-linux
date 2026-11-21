@@ -15,7 +15,7 @@ src/viewmodels/statistics/statistics_view_model.cpp 757
 src/views/pages/PlayerPage.qml 1395
 src/views/pages/ReaderPage.qml 615
 src/views/pages/SettingsPage.qml 800
-src/views/pages/StatisticsPage.qml 1800
+src/views/pages/StatisticsPage.qml 1785
 src/views/player/StudySidebar.qml 569
 src/views/player/mpv_item.cpp 1033
 src/views/reader/SasayakiPanel.qml 516
