@@ -10,6 +10,7 @@ if [ -z "$NIRATAN_CHECK_LOCKED" ]; then
     NIRATAN_CHECK_LOCKED=1 exec flock build/.check.lock "$self" "$@"
 fi
 scripts/check-layers.sh
+scripts/check-size.sh
 cmake --preset debug
 cmake --build build
 ctest --test-dir build --output-on-failure

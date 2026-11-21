@@ -1,0 +1,23 @@
+# Files above scripts/check-size.sh's limit when it was introduced.
+# Format: <file> <line count>; the count may only go down.
+
+src/models/books/book.cpp 624
+src/models/statistics/dashboard_models.cpp 838
+src/models/statistics/statistics.cpp 596
+src/services/novels/epub_book.cpp 608
+src/services/reader/book_session.cpp 507
+src/services/sasayaki/matcher.cpp 666
+src/services/statistics/statistics_storage.cpp 536
+src/viewmodels/player/player_study_view_model.cpp 701
+src/viewmodels/reader/reader_view_model.cpp 1091
+src/viewmodels/sasayaki/sasayaki_view_model.cpp 927
+src/viewmodels/settings/settings_view_model.cpp 534
+src/viewmodels/statistics/statistics_view_model.cpp 820
+src/views/pages/LibraryPage.qml 516
+src/views/pages/PlayerPage.qml 1402
+src/views/pages/ReaderPage.qml 705
+src/views/pages/SettingsPage.qml 815
+src/views/pages/StatisticsPage.qml 1800
+src/views/player/StudySidebar.qml 569
+src/views/player/mpv_item.cpp 1431
+src/views/reader/SasayakiPanel.qml 516
