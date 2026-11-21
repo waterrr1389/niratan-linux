@@ -5,7 +5,7 @@
 // wrong JSON type rejects the whole document. Optional keys follow
 // decodeIfPresent, so a missing or null value decodes as nil while a wrongly
 // typed one still fails. The Linux wheel setting defaults to true when absent.
-// Extra keys are ignored. Values pass through without trimming or clamping.
+// Extra keys are ignored. Only the Linux hover delay is clamped on read.
 
 #include "reader_settings.h"
 
@@ -14,6 +14,7 @@
 #include <QLatin1StringView>
 #include <QString>
 
+#include <algorithm>
 #include <optional>
 #include <string>
 
@@ -130,6 +131,9 @@ std::optional<ReaderProfileSettings> reader_settings_from_json(const QJsonDocume
     if (object.contains(wheel_key) && !read_bool(object, wheel_key, settings.wheel_page_turn)) {
         return std::nullopt;
     }
+    constexpr QLatin1StringView hover_key("desktopLookupHoverDelayMs");
+    settings.desktop_lookup_hover_delay_ms = static_cast<int>(std::clamp(
+        object.value(hover_key).toDouble(settings.desktop_lookup_hover_delay_ms), 0.0, 250.0));
     if (!read_string(object, QLatin1StringView("theme"), settings.theme) ||
         !read_string(object, QLatin1StringView("uiTheme"), settings.ui_theme) ||
         !read_bool(object, QLatin1StringView("systemLightSepia"), settings.system_light_sepia) ||
@@ -203,6 +207,8 @@ QJsonDocument reader_settings_to_json(const ReaderProfileSettings& settings) {
     }
     object.insert(QLatin1StringView("continuousMode"), settings.continuous_mode);
     object.insert(QLatin1StringView("wheelPageTurnEnabled"), settings.wheel_page_turn);
+    object.insert(QLatin1StringView("desktopLookupHoverDelayMs"),
+                  settings.desktop_lookup_hover_delay_ms);
     if (settings.two_column_horizontal_pages) {
         object.insert(QLatin1StringView("twoColumnHorizontalPages"),
                       *settings.two_column_horizontal_pages);

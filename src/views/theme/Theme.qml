@@ -8,10 +8,9 @@
 // Core/UserConfig.swift (preferredColorScheme) with
 // NativeMac/HoshiNativeMacApp.swift (the system appearance fallback).
 //
-// The appearance follows QStyleHints.colorScheme. Niratan pins only Light and
-// Dark; every other theme follows the system, which Unknown resolves to the
-// light set. NIRATAN_THEME=light|dark forces the scheme for local visual
-// checks, mirroring HOSHI_DEBUG_SYSTEM_APPEARANCE.
+// Light and Dark pin the interface appearance; System follows
+// QStyleHints.colorScheme, with Unknown resolving to the light set.
+// NIRATAN_THEME=light|dark overrides the system scheme for local visual checks.
 //
 // The window background is the platform window background already used by the
 // reader theme. Cards and floating surfaces replace the glass effect with the

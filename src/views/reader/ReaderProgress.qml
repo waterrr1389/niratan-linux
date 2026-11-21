@@ -35,12 +35,22 @@ Rectangle {
                 value: modelData ? ReaderViewModel.logicalChapterProgress : ReaderViewModel.progress
 
                 Label {
+                    visible: text.length > 0
                     anchors.right: parent.right
                     anchors.rightMargin: 12
                     anchors.verticalCenter: parent.verticalCenter
                     text: {
-                        const count = !progressLine.modelData && ReaderViewModel.showsPageCount && ReaderViewModel.pageCount > 0
-                            ? qsTr("%1 / %2").arg(ReaderViewModel.pageIndex).arg(ReaderViewModel.chapterPageCount) : ""
+                        let count = ""
+                        if (!progressLine.modelData && ReaderViewModel.progressCountMode !== "Off") {
+                            if (ReaderViewModel.showsPageCount) {
+                                if (ReaderViewModel.pageCount > 0)
+                                    count = qsTr("%1 / %2").arg(ReaderViewModel.pageIndex).arg(ReaderViewModel.chapterPageCount)
+                            } else {
+                                const remaining = ReaderViewModel.chapterCharactersRemaining
+                                const quantity = ReaderViewModel.englishContent ? Math.ceil(remaining / 5) : remaining
+                                count = quantity.toLocaleString(Qt.locale(), "f", 0)
+                            }
+                        }
                         const percent = ReaderViewModel.showPercentage ? (progressLine.value * 100).toFixed(2) + "%" : ""
                         return progressLine.modelData && percent ? qsTr("(%1)").arg(percent) : (count + " " + percent).trim()
                     }

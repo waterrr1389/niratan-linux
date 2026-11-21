@@ -2,13 +2,14 @@
 //
 // The appearance the theme tokens switch on, following
 // Core/UserConfig.swift (preferredColorScheme) and
-// NativeMac/HoshiNativeMacApp.swift (the system appearance fallback). It only
-// reports what QStyleHints says; the palette lives in Theme.qml.
+// NativeMac/HoshiNativeMacApp.swift (the system appearance fallback). The
+// palette lives in Theme.qml.
 
 #pragma once
 
 #include <QColor>
 #include <QObject>
+#include <QString>
 #include <QtQml/qqmlregistration.h>
 
 namespace niratan::ui {
@@ -18,6 +19,8 @@ class ThemeState : public QObject {
     QML_ELEMENT
     QML_SINGLETON
     Q_PROPERTY(bool dark READ isDark NOTIFY darkChanged)
+    Q_PROPERTY(bool systemDark READ isSystemDark NOTIFY systemDarkChanged)
+    Q_PROPERTY(QString uiTheme READ ui_theme WRITE setUiTheme NOTIFY uiThemeChanged)
     // The platform accent, from the system palette's Highlight role.
     Q_PROPERTY(QColor accent READ accent NOTIFY accentChanged)
 
@@ -25,6 +28,9 @@ class ThemeState : public QObject {
     explicit ThemeState(QObject* parent = nullptr);
 
     bool isDark() const;
+    bool isSystemDark() const;
+    QString ui_theme() const;
+    void setUiTheme(const QString& theme);
     QColor accent() const;
 
    protected:
@@ -32,7 +38,12 @@ class ThemeState : public QObject {
 
    signals:
     void darkChanged();
+    void systemDarkChanged();
+    void uiThemeChanged();
     void accentChanged();
+
+   private:
+    QString ui_theme_ = QStringLiteral("System");
 };
 
 }  // namespace niratan::ui

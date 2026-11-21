@@ -56,7 +56,7 @@
 // predicate (isStatisticsContextActive): a hidden page pauses time, while the
 // statistics sheet keeps the reader page visible.
 //
-// The four read-only properties below are cached when the tracker changes, so
+// The totals below are cached when the tracker changes, so
 // a QML binding does no work until statisticsChanged() fires.
 //
 // statisticsInspector is the reader sheet's presentation, rebuilt from the
@@ -102,15 +102,23 @@ class ReaderViewModel : public QObject {
     Q_PROPERTY(double chapterProgress READ chapter_progress NOTIFY progressChanged)
     Q_PROPERTY(double logicalChapterProgress READ logical_chapter_progress NOTIFY progressChanged)
     Q_PROPERTY(int characterOffset READ character_offset NOTIFY progressChanged)
+    Q_PROPERTY(int chapterCharactersRemaining READ chapter_characters_remaining NOTIFY progressChanged)
     Q_PROPERTY(int pageCount READ page_count NOTIFY paginationChanged)
     Q_PROPERTY(int pageIndex READ page_index NOTIFY paginationChanged)
     Q_PROPERTY(int chapterPageCount READ page_count NOTIFY paginationChanged)
     Q_PROPERTY(bool showsPageCount READ shows_page_count NOTIFY settingsChanged)
+    Q_PROPERTY(QString progressCountMode READ progress_count_mode NOTIFY settingsChanged)
     Q_PROPERTY(bool showTitle READ show_title NOTIFY settingsChanged)
     Q_PROPERTY(bool showProgress READ show_progress NOTIFY settingsChanged)
     Q_PROPERTY(bool showPercentage READ show_percentage NOTIFY settingsChanged)
     Q_PROPERTY(bool showProgressTop READ show_progress_top NOTIFY settingsChanged)
     Q_PROPERTY(bool showChapterProgress READ show_chapter_progress NOTIFY settingsChanged)
+    Q_PROPERTY(bool showReadingSpeed READ show_reading_speed NOTIFY settingsChanged)
+    Q_PROPERTY(bool showReadingTime READ show_reading_time NOTIFY settingsChanged)
+    Q_PROPERTY(bool showSasayakiToggle READ show_sasayaki_toggle NOTIFY settingsChanged)
+    Q_PROPERTY(bool showStatisticsToggle READ show_statistics_toggle NOTIFY settingsChanged)
+    Q_PROPERTY(QString uiTheme READ ui_theme NOTIFY settingsChanged)
+    Q_PROPERTY(bool englishContent READ english_content NOTIFY settingsChanged)
     Q_PROPERTY(QString chapterUrl READ chapter_url NOTIFY chapterUrlChanged)
     Q_PROPERTY(QVariantList chapters READ chapters NOTIFY bookChanged)
     Q_PROPERTY(QVariantList searchResults READ search_results NOTIFY searchChanged)
@@ -133,6 +141,7 @@ class ReaderViewModel : public QObject {
                    statisticsChanged)
     Q_PROPERTY(int statisticsTodaySeconds READ statistics_today_seconds NOTIFY statisticsChanged)
     Q_PROPERTY(int statisticsSessionSpeed READ statistics_session_speed NOTIFY statisticsChanged)
+    Q_PROPERTY(int statisticsSessionMinutes READ statistics_session_minutes NOTIFY statisticsChanged)
     Q_PROPERTY(bool statisticsEnabled READ statistics_enabled NOTIFY statisticsChanged)
     Q_PROPERTY(bool tracking READ tracking NOTIFY statisticsChanged)
     Q_PROPERTY(QVariantMap statisticsInspector READ statistics_inspector NOTIFY
@@ -155,14 +164,22 @@ class ReaderViewModel : public QObject {
     double chapter_progress() const;
     double logical_chapter_progress() const;
     int character_offset() const;
+    int chapter_characters_remaining() const;
     int page_count() const;
     int page_index() const;
     bool shows_page_count() const;
+    QString progress_count_mode() const;
     bool show_title() const;
     bool show_progress() const;
     bool show_percentage() const;
     bool show_progress_top() const;
     bool show_chapter_progress() const;
+    bool show_reading_speed() const;
+    bool show_reading_time() const;
+    bool show_sasayaki_toggle() const;
+    bool show_statistics_toggle() const;
+    QString ui_theme() const;
+    bool english_content() const;
     QString chapter_url() const;
     QVariantList chapters() const;
     QVariantList search_results() const;
@@ -179,8 +196,7 @@ class ReaderViewModel : public QObject {
     QString error() const;
     bool has_book() const;
 
-    // Pushed from QML's Theme singleton: the window appearance and the two
-    // reader colours the stylesheet uses.
+    // The system appearance is the fallback for the independent page palette.
     bool dark() const;
     Q_INVOKABLE void setDark(bool dark);
     QColor page_background() const;
@@ -198,11 +214,11 @@ class ReaderViewModel : public QObject {
     int vertical_padding() const;
     void setVerticalPadding(int padding);
 
-    // Cached totals of the open book: today's characters and whole seconds,
-    // the live session's truncating speed and whether statistics is enabled.
+    // Today's characters and whole seconds, and the session's speed and minutes.
     int statistics_today_characters() const;
     int statistics_today_seconds() const;
     int statistics_session_speed() const;
+    int statistics_session_minutes() const;
     bool statistics_enabled() const;
     bool tracking() const;
     // The inspector's derived text, following Features/Reader/StatisticsView.swift
@@ -286,9 +302,9 @@ class ReaderViewModel : public QObject {
     // Credits the elapsed time without characters and writes the live
     // session. Called before a chapter change; never on a page turn.
     void save_statistics();
-    // Recomputes the cached totals from the tracker and fires
-    // statisticsChanged() when one of them changed.
-    void refresh_statistics();
+    // Also notifies on book changes and timer ticks, which may change the
+    // inspector even if the cached values did not change.
+    void refresh_statistics(bool notify = false);
     std::string shell_document(const std::string& path);
 };
 

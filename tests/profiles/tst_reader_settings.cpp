@@ -38,6 +38,7 @@ class ReaderSettingsTest : public QObject {
     void missing_optional_keys_stay_empty();
     void a_missing_or_wrong_required_key_is_rejected();
     void extra_keys_are_ignored();
+    void hover_delay_defaults_and_clamps();
 };
 
 void ReaderSettingsTest::the_defaults_match_the_swift_defaults() {
@@ -107,6 +108,7 @@ void ReaderSettingsTest::every_field_round_trips() {
     settings.furigana_mode = "All";
     settings.continuous_mode = true;
     settings.wheel_page_turn = false;
+    settings.desktop_lookup_hover_delay_ms = 135;
     settings.two_column_horizontal_pages = true;
     settings.paragraph_mode = false;
     settings.text_animation = true;
@@ -230,6 +232,22 @@ void ReaderSettingsTest::extra_keys_are_ignored() {
     const auto settings = reader_settings_from_json(QJsonDocument(object));
     QVERIFY(settings.has_value());
     QCOMPARE(*settings, default_reader_settings());
+}
+
+// Core/UserConfig.swift: desktopLookupHoverDelayMs; DictionaryView's delay slider.
+void ReaderSettingsTest::hover_delay_defaults_and_clamps() {
+    auto object = reader_settings_to_json(default_reader_settings()).object();
+    QCOMPARE(object.value("desktopLookupHoverDelayMs").toInt(-1), 45);
+    object.remove("desktopLookupHoverDelayMs");
+    auto settings = reader_settings_from_json(QJsonDocument(object));
+    QVERIFY(settings);
+    QCOMPARE(settings->desktop_lookup_hover_delay_ms, 45);
+    for (const auto& [stored, expected] : {std::pair{-5, 0}, {47, 47}, {255, 250}}) {
+        object.insert("desktopLookupHoverDelayMs", stored);
+        settings = reader_settings_from_json(QJsonDocument(object));
+        QVERIFY(settings);
+        QCOMPARE(settings->desktop_lookup_hover_delay_ms, expected);
+    }
 }
 
 QTEST_APPLESS_MAIN(ReaderSettingsTest)

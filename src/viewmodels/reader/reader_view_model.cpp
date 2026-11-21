@@ -2,12 +2,10 @@
 
 #include "reader_view_model.h"
 
-#include <QDateTime>
 #include <QFutureWatcher>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
-#include <QLocale>
 #include <QPromise>
 #include <QThreadPool>
 #include <QUuid>
@@ -18,32 +16,22 @@
 #include <utility>
 
 #include "models/profiles/reader_settings.h"
-#include "models/statistics/reader_statistics.h"
-#include "models/statistics/statistics.h"
-#include "services/books/book_storage.h"
-#include "services/reader/reading_tracker.h"
+#include "reader_view_model_state.h"
 #include "services/reader/book_search.h"
 #include "services/reader/theme.h"
 #include "services/settings/global_settings.h"
-#include "services/storage/app_paths.h"
 
 namespace niratan::viewmodels {
 namespace {
 
-using niratan::books::BookStorage;
 using niratan::books::Bookmark;
-using niratan::profiles::ContentLanguage;
 using niratan::profiles::ReaderProfileSettings;
 using niratan::reader::BookSession;
 using niratan::reader::BookStatisticsStore;
 using niratan::reader::PageSize;
-using niratan::reader::ReaderScripts;
 using niratan::reader::ReadingTracker;
 using niratan::reader::ShellInput;
-using niratan::statistics::ReadingTotal;
 using niratan::statistics::StatisticsAutostartMode;
-
-std::int64_t now_milliseconds() { return QDateTime::currentMSecsSinceEpoch(); }
 
 double clamp_progress(double progress) { return std::min(std::max(progress, 0.0), 1.0); }
 
@@ -70,57 +58,6 @@ QColor qcolor_from_css(const std::string& css) {
 }
 
 }  // namespace
-
-struct ReaderViewModel::State {
-    explicit State(std::function<void()> on_settings_changed)
-        : storage(storage::data_root()),
-          settings_watch(storage.app_directory(), std::move(on_settings_changed)),
-          assets(reader::load_reader_scripts()) {}
-
-    BookStorage storage;
-    reader::ReaderSettingsWatch settings_watch;
-    ReaderScripts assets;
-    ReaderProfileSettings settings = profiles::default_reader_settings();
-    std::optional<ReaderProfileSettings> loaded_settings;
-    std::string content_language = "ja";
-    int scan_length = 16;
-    bool scan_non_japanese = true;
-    std::optional<BookSession> session;
-    std::string epub_path;
-    std::size_t search_revision = 0;
-    QVariantList search_results;
-    int search_state = 0;
-    std::vector<books::Highlight> highlights;
-    books::BookMetadata book;
-    bool has_book = false;
-
-    // The store must outlive the tracker that borrows it.
-    std::unique_ptr<BookStatisticsStore> statistics_store;
-    std::unique_ptr<ReadingTracker> tracker;
-    bool statistics_enabled = false;
-    bool reader_active = false;
-    bool jump_pending = false;
-    int statistics_today_characters = 0;
-    int statistics_today_seconds = 0;
-    int statistics_session_speed = 0;
-    int chapter_index = 0;
-    double chapter_progress = 0.0;
-    int page_width = 800;
-    int page_height = 600;
-    int page_count = 0;
-    int page_index = 0;
-    int revision = 0;
-    bool restoring = false;
-    bool reveal_cue_after_restore = false;
-    QString fragment;
-    QString error;
-    QString chapter_url;
-    bool dark = false;
-    bool system_dark = false;
-    std::string background;
-    std::string text;
-    std::string info_color;
-};
 
 ReaderViewModel* ReaderViewModel::instance() {
     static ReaderViewModel* model = new ReaderViewModel();
@@ -189,12 +126,27 @@ int ReaderViewModel::character_offset() const {
     return state_->session ? state_->session->character_offset(state_->chapter_index, chapter_progress()) : 0;
 }
 
+int ReaderViewModel::chapter_characters_remaining() const {
+    return state_->session
+               ? state_->session->chapter_characters_remaining(state_->chapter_index, chapter_progress())
+               : 0;
+}
+
 int ReaderViewModel::page_count() const { return state_->page_count; }
 
 int ReaderViewModel::page_index() const { return state_->page_index; }
 
 bool ReaderViewModel::shows_page_count() const {
     return !state_->settings.continuous_mode && state_->settings.progress_count == "Pages";
+}
+
+QString ReaderViewModel::progress_count_mode() const {
+    const auto& settings = state_->settings;
+    if (settings.progress_count == "Off" || settings.progress_count == "Pages" ||
+        settings.progress_count == "Characters") {
+        return QString::fromStdString(*settings.progress_count);
+    }
+    return settings.show_characters ? QStringLiteral("Characters") : QStringLiteral("Off");
 }
 
 QString ReaderViewModel::chapter_url() const { return state_->chapter_url; }
@@ -206,6 +158,12 @@ bool ReaderViewModel::show_progress_top() const { return state_->settings.show_p
 bool ReaderViewModel::show_chapter_progress() const {
     return state_->settings.show_chapter_progress.value_or(false);
 }
+bool ReaderViewModel::show_reading_speed() const { return state_->settings.show_reading_speed; }
+bool ReaderViewModel::show_reading_time() const { return state_->settings.show_reading_time; }
+bool ReaderViewModel::show_sasayaki_toggle() const { return state_->settings.show_sasayaki_toggle; }
+bool ReaderViewModel::show_statistics_toggle() const { return state_->settings.show_statistics_toggle; }
+QString ReaderViewModel::ui_theme() const { return QString::fromStdString(state_->settings.ui_theme); }
+bool ReaderViewModel::english_content() const { return state_->content_language == "en"; }
 
 QVariantList ReaderViewModel::chapters() const {
     QVariantList result;
@@ -482,69 +440,6 @@ void ReaderViewModel::setVerticalPadding(int padding) {
     reload_document();
 }
 
-int ReaderViewModel::statistics_today_characters() const {
-    return state_->statistics_today_characters;
-}
-
-int ReaderViewModel::statistics_today_seconds() const { return state_->statistics_today_seconds; }
-
-int ReaderViewModel::statistics_session_speed() const {
-    return state_->statistics_session_speed;
-}
-
-bool ReaderViewModel::statistics_enabled() const { return state_->statistics_enabled; }
-
-bool ReaderViewModel::tracking() const {
-    return state_->tracker && state_->tracker->is_tracking();
-}
-
-QVariantMap ReaderViewModel::statistics_inspector() const {
-    if (!state_->tracker || !state_->session) return {};
-    const ContentLanguage language = state_->content_language == "en" ? ContentLanguage::english
-                                                                     : ContentLanguage::japanese;
-    return statistics::reader_statistics_map(
-        statistics::present_reader_statistics(
-            state_->tracker->session_total(), state_->tracker->today_total(now_milliseconds()),
-            state_->tracker->all_time_total(), language, state_->session->info().character_count,
-            state_->session->character_offset(state_->chapter_index, state_->chapter_progress),
-            state_->session->chapter_characters_remaining(state_->chapter_index,
-                                                          state_->chapter_progress),
-            QLocale()),
-        language);
-}
-
-void ReaderViewModel::toggleTracking() {
-    if (!state_->tracker) {
-        return;
-    }
-    const auto now = now_milliseconds();
-    state_->tracker->toggle(now);
-    if (state_->tracker->is_tracking()) {
-        state_->tracker->reset_position(
-            state_->session->character_offset(state_->chapter_index, state_->chapter_progress), now);
-    } else {
-        save_statistics();
-    }
-    refresh_statistics();
-    emit statisticsChanged();
-}
-
-void ReaderViewModel::tickTracking() {
-    if (tracking()) {
-        state_->tracker->flush(now_milliseconds());
-        refresh_statistics();
-        emit statisticsChanged();
-    }
-}
-
-void ReaderViewModel::setReaderActive(bool active) {
-    state_->reader_active = active;
-    if (state_->tracker) {
-        state_->tracker->set_context_active(active, now_milliseconds());
-    }
-    refresh_statistics();
-}
-
 bool ReaderViewModel::importAndOpen(const QUrl& file) {
     const books::ImportResult imported = state_->storage.import_book(
         file.toLocalFile().toStdString());
@@ -634,7 +529,7 @@ bool ReaderViewModel::openBook(const QString& folder) {
     reload_document();
     emit chapterChanged();
     emit progressChanged();
-    refresh_statistics();
+    refresh_statistics(true);
     return true;
 }
 
@@ -669,7 +564,7 @@ void ReaderViewModel::closeBook() {
     emit chapterChanged();
     emit progressChanged();
     emit chapterUrlChanged();
-    refresh_statistics();
+    refresh_statistics(true);
 }
 
 void ReaderViewModel::setPageSize(int width, int height) {
@@ -731,6 +626,7 @@ void ReaderViewModel::handlePageTurnResult(bool forward, const QVariant& result)
     // result moves the position.
     if (state_->tracker) {
         state_->tracker->on_manual_navigation(now_milliseconds());
+        refresh_statistics();
     }
     if (result.typeId() == QMetaType::Double || result.typeId() == QMetaType::Int) {
         updateChapterProgress(result.toDouble());
@@ -817,6 +713,7 @@ void ReaderViewModel::message(const QString& name, const QString& payload) {
         // the page runs the navigation the signal asks for.
         if (state_->tracker) {
             state_->tracker->on_manual_navigation(now_milliseconds());
+            refresh_statistics();
         }
         emit pageTurnRequested(direction);
     } else if (name == QStringLiteral("restoreCompleted") && state_->restoring) {
@@ -916,8 +813,10 @@ void ReaderViewModel::reload_settings(bool reflow) {
         if (reader_changed) {
             state_->settings = *settings;
             update_palette();
-            emit settingsChanged();
         }
+    }
+    if (reader_changed || lookup_changed) {
+        emit settingsChanged();
     }
     if (reflow && (reader_changed || lookup_changed)) {
         state_->reveal_cue_after_restore = false;
@@ -951,44 +850,6 @@ void ReaderViewModel::persist_bookmark() {
     state_->storage.save_bookmark(state_->book.folder, bookmark);
 }
 
-void ReaderViewModel::save_statistics() {
-    if (!state_->tracker) {
-        return;
-    }
-    // flushStats(): credit the elapsed time up to the position the bookmark
-    // was just persisted at, then store the session. The tracker's save()
-    // reloads the records, so the bookmark written above is the snapshot the
-    // persistence policy compares against.
-    const std::int64_t now = now_milliseconds();
-    state_->tracker->flush(now);
-    state_->tracker->save(now, state_->book.display_title());
-}
-
-void ReaderViewModel::refresh_statistics() {
-    ReadingTotal today;
-    ReadingTotal session;
-    if (state_->tracker) {
-        const std::int64_t now = now_milliseconds();
-        today = state_->tracker->today_total(now);
-        session = state_->tracker->session_total();
-    }
-    const int today_characters = std::max(today.characters_read, 0);
-    const int today_seconds = static_cast<int>(std::max(today.reading_time, 0.0));
-    const int session_speed = session.reading_speed();
-    const bool enabled = state_->statistics_enabled;
-    if (state_->statistics_today_characters == today_characters &&
-        state_->statistics_today_seconds == today_seconds &&
-        state_->statistics_session_speed == session_speed &&
-        state_->statistics_enabled == enabled) {
-        return;
-    }
-    state_->statistics_today_characters = today_characters;
-    state_->statistics_today_seconds = today_seconds;
-    state_->statistics_session_speed = session_speed;
-    state_->statistics_enabled = enabled;
-    emit statisticsChanged();
-}
-
 std::string ReaderViewModel::shell_document(const std::string& path) {
     if (!state_->session.has_value()) {
         return {};
@@ -1015,7 +876,7 @@ std::string ReaderViewModel::shell_document(const std::string& path) {
     input.scan_length = state_->scan_length;
     input.scan_non_japanese_text = state_->scan_non_japanese;
     input.content_language = state_->content_language;
-    input.hover_delay_ms = 45;
+    input.hover_delay_ms = state_->settings.desktop_lookup_hover_delay_ms;
 
     input.page = PageSize{state_->page_width, state_->page_height};
     input.colors.text = state_->text;

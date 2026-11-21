@@ -46,6 +46,8 @@ struct ReaderProfileSettings {
     bool continuous_mode = false;
     // Linux stores UserConfig.readerWheelPageTurnEnabled with reader appearance.
     bool wheel_page_turn = true;
+    // Core/UserConfig.swift: desktopLookupHoverDelayMs, in milliseconds (0–250).
+    int desktop_lookup_hover_delay_ms = 45;
     std::optional<bool> two_column_horizontal_pages;
     std::optional<bool> paragraph_mode;
     std::optional<bool> text_animation;

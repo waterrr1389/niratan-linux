@@ -96,14 +96,14 @@ Item {
 
     Component.onCompleted: {
         ReaderViewModel.setReaderActive(statisticsContextActive)
-        ReaderViewModel.setDark(Theme.dark)
+        ReaderViewModel.setDark(ThemeState.systemDark)
     }
     onStatisticsContextActiveChanged: ReaderViewModel.setReaderActive(statisticsContextActive)
 
     Connections {
-        target: Theme
-        function onDarkChanged() {
-            ReaderViewModel.setDark(Theme.dark)
+        target: ThemeState
+        function onSystemDarkChanged() {
+            ReaderViewModel.setDark(ThemeState.systemDark)
         }
     }
 
@@ -252,6 +252,7 @@ Item {
                 ToolTip.text: text
                 onClicked: statisticsPanel.open()
             }
+            ReaderChrome { player: sasayaki }
             ToolButton {
                 text: qsTr("Sasayaki")
                 font.pixelSize: 12

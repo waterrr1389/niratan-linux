@@ -19,6 +19,13 @@ ApplicationWindow {
     title: "Niratan"
     color: Theme.windowBackground
 
+    // The reader model loads and watches the active profile's settings.
+    Binding {
+        target: ThemeState
+        property: "uiTheme"
+        value: ReaderViewModel.uiTheme
+    }
+
     StackView {
         id: stack
         anchors.fill: parent
