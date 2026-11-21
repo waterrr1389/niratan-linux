@@ -154,7 +154,10 @@ Unicode rules, do the same rather than assuming ASCII.
   models and views out of the filesystem; `scripts/layers-baseline.txt` lists today's
   exceptions and may only shrink.
 - `scripts/check-size.sh` caps a source file at 500 lines; files above it are
-  frozen in `scripts/size-baseline.txt` and may shrink but not grow.
+  frozen in `scripts/size-baseline.txt` and may shrink but not grow. Meet the
+  limit by splitting along a real seam, not by compressing code: one public
+  header may have several `.cpp` files, sharing a module-private header such
+  as `<module>_codec.h` that nothing outside the module includes.
 - `scripts/check-style.sh` enforces the SPDX line, no TODO markers or debug
   output, no tool or progress words, theme-only colours in QML and the
   include direction (models, then services, then view models, then views).
