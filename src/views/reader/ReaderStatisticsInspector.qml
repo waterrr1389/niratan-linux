@@ -38,7 +38,7 @@ Drawer {
     width: Math.min(380, parent ? parent.width * 0.65 : 380)
     height: parent ? parent.height : 0
 
-    readonly property var stats: ReaderViewModel.statisticsInspector
+    readonly property var stats: ReaderViewModel.statisticsInspector || ({})
     readonly property var sessionPeriod: stats.session ? stats.session : ({})
     readonly property var todayPeriod: stats.today ? stats.today : ({})
     readonly property var allTimePeriod: stats.allTime ? stats.allTime : ({})
