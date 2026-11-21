@@ -85,6 +85,17 @@ class BookSession {
     // no chapter covers it.
     std::optional<std::pair<int, double>> position_for_character(int characters) const;
 
+    // The characters left in the table-of-contents chapter that holds
+    // character_offset(spine_index, progress), following
+    // NativeReaderView.displayedChapterCharactersRemaining
+    // (displayedProgressChapterRange and ReaderChapterIndex.ChapterRange):
+    // chapter starts are 0 plus every contents entry, shifted by that
+    // entry's fragment offset, and a range ends at the next start or the book
+    // end. The lookup is kept inside the spine item, so the end of a chapter
+    // reports zero rather than the next chapter's count. A book without
+    // characters, or a position with no chapter, has nothing remaining.
+    int chapter_characters_remaining(int spine_index, double progress) const;
+
    private:
     BookSession(niratan::novels::EpubBook book, niratan::books::BookInfo info,
                  std::vector<std::string> spine_paths,

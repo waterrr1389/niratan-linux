@@ -131,6 +131,7 @@ class BookSessionTest : public QObject {
     void chapter_titles_come_from_the_table_of_contents();
     void fragment_offsets_are_recorded();
     void chapter_positions_map_to_character_offsets();
+    void chapter_remaining_stops_at_the_toc_boundary();
     void resources_are_served_with_mime_types();
     void chapter_documents_are_injected();
     void an_unreadable_chapter_is_skipped();
@@ -195,6 +196,24 @@ void BookSessionTest::chapter_positions_map_to_character_offsets() {
     QVERIFY(position.has_value());
     QCOMPARE(position->first, 1);
     QCOMPARE(position->second, 0.5);
+}
+
+// NativeReaderView.displayedChapterCharactersRemaining and
+// ReaderChapterIndex.ChapterRange.remaining: the table-of-contents ranges are
+// [0, 7) and [7, 15) for the fixture, and the end of a chapter reports zero
+// instead of the next chapter's count.
+void BookSessionTest::chapter_remaining_stops_at_the_toc_boundary() {
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    const auto session = BookSession::open(make_book(directory));
+    QVERIFY(session.has_value());
+
+    QCOMPARE(session->chapter_characters_remaining(0, 0.0), 7);
+    QCOMPARE(session->chapter_characters_remaining(0, 0.5), 4);
+    QCOMPARE(session->chapter_characters_remaining(0, 1.0), 0);
+    QCOMPARE(session->chapter_characters_remaining(1, 0.0), 8);
+    QCOMPARE(session->chapter_characters_remaining(1, 0.5), 4);
+    QCOMPARE(session->chapter_characters_remaining(1, 2.0), 0);
 }
 
 void BookSessionTest::resources_are_served_with_mime_types() {
