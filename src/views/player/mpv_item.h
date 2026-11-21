@@ -126,7 +126,8 @@ class MpvItem : public QQuickFramebufferObject {
     Q_INVOKABLE void disableSubtitles();
     // Reports whether mpv accepted the asynchronous request.
     Q_INVOKABLE bool screenshot(const QUrl& file);
-    Q_INVOKABLE void cycleSubtitles();
+    // Returns the selected ID, 0 for Off, or -1 if there are no tracks.
+    Q_INVOKABLE int cycleSubtitles();
     Q_INVOKABLE void toggleSubtitles();
     // false when the current position cannot start or end a range; the
     // caller must not show the range as set in that case.
@@ -167,6 +168,7 @@ class MpvItem : public QQuickFramebufferObject {
     void extractingTranscriptChanged();
     void embeddedTranscriptChanged(const QByteArray& bytes, const QString& error);
     void subtitleCueChanged();
+    void subtitleLoadFailed();
     void subtitlesVisibleChanged();
     void subtitleDocumentChanged(const QUrl& file, const QByteArray& bytes, bool readable);
 
@@ -177,6 +179,12 @@ class MpvItem : public QQuickFramebufferObject {
     void save_playback_position();
     void record_finished_playback();
     void restore_playback_position();
+    void restore_subtitle_selection();
+    void remember_subtitle_selection(const niratan::player::SubtitleSelection& selection);
+    bool load_external_subtitle(const QUrl& file, bool remember);
+    void disable_subtitles(bool remember);
+    void select_subtitle_track(int id, bool remember);
+    void select_subtitle_track_with_transcript(const QVariantMap& track, bool remember);
     QVariantList current_track_fields() const;
     void set_resume_position(double position);
     void cancel_transcript();
@@ -220,6 +228,7 @@ class MpvItem : public QQuickFramebufferObject {
     niratan::player::PlaybackOpenState pending_playback_;
     niratan::player::PlaybackHistory playback_history_ = niratan::player::PlaybackHistory::at_data_root();
     int selected_subtitle_id_ = -1;
+    int last_subtitle_id_ = -1;
     niratan::player::TranscriptExtractor transcript_extractor_{
         niratan::player::TranscriptExtractor::default_cache_directory()};
     bool chapters_dirty_ = true;

@@ -5,6 +5,8 @@
 // clearProgress and VideoPlaybackState.isResumable/progress in
 // Features/Video/VideoPlaybackHistoryStore.swift. Open and restore follow
 // VideoPlayerViewModel.openPlaylistItem and script/test_video_playback_model.swift.
+// Subtitle selection follows VideoSubtitleTrackIdentity and
+// VideoPlaybackHistoryStore.save(subtitleSelection:for:).
 
 #include "services/player/playback_history.h"
 
@@ -23,6 +25,8 @@
 using niratan::player::PlaybackHistory;
 using niratan::player::PlaybackState;
 using niratan::player::ResumeOptions;
+using niratan::player::SubtitleSelection;
+using niratan::player::SubtitleTrackIdentity;
 
 namespace {
 
@@ -59,6 +63,49 @@ class PlaybackHistoryTest : public QObject {
     Q_OBJECT
 
    private slots:
+    void subtitleSelection_isIndependentOfProgress() {
+        QTemporaryDir dir;
+        PlaybackHistory history(path_in(dir, "history.json"));
+        const SubtitleSelection embedded = SubtitleTrackIdentity{
+            2, 5, QStringLiteral("Full dialogue"), QStringLiteral("jpn"), QStringLiteral("ass")};
+        QCOMPARE(history.subtitle_selection(kShow), std::nullopt);
+        QVERIFY(history.save_subtitle_selection(kShow, embedded));
+        QCOMPARE(history.subtitle_selection(kShow), std::optional(embedded));
+        const auto entry = read_object(history.file()).value("subtitleSelections").toObject()
+            .value(kShow).toObject();
+        QCOMPARE(entry.value("embedded").toObject().value("_0").toObject().value("ffIndex"),
+                 QJsonValue(5));
+        QVERIFY(history.save(kShow, 42, 100, kDate));
+        history.prepare_open(kShow, true, true);
+        QCOMPARE(history.subtitle_selection(kShow), std::optional(embedded));
+        const QString subtitle = QStringLiteral("/tmp/字幕.ass");
+        QVERIFY(history.save_subtitle_selection(kShow, subtitle));
+        QCOMPARE(history.subtitle_selection(kShow), std::optional(SubtitleSelection(subtitle)));
+        QVERIFY(history.save_subtitle_selection(kShow, std::monostate{}));
+        QCOMPARE(history.subtitle_selection(kShow), std::optional(SubtitleSelection{}));
+        QCOMPARE(read_object(history.file()).value("externalSubtitlePaths").toObject().value(kShow),
+                 QJsonValue(subtitle));
+        QVERIFY(!history.save_subtitle_selection(kShow, std::monostate{}));
+    }
+
+    void subtitleIdentity_prefersStreamOrIdThenUniqueMetadata() {
+        using niratan::player::matching_subtitle_track_id;
+        const SubtitleTrackIdentity saved{2, 5, QStringLiteral("Full"), QStringLiteral("jpn"), {}};
+        const SubtitleTrackIdentity same_index{7, 5, QStringLiteral("Other"), {}, {}};
+        const SubtitleTrackIdentity same_id{2, 4, QStringLiteral("Signs"), {}, {}};
+        const SubtitleTrackIdentity same_metadata{9, 10, saved.title, saved.language, saved.codec};
+        QCOMPARE(matching_subtitle_track_id(saved, {same_id, same_index, same_metadata}),
+                 std::optional(7));
+        auto without_index = saved;
+        without_index.stream_index.reset();
+        QCOMPARE(matching_subtitle_track_id(without_index, {same_id, same_metadata}), std::optional(2));
+        QCOMPARE(matching_subtitle_track_id(saved, {same_id, same_metadata}), std::optional(9));
+        QCOMPARE(matching_subtitle_track_id(saved, {same_id, same_metadata, saved}), std::optional(2));
+        auto duplicate = same_metadata;
+        duplicate.id = 10;
+        QCOMPARE(matching_subtitle_track_id(saved, {same_metadata, duplicate}), std::nullopt);
+    }
+
     void save_midway_resumesAtSavedPosition() {
         QTemporaryDir dir;
         PlaybackHistory history(path_in(dir, "history.json"));

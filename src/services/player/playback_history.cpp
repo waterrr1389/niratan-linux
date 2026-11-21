@@ -245,6 +245,85 @@ bool PlaybackHistory::clear(const QString& key) {
     return document != before && write(document);
 }
 
+std::optional<int> matching_subtitle_track_id(const SubtitleTrackIdentity& identity,
+                                             const QList<SubtitleTrackIdentity>& tracks) {
+    const auto exact = std::ranges::find_if(tracks, [&identity](const auto& track) {
+        return identity.stream_index ? track.stream_index == identity.stream_index
+                                     : track.id == identity.id;
+    });
+    if (exact != tracks.end()) {
+        return exact->id;
+    }
+    std::optional<int> match;
+    for (const auto& track : tracks) {
+        if (track.title == identity.title && track.language == identity.language &&
+            track.codec == identity.codec) {
+            if (match) {
+                return std::nullopt;
+            }
+            match = track.id;
+        }
+    }
+    return match;
+}
+
+std::optional<SubtitleSelection> PlaybackHistory::subtitle_selection(const QString& key) const {
+    if (key.isEmpty()) {
+        return std::nullopt;
+    }
+    const auto entry = read().value(kSelections).toObject().value(key).toObject();
+    if (entry.value("off").isObject() || entry.value("externalDisabled").isObject()) {
+        return SubtitleSelection{};
+    }
+    const auto path = entry.value("external").toObject().value("path").toString();
+    if (!path.isEmpty()) {
+        return path;
+    }
+    const auto track = entry.value("embedded").toObject().value("_0").toObject();
+    const int id = track.value("trackID").toInt();
+    if (id > 0 && track.value("title").isString()) {
+        const int index = track.value("ffIndex").toInt(-1);
+        return SubtitleTrackIdentity{id, index >= 0 ? std::optional(index) : std::nullopt,
+                                     track.value("title").toString(),
+                                     track.value("language").toString(),
+                                     track.value("codec").toString()};
+    }
+    return std::nullopt;
+}
+
+bool PlaybackHistory::save_subtitle_selection(const QString& key, const SubtitleSelection& selection) {
+    if (key.isEmpty()) {
+        return false;
+    }
+    const auto before = read();
+    auto document = before;
+    QJsonObject entry;
+    if (const auto* track = std::get_if<SubtitleTrackIdentity>(&selection)) {
+        QJsonObject fields{{"trackID", track->id}, {"title", track->title}};
+        if (track->stream_index) {
+            fields.insert("ffIndex", *track->stream_index);
+        }
+        if (!track->language.isNull()) {
+            fields.insert("language", track->language);
+        }
+        if (!track->codec.isNull()) {
+            fields.insert("codec", track->codec);
+        }
+        entry.insert("embedded", QJsonObject{{"_0", fields}});
+    } else if (const auto* path = std::get_if<QString>(&selection)) {
+        entry.insert("external", QJsonObject{{"path", *path}});
+        auto paths = document.value(kSubtitlePaths).toObject();
+        paths.insert(key, *path);
+        document.insert(kSubtitlePaths, paths);
+    } else {
+        entry.insert("off", QJsonObject{});
+    }
+    auto selections = document.value(kSelections).toObject();
+    selections.insert(key, entry);
+    document.insert(kSelections, selections);
+    return document != before && write(document);
+}
+
 QJsonObject PlaybackHistory::read() const {
     if (file_.empty()) {
         return {};

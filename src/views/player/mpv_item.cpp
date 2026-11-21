@@ -285,9 +285,9 @@ void MpvItem::setSubtitlesVisible(bool visible) {
 void MpvItem::open(const QUrl& file, bool fromBeginning) {
     if (handle_ == nullptr) {
         if (error_.isEmpty()) {
-            error_ = QStringLiteral("The video engine is unavailable");
-            emit errorChanged();
+            error_ = tr("The video engine is unavailable");
         }
+        emit errorChanged();
         return;
     }
 
@@ -323,6 +323,7 @@ void MpvItem::replace_file(const QUrl& file, bool from_beginning) {
     chapter_index_ = -1;
     file_ready_ = false;
     selected_subtitle_id_ = -1;
+    last_subtitle_id_ = -1;
     cancel_transcript();
     emit embeddedTranscriptChanged({}, {});
     chapters_dirty_ = tracks_dirty_ = true;
@@ -431,33 +432,6 @@ void MpvItem::seekToChapter(int index) {
     set_property("chapter", index);
 }
 
-bool MpvItem::loadExternalSubtitle(const QUrl& file) {
-    if (handle_ == nullptr || !file.isLocalFile() || file.toLocalFile().isEmpty()) {
-        return false;
-    }
-    const QByteArray path = file.toLocalFile().toUtf8();
-    const char* args[] = {"sub-add", path.constData(), "select", nullptr};
-    if (mpv_command(handle_, args) < 0) {
-        return false;
-    }
-    setSubtitlesVisible(true);
-    tracks_dirty_ = true;
-    set_subtitle_cue({}, -1.0, -1.0);
-    return true;
-}
-
-void MpvItem::selectSubtitleTrack(int id) {
-    if (id <= 0) {
-        return;
-    }
-    set_property("sid", id);
-    setSubtitlesVisible(true);
-    if (file_ready_) {
-        refresh_tracks();
-    }
-    set_subtitle_cue({}, -1.0, -1.0);
-}
-
 void MpvItem::cancel_transcript() {
     transcript_extractor_.cancel();
 }
@@ -497,13 +471,6 @@ void MpvItem::extractTranscript() {
     transcript_extractor_.start(local_video_path_, selected_subtitle_id_, index);
 }
 
-void MpvItem::disableSubtitles() {
-    set_property("sid", QStringLiteral("no"));
-    setSubtitlesVisible(false);
-    tracks_dirty_ = true;
-    set_subtitle_cue({}, -1.0, -1.0);
-}
-
 bool MpvItem::screenshot(const QUrl& file) {
     if (handle_ == nullptr || !file.isLocalFile() || file.toLocalFile().isEmpty()) {
         return false;
@@ -514,47 +481,11 @@ bool MpvItem::screenshot(const QUrl& file) {
     return mpv_command_async(handle_, 0, args) >= 0;
 }
 
-void MpvItem::cycleSubtitles() {
-    if (handle_ == nullptr) {
-        return;
-    }
-    int first_id = -1;
-    const int selected_id = static_cast<int>(get_double("sid", -1.0));
-    bool next = false;
-    for (const QVariant& entry : tracks_) {
-        const QVariantMap track = entry.toMap();
-        if (track.value(QStringLiteral("type")).toString() != QStringLiteral("sub")) {
-            continue;
-        }
-        const int id = track.value(QStringLiteral("id")).toInt();
-        if (first_id < 0) {
-            first_id = id;
-        }
-        if (!subtitles_visible_ && id == selected_id) {
-            setSubtitlesVisible(true);
-            return;
-        }
-        if (next) {
-            selectSubtitleTrack(id);
-            return;
-        }
-        next = subtitles_visible_ && id == selected_id;
-    }
-    if (next) {
-        disableSubtitles();
-    } else if (first_id >= 0) {
-        selectSubtitleTrack(first_id);
-    } else {
-        setSubtitlesVisible(!subtitles_visible_);
-    }
-}
-
 void MpvItem::toggleSubtitles() {
     if (handle_ == nullptr) {
         return;
     }
-    if (!subtitles_visible_ && get_double("sid", -1.0) <= 0) {
-        cycleSubtitles();
+    if (!subtitles_visible_ && get_double("sid", -1.0) <= 0 && cycleSubtitles() >= 0) {
         return;
     }
     setSubtitlesVisible(!subtitles_visible_);
@@ -829,7 +760,7 @@ void MpvItem::poll() {
                 break;
             case MPV_EVENT_END_FILE: {
                 const auto* end = static_cast<const mpv_event_end_file*>(event->data);
-                if (!file_ready_ && end != nullptr && end->reason == MPV_END_FILE_REASON_ERROR) {
+                if (end != nullptr && end->reason == MPV_END_FILE_REASON_ERROR) {
                     error_ = QString::fromUtf8(mpv_error_string(end->error));
                     emit errorChanged();
                 }
@@ -906,6 +837,7 @@ void MpvItem::poll() {
         loaded_ = loaded;
         if (loaded_) {
             restore_playback_position();
+            restore_subtitle_selection();
             resume_save_timer_.start();
         }
         emit loadedChanged();

@@ -24,6 +24,7 @@ Item {
     readonly property int chromeMaxWidth: 760
     readonly property bool compactChrome: mpv.videoSettings.videoControlBarLayout === "compactBottom"
     readonly property int chromeHeight: page.compactChrome ? 84 : 90
+    readonly property int controlDensity: page.width >= 900 ? 0 : page.width >= 600 ? 1 : 2
     readonly property int seekInterval: Math.floor(mpv.videoSettings.videoSeekInterval)
     readonly property int chromeSideInset: 16
     // playbackChromeEdgeInset (16) plus metrics.bottomInset (24).
@@ -258,7 +259,15 @@ Item {
     function cycleSubtitles() {
         if (!mpv.loaded)
             return
-        mpv.cycleSubtitles()
+        const id = mpv.cycleSubtitles()
+        if (id === 0) {
+            page.showOSD(qsTr("Subtitles Off"), "")
+        } else if (id > 0) {
+            const track = studySidebar.subtitleTracks.find(track => track.id === id)
+            if (track)
+                page.showOSD(qsTr("Subtitle Track"), track.title || track.language
+                             || qsTr("Subtitle Track %1").arg(id))
+        }
     }
 
     function setLoopA(time) {
@@ -339,8 +348,8 @@ Item {
         page.osdValue = ""
         osdTimer.stop()
         studyModel.setVideo(url)
-        mpv.open(url, fromBeginning === true)
         page.forceActiveFocus()
+        mpv.open(url, fromBeginning === true)
         page.notePointerMovement()
     }
 
@@ -357,8 +366,13 @@ Item {
     function loadSubtitle(file: url): bool {
         if (mpv.loadExternalSubtitle(file))
             return true
-        studyModel.reportSubtitleLoadFailure()
+        page.showSubtitleLoadError()
         return false
+    }
+
+    function showSubtitleLoadError() {
+        studyModel.reportSubtitleLoadFailure()
+        videoErrorDialog.showError(qsTr("Could not load the subtitle file."))
     }
 
     function textFieldFocused() {
@@ -547,6 +561,8 @@ Item {
             id: mpv
             anchors.fill: parent
 
+            onErrorChanged: videoErrorDialog.showError(mpv.error)
+            onSubtitleLoadFailed: page.showSubtitleLoadError()
             onLoadedChanged: {
                 studyModel.setPlaybackReady(mpv.loaded)
                 if (!mpv.loaded)
@@ -554,7 +570,8 @@ Item {
                 page.speedPanelOpen = false
                 page.speedPanelHovered = false
                 page.chromeVisible = true
-                page.forceActiveFocus()
+                if (!videoErrorDialog.visible)
+                    page.forceActiveFocus()
                 page.notePointerMovement()
             }
             onPositionChanged: studyModel.updatePlayback(mpv.position, mpv.subtitleDelay)
@@ -566,6 +583,8 @@ Item {
                                                              mpv.subtitleEnd)
             onSubtitleDocumentChanged: function(file, bytes, readable) {
                 studyModel.setSubtitleDocument(file, bytes, readable)
+                if (file.toString().length > 0 && !readable)
+                    videoErrorDialog.showError(qsTr("Could not read the subtitle file."))
             }
             onEmbeddedTranscriptChanged: function(bytes, error) {
                 studyModel.setEmbeddedTranscript(bytes, error)
@@ -644,16 +663,6 @@ Item {
                 text: qsTr("Supported files: %1").arg(page.extensionList)
                 color: Theme.textSecondary
                 font.pixelSize: 11
-                wrapMode: Text.WordWrap
-                horizontalAlignment: Text.AlignHCenter
-            }
-
-            Label {
-                width: parent.width
-                visible: mpv.error.length > 0
-                text: mpv.error
-                color: Theme.popupDanger
-                font.pixelSize: 12
                 wrapMode: Text.WordWrap
                 horizontalAlignment: Text.AlignHCenter
             }
@@ -940,25 +949,14 @@ Item {
                 }
             }
 
-            Flickable {
-                id: controlScroller
-                width: parent.width
-                height: 42
-                contentWidth: Math.max(width, controlRow.implicitWidth)
-                contentHeight: height
-                clip: true
-                boundsBehavior: Flickable.StopAtBounds
-                flickableDirection: Flickable.HorizontalFlick
-                interactive: contentWidth > width
-                ScrollBar.horizontal: ScrollBar {}
-            }
-
             RowLayout {
                 id: controlRow
-                parent: controlScroller.contentItem
-                width: controlScroller.contentWidth
-                height: controlScroller.height
-                spacing: 2
+                anchors.horizontalCenter: parent.horizontalCenter
+                height: 42
+                spacing: 0
+                // Also fit the full and condensed rows when the sidebar narrows the stage.
+                readonly property int density: Math.max(page.controlDensity,
+                    barColumn.width >= 734 ? 0 : barColumn.width >= 502 ? 1 : 2)
                 BarButton {
                     glyph: "\u2039"
                     tip: qsTr("Close Player")
@@ -977,7 +975,7 @@ Item {
                 }
 
                 BarButton {
-                    visible: mpv.resumeAvailable
+                    visible: controlRow.density === 0 && mpv.resumeAvailable
                     glyph: "\u21A4"
                     tip: qsTr("Restart from Beginning")
                     Accessible.name: tip
@@ -1002,37 +1000,17 @@ Item {
                 }
 
                 Label {
-                    Layout.preferredWidth: 48
-                    Layout.minimumWidth: 48
-                    Layout.maximumWidth: 48
+                    Layout.preferredWidth: 88
                     Layout.alignment: Qt.AlignVCenter
-                    text: page.formatTime(page.displayTime)
+                    text: page.formatTime(page.displayTime) + " / " + page.formatTime(mpv.duration)
                     color: Theme.textSecondary
                     font.pixelSize: 11
-                    horizontalAlignment: Text.AlignRight
-                }
-
-                Label {
-                    Layout.preferredWidth: 8
-                    Layout.alignment: Qt.AlignVCenter
-                    text: "/"
-                    color: Theme.textSecondary
-                    font.pixelSize: 11
+                    font.features: ({ "tnum": 1 })
                     horizontalAlignment: Text.AlignHCenter
                 }
 
-                Label {
-                    Layout.preferredWidth: 48
-                    Layout.minimumWidth: 48
-                    Layout.maximumWidth: 48
-                    Layout.alignment: Qt.AlignVCenter
-                    text: page.formatTime(mpv.duration)
-                    color: Theme.textSecondary
-                    font.pixelSize: 11
-                    horizontalAlignment: Text.AlignLeft
-                }
-
                 BarButton {
+                    visible: controlRow.density <= 1
                     glyph: "M"
                     tip: mpv.muted ? qsTr("Unmute (M)") : qsTr("Mute (M)")
                     active: mpv.muted
@@ -1041,9 +1019,8 @@ Item {
 
                 Slider {
                     id: volumeSlider
-                    Layout.preferredWidth: 56
-                    Layout.minimumWidth: 56
-                    Layout.maximumWidth: 56
+                    visible: controlRow.density === 0
+                    Layout.preferredWidth: 36
                     Layout.preferredHeight: 24
                     Layout.minimumHeight: 24
                     Layout.maximumHeight: 24
@@ -1068,6 +1045,11 @@ Item {
 
                 Button {
                     id: speedPill
+                    visible: controlRow.density <= 1
+                    onVisibleChanged: {
+                        if (controlRow.density === 2)
+                            page.speedPanelOpen = false
+                    }
                     Layout.alignment: Qt.AlignVCenter
                     implicitWidth: 46
                     implicitHeight: 24
@@ -1107,7 +1089,7 @@ Item {
                 }
 
                 BarButton {
-                    visible: studyModel.canMine
+                    visible: controlRow.density === 0 && studyModel.canMine
                     glyph: "\u2605"
                     tip: qsTr("Mine Subtitle")
                     Accessible.name: tip
@@ -1115,6 +1097,7 @@ Item {
                 }
 
                 BarButton {
+                    visible: controlRow.density === 0
                     glyph: "S\u2212"
                     tip: qsTr("Subtitle Delay -0.05 s (Alt+,)")
                     buttonWidth: 28
@@ -1122,6 +1105,7 @@ Item {
                 }
 
                 BarButton {
+                    visible: controlRow.density === 0
                     glyph: "S+"
                     tip: qsTr("Subtitle Delay +0.05 s (Alt+.)")
                     buttonWidth: 28
@@ -1129,6 +1113,7 @@ Item {
                 }
 
                 BarButton {
+                    visible: controlRow.density === 0
                     glyph: "a\u2212"
                     tip: qsTr("Audio Delay -0.5 s (Alt+Shift+,)")
                     buttonWidth: 28
@@ -1136,6 +1121,7 @@ Item {
                 }
 
                 BarButton {
+                    visible: controlRow.density === 0
                     glyph: "a+"
                     tip: qsTr("Audio Delay +0.5 s (Alt+Shift+.)")
                     buttonWidth: 28
@@ -1143,6 +1129,7 @@ Item {
                 }
 
                 BarButton {
+                    visible: controlRow.density <= 1
                     glyph: "A"
                     tip: qsTr("Set A-B Loop Start (Alt+A)")
                     active: mpv.loopStart >= 0
@@ -1150,6 +1137,7 @@ Item {
                 }
 
                 BarButton {
+                    visible: controlRow.density <= 1
                     glyph: "B"
                     tip: qsTr("Set A-B Loop End (Alt+B)")
                     active: mpv.loopEnd >= 0
@@ -1157,6 +1145,7 @@ Item {
                 }
 
                 BarButton {
+                    visible: controlRow.density <= 1
                     glyph: "AB"
                     tip: qsTr("Clear A-B Loop")
                     buttonWidth: 30
@@ -1164,6 +1153,7 @@ Item {
                 }
 
                 BarButton {
+                    visible: controlRow.density === 0
                     glyph: "\u21BB"
                     tip: qsTr("Rotate Clockwise (R)")
                     glyphSize: 14
@@ -1178,12 +1168,14 @@ Item {
                 }
 
                 BarButton {
+                    visible: controlRow.density <= 1
                     glyph: qsTr("Open")
                     tip: qsTr("Open a Video")
                     buttonWidth: 38
                     onClicked: openMenu.popup()
                 }
                 BarButton {
+                    visible: controlRow.density <= 1
                     glyph: "\u2699"
                     tip: qsTr("Video Settings")
                     Accessible.name: tip
@@ -1354,6 +1346,32 @@ Item {
             }
             page.forceActiveFocus()
             page.notePointerMovement()
+        }
+    }
+
+    Dialog {
+        id: videoErrorDialog
+        property string message
+
+        function showError(error: string) {
+            if (error.length > 0) {
+                videoErrorDialog.message = error
+                videoErrorDialog.open()
+            }
+        }
+
+        anchors.centerIn: parent
+        width: Math.min(440, page.width)
+        modal: true
+        focus: true
+        title: qsTr("Video Error")
+        standardButtons: Dialog.Ok
+        onClosed: page.forceActiveFocus()
+
+        contentItem: Label {
+            text: videoErrorDialog.message
+            textFormat: Text.PlainText
+            wrapMode: Text.Wrap
         }
     }
 

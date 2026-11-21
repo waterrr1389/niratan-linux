@@ -10,8 +10,8 @@
 // Snapshot members:
 //   positions              { key: seconds }            legacy restore points
 //   playbackStates         { key: VideoPlaybackState }
-//   subtitleSelections     { key: ... }                kept, not interpreted
-//   externalSubtitlePaths  { key: path }               kept, not interpreted
+//   subtitleSelections     { key: VideoSubtitleSelection }
+//   externalSubtitlePaths  { key: path }
 // VideoPlaybackState encodes position, duration (omitted when unknown),
 // updatedAt as seconds since 2001-01-01 UTC (Foundation's default Date
 // coding), isFinished and resumeOptions. Resume options contain the per-video
@@ -66,6 +66,25 @@ struct PlaybackOpenState {
     bool operator==(const PlaybackOpenState&) const = default;
 };
 
+// VideoSubtitleTrackIdentity matches the stream index (ID only when the
+// index was absent), then falls back to unique title/language/codec metadata.
+struct SubtitleTrackIdentity {
+    int id = 0;
+    std::optional<int> stream_index;
+    QString title;
+    QString language;
+    QString codec;
+
+    bool operator==(const SubtitleTrackIdentity&) const = default;
+};
+
+// VideoSubtitleSelection: monostate is explicit Off, QString is a local
+// external path. Unsupported remote selections are left in the document.
+using SubtitleSelection = std::variant<std::monostate, SubtitleTrackIdentity, QString>;
+
+std::optional<int> matching_subtitle_track_id(const SubtitleTrackIdentity& identity,
+                                             const QList<SubtitleTrackIdentity>& tracks);
+
 class PlaybackHistory {
    public:
     // <data root>/video_playback_history.json, migrating from
@@ -95,6 +114,10 @@ class PlaybackHistory {
                       const QDateTime& now = QDateTime::currentDateTimeUtc());
     // clearProgress: removes both the state and the legacy position.
     bool clear(const QString& key);
+
+    // Independent of playback progress, including an explicit start from zero.
+    std::optional<SubtitleSelection> subtitle_selection(const QString& key) const;
+    bool save_subtitle_selection(const QString& key, const SubtitleSelection& selection);
 
     const std::filesystem::path& file() const { return file_; }
 

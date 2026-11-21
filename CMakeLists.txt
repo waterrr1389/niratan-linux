@@ -125,6 +125,7 @@ qt_add_executable(niratan
     src/views/player/mpv_item.cpp
     src/views/player/mpv_item.h
     src/views/player/mpv_playback_history.cpp
+    src/views/player/mpv_subtitles.cpp
     src/views/player/mpv_renderer.cpp
     src/views/player/mpv_renderer.h
     src/views/reader/reader_scheme_handler.cpp
