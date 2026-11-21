@@ -19,19 +19,19 @@ QString utf8(std::string_view text) {
     return QString::fromUtf8(text.data(), static_cast<qsizetype>(text.size()));
 }
 
-// NSNumber.int64Value truncates toward zero. A number outside the int64 range
-// would trap there; it is dropped here instead.
-std::optional<std::int64_t> json_int64(const QJsonValue& value) {
+// Both note parsers accept only positive numeric IDs. Read Qt's stored integers
+// without rounding them through double. The fallback truncates fractions like
+// NSNumber.int64Value, but rejects values outside the positive int64 range.
+std::optional<std::int64_t> json_note_id(const QJsonValue& value) {
     if (!value.isDouble()) {
         return std::nullopt;
     }
-    const double number = value.toDouble();
-    if (!std::isfinite(number)) {
-        return std::nullopt;
+    if (const auto integer = value.toInteger(); integer > 0) {
+        return integer;
     }
-    constexpr double kMin = -9223372036854775808.0;
+    const double number = value.toDouble();
     constexpr double kMaxExclusive = 9223372036854775808.0;
-    if (number < kMin || number >= kMaxExclusive) {
+    if (number < 1.0 || number >= kMaxExclusive || !std::isfinite(number)) {
         return std::nullopt;
     }
     return static_cast<std::int64_t>(number);
@@ -174,8 +174,8 @@ AddNoteOutcome parse_add_note_result(const AnkiConnectResult& result) {
     if (!result.ok) {
         return {.note_id = std::nullopt, .request_failed = true, .error = result.error};
     }
-    const std::optional<std::int64_t> note_id = json_int64(result.result);
-    if (!note_id || *note_id <= 0) {
+    const std::optional<std::int64_t> note_id = json_note_id(result.result);
+    if (!note_id) {
         return {};
     }
     return {.note_id = *note_id, .request_failed = false, .error = {}};
@@ -193,7 +193,7 @@ std::optional<std::vector<std::int64_t>> parse_find_notes_result(const AnkiConne
         if (value.isString()) {
             note_id = decimal_int64(value.toString());
         } else {
-            note_id = json_int64(value);
+            note_id = json_note_id(value);
         }
         if (!note_id || *note_id <= 0 || !seen.insert(*note_id).second) {
             continue;

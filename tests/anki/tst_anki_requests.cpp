@@ -106,6 +106,8 @@ class AnkiRequestsTest : public QObject {
     void b11_find_notes_drops_invalid_and_non_positive_ids();
     void b11_find_notes_failure_is_distinct_from_an_empty_list();
 
+    void note_ids_above_double_precision_remain_exact();
+
     // B12: duplicateLookup (canAddNotesWithErrorDetail result).
     void b12_can_add_reads_the_first_boolean();
     void b12_can_add_indeterminate_shapes();
@@ -368,6 +370,15 @@ void AnkiRequestsTest::b11_find_notes_failure_is_distinct_from_an_empty_list() {
     const auto one = parse_find_notes_result(ok_result(QJsonArray{1}));
     QVERIFY(one.has_value());
     QCOMPARE(*one, (std::vector<std::int64_t>{1}));
+}
+
+void AnkiRequestsTest::note_ids_above_double_precision_remain_exact() {
+    constexpr std::int64_t id = 9007199254740993LL;
+    const auto added = parse_add_note_result(ok_result(QJsonValue::fromJson("9007199254740993")));
+    const auto found = parse_find_notes_result(
+        ok_result(QJsonValue::fromJson("[9007199254740992,9007199254740993]")));
+    QCOMPARE(added.note_id, std::optional(id));
+    QCOMPARE(found, std::optional(std::vector<std::int64_t>{id - 1, id}));
 }
 
 void AnkiRequestsTest::b12_can_add_reads_the_first_boolean() {
