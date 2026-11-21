@@ -7,7 +7,40 @@ for how a macOS interaction maps onto a non-Apple desktop.
 
 `PLAN.md` (milestones, scope), `SPEC.md` (layout, quality gate) and `notes/`
 are local working files kept out of git through `.git/info/exclude`. Read them
-when they exist; the rules below hold either way.
+when they exist; the rules below hold either way. Handover notes in `notes/`
+can be stale: check them against `git log` and the tree before acting on them.
+
+## Purpose
+
+The owner uses this application daily on Linux for Japanese immersion
+learning. When being usable and matching Niratan in every detail conflict,
+usable wins; data that reaches a card, a query or a file still matches Niratan
+exactly. Niratan stays pinned at `609d2d7`; upstream changes are not followed.
+
+The first release is done when these flows work end to end:
+
+1. Open an EPUB, look up a word, add an Anki card.
+2. Play a local video, look up a subtitle word, add an Anki card.
+3. Reading statistics.
+4. Sasayaki audiobook playback alongside the reader.
+5. Profiles, including an English profile with English lookup.
+
+Work that serves none of these flows waits until they all work.
+
+## Roles
+
+The project is built by agents. The owner is not a GUI developer and does not
+review code, QML or diffs. Agents therefore verify their own work: every
+change is checked by automated tests and by a review against the Swift
+source done by an agent other than the one that wrote it.
+
+Ask the owner only product questions, in plain language with concrete
+options: what should happen when they do something. Never ask them to judge
+code, layout values or technical trade-offs. When Niratan and Niratan-win
+both answer a question, do not ask at all.
+
+A problem the owner reports is reproduced as a failing test before it is
+fixed, wherever the layer allows it.
 
 ## Layout
 
@@ -54,6 +87,24 @@ Directory names follow Niratan-win (`Services/Dictionary` becomes
    reproduced; record the difference in the header comment instead.
 6. Commit the header, tests and implementation together.
 
+## Writing a view
+
+A QML view is written from the SwiftUI view that implements it, the way a
+module is written from Swift logic.
+
+1. The top comment of each QML file names the Swift files and views it
+   follows.
+2. Carry over structure, sizes, spacing, fonts, colors (through the theme),
+   visibility conditions and state bindings from the SwiftUI `body` and its
+   modifiers. A value with no Swift source follows Niratan-win; if neither
+   has one, ask the owner a product question rather than invent it.
+3. The reviewing agent compares the QML against the SwiftUI source item by
+   item. Screenshots are not a verification method.
+
+A view is not finished until it is wired: every command it shows reaches a
+view model, and every view model command reaches the service that does the
+work. A service no view model calls is not a delivered feature.
+
 Conventions in existing code: `// SPDX-License-Identifier: GPL-3.0-or-later`
 on every file, namespaces `niratan::<area>`, `QTEST_APPLESS_MAIN` unless an
 event loop is needed, `operator== = default` on result structs so `QCOMPARE`
@@ -78,7 +129,20 @@ Unicode rules, do the same rather than assuming ASCII.
   `pre-commit` runs the gate and refuses a commit while unstaged or untracked
   changes exist, because the gate builds the working tree. `pre-push` runs the
   gate on every pushed commit in a separate worktree.
-- QML views have no unit tests. The user checks visual results on the device.
+- Above the services, three layers of tests catch what unit tests cannot,
+  without rendering or screenshots:
+  - QML load test: each page loads offscreen with its view model; any QML
+    warning or binding error fails.
+  - View model tests: `tests/viewmodels/`, services replaced by stubs,
+    commands invoked and state and signals checked with `QSignalSpy`. A new
+    or changed view model comes with its tests.
+  - Flow tests: one per first-release flow, driving view models and
+    services with fixtures (EPUB, dictionary, AnkiConnect stub) from the
+    user action to its result, such as the stub receiving `addNote`. Script
+    bridges are exercised by loading the generated page in a headless
+    `QWebEnginePage`.
+- A flow counts as done when its flow test passes. The owner then uses it on
+  the device and reports problems in plain language.
 
 ## Commits
 
