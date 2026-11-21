@@ -1,0 +1,35 @@
+#!/bin/sh
+# Conventional Commits 1.0.0 with the project's restrictions: lower case
+# description, no trailing period, at most 72 characters, and no tool names or
+# progress words (AGENTS.md).
+set -e
+msg_file="$1"
+subject=$(head -1 "$msg_file")
+
+case "$subject" in
+"Merge "*|"Revert "*|"fixup! "*|"squash! "*) exit 0 ;;
+esac
+
+fail() {
+    echo "commit-msg: $1" >&2
+    exit 1
+}
+
+printf '%s\n' "$subject" | grep -Eq \
+    '^(feat|fix|build|chore|ci|docs|refactor|perf|test|style|revert)(\([a-z0-9/_.-]+\))?: [a-z0-9]' ||
+    fail "expected '<type>(<scope>): <lower case description>'"
+
+case "$subject" in
+*.) fail "the subject ends with a period" ;;
+esac
+
+length=$(printf '%s' "$subject" | wc -m | tr -d ' ')
+[ "$length" -le 72 ] || fail "the subject is $length characters, at most 72 allowed"
+
+for word in Codex Claude Grok Gemini; do
+    grep -qi "$word" "$msg_file" && fail "the message names '$word'"
+done
+grep -qE '\bFIXED\b|\b(Step|Phase|Section|Week)\s+[0-9]|\bAC-[0-9]+' "$msg_file" &&
+    fail "the message carries a progress word"
+
+exit 0

@@ -11,6 +11,7 @@ if [ -z "$NIRATAN_CHECK_LOCKED" ]; then
 fi
 scripts/check-layers.sh
 scripts/check-size.sh
+scripts/check-style.sh
 cmake --preset debug
 cmake --build build
 ctest --test-dir build --output-on-failure
