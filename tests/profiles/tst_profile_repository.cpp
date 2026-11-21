@@ -11,6 +11,7 @@
 #include <string>
 
 #include "models/profiles/profile_index_json.h"
+#include "services/storage/app_paths.h"
 #include "services/storage/json_file.h"
 
 using niratan::profiles::ContentLanguage;
@@ -68,6 +69,8 @@ class ProfileRepositoryTest : public QObject {
     void a_damaged_index_is_preserved();
     void primary_selection_requires_a_matching_language();
     void active_profile_uses_the_resolver();
+    void the_data_root_repository_lives_under_the_data_root();
+    void no_data_root_gives_no_repository();
 };
 
 void ProfileRepositoryTest::construction_creates_the_directory_and_index() {
@@ -232,6 +235,37 @@ void ProfileRepositoryTest::active_profile_uses_the_resolver() {
     QVERIFY(!repository.set_active_profile(created.profile->id).has_value());
 
     QCOMPARE(repository.active_profile().id, created.profile->id);
+}
+
+void ProfileRepositoryTest::the_data_root_repository_lives_under_the_data_root() {
+    const QByteArray data_home = qgetenv("XDG_DATA_HOME");
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    qputenv("XDG_DATA_HOME", directory.path().toUtf8());
+
+    const auto repository = ProfileRepository::at_data_root();
+    const std::filesystem::path root = niratan::storage::data_root();
+    qputenv("XDG_DATA_HOME", data_home);
+
+    QVERIFY(repository.has_value());
+    QVERIFY(!root.empty());
+    QVERIFY(std::filesystem::exists(root / "Profiles" / "profiles.json"));
+}
+
+void ProfileRepositoryTest::no_data_root_gives_no_repository() {
+    const QByteArray data_home = qgetenv("XDG_DATA_HOME");
+    const QByteArray home = qgetenv("HOME");
+    qunsetenv("XDG_DATA_HOME");
+    qunsetenv("HOME");
+
+    const auto repository = ProfileRepository::at_data_root();
+    qputenv("XDG_DATA_HOME", data_home);
+    qputenv("HOME", home);
+    if (data_home.isEmpty()) {
+        qunsetenv("XDG_DATA_HOME");
+    }
+
+    QVERIFY(!repository.has_value());
 }
 
 QTEST_APPLESS_MAIN(ProfileRepositoryTest)

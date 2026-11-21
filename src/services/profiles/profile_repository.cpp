@@ -10,6 +10,7 @@
 #include <utility>
 
 #include "models/profiles/profile_index_json.h"
+#include "services/storage/app_paths.h"
 #include "services/storage/json_file.h"
 
 namespace niratan::profiles {
@@ -33,6 +34,14 @@ bool ensure_directory(const std::filesystem::path& directory) {
 }
 
 }  // namespace
+
+std::optional<ProfileRepository> ProfileRepository::at_data_root() {
+    std::filesystem::path root = storage::data_root();
+    if (root.empty()) {
+        return std::nullopt;
+    }
+    return ProfileRepository(std::move(root));
+}
 
 ProfileRepository::ProfileRepository(std::filesystem::path app_directory)
     : app_directory_(std::move(app_directory)),

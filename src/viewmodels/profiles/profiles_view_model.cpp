@@ -4,7 +4,6 @@
 
 #include <QVariantMap>
 
-#include <filesystem>
 #include <optional>
 #include <string>
 
@@ -12,7 +11,6 @@
 #include "models/profiles/profile_index.h"
 #include "models/profiles/profile_ops.h"
 #include "services/profiles/profile_repository.h"
-#include "services/storage/app_paths.h"
 
 namespace niratan::viewmodels {
 namespace {
@@ -51,12 +49,10 @@ QString message_for(ProfileError error) {
 
 struct ProfilesViewModel::State {
     State() {
-        const std::filesystem::path root = storage::data_root();
-        if (root.empty()) {
+        repository = ProfileRepository::at_data_root();
+        if (!repository.has_value()) {
             error = ProfilesViewModel::tr("Niratan has no data directory.");
-            return;
         }
-        repository.emplace(root);
     }
 
     // An empty optional means the data root is unusable, not that the index

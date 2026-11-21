@@ -44,6 +44,9 @@ class ProfileRepository {
    public:
     // Creates the Profiles directory when needed and loads the index.
     explicit ProfileRepository(std::filesystem::path app_directory);
+    // The repository under storage::data_root(); none when there is no data
+    // root (no XDG_DATA_HOME and no HOME).
+    static std::optional<ProfileRepository> at_data_root();
 
     const ProfileIndex& index() const;
     HoshiProfile active_profile() const;
