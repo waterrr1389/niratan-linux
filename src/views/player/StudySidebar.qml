@@ -1,8 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
-// Docked tabs and width bounds follow VideoMiningHistorySidebar.swift.
-// Flat rows keep the cue text dominant; the timestamp column makes the list
-// read as a timeline rather than a stack of cards.
+// Docked tabs follow VideoMiningHistorySidebar.swift; transcript states,
+// active intervals and window growth follow SubtitleTranscriptView.swift.
 
 pragma ComponentBehavior: Bound
 
@@ -263,23 +262,36 @@ Rectangle {
                     }
                 }
 
-                SidebarButton {
-                    Layout.alignment: Qt.AlignHCenter
-                    text: qsTr("Show earlier cues")
-                    visible: sidebar.study.canShowEarlier
-                    onClicked: {
-                        sidebar.study.showEarlier()
-                        transcript.positionViewAtBeginning()
-                    }
-                }
-
-                EmptyLabel {
+                Item {
+                    id: transcriptEmptyState
+                    Layout.fillWidth: true
+                    Layout.fillHeight: true
                     visible: transcript.count === 0
-                    text: sidebar.extractingTranscript ? qsTr("Extracting transcript…")
-                        : sidebar.study.transcriptError.length > 0 ? sidebar.study.transcriptError
-                        : sidebar.study.search.trim().length > 0 ? qsTr("No matching cues.")
-                        : trackSelector.embedded ? qsTr("Extract the selected track to see its transcript.")
-                        : qsTr("Select a subtitle track or load an external subtitle file.")
+                    ColumnLayout {
+                        anchors.centerIn: parent
+                        width: transcriptEmptyState.width
+                        spacing: Theme.spacingXs
+                        BusyIndicator {
+                            Layout.alignment: Qt.AlignHCenter
+                            running: transcriptEmptyState.visible && sidebar.extractingTranscript
+                            visible: running
+                        }
+                        EmptyLabel {
+                            visible: text.length > 0
+                            font.bold: true
+                            color: Theme.textPrimary
+                            text: sidebar.extractingTranscript ? qsTr("Loading Transcript")
+                                : sidebar.study.transcriptError.length > 0 ? qsTr("Transcript Unavailable") : ""
+                        }
+                        EmptyLabel {
+                            textFormat: Text.PlainText
+                            text: sidebar.extractingTranscript ? qsTr("Reading the selected subtitle track…")
+                                : sidebar.study.transcriptError.length > 0 ? sidebar.study.transcriptError
+                                : sidebar.study.search.trim().length > 0 ? qsTr("No matching cues.")
+                                : trackSelector.embedded ? qsTr("Extract the selected track to see its transcript.")
+                                : qsTr("Select a subtitle track or load an external subtitle file.")
+                        }
+                    }
                 }
 
                 ListView {
@@ -290,7 +302,37 @@ Rectangle {
                     clip: true
                     model: sidebar.study.transcript
                     boundsBehavior: Flickable.StopAtBounds
-                    ScrollBar.vertical: ScrollBar {}
+                    ScrollBar.vertical: ScrollBar {
+                        onPressedChanged: if (!pressed) transcript.extendWindowNearEdge()
+                    }
+                    onMovementEnded: transcript.extendWindowNearEdge()
+
+                    function extendWindowNearEdge() {
+                        if (!transcript.visible || transcript.count === 0)
+                            return
+                        const top = transcript.indexAt(1, transcript.contentY + 1)
+                        const anchor = transcript.itemAtIndex(top)
+                        if (!anchor)
+                            return
+                        const earlier = sidebar.study.canShowEarlier && top < 2
+                        const later = sidebar.study.canShowLater && transcript.contentHeight + transcript.originY
+                            - transcript.contentY - transcript.height <= 2 * anchor.height
+                        if (!earlier && !later)
+                            return
+                        // Replacing the window resets the list model; keep the top cue in place.
+                        const cueIndex = sidebar.study.transcript[top].index
+                        const offset = transcript.contentY - anchor.y
+                        if (earlier)
+                            sidebar.study.showEarlier()
+                        else
+                            sidebar.study.showLater()
+                        transcript.forceLayout()
+                        const index = sidebar.study.transcript.findIndex(cue => cue.index === cueIndex)
+                        transcript.positionViewAtIndex(index, ListView.Beginning)
+                        const restored = transcript.itemAtIndex(index)
+                        if (restored && restored.y === transcript.contentY)
+                            transcript.contentY += offset
+                    }
 
                     delegate: RowLayout {
                         id: cue
@@ -306,12 +348,13 @@ Rectangle {
 
                         HoverHandler { id: cueHover }
 
-                        TimelineRow {
+                        StudyTimelineRow {
                             id: cueRow
                             Layout.fillWidth: true
                             marker: sidebar.timeLabel(cue.modelData.start)
                             title: cue.modelData.text
-                            selected: cue.modelData.index === sidebar.study.currentRow
+                            selected: cue.modelData.start <= sidebar.study.adjustedTime
+                                && sidebar.study.adjustedTime <= cue.modelData.end
                             onClicked: sidebar.study.seekToRow(cue.modelData.index)
                         }
 
@@ -338,13 +381,6 @@ Rectangle {
                         }
                     }
                 }
-
-                SidebarButton {
-                    Layout.alignment: Qt.AlignHCenter
-                    text: qsTr("Show later cues")
-                    visible: sidebar.study.canShowLater
-                    onClicked: sidebar.study.showLater()
-                }
             }
 
             Item {
@@ -357,7 +393,7 @@ Rectangle {
                     boundsBehavior: Flickable.StopAtBounds
                     ScrollBar.vertical: ScrollBar {}
 
-                    delegate: TimelineRow {
+                    delegate: StudyTimelineRow {
                         id: chapter
                         required property int index
                         required property var modelData
@@ -510,60 +546,4 @@ Rectangle {
         }
     }
 
-    component TimelineRow: Button {
-        id: row
-        required property string marker
-        required property string title
-        property string detail: ""
-        property bool selected: false
-        text: row.title
-        focusPolicy: Qt.TabFocus
-        padding: Theme.spacingSm
-        contentItem: RowLayout {
-            spacing: Theme.spacingSm
-            Label {
-                Layout.minimumWidth: 48
-                Layout.alignment: Qt.AlignTop
-                color: Theme.textSecondary
-                font.pixelSize: Theme.fontCaption
-                text: row.marker
-            }
-            ColumnLayout {
-                Layout.fillWidth: true
-                spacing: Theme.spacingXs
-                Label {
-                    Layout.fillWidth: true
-                    font.pixelSize: Theme.fontBody
-                    font.bold: row.selected
-                    color: Theme.textPrimary
-                    wrapMode: Text.Wrap
-                    textFormat: Text.PlainText
-                    text: row.title
-                }
-                Label {
-                    visible: row.detail.length > 0
-                    color: Theme.textSecondary
-                    font.pixelSize: Theme.fontCaption
-                    text: row.detail
-                }
-            }
-        }
-        background: Rectangle {
-            color: row.selected || row.hovered || row.down ? Theme.cardBackground : Theme.windowBackground
-            border.width: row.activeFocus ? Theme.cardBorderWidth : 0
-            border.color: Theme.accent
-            Rectangle {
-                height: parent.height
-                width: 2
-                visible: row.selected
-                color: Theme.accent
-            }
-            Rectangle {
-                anchors.bottom: parent.bottom
-                width: parent.width
-                height: Theme.cardBorderWidth
-                color: Theme.cardStroke
-            }
-        }
-    }
 }

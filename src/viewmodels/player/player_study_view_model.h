@@ -4,8 +4,8 @@
 // lists), Models/Subtitle.swift (SubtitleTranscript and its window),
 // VideoMiningHistoryStore.swift (record and pruning), and
 // VideoMiningHistoryNavigation.swift (local history destinations).
-// Transcript time is playback position minus subtitle delay; both cue
-// endpoints are inclusive. Chapter time is independent of subtitle delay.
+// SubtitleTranscriptView.swift (transcriptRow) marks both cue endpoints
+// inclusive at playback position minus subtitle delay. Chapter time is independent.
 // The playback surface supplies subtitle bytes and native cue state and
 // performs playback commands. Extracted cues retain their embedded track
 // identity; their cache file is not an external subtitle source.
@@ -28,6 +28,7 @@ class PlayerStudyViewModel : public QObject {
     QML_ELEMENT
     Q_PROPERTY(QVariantList transcript READ transcript NOTIFY transcriptChanged)
     Q_PROPERTY(QString transcriptError READ transcript_error NOTIFY transcriptChanged)
+    Q_PROPERTY(double adjustedTime READ adjusted_time NOTIFY adjustedTimeChanged)
     Q_PROPERTY(int currentRow READ current_row NOTIFY currentRowChanged)
     Q_PROPERTY(int currentVisibleRow READ current_visible_row NOTIFY currentVisibleRowChanged)
     Q_PROPERTY(QString search READ search WRITE set_search NOTIFY searchChanged)
@@ -46,6 +47,7 @@ public:
 
     QVariantList transcript() const;
     QString transcript_error() const;
+    double adjusted_time() const;
     int current_row() const;
     int current_visible_row() const;
     QString search() const;
@@ -82,6 +84,7 @@ public:
 
 signals:
     void transcriptChanged();
+    void adjustedTimeChanged();
     void currentRowChanged();
     void currentVisibleRowChanged();
     void searchChanged();

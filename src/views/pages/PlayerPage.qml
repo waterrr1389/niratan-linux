@@ -1,31 +1,11 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
-// The video player page: the mpv surface with Niratan's floating playback
-// chrome. Metrics and behavior follow Features/Video/VideoControlsView.swift
-// (floating controls 760 x 90, 24 corner radius, play button 42, resting
-// track 4, knob 13, speed presets 0.25...5 in 4 x 2 rows, slider step 0.1),
-// VideoPlayerScreen+OSD.swift (1.35 s on-screen display and the speed, delay
-// and volume value text), VideoPlayerScreen+Shortcuts.swift with
-// VideoShortcutActions.swift (the default key bindings), and
-// VideoPlayerScreen+Chrome.swift (one second auto-hide, chrome revealed by
-// pointer movement, visible while paused). Playback state comes only from
-// MpvItem; the page never reaches libmpv.
-//
-// The stage is black in both themes, as in VideoPlayerScreen.swift, so the
-// letterbox does not follow the window background. Every other surface,
-// border and text colour comes from Theme; the empty-state card, the OSD panel
-// and the chrome use floating tokens because their text sits over that black
-// stage and must stay legible in the light theme too.
-//
-// The chrome hides one second after the last pointer movement over the page,
-// but stays visible while paused, while the pointer is over the bar or the
-// speed panel, and while the timeline is being scrubbed.
-//
-// Chapters, subtitle transcripts and mining history live in the docked study
-// sidebar. The timeline also shows chapter markers. An inspector, an ambient backdrop,
-// remote and media-server sources, playlist navigation, screenshot UI,
-// drag-and-drop and interactive subtitle rendering are not included.
-// Both the playback bar and the study dock project the same A-B state.
+// Floating chrome and timeline metrics follow VideoControlsView.swift.
+// VideoPlayerScreen+OSD.swift specifies the OSD; VideoPlayerScreen+Shortcuts.swift
+// and VideoShortcutActions.swift specify keys. VideoPlayerScreen+Chrome.swift
+// specifies auto-hide and pointer reveal. Playback goes through MpvItem only.
+// Floating theme tokens keep overlays legible over the black video stage.
+// The playback bar and study sidebar share the same A-B loop state.
 
 pragma ComponentBehavior: Bound
 
@@ -784,9 +764,12 @@ Item {
             // scrub/endScrubbing in VideoControlsView.swift).
             Item {
                 id: timeline
-                width: parent.width
+                width: Math.max(0, barColumn.width - (remainingTime.visible
+                    ? remainingTime.width + Theme.spacingSm : 0))
                 height: 18
 
+                readonly property bool emphasized: barHover.hovered || page.scrubbing
+                readonly property int trackHeight: emphasized ? 7 : 4
                 readonly property var markers: {
                     if (mpv.duration <= 0)
                         return []
@@ -821,8 +804,8 @@ Item {
                 Rectangle {
                     anchors.verticalCenter: parent.verticalCenter
                     width: parent.width
-                    height: 4
-                    radius: 2
+                    height: timeline.trackHeight
+                    radius: Math.floor(height / 2)
                     color: Theme.cardStroke
                 }
 
@@ -830,8 +813,8 @@ Item {
                     anchors.verticalCenter: parent.verticalCenter
                     anchors.left: parent.left
                     width: timeline.width * page.displayRatio
-                    height: 4
-                    radius: 2
+                    height: timeline.trackHeight
+                    radius: Math.floor(height / 2)
                     color: Theme.textPrimary
                     opacity: 0.85
                 }
@@ -842,8 +825,8 @@ Item {
                     x: visible ? timeline.width * timeline.activeChapter.start / mpv.duration : 0
                     width: visible ? Math.max(0, Math.min(timeline.width - x,
                         timeline.width * (timeline.activeChapter.duration || 0) / mpv.duration)) : 0
-                    height: 4
-                    radius: 2
+                    height: timeline.trackHeight
+                    radius: Math.floor(height / 2)
                     color: Theme.accent
                 }
 
@@ -930,6 +913,23 @@ Item {
                     onCanceled: {
                         timelineMouse.pressedChapter = -1
                         page.endScrub()
+                    }
+                }
+                Label {
+                    id: remainingTime
+                    x: timeline.width + Theme.spacingSm
+                    anchors.verticalCenter: parent.verticalCenter
+                    visible: !page.compactChrome
+                    width: remainingTimeMetrics.advanceWidth
+                    horizontalAlignment: Text.AlignRight
+                    color: Theme.textSecondary
+                    font.pixelSize: 11
+                    font.features: ({ "tnum": 1 })
+                    text: "-" + page.formatTime(mpv.duration - page.displayTime)
+                    TextMetrics {
+                        id: remainingTimeMetrics
+                        font: remainingTime.font
+                        text: "-" + page.formatTime(mpv.duration)
                     }
                 }
             }

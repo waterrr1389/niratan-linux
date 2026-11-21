@@ -214,8 +214,7 @@ struct PlayerStudyViewModel::State {
                                 [](double time, const Cue& cue) { return time < cue.start; });
     }
 
-    int active_row() const {
-        const double time = position - delay;
+    int active_row(double time) const {
         for (qsizetype i = first_after(time) - cues.cbegin(); i > 0 && end_prefix[i - 1] >= time;) {
             --i;
             if (cues[i].end >= time) {
@@ -240,6 +239,7 @@ PlayerStudyViewModel::~PlayerStudyViewModel() = default;
 
 QVariantList PlayerStudyViewModel::transcript() const { return state_->transcript; }
 QString PlayerStudyViewModel::transcript_error() const { return state_->transcript_error; }
+double PlayerStudyViewModel::adjusted_time() const { return state_->position - state_->delay; }
 int PlayerStudyViewModel::current_row() const { return state_->current; }
 int PlayerStudyViewModel::current_visible_row() const { return state_->current_visible; }
 QString PlayerStudyViewModel::search() const { return state_->search; }
@@ -294,7 +294,11 @@ void PlayerStudyViewModel::setVideo(const QUrl& video) {
          local_url(*state_->pending_jump->video_path) != state_->video)) {
         state_->pending_jump.reset();
     }
+    const double previous_time = adjusted_time();
     state_->position = 0.0;
+    if (previous_time != adjusted_time()) {
+        emit adjustedTimeChanged();
+    }
     updateNativeCue({}, -1.0, -1.0);
     setSubtitleDocument({}, {}, false);
     set_notice({});
@@ -313,8 +317,12 @@ void PlayerStudyViewModel::setPlaybackReady(bool ready) {
 }
 
 void PlayerStudyViewModel::updatePlayback(double position, double subtitleDelay) {
+    const double previous_time = adjusted_time();
     state_->position = position;
     state_->delay = subtitleDelay;
+    if (previous_time != adjusted_time()) {
+        emit adjustedTimeChanged();
+    }
     update_current();
 }
 
@@ -370,7 +378,7 @@ void PlayerStudyViewModel::publish_transcript() {
         latest = std::max(latest, cue.end);
         state_->end_prefix.append(latest);
     }
-    const int current = state_->active_row();
+    const int current = state_->active_row(adjusted_time());
     if (state_->current != current) {
         state_->current = current;
         emit currentRowChanged();
@@ -390,7 +398,7 @@ void PlayerStudyViewModel::rebuild_filter() {
     int focus = 0;
     if (query.isEmpty()) {
         focus = state_->current >= 0 ? state_->current
-            : int(state_->first_after(state_->position - state_->delay) - state_->cues.cbegin());
+            : int(state_->first_after(adjusted_time()) - state_->cues.cbegin());
     }
     reset_window(focus);
 }
@@ -440,7 +448,7 @@ void PlayerStudyViewModel::showLater() {
 }
 
 void PlayerStudyViewModel::update_current() {
-    const int current = state_->active_row();
+    const int current = state_->active_row(adjusted_time());
     if (state_->current != current) {
         state_->current = current;
         if (current >= 0 && state_->search.trimmed().isEmpty() &&
@@ -508,7 +516,7 @@ void PlayerStudyViewModel::mineCurrentSubtitle() {
     }
     QList<Cue> active;
     if (!state_->cues.isEmpty()) {
-        const double time = state_->position - state_->delay;
+        const double time = adjusted_time();
         for (qsizetype i = state_->first_after(time) - state_->cues.cbegin();
              i > 0 && state_->end_prefix[i - 1] >= time;) {
             --i;

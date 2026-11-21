@@ -156,6 +156,7 @@ qt_add_qml_module(niratan
         src/views/reader/ReaderStatisticsInspector.qml
         src/views/reader/ReaderProgress.qml
         src/views/player/StudySidebar.qml
+        src/views/player/StudyTimelineRow.qml
         src/views/player/VideoOpenMenu.qml
         src/views/player/VideoSettingsPanel.qml
         src/views/pages/ReaderPage.qml
