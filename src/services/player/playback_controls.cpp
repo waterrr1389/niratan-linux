@@ -28,7 +28,7 @@ double normalized_speed(double speed) {
     if (speed <= kMinimumSpeed) {
         return kMinimumSpeed;
     }
-    return std::clamp(std::round(speed / kSpeedStep) / 10.0, kCustomMinimum,
+    return std::clamp(std::round(speed / kSpeedStep) * kSpeedStep, kCustomMinimum,
                       kMaximumSpeed);
 }
 
