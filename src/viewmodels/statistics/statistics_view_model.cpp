@@ -4,8 +4,6 @@
 
 #include <QDateTime>
 #include <QFileSystemWatcher>
-#include <QJsonDocument>
-#include <QJsonObject>
 #include <QTimeZone>
 #include <QThread>
 #include <QUrl>
@@ -25,9 +23,9 @@
 #include "models/statistics/dashboard_models.h"
 #include "models/statistics/statistics.h"
 #include "services/books/book_storage.h"
+#include "services/settings/global_settings.h"
 #include "services/statistics/statistics_storage.h"
 #include "services/storage/app_paths.h"
-#include "services/storage/json_file.h"
 
 namespace niratan::viewmodels {
 namespace {
@@ -93,61 +91,14 @@ QString cover_url(const std::optional<std::string>& path) {
                : QString();
 }
 
-QJsonObject read_settings_object(const std::filesystem::path& path) {
-    const storage::JsonReadResult read = storage::read_json_file(path);
-    if (read.status == storage::JsonReadStatus::success && read.document.isObject()) {
-        return read.document.object();
-    }
-    return {};
-}
-
-// Merges `values` into the existing object so unrelated settings survive. A
-// file that is valid JSON but not an object is left untouched.
-bool write_settings(const std::filesystem::path& path, const QJsonObject& values) {
-    QJsonObject object;
-    const storage::JsonReadResult read = storage::read_json_file(path);
-    if (read.status == storage::JsonReadStatus::success) {
-        if (!read.document.isObject()) {
-            return false;
-        }
-        object = read.document.object();
-    }
-    for (auto it = values.constBegin(); it != values.constEnd(); ++it) {
-        object.insert(it.key(), it.value());
-    }
-    std::string error;
-    return storage::write_json_file(path, QJsonDocument(object), &error);
-}
-
-StatisticsTargetSettings load_settings(const std::filesystem::path& path) {
-    StatisticsTargetSettings settings;
-    const QJsonObject object = read_settings_object(path);
-    const std::string_view duration_id =
-        statistics::daily_target_type_id(DailyTargetType::duration);
-    if (object.value(QStringLiteral("dailyStatisticsTargetType")).toString() ==
-        QString::fromStdString(std::string(duration_id))) {
-        settings.daily_target_type = DailyTargetType::duration;
-    }
-    settings.daily_character_target = object
-                                          .value(QStringLiteral("dailyStatisticsCharacterTarget"))
-                                          .toInt(settings.daily_character_target);
-    settings.daily_duration_target_minutes =
-        object.value(QStringLiteral("dailyStatisticsDurationTargetMinutes"))
-            .toInt(settings.daily_duration_target_minutes);
-    settings.weekly_target_days =
-        object.value(QStringLiteral("weeklyStatisticsTargetDays"))
-            .toInt(settings.weekly_target_days);
-    return settings.clamped();
-}
-
 }  // namespace
 
 struct StatisticsViewModel::State {
     explicit State(std::filesystem::path data_root)
-        : storage(data_root), settings_path(std::move(data_root) / "settings.json") {}
+        : storage(data_root), global(std::move(data_root) / "settings.json") {}
 
     BookStorage storage;
-    std::filesystem::path settings_path;
+    settings::GlobalSettings global;
     StatisticsTargetSettings settings;
     StatisticsDashboardSnapshot snapshot;
     std::vector<BookShelf> shelves;
@@ -199,7 +150,7 @@ StatisticsViewModel* StatisticsViewModel::create(QQmlEngine*, QJSEngine*) {
 
 StatisticsViewModel::StatisticsViewModel(QObject* parent)
     : QObject(parent), state_(std::make_unique<State>(storage::data_root())) {
-    state_->settings = load_settings(state_->settings_path);
+    state_->settings = state_->global.statistics_targets();
     state_->today = statistics::local_day(QDateTime::currentDateTime(), load_reset_minutes(),
                                           QTimeZone::systemTimeZone());
     reset_selection();
@@ -629,28 +580,14 @@ void StatisticsViewModel::reset_selection() {
 }
 
 int StatisticsViewModel::load_reset_minutes() const {
-    const QJsonObject object = read_settings_object(state_->settings_path);
-    return statistics::normalized_reset_minutes(
-        object.value(QStringLiteral("statisticsResetTime")).toInt(0));
+    return state_->global.statistics_preferences().preferences.reset_minutes;
 }
 
 void StatisticsViewModel::persist_settings() {
-    const std::string_view target_id =
-        statistics::daily_target_type_id(state_->settings.daily_target_type);
-    QJsonObject values;
-    values.insert(QStringLiteral("dailyStatisticsTargetType"),
-                  QString::fromStdString(std::string(target_id)));
-    values.insert(QStringLiteral("dailyStatisticsCharacterTarget"),
-                  state_->settings.daily_character_target);
-    values.insert(QStringLiteral("dailyStatisticsDurationTargetMinutes"),
-                  state_->settings.daily_duration_target_minutes);
-    values.insert(QStringLiteral("weeklyStatisticsTargetDays"),
-                  state_->settings.weekly_target_days);
-
-    // Re-reading the merged file is the reload step: the in-memory settings
+    // Re-reading after the write is the reload step: the in-memory settings
     // then match what a later launch sees.
-    if (write_settings(state_->settings_path, values)) {
-        state_->settings = load_settings(state_->settings_path);
+    if (state_->global.save_statistics_targets(state_->settings) == settings::StoreError::none) {
+        state_->settings = state_->global.statistics_targets();
     }
 }
 

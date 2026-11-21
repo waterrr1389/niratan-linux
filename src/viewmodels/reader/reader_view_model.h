@@ -37,12 +37,9 @@
 // Features/Reader/ReaderStatisticsPersistencePolicy.swift, the model owns one
 // reader::BookStatisticsStore and one reader::ReadingTracker for the open book.
 // They are created in openBook after the session is open and destroyed in
-// closeBook. openBook reads the statistics keys from
-// <data root>/settings.json:
-//   enableStatistics         bool   default false
-//   statisticsAutostartMode  "Off" | "Page Turn" | "On", default "Off"
-//   statisticsResetTime      int    clamped to 0..1439, default 0
-// The file is only read here; the statistics page owns writing those keys.
+// closeBook. openBook reads the statistics preferences (enabled, autostart
+// mode, reset minute) through settings::GlobalSettings; a missing or damaged
+// settings.json gives the defaults. The reader never writes those keys.
 // The tracker is configured with the local time zone, and On mode starts
 // tracking at the open instant. Page Turn mode starts on the first page turn.
 //

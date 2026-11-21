@@ -2,7 +2,6 @@
 
 #include "settings_view_model.h"
 
-#include <QJsonValue>
 #include <QStringList>
 
 #include <algorithm>
@@ -15,6 +14,7 @@
 #include "models/profiles/dictionary_settings.h"
 #include "models/profiles/reader_settings.h"
 #include "models/statistics/statistics.h"
+#include "services/settings/global_settings.h"
 #include "services/settings/settings_store.h"
 
 namespace niratan::viewmodels {
@@ -22,12 +22,9 @@ namespace {
 
 using profiles::DictionaryProfileSettings;
 using profiles::ReaderProfileSettings;
+using settings::GlobalSettings;
 using settings::SettingsStore;
 using settings::StoreError;
-
-const auto kEnableStatistics = QStringLiteral("enableStatistics");
-const auto kAutostartMode = QStringLiteral("statisticsAutostartMode");
-const auto kResetTime = QStringLiteral("statisticsResetTime");
 
 bool is_theme(std::string_view value) {
     return value == "System" || value == "Light" || value == "Dark" || value == "Sepia"
@@ -50,9 +47,9 @@ bool is_collapse_mode(std::string_view value) {
     return value == "Expand All" || value == "Collapse All" || value == "Custom";
 }
 
-bool is_autostart_mode(const QString& value) {
-    return value == QStringLiteral("Off") || value == QStringLiteral("Page Turn")
-           || value == QStringLiteral("On");
+QString autostart_text(statistics::StatisticsAutostartMode mode) {
+    const std::string_view id = statistics::autostart_mode_id(mode);
+    return QString::fromUtf8(id.data(), qsizetype(id.size()));
 }
 
 double snap(double value, double minimum, double maximum, int increments_per_unit) {
@@ -65,9 +62,7 @@ double snap(double value, double minimum, double maximum, int increments_per_uni
 struct SettingsViewModel::State {
     ReaderProfileSettings reader = profiles::default_reader_settings();
     DictionaryProfileSettings dictionary = profiles::default_dictionary_settings();
-    bool statistics_enabled = false;
-    QString autostart_mode = QStringLiteral("Off");
-    int reset_minutes = 0;
+    settings::StatisticsPreferences statistics;
 
     bool reader_writable = false;
     bool dictionary_writable = false;
@@ -77,6 +72,7 @@ struct SettingsViewModel::State {
     QString statistics_error;
 
     std::optional<SettingsStore> store;
+    std::optional<GlobalSettings> global;
 };
 
 SettingsViewModel::SettingsViewModel(QObject* parent)
@@ -115,29 +111,14 @@ SettingsViewModel::SettingsViewModel(QObject* parent)
 
     // Load the three global statistics keys.
     {
-        const auto global =
-            store->read_global({kEnableStatistics.toStdString(), kAutostartMode.toStdString(),
-                                 kResetTime.toStdString()});
-        if (global.status == settings::GlobalRead::Status::invalid) {
-            state_->statistics_error =
-                tr("Could not load settings.json: %1.")
-                    .arg(QString::fromStdString(global.error));
-        } else if (global.status == settings::GlobalRead::Status::success) {
-            for (const auto& [key, value] : global.entries) {
-                const auto qkey = QString::fromStdString(key);
-                if (qkey == kEnableStatistics) {
-                    state_->statistics_enabled = value.toBool();
-                } else if (qkey == kAutostartMode) {
-                    const QString mode = value.toString();
-                    if (is_autostart_mode(mode)) {
-                        state_->autostart_mode = mode;
-                    }
-                } else if (qkey == kResetTime) {
-                    state_->reset_minutes =
-                        statistics::normalized_reset_minutes(value.toInt());
-                }
-            }
+        GlobalSettings global = GlobalSettings::at_data_root();
+        const auto load = global.statistics_preferences();
+        if (load.status == settings::LoadStatus::invalid) {
+            state_->statistics_error = tr("Could not load settings.json: %1.")
+                                           .arg(QString::fromStdString(load.error));
         }
+        state_->statistics = load.preferences;
+        state_->global = std::move(global);
     }
 
     state_->store = std::move(store);
@@ -457,33 +438,42 @@ void SettingsViewModel::setCustomCSS(const QString& value) {
     update_dictionary(state_->dictionary.custom_css, value.toStdString());
 }
 
-bool SettingsViewModel::enableStatistics() const { return state_->statistics_enabled; }
+bool SettingsViewModel::enableStatistics() const { return state_->statistics.enabled; }
 
 void SettingsViewModel::setEnableStatistics(bool value) {
-    if (state_->statistics_enabled != value) {
-        state_->statistics_enabled = value;
-        save_statistic(kEnableStatistics, value);
+    if (state_->statistics.enabled != value) {
+        state_->statistics.enabled = value;
+        if (state_->global) {
+            report_statistics_save(state_->global->save_statistics_enabled(value));
+        }
         emit statisticsChanged();
     }
 }
 
-QString SettingsViewModel::statisticsAutostartMode() const { return state_->autostart_mode; }
+QString SettingsViewModel::statisticsAutostartMode() const {
+    return autostart_text(state_->statistics.autostart_mode);
+}
 
 void SettingsViewModel::setStatisticsAutostartMode(const QString& value) {
-    if (is_autostart_mode(value) && state_->autostart_mode != value) {
-        state_->autostart_mode = value;
-        save_statistic(kAutostartMode, value);
+    const auto mode = settings::autostart_mode_from_id(value.toStdString());
+    if (autostart_text(mode) == value && state_->statistics.autostart_mode != mode) {
+        state_->statistics.autostart_mode = mode;
+        if (state_->global) {
+            report_statistics_save(state_->global->save_statistics_autostart_mode(mode));
+        }
         emit statisticsChanged();
     }
 }
 
-int SettingsViewModel::statisticsResetTime() const { return state_->reset_minutes; }
+int SettingsViewModel::statisticsResetTime() const { return state_->statistics.reset_minutes; }
 
 void SettingsViewModel::setStatisticsResetTime(int value) {
     const int clamped = statistics::normalized_reset_minutes(value);
-    if (state_->reset_minutes != clamped) {
-        state_->reset_minutes = clamped;
-        save_statistic(kResetTime, clamped);
+    if (state_->statistics.reset_minutes != clamped) {
+        state_->statistics.reset_minutes = clamped;
+        if (state_->global) {
+            report_statistics_save(state_->global->save_statistics_reset_minutes(clamped));
+        }
         emit statisticsChanged();
     }
 }
@@ -506,16 +496,9 @@ void SettingsViewModel::save_dictionary() {
         set_error(state_->dictionary_error, {});
 }
 
-void SettingsViewModel::save_statistic(const QString& key, const QJsonValue& value) {
-    if (!state_->store) {
-        return;
-    }
-    const auto err = state_->store->write_global(key.toStdString(), value);
-    if (err != StoreError::none) {
-        set_error(state_->statistics_error, tr("Could not save settings.json."));
-    } else {
-        set_error(state_->statistics_error, {});
-    }
+void SettingsViewModel::report_statistics_save(StoreError error) {
+    set_error(state_->statistics_error,
+              error == StoreError::none ? QString() : tr("Could not save settings.json."));
 }
 
 void SettingsViewModel::set_error(QString& slot, QString error) {

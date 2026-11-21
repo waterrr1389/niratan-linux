@@ -2,9 +2,6 @@
 
 #include "settings_store.h"
 
-#include <QJsonDocument>
-#include <QJsonObject>
-
 #include <filesystem>
 #include <optional>
 #include <string>
@@ -41,8 +38,7 @@ std::optional<SettingsStore> SettingsStore::create() {
 
 SettingsStore::SettingsStore(std::filesystem::path data_root)
     : data_root_(std::move(data_root)),
-      profiles_directory_(data_root_ / kProfilesDir),
-      global_file_(data_root_ / "settings.json") {
+      profiles_directory_(data_root_ / kProfilesDir) {
     profiles::ProfileRepository repository(data_root_);
     active_profile_id_ = repository.active_profile().id;
 }
@@ -193,52 +189,6 @@ DictionaryProfileSettings SettingsStore::dictionary_settings_for(
     }
     const auto decoded = load_dictionary_from(*dir);
     return decoded.value_or(fallback);
-}
-
-// ---------------------------------------------------------------------------
-// Global settings
-// ---------------------------------------------------------------------------
-
-GlobalRead SettingsStore::read_global(const std::vector<std::string>& keys) const {
-    const auto read = storage::read_json_file(global_file_);
-    GlobalRead result;
-    if (read.status == storage::JsonReadStatus::missing) {
-        result.status = GlobalRead::Status::missing;
-        return result;
-    }
-    if (read.status == storage::JsonReadStatus::invalid) {
-        result.status = GlobalRead::Status::invalid;
-        result.error = read.error;
-        return result;
-    }
-    if (!read.document.isObject()) {
-        result.status = GlobalRead::Status::invalid;
-        result.error = "settings.json is not a JSON object";
-        return result;
-    }
-    result.status = GlobalRead::Status::success;
-    const QJsonObject object = read.document.object();
-    for (const auto& key : keys) {
-        result.entries.emplace_back(key, object.value(QString::fromStdString(key)));
-    }
-    return result;
-}
-
-StoreError SettingsStore::write_global(const std::string& key, const QJsonValue& value) {
-    const auto read = storage::read_json_file(global_file_);
-    if (read.status == storage::JsonReadStatus::invalid) {
-        return StoreError::io_error;
-    }
-    QJsonObject object;
-    if (read.status == storage::JsonReadStatus::success) {
-        if (!read.document.isObject()) {
-            return StoreError::io_error;
-        }
-        object = read.document.object();
-    }
-    object.insert(QString::fromStdString(key), value);
-    const bool ok = storage::write_json_file(global_file_, QJsonDocument(object));
-    return ok ? StoreError::none : StoreError::io_error;
 }
 
 }  // namespace niratan::settings

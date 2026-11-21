@@ -1,8 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
 // Tests for SettingsStore, following Core/ProfileSettingsStore.swift
-// (bootstrap, activate, persistCurrent, dictionarySettings(for:fallback:))
-// and Core/UserConfig.swift (the global settings.json read/write contract).
+// (bootstrap, activate, persistCurrent, dictionarySettings(for:fallback:)).
 
 #include "services/settings/settings_store.h"
 
@@ -22,7 +21,6 @@
 
 using niratan::profiles::default_dictionary_settings;
 using niratan::profiles::default_reader_settings;
-using niratan::settings::GlobalRead;
 using niratan::settings::SettingsStore;
 using niratan::settings::StoreError;
 using ReaderProfileSettings = niratan::profiles::ReaderProfileSettings;
@@ -46,116 +44,6 @@ class SettingsStoreTest : public QObject {
     Q_OBJECT
 
    private slots:
-    // --- global read ---
-
-    void readGlobal_missingFile_returnsMissing() {
-        QTemporaryDir dir;
-        QVERIFY(dir.isValid());
-        SettingsStore store(make_root(dir));
-
-        const auto result = store.read_global({"enableStatistics"});
-        QCOMPARE(result.status, GlobalRead::Status::missing);
-        QVERIFY(result.entries.empty());
-    }
-
-    void readGlobal_validFile_returnsRequestedKeys() {
-        QTemporaryDir dir;
-        QVERIFY(dir.isValid());
-        const auto root = make_root(dir);
-        write_text(root / "settings.json",
-                   R"({"enableStatistics":true,"statisticsResetTime":60})");
-        SettingsStore store(root);
-
-        const auto result = store.read_global({"enableStatistics", "statisticsResetTime"});
-        QCOMPARE(result.status, GlobalRead::Status::success);
-        QCOMPARE(result.entries.size(), size_t(2));
-        QCOMPARE(result.entries[0].first, std::string("enableStatistics"));
-        QVERIFY(result.entries[0].second.toBool() == true);
-        QCOMPARE(result.entries[1].first, std::string("statisticsResetTime"));
-        QCOMPARE(result.entries[1].second.toInt(), 60);
-    }
-
-    void readGlobal_absentKey_returnsUndefined() {
-        QTemporaryDir dir;
-        QVERIFY(dir.isValid());
-        const auto root = make_root(dir);
-        write_text(root / "settings.json", R"({"enableStatistics":true})");
-        SettingsStore store(root);
-
-        const auto result = store.read_global({"statisticsResetTime"});
-        QCOMPARE(result.status, GlobalRead::Status::success);
-        QVERIFY(result.entries[0].second.isUndefined());
-    }
-
-    void readGlobal_damagedFile_returnsInvalid() {
-        QTemporaryDir dir;
-        QVERIFY(dir.isValid());
-        const auto root = make_root(dir);
-        write_text(root / "settings.json", "{bad json");
-        SettingsStore store(root);
-
-        const auto result = store.read_global({"enableStatistics"});
-        QCOMPARE(result.status, GlobalRead::Status::invalid);
-        QVERIFY(!result.error.empty());
-    }
-
-    void readGlobal_notAnObject_returnsInvalid() {
-        QTemporaryDir dir;
-        QVERIFY(dir.isValid());
-        const auto root = make_root(dir);
-        write_text(root / "settings.json", "[1,2,3]");
-        SettingsStore store(root);
-
-        const auto result = store.read_global({"x"});
-        QCOMPARE(result.status, GlobalRead::Status::invalid);
-    }
-
-    // --- global write ---
-
-    void writeGlobal_newFile_createsDocument() {
-        QTemporaryDir dir;
-        QVERIFY(dir.isValid());
-        SettingsStore store(make_root(dir));
-
-        const auto err = store.write_global("enableStatistics", QJsonValue(true));
-        QCOMPARE(err, StoreError::none);
-
-        const auto result = store.read_global({"enableStatistics"});
-        QCOMPARE(result.status, GlobalRead::Status::success);
-        QVERIFY(result.entries[0].second.toBool() == true);
-    }
-
-    void writeGlobal_preservesOtherKeys() {
-        QTemporaryDir dir;
-        QVERIFY(dir.isValid());
-        const auto root = make_root(dir);
-        write_text(root / "settings.json", R"({"enableStatistics":true})");
-        SettingsStore store(root);
-
-        store.write_global("statisticsResetTime", QJsonValue(30));
-
-        const auto result = store.read_global({"enableStatistics", "statisticsResetTime"});
-        QCOMPARE(result.status, GlobalRead::Status::success);
-        QVERIFY(result.entries[0].second.toBool() == true);
-        QCOMPARE(result.entries[1].second.toInt(), 30);
-    }
-
-    void writeGlobal_damagedFile_returnsIoError() {
-        QTemporaryDir dir;
-        QVERIFY(dir.isValid());
-        const auto root = make_root(dir);
-        write_text(root / "settings.json", "{bad json");
-        SettingsStore store(root);
-
-        const auto err = store.write_global("x", QJsonValue(1));
-        QCOMPARE(err, StoreError::io_error);
-
-        // Original file must be untouched.
-        std::ifstream f(root / "settings.json", std::ios::binary);
-        const std::string content(std::istreambuf_iterator<char>(f), {});
-        QCOMPARE(content, std::string("{bad json"));
-    }
-
     // --- profile settings load ---
 
     void loadReader_missingFile_returnsNullopt() {
@@ -299,6 +187,22 @@ class SettingsStoreTest : public QObject {
 
         const auto result = store.active_reader();
         QCOMPARE(result.status, niratan::settings::LoadStatus::missing);
+        QCOMPARE(result.settings.font_size,
+                 niratan::profiles::default_reader_settings().font_size);
+    }
+
+    void activeReader_damagedFile_isInvalidWithDefaults() {
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        const auto root = make_root(dir);
+        SettingsStore store(root);
+        write_text(root / "Profiles" / std::string(store.active_profile_id()) /
+                       "reader_settings.json",
+                   "{bad json");
+
+        const auto result = store.active_reader();
+        QCOMPARE(result.status, niratan::settings::LoadStatus::invalid);
+        QVERIFY(!result.error.empty());
         QCOMPARE(result.settings.font_size,
                  niratan::profiles::default_reader_settings().font_size);
     }

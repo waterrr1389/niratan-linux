@@ -32,9 +32,10 @@
 //   dailyStatisticsCharacterTarget         500..50000, step 500
 //   dailyStatisticsDurationTargetMinutes   5..240, step 5
 //   weeklyStatisticsTargetDays             1..7
-// Other keys in the file are preserved. Values are clamped and snapped by
-// StatisticsTargetSettings::clamped() on read and on write. A failed write
-// keeps the in-memory value and is not reported.
+// They are read and written through settings::GlobalSettings, which keeps
+// other keys and refuses to rewrite a damaged document. Values are clamped
+// and snapped by StatisticsTargetSettings::clamped() on read and on write. A
+// failed write keeps the in-memory value and is not reported.
 //
 // Projections
 // -----------

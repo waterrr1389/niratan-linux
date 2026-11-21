@@ -19,6 +19,8 @@
 
 #include <memory>
 
+#include "services/settings/settings_status.h"
+
 namespace niratan::viewmodels {
 
 class SettingsViewModel : public QObject {
@@ -165,7 +167,7 @@ class SettingsViewModel : public QObject {
     void update_dictionary(Field& field, Value value);
     void save_reader();
     void save_dictionary();
-    void save_statistic(const QString& key, const QJsonValue& value);
+    void report_statistics_save(settings::StoreError error);
     void set_error(QString& slot, QString error);
 };
 

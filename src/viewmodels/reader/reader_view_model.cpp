@@ -6,6 +6,7 @@
 #include <QFile>
 #include <QFutureWatcher>
 #include <QJsonArray>
+#include <QJsonDocument>
 #include <QJsonObject>
 #include <QPromise>
 #include <QThreadPool>
@@ -22,8 +23,8 @@
 #include "services/reader/reading_tracker.h"
 #include "services/reader/book_search.h"
 #include "services/reader/theme.h"
+#include "services/settings/global_settings.h"
 #include "services/storage/app_paths.h"
-#include "services/storage/json_file.h"
 
 namespace niratan::viewmodels {
 namespace {
@@ -59,46 +60,6 @@ std::string script_string(const QString& value) {
     // An EPUB identifier is data even when embedded in an inline script.
     array.replace("<", "\\u003c");
     return array.mid(1, array.size() - 2).toStdString();
-}
-
-StatisticsAutostartMode parse_autostart_mode(const QString& raw) {
-    if (raw == QString::fromStdString(std::string(
-                   niratan::statistics::autostart_mode_id(StatisticsAutostartMode::page_turn)))) {
-        return StatisticsAutostartMode::page_turn;
-    }
-    if (raw == QString::fromStdString(
-                   std::string(niratan::statistics::autostart_mode_id(
-                       StatisticsAutostartMode::on)))) {
-        return StatisticsAutostartMode::on;
-    }
-    return StatisticsAutostartMode::off;
-}
-
-// The statistics keys of <data root>/settings.json. Reads never write: the
-// statistics page owns the stored values. A missing or damaged file is the
-// default configuration, as UserConfig's synthesized decode would fall back.
-struct ReaderStatisticsSettings {
-    bool enabled = false;
-    StatisticsAutostartMode autostart_mode = StatisticsAutostartMode::off;
-    int reset_minutes = 0;
-};
-
-ReaderStatisticsSettings load_statistics_settings(const std::filesystem::path& path) {
-    ReaderStatisticsSettings settings;
-    const storage::JsonReadResult read = storage::read_json_file(path);
-    if (read.status != storage::JsonReadStatus::success || !read.document.isObject()) {
-        return settings;
-    }
-    const QJsonObject object = read.document.object();
-    settings.enabled = object.value(QStringLiteral("enableStatistics")).toBool(false);
-    settings.autostart_mode = parse_autostart_mode(
-        object.value(QStringLiteral("statisticsAutostartMode")).toString(QStringLiteral("Off")));
-    // normalizedResetMinutes clamps the same range, so the stored value never
-    // reaches the tracker out of range.
-    settings.reset_minutes =
-        std::clamp(object.value(QStringLiteral("statisticsResetTime")).toInt(0), 0,
-                   niratan::statistics::minutes_per_day - 1);
-    return settings;
 }
 
 std::string resolve_furigana(const ReaderProfileSettings& settings) {
@@ -638,8 +599,10 @@ bool ReaderViewModel::openBook(const QString& folder) {
     // Statistics is configured for this book, after the session is open so a
     // failed open leaves no tracker behind. The settings file is read on every
     // open; the reader never writes it.
-    const ReaderStatisticsSettings statistics_settings =
-        load_statistics_settings(state_->storage.app_directory() / "settings.json");
+    const settings::StatisticsPreferences statistics_settings =
+        settings::GlobalSettings(state_->storage.app_directory() / "settings.json")
+            .statistics_preferences()
+            .preferences;
     state_->statistics_enabled = statistics_settings.enabled;
     // Replacing an open book must not leave a tracker borrowing a destroyed
     // store; the tracker goes first.
