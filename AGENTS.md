@@ -42,6 +42,41 @@ both answer a question, do not ask at all.
 A problem the owner reports is reproduced as a failing test before it is
 fixed, wherever the layer allows it.
 
+## Workflow
+
+Three agent roles; the `Audit` and `Implement` definitions live in the local
+`.opencode/agents/`.
+
+- Coordinator: splits a flow into modules, writes or approves the task file,
+  dispatches, reads verdicts and gate output, stages and commits. It does not
+  read implementation diffs routinely; that is the reviewer's job.
+- `Audit`: judges work against the Swift source only, never against another
+  agent's summary. One session per flow, so its context does not drift.
+- `Implement`: writes code. One session per module; related modules in a
+  batch may reuse it.
+
+Each module has a task file `notes/specs/<area>-<module>.md` from
+`notes/specs/TEMPLATE.md`: Swift sources, a behaviour table with tiers, the
+files each phase may edit, and a review section. Agents exchange findings
+through this file, not through messages. Once the module is committed its
+header carries the citations and the task file is deleted.
+
+1. `Audit` drafts the behaviour table from Swift; the coordinator checks it
+   is complete and in scope.
+2. `Implement` writes the header, tests and a stub that fails them.
+3. `Audit` checks every test against its Swift symbol and records `ok` or a
+   deviation per behaviour. Deviations go back to step 2.
+4. The coordinator stages the approved tests. They are now frozen: after the
+   implementation, `git diff --name-only` must show no test file.
+5. `Implement` implements until `scripts/check.sh` passes.
+6. For tier 1 behaviours, `Audit` checks the implementation against Swift.
+   Build and wiring changes skip this; the gates and flow tests cover them.
+7. The coordinator commits.
+
+Replies are a few lines: results, deviations, open questions. A delegated
+agent that needs a product decision stops and reports it; only the
+coordinator asks the owner.
+
 ## Layout
 
 - `src/models/`: plain data and pure functions shared by every layer.
