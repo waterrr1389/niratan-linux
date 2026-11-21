@@ -110,6 +110,7 @@ class BookStorageTest : public QObject {
     void unsafe_folders_are_rejected();
     void books_without_metadata_are_skipped();
     void book_directories_must_exist();
+    void deleting_a_book_removes_its_folder();
     void sasayaki_sidecars_round_trip();
     void missing_or_undecodable_sasayaki_sidecars_load_as_none();
 };
@@ -256,6 +257,24 @@ void BookStorageTest::book_directories_must_exist() {
     QVERIFY(!storage.has_book_directory("Missing"));
     QVERIFY(!storage.has_book_directory("File"));
     QVERIFY(!storage.has_book_directory("../escape"));
+}
+
+void BookStorageTest::deleting_a_book_removes_its_folder() {
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    BookStorage storage(app_dir(directory));
+    const auto folder = app_dir(directory) / "Books" / "Title";
+    std::filesystem::create_directories(folder / "images");
+    std::ofstream(folder / "metadata.json") << "{}";
+
+    QVERIFY(storage.delete_book("Title"));
+    QVERIFY(!std::filesystem::exists(folder));
+    QVERIFY(std::filesystem::exists(app_dir(directory) / "Books"));
+    QVERIFY(storage.delete_book("Title"));
+    QVERIFY(!storage.delete_book("../escape"));
+    QVERIFY(!storage.delete_book(""));
+    QVERIFY(!storage.delete_book("."));
+    QVERIFY(std::filesystem::exists(app_dir(directory) / "Books"));
 }
 
 // BookStorage.loadSasayakiPlayback / loadSasayakiMatch and

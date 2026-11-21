@@ -215,6 +215,21 @@ bool BookStorage::has_book_directory(std::string_view folder) const {
     return directory.has_value() && std::filesystem::is_directory(*directory, error);
 }
 
+bool BookStorage::delete_book(std::string_view folder) const {
+    const std::optional<std::filesystem::path> directory = book_directory(folder);
+    if (!directory.has_value()) {
+        return false;
+    }
+    // A folder of "." resolves to Books itself.
+    const std::filesystem::path relative = directory->lexically_relative(books_directory_);
+    if (relative.empty() || relative == ".") {
+        return false;
+    }
+    std::error_code error;
+    std::filesystem::remove_all(*directory, error);
+    return !error;
+}
+
 std::optional<sasayaki::SasayakiPlaybackData> BookStorage::load_sasayaki_playback(
     std::string_view folder) const {
     const std::optional<std::filesystem::path> directory = book_directory(folder);

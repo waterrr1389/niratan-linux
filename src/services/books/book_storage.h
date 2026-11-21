@@ -66,6 +66,10 @@ class BookStorage {
     std::optional<std::filesystem::path> book_directory(std::string_view folder) const;
     // Whether book_directory(folder) names an existing directory.
     bool has_book_directory(std::string_view folder) const;
+    // BookStorage.delete(at:) for the book's folder: true when it is gone,
+    // including when it never existed; false for an unsafe folder or a
+    // removal that failed.
+    bool delete_book(std::string_view folder) const;
 
     // Directories without a readable metadata.json are skipped.
     std::vector<BookMetadata> load_all_books() const;

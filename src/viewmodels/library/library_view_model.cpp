@@ -7,7 +7,6 @@
 #include <QVariantMap>
 
 #include <algorithm>
-#include <filesystem>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -174,7 +173,7 @@ struct LibraryViewModel::State {
             entry.insert(QStringLiteral("progress"), value);
             entry.insert(QStringLiteral("percent"), QString::number(value * 100.0, 'f', 1));
             entry.insert(QStringLiteral("finished"), value >= kFinished);
-            const std::optional<std::filesystem::path> cover = storage.cover_path(book.metadata);
+            const auto cover = storage.cover_path(book.metadata);
             entry.insert(QStringLiteral("cover"),
                          cover.has_value() ? QUrl::fromLocalFile(
                                                  QString::fromStdString(cover->string()))
@@ -315,12 +314,8 @@ void LibraryViewModel::deleteBook(const QString& folder) {
         return;
     }
     const std::string id = state_->library.books[*index].metadata.id;
-    if (const auto directory = state_->storage.book_directory(folder_name)) {
-        std::error_code error;
-        std::filesystem::remove_all(*directory, error);
-        if (error) {
-            return;
-        }
+    if (!state_->storage.delete_book(folder_name)) {
+        return;
     }
     // A deleted book is off every shelf, and the model helper is what takes an
     // ID out of all of them.
