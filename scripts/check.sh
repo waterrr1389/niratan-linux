@@ -9,6 +9,7 @@ if [ -z "$NIRATAN_CHECK_LOCKED" ]; then
     mkdir -p build
     NIRATAN_CHECK_LOCKED=1 exec flock build/.check.lock "$self" "$@"
 fi
+scripts/check-layers.sh
 cmake --preset debug
 cmake --build build
 ctest --test-dir build --output-on-failure
