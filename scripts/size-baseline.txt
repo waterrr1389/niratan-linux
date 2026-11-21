@@ -11,7 +11,7 @@ src/services/statistics/statistics_storage.cpp 536
 src/viewmodels/player/player_study_view_model.cpp 701
 src/viewmodels/reader/reader_view_model.cpp 1091
 src/viewmodels/sasayaki/sasayaki_view_model.cpp 927
-src/viewmodels/settings/settings_view_model.cpp 534
+src/viewmodels/settings/settings_view_model.cpp 528
 src/viewmodels/statistics/statistics_view_model.cpp 820
 src/views/pages/LibraryPage.qml 516
 src/views/pages/PlayerPage.qml 1402

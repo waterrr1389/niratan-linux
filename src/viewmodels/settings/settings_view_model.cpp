@@ -2,13 +2,12 @@
 
 #include "settings_view_model.h"
 
-#include <QJsonDocument>
-#include <QJsonObject>
+#include <QJsonValue>
 #include <QStringList>
 
 #include <algorithm>
 #include <cmath>
-#include <initializer_list>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -16,16 +15,15 @@
 #include "models/profiles/dictionary_settings.h"
 #include "models/profiles/reader_settings.h"
 #include "models/statistics/statistics.h"
-#include "services/profiles/profile_repository.h"
-#include "services/storage/app_paths.h"
-#include "services/storage/json_file.h"
+#include "services/settings/settings_store.h"
 
 namespace niratan::viewmodels {
 namespace {
 
 using profiles::DictionaryProfileSettings;
 using profiles::ReaderProfileSettings;
-using storage::JsonReadStatus;
+using settings::SettingsStore;
+using settings::StoreError;
 
 const auto kEnableStatistics = QStringLiteral("enableStatistics");
 const auto kAutostartMode = QStringLiteral("statisticsAutostartMode");
@@ -62,30 +60,6 @@ double snap(double value, double minimum, double maximum, int increments_per_uni
            / increments_per_unit;
 }
 
-QString read_error(const std::filesystem::path& path, const QString& detail) {
-    return SettingsViewModel::tr("Could not load %1: %2.")
-        .arg(QString::fromStdString(path.filename().string()), detail);
-}
-
-template <typename Settings, typename Decode>
-bool load_profile_settings(const std::filesystem::path& path, Settings& settings, Decode decode,
-                           QString& error) {
-    const storage::JsonReadResult read = storage::read_json_file(path);
-    if (read.status == JsonReadStatus::missing) {
-        return true;
-    }
-    if (read.status == JsonReadStatus::success) {
-        if (auto decoded = decode(read.document)) {
-            settings = std::move(*decoded);
-            return true;
-        }
-        error = read_error(path, SettingsViewModel::tr("unexpected settings format"));
-    } else {
-        error = read_error(path, QString::fromStdString(read.error));
-    }
-    return false;
-}
-
 }  // namespace
 
 struct SettingsViewModel::State {
@@ -95,57 +69,78 @@ struct SettingsViewModel::State {
     QString autostart_mode = QStringLiteral("Off");
     int reset_minutes = 0;
 
-    std::filesystem::path reader_path;
-    std::filesystem::path dictionary_path;
-    std::filesystem::path global_path;
     bool reader_writable = false;
     bool dictionary_writable = false;
     QString profile_error;
     QString reader_error;
     QString dictionary_error;
     QString statistics_error;
+
+    std::optional<SettingsStore> store;
 };
 
 SettingsViewModel::SettingsViewModel(QObject* parent)
     : QObject(parent), state_(std::make_unique<State>()) {
-    const auto root = storage::data_root();
-    if (root.empty()) {
+    auto store = SettingsStore::create();
+    if (!store) {
         state_->profile_error = tr("The Niratan data folder could not be located.");
         return;
     }
 
-    const profiles::ProfileRepository repository(root);
-    if (const auto directory = repository.profile_directory(repository.active_profile().id)) {
-        state_->reader_path = *directory / "reader_settings.json";
-        state_->dictionary_path = *directory / "dictionary_settings.json";
-        // Keep settings that could not be decoded intact, even if the JSON
-        // syntax was valid. Defaults remain available in memory.
-        state_->reader_writable = load_profile_settings(
-            state_->reader_path, state_->reader, profiles::reader_settings_from_json,
-            state_->reader_error);
-        state_->dictionary_writable = load_profile_settings(
-            state_->dictionary_path, state_->dictionary, profiles::dictionary_settings_from_json,
-            state_->dictionary_error);
-    } else {
-        state_->profile_error = tr("The active profile has no valid settings folder.");
+    // Load reader settings for the active profile.
+    {
+        const auto result = store->active_reader();
+        if (result.status == settings::LoadStatus::invalid) {
+            state_->reader_error =
+                tr("Could not load reader_settings.json: %1.")
+                    .arg(QString::fromStdString(result.error));
+        } else {
+            state_->reader = result.settings;
+            state_->reader_writable = true;
+        }
     }
 
-    state_->global_path = root / "settings.json";
-    const auto read = storage::read_json_file(state_->global_path);
-    if (read.status == JsonReadStatus::success && read.document.isObject()) {
-        const auto object = read.document.object();
-        state_->statistics_enabled = object.value(kEnableStatistics).toBool();
-        const QString mode = object.value(kAutostartMode).toString();
-        if (is_autostart_mode(mode)) {
-            state_->autostart_mode = mode;
+    // Load dictionary settings for the active profile.
+    {
+        const auto result = store->active_dictionary();
+        if (result.status == settings::LoadStatus::invalid) {
+            state_->dictionary_error =
+                tr("Could not load dictionary_settings.json: %1.")
+                    .arg(QString::fromStdString(result.error));
+        } else {
+            state_->dictionary = result.settings;
+            state_->dictionary_writable = true;
         }
-        state_->reset_minutes = statistics::normalized_reset_minutes(object.value(kResetTime).toInt());
-    } else if (read.status != JsonReadStatus::missing) {
-        state_->statistics_error = read_error(
-            state_->global_path, read.status == JsonReadStatus::invalid
-                                     ? QString::fromStdString(read.error)
-                                     : tr("expected a JSON object"));
     }
+
+    // Load the three global statistics keys.
+    {
+        const auto global =
+            store->read_global({kEnableStatistics.toStdString(), kAutostartMode.toStdString(),
+                                 kResetTime.toStdString()});
+        if (global.status == settings::GlobalRead::Status::invalid) {
+            state_->statistics_error =
+                tr("Could not load settings.json: %1.")
+                    .arg(QString::fromStdString(global.error));
+        } else if (global.status == settings::GlobalRead::Status::success) {
+            for (const auto& [key, value] : global.entries) {
+                const auto qkey = QString::fromStdString(key);
+                if (qkey == kEnableStatistics) {
+                    state_->statistics_enabled = value.toBool();
+                } else if (qkey == kAutostartMode) {
+                    const QString mode = value.toString();
+                    if (is_autostart_mode(mode)) {
+                        state_->autostart_mode = mode;
+                    }
+                } else if (qkey == kResetTime) {
+                    state_->reset_minutes =
+                        statistics::normalized_reset_minutes(value.toInt());
+                }
+            }
+        }
+    }
+
+    state_->store = std::move(store);
 }
 
 SettingsViewModel::~SettingsViewModel() = default;
@@ -243,10 +238,8 @@ QString SettingsViewModel::furiganaMode() const {
 void SettingsViewModel::setFuriganaMode(const QString& value) {
     const auto raw = value.toStdString();
     if (is_furigana_mode(raw)) {
-        const bool hidden = raw == "Hidden";
-        if (state_->reader.furigana_mode != raw || state_->reader.hide_furigana != hidden) {
+        if (state_->reader.furigana_mode != raw) {
             state_->reader.furigana_mode = raw;
-            state_->reader.hide_furigana = hidden;
             save_reader();
             emit readerChanged();
         }
@@ -259,10 +252,16 @@ void SettingsViewModel::setContinuousMode(bool value) {
     update_reader(state_->reader.continuous_mode, value);
 }
 
-bool SettingsViewModel::paragraphMode() const { return state_->reader.paragraph_mode.value_or(false); }
+bool SettingsViewModel::paragraphMode() const {
+    return state_->reader.paragraph_mode.value_or(false);
+}
 
 void SettingsViewModel::setParagraphMode(bool value) {
-    update_reader(state_->reader.paragraph_mode, value);
+    if (state_->reader.paragraph_mode != value) {
+        state_->reader.paragraph_mode = value;
+        save_reader();
+        emit readerChanged();
+    }
 }
 
 bool SettingsViewModel::twoColumnHorizontalPages() const {
@@ -270,19 +269,23 @@ bool SettingsViewModel::twoColumnHorizontalPages() const {
 }
 
 void SettingsViewModel::setTwoColumnHorizontalPages(bool value) {
-    update_reader(state_->reader.two_column_horizontal_pages, value);
+    if (state_->reader.two_column_horizontal_pages != value) {
+        state_->reader.two_column_horizontal_pages = value;
+        save_reader();
+        emit readerChanged();
+    }
 }
 
 int SettingsViewModel::horizontalPadding() const { return state_->reader.horizontal_padding; }
 
 void SettingsViewModel::setHorizontalPadding(int value) {
-    update_reader(state_->reader.horizontal_padding, std::clamp(value, 0, 80));
+    update_reader(state_->reader.horizontal_padding, std::clamp(value, 0, 30));
 }
 
 int SettingsViewModel::verticalPadding() const { return state_->reader.vertical_padding; }
 
 void SettingsViewModel::setVerticalPadding(int value) {
-    update_reader(state_->reader.vertical_padding, std::clamp(value, 0, 50));
+    update_reader(state_->reader.vertical_padding, std::clamp(value, 0, 30));
 }
 
 bool SettingsViewModel::avoidPageBreak() const { return state_->reader.avoid_page_break; }
@@ -312,35 +315,37 @@ void SettingsViewModel::setLayoutAdvanced(bool value) {
 double SettingsViewModel::lineHeight() const { return state_->reader.line_height; }
 
 void SettingsViewModel::setLineHeight(double value) {
-    if (std::isfinite(value)) {
-        update_reader(state_->reader.line_height, snap(value, 1.0, 2.5, 20));
-    }
+    update_reader(state_->reader.line_height, snap(value, 1.0, 3.0, 100));
 }
 
 double SettingsViewModel::characterSpacing() const { return state_->reader.character_spacing; }
 
 void SettingsViewModel::setCharacterSpacing(double value) {
-    if (std::isfinite(value)) {
-        update_reader(state_->reader.character_spacing, snap(value, -10.0, 10.0, 1));
-    }
+    update_reader(state_->reader.character_spacing, snap(value, -0.1, 0.5, 100));
 }
 
 double SettingsViewModel::paragraphSpacing() const { return state_->reader.paragraph_spacing; }
 
 void SettingsViewModel::setParagraphSpacing(double value) {
-    if (std::isfinite(value)) {
-        update_reader(state_->reader.paragraph_spacing, snap(value, 0.0, 3.0, 10));
-    }
+    update_reader(state_->reader.paragraph_spacing, snap(value, 0.0, 3.0, 100));
 }
 
 bool SettingsViewModel::showTitle() const { return state_->reader.show_title; }
 
-void SettingsViewModel::setShowTitle(bool value) { update_reader(state_->reader.show_title, value); }
+void SettingsViewModel::setShowTitle(bool value) {
+    update_reader(state_->reader.show_title, value);
+}
 
-bool SettingsViewModel::showProgress() const { return state_->reader.show_progress.value_or(true); }
+bool SettingsViewModel::showProgress() const {
+    return state_->reader.show_progress.value_or(true);
+}
 
 void SettingsViewModel::setShowProgress(bool value) {
-    update_reader(state_->reader.show_progress, value);
+    if (state_->reader.show_progress != value) {
+        state_->reader.show_progress = value;
+        save_reader();
+        emit readerChanged();
+    }
 }
 
 bool SettingsViewModel::showChapterProgress() const {
@@ -348,27 +353,26 @@ bool SettingsViewModel::showChapterProgress() const {
 }
 
 void SettingsViewModel::setShowChapterProgress(bool value) {
-    update_reader(state_->reader.show_chapter_progress, value);
+    if (state_->reader.show_chapter_progress != value) {
+        state_->reader.show_chapter_progress = value;
+        save_reader();
+        emit readerChanged();
+    }
 }
 
 QString SettingsViewModel::progressCount() const {
-    const auto& reader = state_->reader;
-    if (reader.progress_count && is_progress_count(*reader.progress_count)) {
-        return QString::fromStdString(*reader.progress_count);
+    if (state_->reader.progress_count && is_progress_count(*state_->reader.progress_count)) {
+        return QString::fromStdString(*state_->reader.progress_count);
     }
-    return reader.show_characters ? QStringLiteral("Characters") : QStringLiteral("Off");
+    return state_->reader.show_characters ? QStringLiteral("Characters") : QStringLiteral("Off");
 }
 
 void SettingsViewModel::setProgressCount(const QString& value) {
     const auto raw = value.toStdString();
-    if (is_progress_count(raw)) {
-        const bool show = raw != "Off";
-        if (state_->reader.progress_count != raw || state_->reader.show_characters != show) {
-            state_->reader.progress_count = raw;
-            state_->reader.show_characters = show;
-            save_reader();
-            emit readerChanged();
-        }
+    if (is_progress_count(raw) && state_->reader.progress_count != raw) {
+        state_->reader.progress_count = raw;
+        save_reader();
+        emit readerChanged();
     }
 }
 
@@ -403,7 +407,7 @@ void SettingsViewModel::setScanNonJapaneseText(bool value) {
 int SettingsViewModel::maxResults() const { return state_->dictionary.max_results; }
 
 void SettingsViewModel::setMaxResults(int value) {
-    update_dictionary(state_->dictionary.max_results, std::clamp(value, 1, 50));
+    update_dictionary(state_->dictionary.max_results, std::clamp(value, 1, 64));
 }
 
 int SettingsViewModel::scanLength() const { return state_->dictionary.scan_length; }
@@ -414,7 +418,8 @@ void SettingsViewModel::setScanLength(int value) {
 
 QString SettingsViewModel::collapseMode() const {
     const auto& value = state_->dictionary.collapse_mode;
-    return is_collapse_mode(value) ? QString::fromStdString(value) : QStringLiteral("Expand All");
+    return is_collapse_mode(value) ? QString::fromStdString(value)
+                                   : QStringLiteral("Expand All");
 }
 
 void SettingsViewModel::setCollapseMode(const QString& value) {
@@ -429,10 +434,16 @@ bool SettingsViewModel::twoColumnLayout() const {
 }
 
 void SettingsViewModel::setTwoColumnLayout(bool value) {
-    update_dictionary(state_->dictionary.two_column_layout, value);
+    if (state_->dictionary.two_column_layout != value) {
+        state_->dictionary.two_column_layout = value;
+        save_dictionary();
+        emit dictionaryChanged();
+    }
 }
 
-bool SettingsViewModel::compactGlossaries() const { return state_->dictionary.compact_glossaries; }
+bool SettingsViewModel::compactGlossaries() const {
+    return state_->dictionary.compact_glossaries;
+}
 
 void SettingsViewModel::setCompactGlossaries(bool value) {
     update_dictionary(state_->dictionary.compact_glossaries, value);
@@ -478,49 +489,32 @@ void SettingsViewModel::setStatisticsResetTime(int value) {
 }
 
 void SettingsViewModel::save_reader() {
-    if (state_->reader_writable) {
-        write_document(state_->reader_path, profiles::reader_settings_to_json(state_->reader),
-                       state_->reader_error);
-    }
+    if (!state_->reader_writable || !state_->store) return;
+    const auto err = state_->store->save_active_reader(state_->reader);
+    if (err != StoreError::none)
+        set_error(state_->reader_error, tr("Could not save reader_settings.json."));
+    else
+        set_error(state_->reader_error, {});
 }
 
 void SettingsViewModel::save_dictionary() {
-    if (state_->dictionary_writable) {
-        write_document(state_->dictionary_path,
-                       profiles::dictionary_settings_to_json(state_->dictionary),
-                       state_->dictionary_error);
-    }
+    if (!state_->dictionary_writable || !state_->store) return;
+    const auto err = state_->store->save_active_dictionary(state_->dictionary);
+    if (err != StoreError::none)
+        set_error(state_->dictionary_error, tr("Could not save dictionary_settings.json."));
+    else
+        set_error(state_->dictionary_error, {});
 }
 
 void SettingsViewModel::save_statistic(const QString& key, const QJsonValue& value) {
-    if (state_->global_path.empty()) {
+    if (!state_->store) {
         return;
     }
-
-    const auto read = storage::read_json_file(state_->global_path);
-    if (read.status == JsonReadStatus::invalid
-        || (read.status == JsonReadStatus::success && !read.document.isObject())) {
-        const QString detail = read.status == JsonReadStatus::invalid
-                                   ? QString::fromStdString(read.error)
-                                   : tr("expected a JSON object");
-        set_error(state_->statistics_error, tr("Could not save settings.json: %1.").arg(detail));
-        return;
-    }
-
-    QJsonObject object = read.document.object();
-    object.insert(key, value);
-    write_document(state_->global_path, QJsonDocument(object), state_->statistics_error);
-}
-
-void SettingsViewModel::write_document(const std::filesystem::path& path,
-                                       const QJsonDocument& document, QString& error) {
-    std::string detail;
-    if (storage::write_json_file(path, document, &detail)) {
-        set_error(error, {});
+    const auto err = state_->store->write_global(key.toStdString(), value);
+    if (err != StoreError::none) {
+        set_error(state_->statistics_error, tr("Could not save settings.json."));
     } else {
-        set_error(error, tr("Could not save %1: %2.")
-                             .arg(QString::fromStdString(path.filename().string()),
-                                  QString::fromStdString(detail)));
+        set_error(state_->statistics_error, {});
     }
 }
 

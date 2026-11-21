@@ -389,3 +389,11 @@ target_include_directories(tst_matcher PRIVATE ${CMAKE_SOURCE_DIR}/src)
 target_link_libraries(tst_matcher PRIVATE niratan_core Qt6::Test)
 target_compile_options(tst_matcher PRIVATE -Wall -Wextra -Wpedantic -Werror)
 add_test(NAME matcher COMMAND tst_matcher)
+
+qt_add_executable(tst_settings_store
+    settings/tst_settings_store.cpp
+)
+target_include_directories(tst_settings_store PRIVATE ${CMAKE_SOURCE_DIR}/src)
+target_link_libraries(tst_settings_store PRIVATE niratan_core Qt6::Test)
+target_compile_options(tst_settings_store PRIVATE -Wall -Wextra -Wpedantic -Werror)
+add_test(NAME settings_store COMMAND tst_settings_store)

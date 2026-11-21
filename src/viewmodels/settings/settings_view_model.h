@@ -17,11 +17,7 @@
 #include <QString>
 #include <QtQmlIntegration/qqmlintegration.h>
 
-#include <filesystem>
 #include <memory>
-
-class QJsonDocument;
-class QJsonValue;
 
 namespace niratan::viewmodels {
 
@@ -170,8 +166,6 @@ class SettingsViewModel : public QObject {
     void save_reader();
     void save_dictionary();
     void save_statistic(const QString& key, const QJsonValue& value);
-    void write_document(const std::filesystem::path& path, const QJsonDocument& document,
-                        QString& error);
     void set_error(QString& slot, QString error);
 };
 

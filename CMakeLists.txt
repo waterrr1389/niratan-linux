@@ -72,6 +72,7 @@ qt_add_library(niratan_core STATIC
     src/services/player/playback_controls.cpp
     src/services/player/video_settings.cpp
     src/services/profiles/profile_repository.cpp
+    src/services/settings/settings_store.cpp
     src/services/storage/app_paths.cpp
     src/services/storage/json_file.cpp
 )
