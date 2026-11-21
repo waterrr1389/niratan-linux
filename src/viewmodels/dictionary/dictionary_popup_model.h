@@ -6,10 +6,20 @@
 // scan limits, drop an empty result, and otherwise build the popup shell from
 // the entries, the dictionary styles, the audio sources and the theme.
 //
-// The model never reads files, opens sockets or calls hoshidicts itself. The
-// installed dictionary list, the lookup, the media-independent styles and the
-// popup assets all come from services. Lookup runs synchronously: the library
-// query is in-memory and the page has a single user.
+// Core/UserConfig.swift (apply(dictionaryProfileSettings:)) supplies the
+// profile's resolved defaults. Content language, maxResults and scanLength
+// reach both the lookup and the popup HTML. collapseMode,
+// expandFirstDictionary, twoColumnLayout, compactGlossaries, showExpressionTags,
+// harmonicFrequency, deduplicatePitchAccents, compactPitchAccents and customCSS
+// affect only the popup HTML. Audio and mining retain their existing defaults.
+// scanNonJapaneseText has no selection bridge on this page and is not a
+// typed-lookup parameter. dictionaryTabDefault, frequencySortOrder,
+// frequencySortDictionary and searchTextSize have no runtime consumer here.
+//
+// A file watcher invalidates the profile settings; file reads and dictionary
+// queries go through services. An invalid live edit retains the last good
+// settings for the same profile; a missing file or an invalid initial file
+// uses defaults.
 //
 // The theme properties are pushed from QML's Theme singleton, because colors
 // outside src/views/theme are not allowed.
@@ -60,6 +70,10 @@ class DictionaryPopupModel : public QObject {
     void themeChanged();
 
    private:
+    bool reload_profile_settings();
+    void run_lookup();
+    void clear_results();
+
     struct State;
     std::unique_ptr<State> state_;
 };
