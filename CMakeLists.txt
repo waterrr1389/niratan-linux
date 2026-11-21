@@ -155,7 +155,9 @@ qt_add_qml_module(niratan
         src/views/reader/SasayakiPanel.qml
         src/views/reader/ReaderStatisticsInspector.qml
         src/views/reader/ReaderProgress.qml
+        src/views/player/BarButton.qml
         src/views/player/StudySidebar.qml
+        src/views/player/StudyLoopMarker.qml
         src/views/player/StudyTimelineRow.qml
         src/views/player/VideoOpenMenu.qml
         src/views/player/VideoSettingsPanel.qml

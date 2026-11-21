@@ -5,7 +5,10 @@
 // VideoMiningHistoryStore.swift (record and pruning), and
 // VideoMiningHistoryNavigation.swift (local history destinations).
 // SubtitleTranscriptView.swift (transcriptRow) marks both cue endpoints
-// inclusive at playback position minus subtitle delay. Chapter time is independent.
+// inclusive at playback position minus subtitle delay. Follow playback uses
+// SubtitleTranscript.nearestRowIndex: prefer the active cue, then the next
+// cue in gaps, or the last cue after the transcript. Manual scrolling keeps
+// the current window until following resumes. Chapter time is independent.
 // The playback surface supplies subtitle bytes and native cue state and
 // performs playback commands. Extracted cues retain their embedded track
 // identity; their cache file is not an external subtitle source.
@@ -71,6 +74,7 @@ public:
     Q_INVOKABLE void setSubtitleDocument(const QUrl& file, const QByteArray& bytes, bool readable);
     Q_INVOKABLE void setEmbeddedTranscript(const QByteArray& bytes, const QString& error);
     Q_INVOKABLE void seekToRow(int index);
+    Q_INVOKABLE void setTranscriptFollowing(bool following);
     Q_INVOKABLE void showEarlier();
     Q_INVOKABLE void showLater();
     Q_INVOKABLE void playChapter(int index);

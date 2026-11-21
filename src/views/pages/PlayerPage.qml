@@ -1101,6 +1101,14 @@ Item {
                 }
 
                 BarButton {
+                    visible: studyModel.canMine
+                    glyph: "\u2605"
+                    tip: qsTr("Mine Subtitle")
+                    Accessible.name: tip
+                    onClicked: studyModel.mineCurrentSubtitle()
+                }
+
+                BarButton {
                     glyph: "S\u2212"
                     tip: qsTr("Subtitle Delay -0.05 s (Alt+,)")
                     buttonWidth: 28
@@ -1327,12 +1335,17 @@ Item {
         anchors.right: stage.right
         anchors.margins: Theme.spacingMd
         visible: mpv.loaded && (page.chromeShown || page.studyOpen)
-        glyph: qsTr("Study")
-        tip: qsTr("Toggle Study Sidebar")
-        active: page.studyOpen
+        glyph: qsTr("History")
+        tip: qsTr("Toggle Mining History")
+        active: page.studyOpen && studySidebar.selectedTab === 0
         buttonWidth: 58
         onClicked: {
-            page.studyOpen = !page.studyOpen
+            if (page.studyOpen && studySidebar.selectedTab === 0) {
+                page.studyOpen = false
+            } else {
+                studySidebar.selectedTab = 0
+                page.studyOpen = true
+            }
             page.forceActiveFocus()
             page.notePointerMovement()
         }
@@ -1354,42 +1367,4 @@ Item {
         onSelectionCanceled: page.forceActiveFocus()
     }
 
-    component BarButton: Button {
-        id: barButton
-
-        property string glyph
-        property string tip
-        property bool active: false
-        property int glyphSize: 11
-        property int buttonWidth: 28
-        property int buttonHeight: 28
-
-        implicitWidth: barButton.buttonWidth
-        implicitHeight: barButton.buttonHeight
-        padding: 0
-        focusPolicy: Qt.NoFocus
-        Layout.alignment: Qt.AlignVCenter
-        text: barButton.glyph
-
-        ToolTip.visible: barButton.hovered && barButton.tip.length > 0
-        ToolTip.text: barButton.tip
-        ToolTip.delay: 700
-
-        contentItem: Text {
-            text: barButton.glyph
-            color: barButton.active ? Theme.accent : Theme.textPrimary
-            font.pixelSize: barButton.glyphSize
-            font.bold: barButton.active
-            horizontalAlignment: Text.AlignHCenter
-            verticalAlignment: Text.AlignVCenter
-        }
-
-        background: Rectangle {
-            radius: barButton.buttonHeight / 2
-            color: barButton.active || barButton.down || barButton.hovered
-                ? Theme.cardStroke : Theme.floatingBackground
-            border.width: barButton.active ? Theme.cardBorderWidth : 0
-            border.color: Theme.cardStroke
-        }
-    }
 }

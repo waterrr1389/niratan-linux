@@ -194,7 +194,7 @@ struct PlayerStudyViewModel::State {
     int first = 0;
     int last = 0;
     int current = -1;
-    int current_visible = -1;
+    int focus = -1;
     int current_chapter = -1;
     double position = 0.0;
     double delay = 0.0;
@@ -202,6 +202,7 @@ struct PlayerStudyViewModel::State {
     bool ready = false;
     bool visible = true;
     bool can_mine = false;
+    bool following = true;
     QVariantList transcript;
     QVariantList history;
     QVariantList chapters;
@@ -224,6 +225,11 @@ struct PlayerStudyViewModel::State {
         return -1;
     }
 
+    int nearest_row(double time) const {
+        return current >= 0 || cues.isEmpty() ? current
+            : int(std::min(first_after(time) - cues.cbegin(), cues.size() - 1));
+    }
+
     auto find_item(const QString& id) const {
         const std::string key = id.toStdString();
         return std::ranges::find(snapshot.items, key, &MiningHistoryItem::id);
@@ -241,7 +247,12 @@ QVariantList PlayerStudyViewModel::transcript() const { return state_->transcrip
 QString PlayerStudyViewModel::transcript_error() const { return state_->transcript_error; }
 double PlayerStudyViewModel::adjusted_time() const { return state_->position - state_->delay; }
 int PlayerStudyViewModel::current_row() const { return state_->current; }
-int PlayerStudyViewModel::current_visible_row() const { return state_->current_visible; }
+int PlayerStudyViewModel::current_visible_row() const {
+    const auto begin = state_->filtered.cbegin() + state_->first;
+    const auto end = state_->filtered.cbegin() + state_->last;
+    const auto match = std::lower_bound(begin, end, state_->focus);
+    return match != end && *match == state_->focus ? int(match - begin) : -1;
+}
 QString PlayerStudyViewModel::search() const { return state_->search; }
 bool PlayerStudyViewModel::can_show_earlier() const { return state_->first > 0; }
 bool PlayerStudyViewModel::can_show_later() const { return state_->last < state_->filtered.size(); }
@@ -379,10 +390,8 @@ void PlayerStudyViewModel::publish_transcript() {
         state_->end_prefix.append(latest);
     }
     const int current = state_->active_row(adjusted_time());
-    if (state_->current != current) {
-        state_->current = current;
+    if (std::exchange(state_->current, current) != current)
         emit currentRowChanged();
-    }
     rebuild_filter();
     update_can_mine();
 }
@@ -395,12 +404,8 @@ void PlayerStudyViewModel::rebuild_filter() {
             state_->filtered.append(int(i));
         }
     }
-    int focus = 0;
-    if (query.isEmpty()) {
-        focus = state_->current >= 0 ? state_->current
-            : int(state_->first_after(adjusted_time()) - state_->cues.cbegin());
-    }
-    reset_window(focus);
+    state_->focus = state_->nearest_row(adjusted_time());
+    reset_window(query.isEmpty() ? state_->focus : 0);
 }
 
 void PlayerStudyViewModel::reset_window(int focus) {
@@ -418,23 +423,15 @@ void PlayerStudyViewModel::reset_window(int focus) {
 void PlayerStudyViewModel::publish_window() {
     QVariantList rows;
     rows.reserve(state_->last - state_->first);
-    int visible = -1;
     for (int i = state_->first; i < state_->last; ++i) {
         const int index = state_->filtered[i];
         const Cue& cue = state_->cues[index];
         rows.append(QVariantMap{{QStringLiteral("index"), index}, {QStringLiteral("start"), cue.start},
                                 {QStringLiteral("end"), cue.end}, {QStringLiteral("text"), cue.text}});
-        if (index == state_->current) {
-            visible = i - state_->first;
-        }
     }
     state_->transcript = std::move(rows);
-    const bool visible_changed = state_->current_visible != visible;
-    state_->current_visible = visible;
     emit transcriptChanged();
-    if (visible_changed) {
-        emit currentVisibleRowChanged();
-    }
+    emit currentVisibleRowChanged();
 }
 
 void PlayerStudyViewModel::showEarlier() {
@@ -447,26 +444,29 @@ void PlayerStudyViewModel::showLater() {
     publish_window();
 }
 
+void PlayerStudyViewModel::setTranscriptFollowing(bool following) {
+    state_->following = following;
+    if (following && state_->search.trimmed().isEmpty() && state_->focus >= 0 &&
+        (state_->focus < state_->first || state_->focus >= state_->last)) {
+        reset_window(state_->focus);
+    }
+}
+
 void PlayerStudyViewModel::update_current() {
     const int current = state_->active_row(adjusted_time());
-    if (state_->current != current) {
-        state_->current = current;
-        if (current >= 0 && state_->search.trimmed().isEmpty() &&
-            (current < state_->first || current >= state_->last ||
-             (state_->first > 0 && current < state_->first + kWindowSize / 4) ||
-             (can_show_later() && current >= state_->last - kWindowSize / 4))) {
-            reset_window(current);
-        } else {
-            const auto begin = state_->filtered.cbegin() + state_->first;
-            const auto end = state_->filtered.cbegin() + state_->last;
-            const auto match = std::lower_bound(begin, end, current);
-            const int visible = match != end && *match == current ? int(match - begin) : -1;
-            if (state_->current_visible != visible) {
-                state_->current_visible = visible;
-                emit currentVisibleRowChanged();
-            }
-        }
+    if (std::exchange(state_->current, current) != current)
         emit currentRowChanged();
+    const int focus = state_->nearest_row(adjusted_time());
+    if (state_->focus != focus) {
+        state_->focus = focus;
+        if (state_->following && state_->search.trimmed().isEmpty() &&
+            (focus < state_->first || focus >= state_->last ||
+             (state_->first > 0 && focus < state_->first + kWindowSize / 4) ||
+             (can_show_later() && focus >= state_->last - kWindowSize / 4))) {
+            reset_window(focus);
+        } else {
+            emit currentVisibleRowChanged();
+        }
     }
 
     int chapter = -1;

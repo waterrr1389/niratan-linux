@@ -22,6 +22,7 @@ Rectangle {
     property real loopEnd: -1
     property int preferredWidth: 340
     property int selectedTab: 0
+    property bool followingTranscript: true
     readonly property int minimumWidth: 320
     readonly property int maximumWidth: 560
 
@@ -54,11 +55,19 @@ Rectangle {
     }
 
     function revealCurrent() {
-        if (sidebar.selectedTab === 1 && sidebar.study.currentVisibleRow >= 0)
-            transcript.positionViewAtIndex(sidebar.study.currentVisibleRow, ListView.Center)
+        if (sidebar.selectedTab === 1)
+            sidebar.revealTranscriptRow()
         else if (sidebar.selectedTab === 2 && sidebar.study.currentChapter >= 0)
             chapterList.positionViewAtIndex(sidebar.study.currentChapter, ListView.Center)
     }
+
+    function revealTranscriptRow() {
+        if (sidebar.visible && sidebar.selectedTab === 1 && sidebar.followingTranscript
+                && sidebar.study.search.trim() === "" && sidebar.study.currentVisibleRow >= 0)
+            transcript.positionRow(sidebar.study.currentVisibleRow, ListView.Center)
+    }
+
+    onFollowingTranscriptChanged: sidebar.study.setTranscriptFollowing(sidebar.followingTranscript)
 
     ColumnLayout {
         anchors.fill: parent
@@ -143,6 +152,13 @@ Rectangle {
                         width: history.width - Theme.spacingMd
                         height: summary.implicitHeight + Theme.spacingMd
 
+                        HoverHandler { id: recordHover }
+
+                        MouseArea {
+                            anchors.fill: parent
+                            onClicked: sidebar.study.jumpToHistory(record.modelData.id)
+                        }
+
                         ColumnLayout {
                             id: summary
                             anchors.left: parent.left
@@ -165,6 +181,8 @@ Rectangle {
                                 font.pixelSize: Theme.fontBody
                                 textFormat: Text.PlainText
                                 wrapMode: Text.Wrap
+                                maximumLineCount: 3
+                                elide: Text.ElideRight
                                 text: record.modelData.text
                             }
                             Label {
@@ -179,13 +197,16 @@ Rectangle {
                                     text: qsTr("Jump")
                                     onClicked: sidebar.study.jumpToHistory(record.modelData.id)
                                 }
-                                SidebarButton {
-                                    text: qsTr("Copy")
-                                    onClicked: sidebar.study.copyHistory(record.modelData.id)
-                                }
-                                SidebarButton {
-                                    text: qsTr("Delete")
-                                    onClicked: sidebar.study.removeHistory(record.modelData.id)
+                                RowLayout {
+                                    visible: recordHover.hovered
+                                    SidebarButton {
+                                        text: qsTr("Copy")
+                                        onClicked: sidebar.study.copyHistory(record.modelData.id)
+                                    }
+                                    SidebarButton {
+                                        text: qsTr("Delete")
+                                        onClicked: sidebar.study.removeHistory(record.modelData.id)
+                                    }
                                 }
                             }
                         }
@@ -294,8 +315,19 @@ Rectangle {
                     }
                 }
 
+                SidebarButton {
+                    visible: !sidebar.followingTranscript && transcript.count > 0
+                        && sidebar.study.search.trim() === ""
+                    text: qsTr("Resume Following")
+                    onClicked: {
+                        sidebar.followingTranscript = true
+                        sidebar.revealTranscriptRow()
+                    }
+                }
+
                 ListView {
                     id: transcript
+                    property bool programmaticScroll: false
                     Layout.fillWidth: true
                     Layout.fillHeight: true
                     visible: count > 0
@@ -303,9 +335,21 @@ Rectangle {
                     model: sidebar.study.transcript
                     boundsBehavior: Flickable.StopAtBounds
                     ScrollBar.vertical: ScrollBar {
-                        onPressedChanged: if (!pressed) transcript.extendWindowNearEdge()
+                        onPressedChanged: {
+                            if (pressed)
+                                sidebar.followingTranscript = false
+                            else
+                                transcript.extendWindowNearEdge()
+                        }
                     }
-                    onMovementEnded: transcript.extendWindowNearEdge()
+                    onMovementStarted: if (!programmaticScroll) sidebar.followingTranscript = false
+                    onMovementEnded: if (!programmaticScroll) transcript.extendWindowNearEdge()
+
+                    function positionRow(index: int, mode: int) {
+                        transcript.programmaticScroll = true
+                        transcript.positionViewAtIndex(index, mode)
+                        transcript.programmaticScroll = false
+                    }
 
                     function extendWindowNearEdge() {
                         if (!transcript.visible || transcript.count === 0)
@@ -328,7 +372,7 @@ Rectangle {
                             sidebar.study.showLater()
                         transcript.forceLayout()
                         const index = sidebar.study.transcript.findIndex(cue => cue.index === cueIndex)
-                        transcript.positionViewAtIndex(index, ListView.Beginning)
+                        transcript.positionRow(index, ListView.Beginning)
                         const restored = transcript.itemAtIndex(index)
                         if (restored && restored.y === transcript.contentY)
                             transcript.contentY += offset
@@ -358,7 +402,7 @@ Rectangle {
                             onClicked: sidebar.study.seekToRow(cue.modelData.index)
                         }
 
-                        LoopMarker {
+                        StudyLoopMarker {
                             id: markA
                             opacity: cue.showMarkers ? 1 : 0
                             enabled: sidebar.playbackReady
@@ -369,7 +413,7 @@ Rectangle {
                             onClicked: sidebar.loopStartRequested(cue.modelData.start)
                         }
 
-                        LoopMarker {
+                        StudyLoopMarker {
                             id: markB
                             opacity: cue.showMarkers ? 1 : 0
                             enabled: sidebar.playbackReady && sidebar.loopStart >= 0
@@ -430,11 +474,7 @@ Rectangle {
 
     Connections {
         target: sidebar.study
-        function onCurrentRowChanged() {
-            if (sidebar.visible && sidebar.selectedTab === 1 && sidebar.study.search.trim() === ""
-                    && sidebar.study.currentVisibleRow >= 0)
-                transcript.positionViewAtIndex(sidebar.study.currentVisibleRow, ListView.Contain)
-        }
+        function onCurrentVisibleRowChanged() { sidebar.revealTranscriptRow() }
         function onCurrentChapterChanged() {
             if (sidebar.visible && sidebar.selectedTab === 2 && sidebar.study.currentChapter >= 0)
                 chapterList.positionViewAtIndex(sidebar.study.currentChapter, ListView.Contain)
@@ -519,30 +559,6 @@ Rectangle {
                 ? Theme.cardBackground : Theme.windowBackground
             border.width: Theme.cardBorderWidth
             border.color: button.selected || button.activeFocus ? Theme.accent : Theme.cardStroke
-        }
-    }
-
-    component LoopMarker: Button {
-        id: loopMarker
-        property bool selected: false
-        implicitWidth: 20
-        implicitHeight: 20
-        padding: 0
-        focusPolicy: Qt.TabFocus
-        ToolTip.visible: hovered
-        contentItem: Text {
-            text: loopMarker.text
-            color: loopMarker.selected ? Theme.windowBackground : Theme.textSecondary
-            font.pixelSize: Theme.fontCaption
-            font.bold: true
-            horizontalAlignment: Text.AlignHCenter
-            verticalAlignment: Text.AlignVCenter
-        }
-        background: Rectangle {
-            radius: width / 2
-            color: loopMarker.selected ? Theme.accent : Theme.cardBackground
-            border.width: loopMarker.activeFocus ? Theme.cardBorderWidth : 0
-            border.color: Theme.accent
         }
     }
 
