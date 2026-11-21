@@ -2,6 +2,8 @@
 
 #include "subtitle_document.h"
 
+#include "subtitle_document_internal.h"
+
 #include <QFileInfo>
 #include <QRegularExpression>
 #include <QStringDecoder>
@@ -17,9 +19,124 @@ namespace {
 
 constexpr double kLongCueThreshold = 30.0;
 
-// Unicode White_Space, the union of Foundation's .whitespaces and .newlines
-// that Swift trims with, and also Character.isWhitespace used for timing
-// tokens.
+std::optional<qint64> timestamp_milliseconds(double time) {
+    if (!std::isfinite(time) || time < 0) {
+        return std::nullopt;
+    }
+    const double milliseconds = std::round(time * 1000.0);
+    if (!std::isfinite(milliseconds) || milliseconds < 0 ||
+        milliseconds >= static_cast<double>(std::numeric_limits<qint64>::max())) {
+        return std::nullopt;
+    }
+    return static_cast<qint64>(milliseconds);
+}
+
+QString first_token(const QString& text) {
+    qsizetype begin = 0;
+    while (begin < text.size() && detail::is_whitespace(text[begin])) {
+        ++begin;
+    }
+    qsizetype end = begin;
+    while (end < text.size() && !detail::is_whitespace(text[end])) {
+        ++end;
+    }
+    return begin == end ? text : text.mid(begin, end - begin);
+}
+
+QString clean_web_vtt_text(QString text) {
+    static const QRegularExpression tags(QStringLiteral(R"(<[^>\n]+>)"));
+    text.remove(tags);
+    text.replace(QStringLiteral("&nbsp;"), QStringLiteral(" "));
+    text.remove(QStringLiteral("&lrm;"));
+    text.remove(QStringLiteral("&rlm;"));
+    text.replace(QStringLiteral("&lt;"), QStringLiteral("<"));
+    text.replace(QStringLiteral("&gt;"), QStringLiteral(">"));
+    text.replace(QStringLiteral("&quot;"), QStringLiteral("\""));
+    text.replace(QStringLiteral("&apos;"), QStringLiteral("'"));
+    text.replace(QStringLiteral("&amp;"), QStringLiteral("&"));
+    QStringList lines;
+    for (const QString& line : text.split(QLatin1Char('\n'), Qt::KeepEmptyParts)) {
+        const QString cleaned = detail::trimmed(line, detail::is_line_whitespace);
+        if (!cleaned.isEmpty()) {
+            lines.append(cleaned);
+        }
+    }
+    return detail::trim_all(lines.join(QLatin1Char('\n')));
+}
+
+std::optional<SubtitleCue> parse_block(const QString& block, int index, SubtitleFormat format) {
+    QStringList lines = block.split(QLatin1Char('\n'), Qt::KeepEmptyParts);
+    while (!lines.isEmpty() && detail::trim_all(lines.first()).isEmpty()) {
+        lines.removeFirst();
+    }
+    if (lines.isEmpty()) {
+        return std::nullopt;
+    }
+    if (format == SubtitleFormat::web_vtt && lines.first().startsWith(QStringLiteral("WEBVTT"))) {
+        lines.removeFirst();
+    }
+    if (lines.isEmpty()) {
+        return std::nullopt;
+    }
+    qsizetype timing_index = -1;
+    for (qsizetype i = 0; i < lines.size(); ++i) {
+        if (lines.at(i).contains(QStringLiteral("-->"))) {
+            timing_index = i;
+            break;
+        }
+    }
+    if (timing_index < 0) {
+        return std::nullopt;
+    }
+    const QStringList timing =
+        lines.at(timing_index).split(QStringLiteral("-->"), Qt::KeepEmptyParts);
+    if (timing.size() != 2) {
+        return std::nullopt;
+    }
+    const auto start = detail::parse_timestamp(timing.at(0));
+    const auto end = detail::parse_timestamp(first_token(timing.at(1)));
+    if (!start || !end || *end < *start) {
+        return std::nullopt;
+    }
+    QString raw_text;
+    for (qsizetype i = timing_index + 1; i < lines.size(); ++i) {
+        if (i > timing_index + 1) {
+            raw_text.append(QLatin1Char('\n'));
+        }
+        raw_text.append(lines.at(i));
+    }
+    raw_text = detail::trim_all(raw_text);
+    const QString text =
+        format == SubtitleFormat::web_vtt ? clean_web_vtt_text(raw_text) : raw_text;
+    if (text.isEmpty()) {
+        return std::nullopt;
+    }
+    QString declared_id;
+    if (timing_index > 0) {
+        declared_id = detail::trim_all(lines.at(timing_index - 1));
+    }
+    return SubtitleCue{declared_id.isEmpty() ? QString::number(index) : declared_id, *start, *end,
+                       text};
+}
+
+bool ignored_block(const QString& block) {
+    const QString text = detail::trim_all(block);
+    return text.isEmpty() || text == QStringLiteral("WEBVTT") ||
+        text.startsWith(QStringLiteral("NOTE"));
+}
+
+auto by_start(const SubtitleCue& lhs, const SubtitleCue& rhs) {
+    return std::tie(lhs.start_time, lhs.end_time) < std::tie(rhs.start_time, rhs.end_time);
+}
+
+auto by_end(const SubtitleCue& lhs, const SubtitleCue& rhs) {
+    return std::tie(lhs.end_time, lhs.start_time) < std::tie(rhs.end_time, rhs.start_time);
+}
+
+}  // namespace
+
+namespace detail {
+
 bool is_whitespace(QChar character) {
     switch (character.unicode()) {
         case 0x0009:
@@ -42,8 +159,6 @@ bool is_whitespace(QChar character) {
     }
 }
 
-// Foundation's .whitespaces: Zs plus tab, which is one line trim in the
-// WebVTT cleaning step.
 bool is_line_whitespace(QChar character) {
     switch (character.unicode()) {
         case 0x0009:
@@ -97,9 +212,14 @@ QString decode_document(const QByteArray& data) {
     return QString::fromUtf8(data);
 }
 
-QString normalize_newlines(QString text) {
+QString normalize_crlf(QString text) {
     text.replace(QStringLiteral("\r\n"), QStringLiteral("\n"));
     text.replace(QLatin1Char('\r'), QLatin1Char('\n'));
+    return text;
+}
+
+QString normalize_blocks(QString text) {
+    text = normalize_crlf(std::move(text));
     QString collapsed;
     collapsed.reserve(text.size());
     int newlines = 0;
@@ -118,18 +238,6 @@ QString normalize_newlines(QString text) {
         collapsed.append(newlines >= 2 ? QStringLiteral("\n\n") : QStringLiteral("\n"));
     }
     return collapsed;
-}
-
-std::optional<qint64> timestamp_milliseconds(double time) {
-    if (!std::isfinite(time) || time < 0) {
-        return std::nullopt;
-    }
-    const double milliseconds = std::round(time * 1000.0);
-    if (!std::isfinite(milliseconds) || milliseconds < 0 ||
-        milliseconds >= static_cast<double>(std::numeric_limits<qint64>::max())) {
-        return std::nullopt;
-    }
-    return static_cast<qint64>(milliseconds);
 }
 
 std::optional<double> parse_timestamp(QStringView raw) {
@@ -176,109 +284,7 @@ std::optional<double> parse_timestamp(QStringView raw) {
     return result;
 }
 
-QString first_token(const QString& text) {
-    qsizetype begin = 0;
-    while (begin < text.size() && is_whitespace(text[begin])) {
-        ++begin;
-    }
-    qsizetype end = begin;
-    while (end < text.size() && !is_whitespace(text[end])) {
-        ++end;
-    }
-    return begin == end ? text : text.mid(begin, end - begin);
-}
-
-QString clean_web_vtt_text(QString text) {
-    static const QRegularExpression tags(QStringLiteral(R"(<[^>\n]+>)"));
-    text.remove(tags);
-    text.replace(QStringLiteral("&nbsp;"), QStringLiteral(" "));
-    text.remove(QStringLiteral("&lrm;"));
-    text.remove(QStringLiteral("&rlm;"));
-    text.replace(QStringLiteral("&lt;"), QStringLiteral("<"));
-    text.replace(QStringLiteral("&gt;"), QStringLiteral(">"));
-    text.replace(QStringLiteral("&quot;"), QStringLiteral("\""));
-    text.replace(QStringLiteral("&apos;"), QStringLiteral("'"));
-    text.replace(QStringLiteral("&amp;"), QStringLiteral("&"));
-    QStringList lines;
-    for (const QString& line : text.split(QLatin1Char('\n'), Qt::KeepEmptyParts)) {
-        const QString cleaned = trimmed(line, is_line_whitespace);
-        if (!cleaned.isEmpty()) {
-            lines.append(cleaned);
-        }
-    }
-    return trim_all(lines.join(QLatin1Char('\n')));
-}
-
-std::optional<SubtitleCue> parse_block(const QString& block, int index, SubtitleFormat format) {
-    QStringList lines = block.split(QLatin1Char('\n'), Qt::KeepEmptyParts);
-    while (!lines.isEmpty() && trim_all(lines.first()).isEmpty()) {
-        lines.removeFirst();
-    }
-    if (lines.isEmpty()) {
-        return std::nullopt;
-    }
-    if (format == SubtitleFormat::web_vtt && lines.first().startsWith(QStringLiteral("WEBVTT"))) {
-        lines.removeFirst();
-    }
-    if (lines.isEmpty()) {
-        return std::nullopt;
-    }
-    qsizetype timing_index = -1;
-    for (qsizetype i = 0; i < lines.size(); ++i) {
-        if (lines.at(i).contains(QStringLiteral("-->"))) {
-            timing_index = i;
-            break;
-        }
-    }
-    if (timing_index < 0) {
-        return std::nullopt;
-    }
-    const QStringList timing =
-        lines.at(timing_index).split(QStringLiteral("-->"), Qt::KeepEmptyParts);
-    if (timing.size() != 2) {
-        return std::nullopt;
-    }
-    const auto start = parse_timestamp(timing.at(0));
-    const auto end = parse_timestamp(first_token(timing.at(1)));
-    if (!start || !end || *end < *start) {
-        return std::nullopt;
-    }
-    QString raw_text;
-    for (qsizetype i = timing_index + 1; i < lines.size(); ++i) {
-        if (i > timing_index + 1) {
-            raw_text.append(QLatin1Char('\n'));
-        }
-        raw_text.append(lines.at(i));
-    }
-    raw_text = trim_all(raw_text);
-    const QString text =
-        format == SubtitleFormat::web_vtt ? clean_web_vtt_text(raw_text) : raw_text;
-    if (text.isEmpty()) {
-        return std::nullopt;
-    }
-    QString declared_id;
-    if (timing_index > 0) {
-        declared_id = trim_all(lines.at(timing_index - 1));
-    }
-    return SubtitleCue{declared_id.isEmpty() ? QString::number(index) : declared_id, *start, *end,
-                       text};
-}
-
-bool ignored_block(const QString& block) {
-    const QString text = trim_all(block);
-    return text.isEmpty() || text == QStringLiteral("WEBVTT") ||
-        text.startsWith(QStringLiteral("NOTE"));
-}
-
-auto by_start(const SubtitleCue& lhs, const SubtitleCue& rhs) {
-    return std::tie(lhs.start_time, lhs.end_time) < std::tie(rhs.start_time, rhs.end_time);
-}
-
-auto by_end(const SubtitleCue& lhs, const SubtitleCue& rhs) {
-    return std::tie(lhs.end_time, lhs.start_time) < std::tie(rhs.end_time, rhs.start_time);
-}
-
-}  // namespace
+}  // namespace detail
 
 SubtitleParseResult parse_subtitle_document(const QByteArray& data, const QUrl& source,
                                             std::optional<SubtitleFormat> format_hint) {
@@ -292,14 +298,23 @@ SubtitleParseResult parse_subtitle_document(const QByteArray& data, const QUrl& 
             format = SubtitleFormat::srt;
         } else if (suffix == QStringLiteral("vtt")) {
             format = SubtitleFormat::web_vtt;
+        } else if (suffix == QStringLiteral("ass")) {
+            format = SubtitleFormat::ass;
+        } else if (suffix == QStringLiteral("ssa")) {
+            format = SubtitleFormat::ssa;
         } else {
             result.error = SubtitleParseError::unsupported_format;
             return result;
         }
     }
 
+    const QString text = detail::decode_document(data);
+    if (format == SubtitleFormat::ass || format == SubtitleFormat::ssa) {
+        return detail::parse_ass_document(detail::normalize_crlf(text), source, format);
+    }
+
     const QStringList blocks =
-        normalize_newlines(decode_document(data)).split(QStringLiteral("\n\n"), Qt::KeepEmptyParts);
+        detail::normalize_blocks(text).split(QStringLiteral("\n\n"), Qt::KeepEmptyParts);
     QList<SubtitleCue> cues;
     QStringList warnings;
     for (qsizetype i = 0; i < blocks.size(); ++i) {

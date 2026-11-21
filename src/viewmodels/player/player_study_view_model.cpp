@@ -44,80 +44,17 @@ QString subtitle_format(const QUrl& file) {
     return {};
 }
 
-double ass_timestamp(const QString& token) {
-    const QStringList parts = token.trimmed().split(QLatin1Char(':'));
-    if (parts.size() != 3) {
-        return -1.0;
+player::SubtitleFormat format_hint(const QString& format) {
+    if (format == QStringLiteral("webVTT")) {
+        return player::SubtitleFormat::web_vtt;
     }
-    bool valid_hours = false;
-    bool valid_minutes = false;
-    bool valid_seconds = false;
-    const int hours = parts[0].toInt(&valid_hours);
-    const int minutes = parts[1].toInt(&valid_minutes);
-    const double seconds = parts[2].toDouble(&valid_seconds);
-    if (!valid_hours || !valid_minutes || !valid_seconds || hours < 0 || minutes < 0 ||
-        minutes >= 60 || !std::isfinite(seconds) || seconds < 0 || seconds >= 60) {
-        return -1.0;
+    if (format == QStringLiteral("ass")) {
+        return player::SubtitleFormat::ass;
     }
-    return hours * 3600.0 + minutes * 60.0 + seconds;
-}
-
-QList<Cue> parse_ass(const QString& text) {
-    static const QRegularExpression overrides(QStringLiteral(R"(\{[^}]*\})"));
-    static const QRegularExpression drawing(QStringLiteral(R"(\{[^}]*\\p[1-9]\d*[^}]*\})"));
-    QList<Cue> cues;
-    bool events = false;
-    int fields = 10;
-    int start_field = 1;
-    int end_field = 2;
-    for (const QString& line : text.split(QLatin1Char('\n'))) {
-        const QString trimmed = line.trimmed();
-        if (trimmed.startsWith(QLatin1Char('['))) {
-            events = trimmed.compare(QStringLiteral("[Events]"), Qt::CaseInsensitive) == 0;
-        } else if (events && trimmed.startsWith(QStringLiteral("Format:"), Qt::CaseInsensitive)) {
-            QStringList names = trimmed.mid(7).toLower().split(QLatin1Char(','));
-            for (QString& name : names) {
-                name = name.trimmed();
-            }
-            fields = int(names.size());
-            start_field = names.indexOf(QStringLiteral("start"));
-            end_field = names.indexOf(QStringLiteral("end"));
-            if (names.last() != QStringLiteral("text") ||
-                start_field == fields - 1 || end_field == fields - 1) {
-                start_field = end_field = -1;
-            }
-        } else if (events && start_field >= 0 && end_field >= 0 &&
-                   trimmed.startsWith(QStringLiteral("Dialogue:"), Qt::CaseInsensitive)) {
-            const QString body = trimmed.mid(9);
-            QStringList values;
-            qsizetype offset = 0;
-            while (values.size() < fields - 1) {
-                const qsizetype comma = body.indexOf(QLatin1Char(','), offset);
-                if (comma < 0) {
-                    break;
-                }
-                values.append(body.mid(offset, comma - offset));
-                offset = comma + 1;
-            }
-            if (values.size() != fields - 1) {
-                continue;
-            }
-            const double start = ass_timestamp(values[start_field]);
-            const double end = ass_timestamp(values[end_field]);
-            QString cue = body.mid(offset);
-            if (start < 0.0 || end < start || cue.contains(drawing)) {
-                continue;
-            }
-            cue.remove(overrides)
-                .replace(QStringLiteral("\\N"), QStringLiteral("\n"))
-                .replace(QStringLiteral("\\n"), QStringLiteral("\n"))
-                .replace(QStringLiteral("\\h"), QStringLiteral(" "));
-            if (!cue.trimmed().isEmpty()) {
-                cues.append({start, end, cue.trimmed()});
-            }
-        }
+    if (format == QStringLiteral("ssa")) {
+        return player::SubtitleFormat::ssa;
     }
-    return cues;
+    return player::SubtitleFormat::srt;
 }
 
 QList<Cue> cues_from_document(const player::SubtitleDocument& document) {
@@ -316,18 +253,9 @@ void PlayerStudyViewModel::setSubtitleDocument(const QUrl& file, const QByteArra
             state_->transcript_error = tr("Could not read the subtitle file.");
         } else if (state_->subtitle_format.isEmpty()) {
             state_->transcript_error = tr("This subtitle format is not supported for transcripts.");
-        } else if (state_->subtitle_format == QStringLiteral("ass") ||
-                   state_->subtitle_format == QStringLiteral("ssa")) {
-            state_->cues = parse_ass(QString::fromUtf8(bytes).remove(QChar(0xfeff)));
-            if (state_->cues.isEmpty()) {
-                state_->transcript_error = tr("No readable cues were found in this subtitle file.");
-            }
         } else {
-            const player::SubtitleFormat format =
-                state_->subtitle_format == QStringLiteral("webVTT")
-                ? player::SubtitleFormat::web_vtt
-                : player::SubtitleFormat::srt;
-            const auto parsed = player::parse_subtitle_document(bytes, file, format);
+            const auto parsed =
+                player::parse_subtitle_document(bytes, file, format_hint(state_->subtitle_format));
             if (parsed.document) {
                 state_->cues = cues_from_document(*parsed.document);
             } else {

@@ -459,6 +459,14 @@ target_link_libraries(tst_subtitle_document PRIVATE niratan_core Qt6::Test)
 target_compile_options(tst_subtitle_document PRIVATE -Wall -Wextra -Wpedantic -Werror)
 add_test(NAME subtitle_document COMMAND tst_subtitle_document)
 
+qt_add_executable(tst_ass_subtitle
+    player/tst_ass_subtitle.cpp
+)
+target_include_directories(tst_ass_subtitle PRIVATE ${CMAKE_SOURCE_DIR}/src)
+target_link_libraries(tst_ass_subtitle PRIVATE niratan_core Qt6::Test)
+target_compile_options(tst_ass_subtitle PRIVATE -Wall -Wextra -Wpedantic -Werror)
+add_test(NAME ass_subtitle COMMAND tst_ass_subtitle)
+
 qt_add_executable(tst_transcript_extractor
     player/tst_transcript_extractor.cpp
 )
