@@ -483,3 +483,46 @@ target_include_directories(tst_dictionary_settings_watch PRIVATE ${CMAKE_SOURCE_
 target_link_libraries(tst_dictionary_settings_watch PRIVATE niratan_core Qt6::Test)
 target_compile_options(tst_dictionary_settings_watch PRIVATE -Wall -Wextra -Wpedantic -Werror)
 add_test(NAME dictionary_settings_watch COMMAND tst_dictionary_settings_watch)
+
+# Application-layer tests. View models build their services internally and
+# read the data root from the environment, so these run with HOME and the XDG
+# directories pointed at a temporary directory and with Qt offscreen.
+
+qt_add_executable(tst_dictionary_popup_model
+    viewmodels/tst_dictionary_popup_model.cpp
+)
+target_include_directories(tst_dictionary_popup_model PRIVATE ${CMAKE_SOURCE_DIR}/src
+    ${CMAKE_CURRENT_SOURCE_DIR}/dictionary)
+target_link_libraries(tst_dictionary_popup_model PRIVATE niratan_app Qt6::Test)
+target_compile_options(tst_dictionary_popup_model PRIVATE -Wall -Wextra -Wpedantic -Werror)
+add_test(NAME dictionary_popup_model COMMAND tst_dictionary_popup_model)
+set_tests_properties(dictionary_popup_model PROPERTIES
+    ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QTWEBENGINE_CHROMIUM_FLAGS=--disable-gpu")
+
+qt_add_executable(tst_qml_load
+    qml/tst_qml_load.cpp
+)
+target_include_directories(tst_qml_load PRIVATE ${CMAKE_SOURCE_DIR}/src)
+target_link_libraries(tst_qml_load PRIVATE niratan_app niratan_appplugin Qt6::Test
+    Qt6::Quick Qt6::QuickControls2 Qt6::WebEngineQuick)
+target_compile_options(tst_qml_load PRIVATE -Wall -Wextra -Wpedantic -Werror)
+add_test(NAME qml_load COMMAND tst_qml_load)
+set_tests_properties(qml_load PROPERTIES
+    ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QTWEBENGINE_CHROMIUM_FLAGS=--disable-gpu")
+
+qt_add_executable(tst_popup_bridge
+    web/tst_popup_bridge.cpp
+)
+target_include_directories(tst_popup_bridge PRIVATE ${CMAKE_SOURCE_DIR}/src)
+target_link_libraries(tst_popup_bridge PRIVATE niratan_core Qt6::Test Qt6::WebEngineQuick
+    Qt6::WebChannelQuick)
+target_compile_options(tst_popup_bridge PRIVATE -Wall -Wextra -Wpedantic -Werror)
+add_test(NAME popup_bridge COMMAND tst_popup_bridge)
+set_tests_properties(popup_bridge PROPERTIES
+    ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QTWEBENGINE_CHROMIUM_FLAGS=--disable-gpu")
+
+# Flow tests: one per first-release flow, driving view models and services from
+# a user action to its result with fixtures (EPUB, dictionary, AnkiConnect).
+# Put them under tests/flows and add them here; scripts/check-wired.sh treats
+# that directory as wiring roots.
+# add_subdirectory(flows)
