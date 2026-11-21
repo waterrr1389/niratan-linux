@@ -85,7 +85,11 @@ StatisticsAutostartMode autostart_mode_from_id(std::string_view id) {
 }
 
 GlobalSettings GlobalSettings::at_data_root() {
-    return GlobalSettings(storage::data_root() / "settings.json");
+    const auto root = storage::data_root();
+    // An empty root means HOME is unavailable; disable storage rather than
+    // reading and writing a relative path in the process working directory,
+    // matching the same guard in PlaybackHistory::at_data_root.
+    return GlobalSettings(root.empty() ? std::filesystem::path{} : root / "settings.json");
 }
 
 GlobalSettings::GlobalSettings(std::filesystem::path file) : file_(std::move(file)) {}
@@ -144,6 +148,9 @@ StoreError GlobalSettings::save_statistics_targets(const StatisticsTargetSetting
 }
 
 StoreError GlobalSettings::write(const QJsonObject& values) {
+    if (file_.empty()) {
+        return StoreError::io_error;
+    }
     DocumentRead read = read_document(file_);
     if (read.status == LoadStatus::invalid) {
         return StoreError::io_error;
