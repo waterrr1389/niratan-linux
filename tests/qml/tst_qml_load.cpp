@@ -134,6 +134,7 @@ class QmlLoadTest : public QObject {
     void profiles_page_lists_the_management_controls();
     void dictionary_page_search_field_uses_the_profile_text_size();
     void icon_table_resolves();
+    void shared_components_load();
 
    private:
     // Empty when the component loaded without a QML warning.
@@ -559,6 +560,95 @@ void QmlLoadTest::icon_table_resolves() {
     QVERIFY(unknown_icon->property("source").toUrl().isEmpty());
 
     const QString warnings = warnings_after(QStringLiteral("Icon"));
+    QVERIFY2(warnings.isEmpty(), qPrintable(warnings));
+}
+
+// B1-B4 of the views-components module: the shared surfaces carry the
+// geometry and behaviour the pages rely on, and the search bar clears its text
+// and returns focus to the field. B6.
+void QmlLoadTest::shared_components_load() {
+    QQuickWindow window;
+    window.resize(960, 640);
+
+    auto create = [this, &window](const QString& component_name,
+                                  QString& error) -> std::unique_ptr<QObject> {
+        const QUrl url(
+            QStringLiteral("qrc:/qt/qml/Niratan/src/views/components/%1.qml").arg(component_name));
+        QQmlComponent component(&engine_, url);
+        if (component.isError()) {
+            error = component_name + QStringLiteral(": ") + error_text(component);
+            return {};
+        }
+        std::unique_ptr<QObject> object(component.beginCreate(engine_.rootContext()));
+        if (!object) {
+            error = component_name + QStringLiteral(": ") + error_text(component);
+            return {};
+        }
+        auto* item = qobject_cast<QQuickItem*>(object.get());
+        if (item == nullptr) {
+            error = component_name + QStringLiteral(" is not an Item");
+            return {};
+        }
+        item->setParentItem(window.contentItem());
+        component.completeCreate();
+        return object;
+    };
+
+    QString error;
+    std::unique_ptr<QObject> surface = create(QStringLiteral("GlassSurface"), error);
+    QVERIFY2(surface != nullptr, qPrintable(error));
+    auto* surface_item = qobject_cast<QQuickItem*>(surface.get());
+    QVERIFY2(surface_item != nullptr, "GlassSurface is not an Item");
+    surface_item->setWidth(240);
+    surface_item->setHeight(120);
+    QCOMPARE(surface_item->property("cornerRadius").toInt(), 18);
+    QCOMPARE(surface_item->property("borderWidth").toInt(), 1);
+
+    std::unique_ptr<QObject> capsule = create(QStringLiteral("GlassCapsule"), error);
+    QVERIFY2(capsule != nullptr, qPrintable(error));
+    auto* capsule_item = qobject_cast<QQuickItem*>(capsule.get());
+    QVERIFY2(capsule_item != nullptr, "GlassCapsule is not an Item");
+    capsule_item->setWidth(240);
+    capsule_item->setHeight(44);
+    QCOMPARE(capsule_item->property("radius").toReal(), 22.0);
+    QCOMPARE(capsule_item->property("borderWidth").toInt(), 1);
+
+    std::unique_ptr<QObject> icon_button = create(QStringLiteral("IconButton"), error);
+    QVERIFY2(icon_button != nullptr, qPrintable(error));
+    auto* icon_button_item = qobject_cast<QQuickItem*>(icon_button.get());
+    QVERIFY2(icon_button_item != nullptr, "IconButton is not an Item");
+    icon_button_item->setProperty("icon", QStringLiteral("xmark.circle.fill"));
+    QCOMPARE(icon_button_item->property("diameter").toReal(), 38.0);
+    QCOMPARE(icon_button_item->implicitWidth(), 38.0);
+    QCOMPARE(icon_button_item->implicitHeight(), 38.0);
+    icon_button_item->setProperty("diameter", 44);
+    QCOMPARE(icon_button_item->implicitWidth(), 44.0);
+    QCOMPARE(icon_button_item->implicitHeight(), 44.0);
+
+    std::unique_ptr<QObject> search_bar = create(QStringLiteral("SearchBar"), error);
+    QVERIFY2(search_bar != nullptr, qPrintable(error));
+    auto* search_bar_item = qobject_cast<QQuickItem*>(search_bar.get());
+    QVERIFY2(search_bar_item != nullptr, "SearchBar is not an Item");
+    search_bar_item->setWidth(620);
+    search_bar_item->setHeight(48);
+
+    QQuickItem* clear = search_bar_item->findChild<QQuickItem*>(QStringLiteral("clearButton"));
+    QVERIFY2(clear != nullptr, "SearchBar has no clear control");
+    QQuickItem* field = search_bar_item->findChild<QQuickItem*>(QStringLiteral("field"));
+    QVERIFY2(field != nullptr, "SearchBar has no field");
+    QVERIFY(field->property("placeholderText").toString().isEmpty());
+
+    QCOMPARE(search_bar_item->property("text").toString(), QString());
+    QVERIFY(!clear->isVisible());
+
+    search_bar_item->setProperty("text", QStringLiteral("星"));
+    QVERIFY(clear->isVisible());
+
+    QVERIFY(QMetaObject::invokeMethod(clear, "clicked"));
+    QCOMPARE(search_bar_item->property("text").toString(), QString());
+    QVERIFY(field->hasFocus());
+
+    const QString warnings = warnings_after(QStringLiteral("shared components"));
     QVERIFY2(warnings.isEmpty(), qPrintable(warnings));
 }
 

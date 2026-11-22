@@ -216,8 +216,12 @@ qt_add_qml_module(niratan_app
     URI Niratan
     QML_FILES
         src/views/MainWindow.qml
+        src/views/components/GlassCapsule.qml
+        src/views/components/GlassSurface.qml
         src/views/components/Icon.qml
+        src/views/components/IconButton.qml
         src/views/components/PageHeader.qml
+        src/views/components/SearchBar.qml
         src/views/dictionary/AnkiMiningToast.qml
         src/views/icons/icon_map.js
         src/views/icons/phosphor/fill/x-circle-fill.svg
