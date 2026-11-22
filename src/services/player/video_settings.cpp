@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "services/player/video_settings.h"
+#include "services/storage/app_paths.h"
 #include "services/storage/json_file.h"
 
 #include <QRegularExpression>
@@ -21,6 +22,7 @@ struct Number {
 constexpr Number numbers[] = {
     {"videoSeekInterval", 5, 1, 60},
     {"videoMiningHistoryLimit", 25, 0, 1000},
+    {"videoLibraryPosterWidth", 160, 110, 240},
     {"studySidebarWidth", 340, 320, 560},
     {"videoSubtitleGapFastForwardSpeed", 2.7, 1.1, 5},
     {"videoBrightness", 0, -100, 100},
@@ -105,6 +107,8 @@ QJsonObject video_settings(const QJsonObject& stored) {
         {"off", "anime4KFast", "anime4KHighQuality"}));
     result.insert("videoControlBarLayout", choice(stored.value("videoControlBarLayout"),
         {"floating", "compactBottom"}));
+    result.insert("videoLibraryLayoutMode",
+                  choice(stored.value("videoLibraryLayoutMode"), {"posters", "list"}));
     result.insert("videoSubtitleMaskMode", choice(stored.value("videoSubtitleMaskMode"),
         {"Blur", "Transparent"}));
     const auto edge = stored.value("videoSubtitleEdgeStyle");
@@ -141,6 +145,16 @@ QJsonObject video_settings(const QJsonObject& stored) {
 QJsonObject load_video_settings(const std::filesystem::path& directory) {
     return video_settings(directory.empty() ? QJsonObject{}
         : storage::read_json_file(directory / "settings.json").document.object());
+}
+
+QJsonObject load_video_library_settings() {
+    const auto settings = load_video_settings(storage::data_root());
+    return {{"videoLibraryLayoutMode", settings.value("videoLibraryLayoutMode")},
+            {"videoLibraryPosterWidth", settings.value("videoLibraryPosterWidth")}};
+}
+
+bool store_video_library_settings(const QJsonObject& changes) {
+    return store_video_settings(storage::data_root(), changes);
 }
 
 bool store_video_settings(const std::filesystem::path& directory, const QJsonObject& changes) {

@@ -69,6 +69,44 @@ private slots:
         QCOMPARE(load_video_settings(path).value("studySidebarWidth").toInt(), 480);
     }
 
+    void videoLibraryKeys() {
+        const auto defaults = video_settings();
+        QCOMPARE(defaults.value("videoLibraryLayoutMode").toString(), QStringLiteral("posters"));
+        QCOMPARE(defaults.value("videoLibraryPosterWidth").toDouble(), 160);
+        QCOMPARE(
+            video_settings({{"videoLibraryLayoutMode", "list"}, {"videoLibraryPosterWidth", 300}})
+                .value("videoLibraryPosterWidth")
+                .toDouble(),
+            240);
+        QCOMPARE(video_settings({{"videoLibraryLayoutMode", "grid"}})
+                     .value("videoLibraryLayoutMode")
+                     .toString(),
+                 QStringLiteral("posters"));
+        QCOMPARE(video_settings({{"videoLibraryPosterWidth", 20}})
+                     .value("videoLibraryPosterWidth")
+                     .toDouble(),
+                 110);
+        QCOMPARE(video_settings({{"videoLibraryPosterWidth", 999}})
+                     .value("videoLibraryPosterWidth")
+                     .toDouble(),
+                 240);
+
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        const auto path = std::filesystem::path(dir.path().toStdString());
+        QVERIFY(niratan::storage::write_json_file(path / "settings.json",
+                                                  QJsonDocument(QJsonObject{{"other", 42}})));
+        QVERIFY(store_video_settings(
+            path, {{"videoLibraryLayoutMode", "list"}, {"videoLibraryPosterWidth", 300}}));
+        const auto stored =
+            niratan::storage::read_json_file(path / "settings.json").document.object();
+        QCOMPARE(stored.value("videoLibraryLayoutMode").toString(), QStringLiteral("list"));
+        QCOMPARE(stored.value("videoLibraryPosterWidth").toDouble(), 240);
+        QCOMPARE(stored.value("other").toInt(), 42);
+        QCOMPARE(load_video_settings(path).value("videoLibraryLayoutMode").toString(),
+                 QStringLiteral("list"));
+    }
+
     void saveAndReset() {
         QTemporaryDir dir;
         QVERIFY(dir.isValid());

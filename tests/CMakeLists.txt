@@ -470,6 +470,22 @@ target_link_libraries(tst_video_settings PRIVATE niratan_core Qt6::Test)
 target_compile_options(tst_video_settings PRIVATE -Wall -Wextra -Wpedantic -Werror)
 add_test(NAME video_settings COMMAND tst_video_settings)
 
+qt_add_executable(tst_library_catalog
+    video/tst_library_catalog.cpp
+)
+target_include_directories(tst_library_catalog PRIVATE ${CMAKE_SOURCE_DIR}/src)
+target_link_libraries(tst_library_catalog PRIVATE niratan_core Qt6::Test)
+target_compile_options(tst_library_catalog PRIVATE -Wall -Wextra -Wpedantic -Werror)
+add_test(NAME library_catalog COMMAND tst_library_catalog)
+
+qt_add_executable(tst_video_library_view_model
+    viewmodels/tst_video_library_view_model.cpp
+)
+target_include_directories(tst_video_library_view_model PRIVATE ${CMAKE_SOURCE_DIR}/src)
+target_link_libraries(tst_video_library_view_model PRIVATE niratan_app Qt6::Test)
+target_compile_options(tst_video_library_view_model PRIVATE -Wall -Wextra -Wpedantic -Werror)
+add_test(NAME video_library_view_model COMMAND tst_video_library_view_model)
+
 qt_add_executable(tst_playback_history
     player/tst_playback_history.cpp
 )

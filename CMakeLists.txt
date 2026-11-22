@@ -116,6 +116,14 @@ qt_add_library(niratan_core STATIC
     src/services/settings/settings_store.cpp
     src/services/storage/app_paths.cpp
     src/services/storage/json_file.cpp
+    src/services/video/library_catalog.cpp
+    src/services/video/library_catalog.h
+    src/services/video/library_catalog_codec.cpp
+    src/services/video/library_catalog_internal.h
+    src/services/video/library_metadata.cpp
+    src/services/video/library_scan.cpp
+    src/services/video/media_types.cpp
+    src/services/video/media_types.h
 )
 qt_add_resources(niratan_core "dictionary_popup_assets"
     PREFIX "/niratan/dictionary_popup"
@@ -170,6 +178,12 @@ qt_add_library(niratan_app STATIC
     src/viewmodels/sasayaki/sasayaki_view_model.h
     src/viewmodels/statistics/statistics_view_model.cpp
     src/viewmodels/statistics/statistics_view_model.h
+    src/viewmodels/video/video_library_view_model.cpp
+    src/viewmodels/video/video_library_view_model.h
+    src/viewmodels/video/video_library_commands.cpp
+    src/viewmodels/video/video_library_rows.cpp
+    src/viewmodels/video/video_library_rows.h
+    src/viewmodels/video/video_library_sections.cpp
     src/viewmodels/player/player_lookup_policy.cpp
     src/viewmodels/player/player_lookup_policy.h
     src/viewmodels/player/player_lookup_view_model.cpp
@@ -323,7 +337,7 @@ target_link_libraries(niratan_app PUBLIC niratan_core Qt6::Quick Qt6::QuickContr
 target_include_directories(niratan_app PUBLIC src/views/theme src/viewmodels/dictionary
     src/viewmodels/anki src/viewmodels/reader src/views/reader src/viewmodels/library src/views/player
     src/viewmodels/profiles src/viewmodels/sasayaki src/viewmodels/statistics
-    src/viewmodels/player src/viewmodels/settings)
+    src/viewmodels/player src/viewmodels/settings src/viewmodels/video)
 target_compile_options(niratan_app PRIVATE -Wall -Wextra -Wpedantic -Werror)
 
 # The QML module is static, so its generated plugin must be imported by the

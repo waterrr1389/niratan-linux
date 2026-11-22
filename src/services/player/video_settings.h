@@ -20,6 +20,12 @@ namespace niratan::player {
 QJsonObject video_settings(const QJsonObject& stored = {});
 QJsonObject load_video_settings(const std::filesystem::path& directory);
 bool store_video_settings(const std::filesystem::path& directory, const QJsonObject& changes);
+// The video library's two @AppStorage values (VideoLibraryView.swift
+// videoLibraryLayoutMode and videoLibraryPosterWidth) in
+// <data root>/settings.json. The view model reads and writes them through
+// these so it never names a path.
+QJsonObject load_video_library_settings();
+bool store_video_library_settings(const QJsonObject& changes);
 QJsonObject subtitle_appearance_defaults();
 QString mpv_color(const QString& rgba);
 
