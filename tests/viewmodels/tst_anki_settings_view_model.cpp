@@ -15,6 +15,7 @@
 
 #include "anki_stub.h"
 #include "data_root.h"
+#include "models/dictionary/dictionary_config.h"
 #include "services/anki/anki_config.h"
 #include "services/profiles/profile_repository.h"
 #include "services/storage/app_paths.h"
@@ -492,7 +493,9 @@ void AnkiSettingsViewModelTest::toggles_and_duplicate_scope_save_immediately() {
 void AnkiSettingsViewModelTest::mapping_menu_uses_active_dictionaries_and_saves_choices() {
     Fixture f;
     QVERIFY(f.save());
-    const auto dictionary = niratan::storage::dictionaries_root() / "国語 [A]";
+    const auto dictionary =
+        niratan::storage::dictionary_type_directory(niratan::dictionary::DictionaryType::term) /
+        "国語 [A]";
     QVERIFY(std::filesystem::create_directories(dictionary));
     QVERIFY(write_bytes(
         dictionary / "index.json",

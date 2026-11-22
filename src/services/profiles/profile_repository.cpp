@@ -6,10 +6,13 @@
 #include <QUuid>
 
 #include <algorithm>
+#include <cstdint>
+#include <set>
 #include <system_error>
 #include <utility>
 
 #include "models/profiles/profile_index_json.h"
+#include "services/dictionary/dictionary_config_store.h"
 #include "services/storage/app_paths.h"
 #include "services/storage/json_file.h"
 
@@ -221,6 +224,48 @@ std::optional<ProfileError> ProfileRepository::set_primary_profile(std::string_v
 
 bool ProfileRepository::persist(const ProfileIndex& index) {
     return storage::write_json_file(index_file_, profile_index_to_json(index));
+}
+
+void ProfileRepository::remove_dictionary_references(std::string_view file_name,
+                                                     std::string_view title) {
+    const std::string removed_file(file_name);
+    const std::string removed_title(title);
+
+    for (const HoshiProfile& profile : index_.profiles) {
+        const std::optional<std::filesystem::path> directory = profile_directory(profile.id);
+        if (!directory.has_value()) {
+            continue;
+        }
+
+        const std::filesystem::path config_path = *directory / "dictionary_config.json";
+        if (std::optional<dictionary::DictionaryConfig> config =
+                dictionary::load_dictionary_config(config_path)) {
+            const auto remove_from = [&removed_file](
+                                         std::vector<dictionary::DictionaryEntry>& entries) {
+                std::erase_if(entries, [&removed_file](const dictionary::DictionaryEntry& entry) {
+                    return entry.file_name == removed_file;
+                });
+                for (std::size_t index = 0; index < entries.size(); ++index) {
+                    entries[index].order = static_cast<std::int64_t>(index);
+                }
+            };
+            remove_from(config->term_dictionaries);
+            remove_from(config->frequency_dictionaries);
+            remove_from(config->pitch_dictionaries);
+            if (config->kanji_dictionaries.has_value()) {
+                remove_from(*config->kanji_dictionaries);
+            }
+            // Swift rewrites the file even when no entry matched, because the
+            // decoded shape is re-encoded with contiguous orders.
+            dictionary::save_dictionary_config(config_path, *config);
+        }
+
+        const std::filesystem::path collapsed_path = *directory / "collapsed.json";
+        std::set<std::string> collapsed = dictionary::load_collapsed_dictionaries(collapsed_path);
+        if (collapsed.erase(removed_title) > 0) {
+            dictionary::save_collapsed_dictionaries(collapsed_path, collapsed);
+        }
+    }
 }
 
 bool ProfileRepository::copy_owned_files(const std::filesystem::path& source,

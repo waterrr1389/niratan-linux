@@ -20,6 +20,7 @@
 
 #include "anki_stub.h"
 #include "data_root.h"
+#include "models/dictionary/dictionary_config.h"
 #include "services/anki/anki_config.h"
 #include "services/profiles/profile_repository.h"
 #include "services/storage/app_paths.h"
@@ -552,7 +553,9 @@ void MiningViewModelTest::add_uses_ordered_profile_term_dictionaries() {
 
     std::error_code error;
     for (const char* name : {"A", "B", "C"}) {
-        const auto directory = niratan::storage::dictionaries_root() / name;
+        const auto directory =
+            niratan::storage::dictionary_type_directory(niratan::dictionary::DictionaryType::term) /
+            name;
         std::filesystem::create_directories(directory, error);
         QVERIFY(!error);
         const QJsonObject index{
@@ -612,7 +615,9 @@ void MiningViewModelTest::term_dictionaries_refresh_with_the_active_profile() {
 
     std::error_code error;
     for (const char* name : {"A", "B", "C"}) {
-        const auto directory = niratan::storage::dictionaries_root() / name;
+        const auto directory =
+            niratan::storage::dictionary_type_directory(niratan::dictionary::DictionaryType::term) /
+            name;
         std::filesystem::create_directories(directory, error);
         QVERIFY(!error);
         const QJsonObject index{

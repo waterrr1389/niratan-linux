@@ -65,6 +65,14 @@ class ProfileRepository {
     std::optional<ProfileError> set_primary_profile(std::string_view profile_id,
                                                     ContentLanguage language);
 
+    // Drops a deleted dictionary from every profile's dictionary_config.json
+    // and collapsed.json. A config that decodes loses the entry from all four
+    // arrays and has each remaining array's orders renumbered 0..n-1; it is
+    // rewritten even when no entry matched. A collapsed set loses the title
+    // only when it contained it. Missing or invalid files are left untouched,
+    // and no legacy Dictionaries/config.json mirror is written.
+    void remove_dictionary_references(std::string_view file_name, std::string_view title);
+
    private:
     bool persist(const ProfileIndex& index);
     bool copy_owned_files(const std::filesystem::path& source,

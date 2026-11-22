@@ -21,6 +21,8 @@
 #include <optional>
 #include <string_view>
 
+#include "models/dictionary/dictionary_config.h"
+
 namespace niratan::storage {
 
 std::filesystem::path data_root();
@@ -28,6 +30,10 @@ std::filesystem::path cache_root();
 
 // SPEC.md 3.5's internal layout: the imported dictionary directories.
 std::filesystem::path dictionaries_root();
+
+// The typed dictionary directory, <dictionaries_root>/<Type> (Term,
+// Frequency, Pitch or Kanji); empty when the data root is empty.
+std::filesystem::path dictionary_type_directory(dictionary::DictionaryType type);
 
 // nullopt when the path is absolute or contains "..".
 std::optional<std::filesystem::path> resolve_within(const std::filesystem::path& root,

@@ -271,7 +271,8 @@ void TermDictionariesTest::an_invalid_config_lists_installed_directories() {
 void TermDictionariesTest::active_profile_orders_the_shared_term_dictionaries() {
     niratan::test::TempDataRoot data;
     QVERIFY(data.isValid());
-    const auto dictionaries = niratan::storage::dictionaries_root();
+    const auto dictionaries =
+        niratan::storage::dictionary_type_directory(niratan::dictionary::DictionaryType::term);
     make_dictionary(dictionaries, "A");
     make_dictionary(dictionaries, "B");
     niratan::profiles::ProfileRepository profiles(niratan::storage::data_root());

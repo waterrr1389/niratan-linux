@@ -8,17 +8,22 @@
 
 #include <filesystem>
 #include <fstream>
+#include <set>
 #include <string>
 
 #include "models/profiles/profile_index_json.h"
+#include "services/dictionary/dictionary_config_store.h"
 #include "services/storage/app_paths.h"
 #include "services/storage/json_file.h"
 
+using niratan::dictionary::DictionaryConfig;
+using niratan::dictionary::load_collapsed_dictionaries;
+using niratan::dictionary::load_dictionary_config;
 using niratan::profiles::ContentLanguage;
+using niratan::profiles::profile_index_from_json;
 using niratan::profiles::ProfileError;
 using niratan::profiles::ProfileIndex;
 using niratan::profiles::ProfileRepository;
-using niratan::profiles::profile_index_from_json;
 using niratan::storage::read_json_file;
 
 // Core/ProfileRepository.swift and script/test_profile_repository.swift
@@ -53,6 +58,10 @@ std::optional<ProfileIndex> persisted_index(const QTemporaryDir& directory) {
     return profile_index_from_json(read.document);
 }
 
+std::filesystem::path profile_directory(const QTemporaryDir& directory, const std::string& id) {
+    return app_dir(directory) / "Profiles" / id;
+}
+
 }  // namespace
 
 class ProfileRepositoryTest : public QObject {
@@ -71,6 +80,9 @@ class ProfileRepositoryTest : public QObject {
     void active_profile_uses_the_resolver();
     void the_data_root_repository_lives_under_the_data_root();
     void no_data_root_gives_no_repository();
+    void removing_a_dictionary_cleans_every_profile();
+    void removing_a_dictionary_renumbers_even_without_a_match();
+    void damaged_dictionary_files_are_left_untouched();
 };
 
 void ProfileRepositoryTest::construction_creates_the_directory_and_index() {
@@ -266,6 +278,115 @@ void ProfileRepositoryTest::no_data_root_gives_no_repository() {
     }
 
     QVERIFY(!repository.has_value());
+}
+
+// B8: removeDictionaryReferences drops the file name from all four arrays of
+// every profile, renumbers each present array and rewrites the config; a
+// collapsed set loses the title only when it contained it.
+void ProfileRepositoryTest::removing_a_dictionary_cleans_every_profile() {
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    ProfileRepository repository(app_dir(directory));
+    const auto other =
+        repository.create_profile("Other", ContentLanguage::japanese, std::string("default-ja"));
+    QVERIFY(other.profile.has_value());
+    const auto default_directory = profile_directory(directory, "default-ja");
+    const auto other_directory = profile_directory(directory, other.profile->id);
+
+    write_text(
+        default_directory / "dictionary_config.json",
+        R"({"termDictionaries":[{"fileName":"A","isEnabled":true,"order":0},{"fileName":"B","isEnabled":true,"order":1}],"frequencyDictionaries":[{"fileName":"A","isEnabled":true,"order":3},{"fileName":"F","isEnabled":true,"order":4}],"pitchDictionaries":[{"fileName":"A","isEnabled":true,"order":2},{"fileName":"P","isEnabled":true,"order":3}],"kanjiDictionaries":[{"fileName":"A","isEnabled":true,"order":1},{"fileName":"K","isEnabled":true,"order":2}]})");
+    write_text(
+        other_directory / "dictionary_config.json",
+        R"({"termDictionaries":[{"fileName":"A","isEnabled":true,"order":0},{"fileName":"B","isEnabled":true,"order":1},{"fileName":"C","isEnabled":true,"order":2}],"frequencyDictionaries":[],"pitchDictionaries":[]})");
+    write_text(default_directory / "collapsed.json", R"(["A","Z"])");
+    write_text(other_directory / "collapsed.json", R"(["B"])");
+
+    repository.remove_dictionary_references("A", "A");
+
+    const auto default_config =
+        load_dictionary_config(default_directory / "dictionary_config.json");
+    QVERIFY(default_config.has_value());
+    QCOMPARE(default_config->term_dictionaries.size(), std::size_t(1));
+    QCOMPARE(default_config->term_dictionaries.front().file_name, std::string("B"));
+    QCOMPARE(default_config->term_dictionaries.front().order, std::int64_t(0));
+    QCOMPARE(default_config->frequency_dictionaries.size(), std::size_t(1));
+    QCOMPARE(default_config->frequency_dictionaries.front().file_name, std::string("F"));
+    QCOMPARE(default_config->frequency_dictionaries.front().order, std::int64_t(0));
+    QCOMPARE(default_config->pitch_dictionaries.size(), std::size_t(1));
+    QCOMPARE(default_config->pitch_dictionaries.front().file_name, std::string("P"));
+    QCOMPARE(default_config->pitch_dictionaries.front().order, std::int64_t(0));
+    QVERIFY(default_config->kanji_dictionaries.has_value());
+    QCOMPARE(default_config->kanji_dictionaries->size(), std::size_t(1));
+    QCOMPARE(default_config->kanji_dictionaries->front().file_name, std::string("K"));
+    QCOMPARE(default_config->kanji_dictionaries->front().order, std::int64_t(0));
+
+    const auto other_config = load_dictionary_config(other_directory / "dictionary_config.json");
+    QVERIFY(other_config.has_value());
+    QCOMPARE(other_config->term_dictionaries.size(), std::size_t(2));
+    QCOMPARE(other_config->term_dictionaries.at(0).file_name, std::string("B"));
+    QCOMPARE(other_config->term_dictionaries.at(0).order, std::int64_t(0));
+    QCOMPARE(other_config->term_dictionaries.at(1).file_name, std::string("C"));
+    QCOMPARE(other_config->term_dictionaries.at(1).order, std::int64_t(1));
+
+    QVERIFY(load_collapsed_dictionaries(default_directory / "collapsed.json") ==
+            std::set<std::string>{"Z"});
+    QCOMPARE(read_text(other_directory / "collapsed.json"), std::string(R"(["B"])"));
+}
+
+// B8: a decodable config is rewritten and renumbered even when no entry
+// matches; a collapsed file without the title keeps its exact bytes.
+void ProfileRepositoryTest::removing_a_dictionary_renumbers_even_without_a_match() {
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    ProfileRepository repository(app_dir(directory));
+    const auto other =
+        repository.create_profile("Other", ContentLanguage::japanese, std::string("default-ja"));
+    QVERIFY(other.profile.has_value());
+    const auto default_directory = profile_directory(directory, "default-ja");
+    const auto other_directory = profile_directory(directory, other.profile->id);
+
+    write_text(
+        default_directory / "dictionary_config.json",
+        R"({"termDictionaries":[{"fileName":"X","isEnabled":true,"order":5},{"fileName":"Y","isEnabled":true,"order":9}],"frequencyDictionaries":[],"pitchDictionaries":[]})");
+    write_text(default_directory / "collapsed.json", R"(["Z"])");
+    write_text(other_directory / "collapsed.json", R"(["B"])");
+
+    repository.remove_dictionary_references("Nope", "Z");
+
+    const auto config = load_dictionary_config(default_directory / "dictionary_config.json");
+    QVERIFY(config.has_value());
+    QCOMPARE(config->term_dictionaries.size(), std::size_t(2));
+    QCOMPARE(config->term_dictionaries.at(0).file_name, std::string("X"));
+    QCOMPARE(config->term_dictionaries.at(0).order, std::int64_t(0));
+    QCOMPARE(config->term_dictionaries.at(1).file_name, std::string("Y"));
+    QCOMPARE(config->term_dictionaries.at(1).order, std::int64_t(1));
+    QVERIFY(!config->kanji_dictionaries.has_value());
+    QVERIFY(load_collapsed_dictionaries(default_directory / "collapsed.json").empty());
+    QCOMPARE(read_text(other_directory / "collapsed.json"), std::string(R"(["B"])"));
+}
+
+// B8: invalid files are left byte-identical and a missing config is not
+// created.
+void ProfileRepositoryTest::damaged_dictionary_files_are_left_untouched() {
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    ProfileRepository repository(app_dir(directory));
+    const auto other =
+        repository.create_profile("Other", ContentLanguage::japanese, std::string("default-ja"));
+    QVERIFY(other.profile.has_value());
+    const auto default_directory = profile_directory(directory, "default-ja");
+    const auto other_directory = profile_directory(directory, other.profile->id);
+
+    write_text(default_directory / "dictionary_config.json", "{");
+    write_text(default_directory / "collapsed.json", "{");
+
+    repository.remove_dictionary_references("A", "A");
+
+    QCOMPARE(read_text(default_directory / "dictionary_config.json"), std::string("{"));
+    QCOMPARE(read_text(default_directory / "collapsed.json"), std::string("{"));
+    QVERIFY(!std::filesystem::exists(other_directory / "dictionary_config.json"));
+    QVERIFY(!std::filesystem::exists(other_directory / "collapsed.json"));
 }
 
 QTEST_APPLESS_MAIN(ProfileRepositoryTest)

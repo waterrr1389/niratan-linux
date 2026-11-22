@@ -23,6 +23,7 @@ find_package(libzip REQUIRED)
 
 qt_add_library(niratan_core STATIC
     src/models/dictionary/audio_source.cpp
+    src/models/dictionary/dictionary_config.cpp
     src/services/anki/field_mapping.cpp
     src/services/anki/fetch_metadata.cpp
     src/services/anki/mapping_options.cpp
@@ -46,6 +47,7 @@ qt_add_library(niratan_core STATIC
     src/services/audio/web_audio_download.cpp
     src/services/audiobook/audiobook_metadata.cpp
     src/services/dictionary/dictionary_store.cpp
+    src/services/dictionary/dictionary_config_store.cpp
     src/services/dictionary/dictionary_media.cpp
     src/services/dictionary/media_type.cpp
     src/services/dictionary/dictionary_query.cpp

@@ -10,9 +10,11 @@
 #include <string>
 #include <vector>
 
+using niratan::dictionary::DictionaryType;
 using niratan::storage::cache_root;
 using niratan::storage::data_root;
 using niratan::storage::dictionaries_root;
+using niratan::storage::dictionary_type_directory;
 using niratan::storage::resolve_within;
 
 // SPEC.md 3.5 fixes the Linux roots and Helpers/AppDataHelper.cs fixes the
@@ -70,6 +72,7 @@ class AppPathsTest : public QObject {
     void relative_xdg_values_are_ignored();
     void missing_home_yields_empty_roots();
     void the_dictionaries_root_is_below_the_data_root();
+    void dictionary_types_have_their_own_directories();
     void resolve_within_keeps_relative_paths();
     void resolve_within_rejects_absolute_and_parent_paths();
 };
@@ -133,6 +136,25 @@ void AppPathsTest::the_dictionaries_root_is_below_the_data_root() {
 
     const std::filesystem::path data(directory.filePath(QStringLiteral("data")).toStdString());
     QCOMPARE(path_text(dictionaries_root()), path_text(data / "niratan/dictionaries"));
+}
+
+// B1: DictionaryType.rawValue names the typed directories.
+void AppPathsTest::dictionary_types_have_their_own_directories() {
+    EnvironmentGuard guard({"XDG_DATA_HOME", "XDG_CACHE_HOME", "HOME"});
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    qputenv("XDG_DATA_HOME", directory.filePath(QStringLiteral("data")).toUtf8());
+    qunsetenv("XDG_CACHE_HOME");
+
+    const std::filesystem::path data(directory.filePath(QStringLiteral("data")).toStdString());
+    const auto expected = [&data](const char* name) {
+        return path_text(data / "niratan/dictionaries" / name);
+    };
+    QCOMPARE(path_text(dictionary_type_directory(DictionaryType::term)), expected("Term"));
+    QCOMPARE(path_text(dictionary_type_directory(DictionaryType::frequency)),
+             expected("Frequency"));
+    QCOMPARE(path_text(dictionary_type_directory(DictionaryType::pitch)), expected("Pitch"));
+    QCOMPARE(path_text(dictionary_type_directory(DictionaryType::kanji)), expected("Kanji"));
 }
 
 void AppPathsTest::resolve_within_keeps_relative_paths() {

@@ -30,6 +30,14 @@ target_link_libraries(tst_dictionary PRIVATE niratan_core Qt6::Test)
 target_compile_options(tst_dictionary PRIVATE -Wall -Wextra -Wpedantic -Werror)
 add_test(NAME dictionary COMMAND tst_dictionary)
 
+qt_add_executable(tst_dictionary_config
+    dictionary/tst_dictionary_config.cpp
+)
+target_include_directories(tst_dictionary_config PRIVATE ${CMAKE_SOURCE_DIR}/src)
+target_link_libraries(tst_dictionary_config PRIVATE niratan_core Qt6::Test)
+target_compile_options(tst_dictionary_config PRIVATE -Wall -Wextra -Wpedantic -Werror)
+add_test(NAME dictionary_config COMMAND tst_dictionary_config)
+
 qt_add_executable(tst_text_selection
     dictionary/tst_text_selection.cpp
 )

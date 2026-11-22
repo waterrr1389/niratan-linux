@@ -39,6 +39,14 @@ std::filesystem::path dictionaries_root() {
     return root.empty() ? root : root / "dictionaries";
 }
 
+std::filesystem::path dictionary_type_directory(dictionary::DictionaryType type) {
+    const std::filesystem::path root = dictionaries_root();
+    if (root.empty()) {
+        return root;
+    }
+    return root / std::string(dictionary::dictionary_type_name(type));
+}
+
 std::optional<std::filesystem::path> resolve_within(const std::filesystem::path& root,
                                                     std::string_view relative) {
     const std::filesystem::path candidate(relative);
