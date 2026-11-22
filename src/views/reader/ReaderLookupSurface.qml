@@ -1,23 +1,39 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
-// Follows Features/Popup/PopupView.swift (popupContent, sasayakiControls,
-// mineEntry's sasayakiCue and the wasPaused/onPause/onSasayakiJumpDismiss
-// wiring), Core/AnkiManager.swift (needsSasayakiAudio), PopupWebView.swift
+// Follows Features/Popup/PopupView.swift (body's 8 px card with a hairline
+// border, popupContent, actionBar, sasayakiControls, mineEntry's sasayakiCue
+// and the wasPaused/onPause/onSasayakiJumpDismiss wiring),
+// Core/AnkiManager.swift (needsSasayakiAudio), PopupWebView.swift
 // (Coordinator.userContentController, updateUIView) and
 // NativeMac/NativeReaderView.swift (handleSelection's cue and auto-pause,
 // closePopup(resumePausedPlayback:)).
+//
+// Deliberate Linux differences: the card is the solid PLAN.md surface in both
+// popupDisableTransparency states (the setting keeps its stored value but the
+// popup is never translucent), the action bar draws no back/forward chevrons
+// because the port keeps no nested-popup history (the popup shows only the
+// close control), and the Sasayaki jump control draws forward.fill because
+// the Phosphor set bundled here has no forward.frame glyph.
 
 pragma ComponentBehavior: Bound
 
 import QtQuick
-import QtQuick.Controls
-import QtQuick.Layouts
 import QtWebChannel
 import QtWebEngine
 import Niratan
 
-Item {
+// PopupView.body: the opaque card of Theme.popupBackground with an 8 px
+// radius and a 1 px textPrimary hairline; PopupView.actionBar and
+// sasayakiControls(for:includesActionBar:) share one top row above the
+// results, each control a 52x32 hit area.
+Rectangle {
     id: surface
+
+    color: Theme.popupBackground
+    radius: 8
+    border.width: 1
+    border.color: Qt.rgba(Theme.textPrimary.r, Theme.textPrimary.g, Theme.textPrimary.b, 0.2)
+    clip: true
 
     required property DictionaryPopupModel popupModel
     required property MiningViewModel miningModel
@@ -28,6 +44,10 @@ Item {
     property var popupCue: ({})
     property bool wasPaused: false
     readonly property bool hasPopupCue: visible && popupCue.id !== undefined
+    // PopupView.popupContent's showsActionBar; the port has no history.
+    readonly property bool showsActionBar: ReaderViewModel.popupActionBar
+    readonly property bool showsSasayakiControls: hasPopupCue && player.hasAudio
+    readonly property bool showsControls: showsActionBar || showsSasayakiControls
     signal dismissRequested(bool resumePausedPlayback)
 
     // PopupModels.swift: PopupLayout positions the surface in reader coordinates.
@@ -195,70 +215,133 @@ Item {
                 Math.min(parent.height - height - borderInset, fullWidth
                          ? parent.height : vertical ? selectionAnchor.y : placeBelow
                          ? anchorBottom + gap : selectionAnchor.y - gap - height))))
-    opacity: ReaderViewModel.popupDisableTransparency ? 1.0 : 0.95
+    // PopupView.body: an opaque card in both popupDisableTransparency states.
+    opacity: 1.0
 
-    // PopupView.sasayakiControls: replay, play/pause and jump, above the
-    // action bar, only while the popup holds a cue and the player has audio.
-    Rectangle {
-        id: sasayakiBar
+    // PopupView.actionBar and sasayakiControls(for:includesActionBar:): one
+    // row above the results; the Sasayaki controls replace the bar and share
+    // its row with Close when the action bar is on.
+    Item {
+        id: controlsRow
 
         anchors.top: parent.top
         width: parent.width
-        height: visible ? 36 : 0
-        visible: surface.hasPopupCue && surface.player.hasAudio
-        color: Theme.popupBackground
+        height: surface.showsControls ? 48 : 0
 
-        RowLayout {
-            anchors.centerIn: parent
-            spacing: 20
+        Item {
+            id: actionBar
+            objectName: "lookupActionBar"
+            anchors.fill: parent
+            visible: surface.showsActionBar
 
-            ToolButton {
-                text: "\u21bb"
-                Accessible.name: qsTr("Replay cue")
-                ToolTip.visible: hovered
-                ToolTip.text: Accessible.name
-                onClicked: surface.replayCue()
+            Item {
+                id: closeButton
+                objectName: "lookupCloseButton"
+                anchors.right: parent.right
+                anchors.rightMargin: 16
+                anchors.verticalCenter: parent.verticalCenter
+                width: 52
+                height: 32
+                Accessible.role: Accessible.Button
+                Accessible.name: qsTr("Close lookup")
+                Accessible.onPressAction: surface.dismissRequested(true)
+
+                Icon {
+                    anchors.centerIn: parent
+                    name: "xmark"
+                    size: 16
+                    color: Theme.textSecondary
+                }
+
+                TapHandler {
+                    onTapped: surface.dismissRequested(true)
+                }
             }
+        }
 
-            ToolButton {
-                text: surface.player.playing || surface.wasPaused ? "\u275A\u275A" : "\u25B6"
-                Accessible.name: surface.player.playing || surface.wasPaused
-                                 ? qsTr("Pause Sasayaki") : qsTr("Play Sasayaki")
-                ToolTip.visible: hovered
-                ToolTip.text: Accessible.name
-                onClicked: surface.toggleCuePlayback()
-            }
+        Item {
+            id: sasayakiControls
+            objectName: "lookupSasayakiControls"
+            anchors.fill: parent
+            visible: surface.showsSasayakiControls
 
-            ToolButton {
-                text: "\u23ED"
-                Accessible.name: qsTr("Jump to cue")
-                ToolTip.visible: hovered
-                ToolTip.text: Accessible.name
-                onClicked: surface.jumpToCue()
+            Row {
+                anchors.centerIn: parent
+                spacing: 20
+
+                Item {
+                    objectName: "lookupSasayakiReplay"
+                    width: 52
+                    height: 32
+                    Accessible.role: Accessible.Button
+                    Accessible.name: qsTr("Replay cue")
+                    Accessible.onPressAction: surface.replayCue()
+
+                    Icon {
+                        anchors.centerIn: parent
+                        name: "arrow.clockwise"
+                        size: 16
+                        color: Theme.textSecondary
+                    }
+
+                    TapHandler {
+                        onTapped: surface.replayCue()
+                    }
+                }
+
+                Item {
+                    objectName: "lookupSasayakiPlayback"
+                    width: 52
+                    height: 32
+                    Accessible.role: Accessible.Button
+                    Accessible.name: surface.player.playing || surface.wasPaused
+                                     ? qsTr("Pause Sasayaki") : qsTr("Play Sasayaki")
+                    Accessible.onPressAction: surface.toggleCuePlayback()
+
+                    Icon {
+                        anchors.centerIn: parent
+                        name: surface.player.playing || surface.wasPaused
+                              ? "pause.fill" : "play.fill"
+                        size: 16
+                        color: Theme.textSecondary
+                    }
+
+                    TapHandler {
+                        onTapped: surface.toggleCuePlayback()
+                    }
+                }
+
+                Item {
+                    objectName: "lookupSasayakiJump"
+                    width: 52
+                    height: 32
+                    Accessible.role: Accessible.Button
+                    Accessible.name: qsTr("Jump to cue")
+                    Accessible.onPressAction: surface.jumpToCue()
+
+                    Icon {
+                        anchors.centerIn: parent
+                        name: "forward.fill"
+                        size: 16
+                        color: Theme.textSecondary
+                    }
+
+                    TapHandler {
+                        onTapped: surface.jumpToCue()
+                    }
+                }
             }
         }
     }
 
-    // PopupView.swift places the action bar outside the scaled results.
     Rectangle {
-        id: actionBar
-        anchors.top: sasayakiBar.bottom
-        width: parent.width
-        height: visible ? Math.min(parent.height, closeButton.implicitHeight) : 0
-        visible: ReaderViewModel.popupActionBar
-        color: Theme.popupBackground
-        clip: true
+        id: controlsDivider
 
-        ToolButton {
-            id: closeButton
-            anchors.right: parent.right
-            height: parent.height
-            text: "\u00d7"
-            Accessible.name: qsTr("Close lookup")
-            ToolTip.visible: hovered
-            ToolTip.text: Accessible.name
-            onClicked: surface.dismissRequested(true)
-        }
+        anchors.top: controlsRow.bottom
+        width: parent.width
+        height: surface.showsControls ? 1 : 0
+        visible: surface.showsControls
+        color: Theme.separator
     }
 
     WebEngineView {
@@ -266,7 +349,7 @@ Item {
         property bool loadingPopupDocument: false
         // A new document must not consume outstanding replies for the old one.
         property int lastMiningRequest: 0
-        anchors.top: actionBar.bottom
+        anchors.top: controlsDivider.bottom
         anchors.bottom: parent.bottom
         width: parent.width
         backgroundColor: Theme.popupBackground

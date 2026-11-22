@@ -260,6 +260,7 @@ qt_add_qml_module(niratan_app
         src/views/icons/phosphor/fill/play-fill.svg
         src/views/icons/phosphor/fill/rewind-fill.svg
         src/views/icons/phosphor/fill/x-circle-fill.svg
+        src/views/icons/phosphor/regular/arrow-clockwise.svg
         src/views/icons/phosphor/regular/arrow-line-right.svg
         src/views/icons/phosphor/regular/book.svg
         src/views/icons/phosphor/regular/bookmark-simple.svg

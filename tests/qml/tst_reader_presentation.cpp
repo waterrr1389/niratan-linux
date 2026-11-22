@@ -29,6 +29,10 @@
 // - page: `focusMode` (bool), `activeTool` ("", "goTo", "appearance",
 //   "statistics", "sasayaki", "gallery"), `statisticsContextActive`.
 // - readerWeb: the chapter WebEngineView. readerLookupSurface: the lookup.
+//   Its card exposes radius and border; with the action bar on it holds
+//   lookupActionBar and one lookupCloseButton, and a cue adds
+//   lookupSasayakiControls with lookupSasayakiReplay, lookupSasayakiPlayback
+//   and lookupSasayakiJump.
 // - readerTopInfo holding readerTopTitle and readerTopProgress (Text).
 // - readerBottomControls holding readerBottomInfo (readerStatisticsLine,
 //   readerBottomProgress) and the IconButtons readerTrackingButton,
@@ -380,6 +384,9 @@ class ReaderPresentationTest : public QObject {
     void web_view_fills_the_minimum_window();
     void focus_mode_hides_the_chrome();
     void tap_outside_dismisses_a_lookup_first();
+    void lookup_popup_is_a_card();
+    void sasayaki_controls_replace_the_action_bar();
+    void lookup_popup_fits_the_reader();
     void top_info_shows_title_and_progress();
     void top_info_hides_disabled_lines();
     void bottom_info_takes_progress_when_not_at_top();
@@ -413,6 +420,7 @@ class ReaderPresentationTest : public QObject {
     void click_at(QPointF point);
     bool open_tool(const char* button, const char* tool);
     QQuickItem* open_panel(const char* name) const;
+    void open_lookup();
     QObject* find_object(const char* name) const;
 
     niratan::test::TempDataRoot data_root_;
@@ -457,6 +465,12 @@ void ReaderPresentationTest::cleanup() {
     window_.reset();
     page_ = nullptr;
     QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
+    // A test that opened audio or matched subtitles leaves sidecars in the
+    // book folder; later pages must not restore them.
+    const QString book_dir = QString::fromStdString(niratan::storage::data_root().string()) +
+        QStringLiteral("/Books/") + folder_;
+    QFile::remove(book_dir + QStringLiteral("/sasayaki_playback.json"));
+    QFile::remove(book_dir + QStringLiteral("/sasayaki_match.json"));
     if (reader_->tracking()) {
         reader_->toggleTracking();
     }
@@ -560,6 +574,24 @@ QQuickItem* ReaderPresentationTest::open_panel(const char* name) const {
     return shown(panel) ? panel : nullptr;
 }
 
+// NativeReaderView.handleSelection's textSelected message with the fixture
+// dictionary word at normalized offset 0, which is the first cue's start.
+void ReaderPresentationTest::open_lookup() {
+    const QJsonObject selection{
+        {"token", revision(*reader_)},
+        {"text", kWord},
+        {"sentence", kWord},
+        {"rect", QJsonObject{{"x", 100}, {"y", 100}, {"width", 30}, {"height", 30}}},
+        {"normalizedOffset", 0},
+        {"miningContext",
+         QJsonObject{{"currentIndex", 0},
+                     {"sentences", QJsonArray{QJsonObject{{"id", "0"}, {"text", kWord}}}}}}};
+    send(*reader_, QStringLiteral("textSelected"), selection);
+    QQuickItem* surface = find("readerLookupSurface");
+    QVERIFY(surface != nullptr);
+    QTRY_VERIFY(surface->isVisible());
+}
+
 // NativeReaderView.body: the web view takes the whole GeometryReader; no
 // header, back control, font buttons or progress bars take rows.
 void ReaderPresentationTest::web_view_fills_the_reader() {
@@ -652,6 +684,145 @@ void ReaderPresentationTest::tap_outside_dismisses_a_lookup_first() {
     send(*reader_, QStringLiteral("tapOutside"), {{"token", revision(*reader_)}});
     QTRY_VERIFY(!surface->isVisible());
     QCOMPARE(page_->property("focusMode").toBool(), false);
+}
+
+// PopupView.body: an opaque card of Theme.popupBackground with an 8 px corner
+// radius and a 1 px hairline of textPrimary at 20%; PopupView.actionBar draws
+// the close in a single bar. The surface itself is never translucent.
+void ReaderPresentationTest::lookup_popup_is_a_card() {
+    auto settings = base_settings();
+    settings.popup_action_bar = true;
+    QVERIFY(apply_settings(settings));
+    QTest::qWait(50);
+
+    QQuickItem* surface = find("readerLookupSurface");
+    QVERIFY(surface != nullptr);
+    QVERIFY(!surface->isVisible());
+    open_lookup();
+    QVERIFY(shown(surface));
+    QCOMPARE(surface->property("radius").toReal(), 8.0);
+    QObject* border = surface->property("border").value<QObject*>();
+    QVERIFY(border != nullptr);
+    QCOMPARE(border->property("width").toReal(), 1.0);
+    QCOMPARE(surface->property("opacity").toReal(), 1.0);
+
+    QQuickItem* bar = item_named(surface, QStringLiteral("lookupActionBar"));
+    QVERIFY2(shown(bar), "the action bar is not shown");
+    QList<QQuickItem*> closes = items_named(surface, QStringLiteral("lookupCloseButton"));
+    QCOMPARE(closes.size(), qsizetype(1));
+    QVERIFY(shown(closes.front()));
+    QVERIFY(closes.front()
+                ->mapRectToItem(surface,
+                                QRectF(0, 0, closes.front()->width(), closes.front()->height()))
+                .center()
+                .x() > surface->width() / 2);
+
+    click(closes.front());
+    QTRY_VERIFY(!surface->isVisible());
+}
+
+// PopupView.sasayakiControls(for:includesActionBar:): one row of replay,
+// play/pause and jump replaces the action bar; with the bar on, Close sits in
+// the same row rather than a second stacked bar.
+void ReaderPresentationTest::sasayaki_controls_replace_the_action_bar() {
+    auto settings = base_settings();
+    settings.popup_action_bar = true;
+    QVERIFY(apply_settings(settings));
+
+    SasayakiViewModel* player = nullptr;
+    const auto players = page_->findChildren<SasayakiViewModel*>();
+    for (auto* candidate : players) {
+        player = candidate;
+    }
+    QVERIFY(player != nullptr);
+    const QString audio = data_root_.path() + QStringLiteral("/silence.wav");
+    QVERIFY(write_silent_wav(audio, 60));
+    QVERIFY(player->openAudio(QUrl::fromLocalFile(audio)));
+    QTRY_VERIFY(player->has_audio());
+
+    // The fixture chapter's ten characters; one cue covers offset 0..10.
+    const QString subtitles = data_root_.path() + QStringLiteral("/lookup.srt");
+    QFile file(subtitles);
+    QVERIFY(file.open(QIODevice::WriteOnly | QIODevice::Truncate));
+    const QByteArray srt = QByteArrayLiteral("1\n"
+                                             "00:00:01,000 --> 00:00:03,000\n"
+                                             "あいうえおかきくけこ\n"
+                                             "\n");
+    QCOMPARE(file.write(srt), srt.size());
+    file.close();
+    QVERIFY(player->openSubtitles(QUrl::fromLocalFile(subtitles)));
+    player->matchSubtitles(200);
+    QTRY_VERIFY_WITH_TIMEOUT(!player->matching(), 15000);
+    QVERIFY2(player->match_error().isEmpty(), qPrintable(player->match_error()));
+    QVERIFY(player->has_match());
+
+    QQuickItem* surface = find("readerLookupSurface");
+    QVERIFY(surface != nullptr);
+    open_lookup();
+
+    QQuickItem* controls = item_named(surface, QStringLiteral("lookupSasayakiControls"));
+    QVERIFY2(shown(controls), "the Sasayaki controls are not shown");
+    QQuickItem* replay = item_named(surface, QStringLiteral("lookupSasayakiReplay"));
+    QQuickItem* playback = item_named(surface, QStringLiteral("lookupSasayakiPlayback"));
+    QQuickItem* jump = item_named(surface, QStringLiteral("lookupSasayakiJump"));
+    QVERIFY(shown(replay));
+    QVERIFY(shown(playback));
+    QVERIFY(shown(jump));
+
+    QQuickItem* bar = item_named(surface, QStringLiteral("lookupActionBar"));
+    QVERIFY(shown(bar));
+    QCOMPARE(controls->mapToScene(QPointF()).y(), bar->mapToScene(QPointF()).y());
+
+    click(playback);
+    QTRY_VERIFY_WITH_TIMEOUT(player->playing(), 10000);
+    click(playback);
+    QTRY_VERIFY(!player->playing());
+    click(replay);
+    QTRY_VERIFY_WITH_TIMEOUT(player->playing(), 10000);
+
+    click(jump);
+    QTRY_VERIFY(!surface->isVisible());
+}
+
+// PopupLayout keeps the surface inside the reader page at the default window
+// and at the minimum one; every shown control stays inside the card.
+void ReaderPresentationTest::lookup_popup_fits_the_reader() {
+    open_lookup();
+
+    const auto fits = [&] {
+        QQuickItem* surface = find("readerLookupSurface");
+        QVERIFY(surface != nullptr);
+        const QRectF frame =
+            surface->mapRectToItem(page_, QRectF(0, 0, surface->width(), surface->height()));
+        QVERIFY2(frame.left() >= 0 && frame.top() >= 0 && frame.right() <= page_->width() &&
+                     frame.bottom() <= page_->height(),
+                 qPrintable(QStringLiteral("surface %1,%2 %3x%4 outside page %5x%6")
+                                .arg(frame.left())
+                                .arg(frame.top())
+                                .arg(frame.width())
+                                .arg(frame.height())
+                                .arg(page_->width())
+                                .arg(page_->height())));
+        QList<QQuickItem*> controls;
+        collect_shown_controls(surface, controls);
+        for (QQuickItem* control : controls) {
+            const QRectF rect =
+                control->mapRectToItem(surface, QRectF(0, 0, control->width(), control->height()));
+            QVERIFY2(rect.left() >= -0.5 && rect.right() <= surface->width() + 0.5,
+                     qPrintable(QString::fromLatin1(control->metaObject()->className())));
+        }
+    };
+    fits();
+
+    // A fresh page at the minimum window, as web_view_fills_the_minimum_window
+    // does, keeps the popup placement meaningful after the resize.
+    object_.reset();
+    window_.reset();
+    page_ = nullptr;
+    QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
+    QVERIFY(create_page(720, 520));
+    open_lookup();
+    fits();
 }
 
 // nativeTopInfoOverlay: centred title (one line, middle truncation) and the

@@ -53,6 +53,7 @@ var icons = {
     "play.fill": { weight: "fill", name: "play" },
     "timer": { weight: "regular", name: "timer" },
     "xmark": { weight: "regular", name: "x" },
+    "arrow.clockwise": { weight: "regular", name: "arrow-clockwise" },
     "highlighter": { weight: "regular", name: "highlighter" },
     "arrow.right.to.line": { weight: "regular", name: "arrow-line-right" },
     "trash": { weight: "regular", name: "trash" },
