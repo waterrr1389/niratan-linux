@@ -260,6 +260,9 @@ qt_add_qml_module(niratan_app
         src/views/icons/phosphor/regular/book-open-text.svg
         src/views/icons/phosphor/regular/books.svg
         src/views/icons/phosphor/regular/chart-line.svg
+        src/views/icons/phosphor/regular/brackets-curly.svg
+        src/views/icons/phosphor/regular/chat-exclamation.svg
+        src/views/icons/phosphor/regular/circle.svg
         src/views/icons/phosphor/regular/gear.svg
         src/views/icons/phosphor/regular/list-checks.svg
         src/views/icons/phosphor/regular/magnifying-glass.svg
@@ -273,6 +276,8 @@ qt_add_qml_module(niratan_app
         src/views/icons/phosphor/regular/list.svg
         src/views/icons/phosphor/regular/folder.svg
         src/views/icons/phosphor/regular/tray.svg
+        src/views/icons/phosphor/regular/translate.svg
+        src/views/icons/phosphor/regular/user-circle-check.svg
         src/views/icons/phosphor/regular/pencil-simple.svg
         src/views/icons/phosphor/regular/cursor-text.svg
         src/views/icons/phosphor/fill/check-circle-fill.svg
@@ -318,6 +323,15 @@ qt_add_qml_module(niratan_app
         src/views/pages/SettingsSectionRail.qml
         src/views/pages/SettingRow.qml
         src/views/pages/SettingsSliderRow.qml
+        src/views/settings/AppearanceSettings.qml
+        src/views/settings/SettingsActions.qml
+        src/views/settings/SettingsCard.qml
+        src/views/settings/SettingsForm.qml
+        src/views/settings/SettingsInteger.qml
+        src/views/settings/SettingsSegments.qml
+        src/views/settings/SettingsSeparator.qml
+        src/views/settings/SettingsToggle.qml
+        src/views/settings/StatisticsSettings.qml
         src/views/reader/SasayakiChaptersTab.qml
         src/views/reader/ReaderAppearancePanel.qml
         src/views/reader/ReaderBottomControls.qml

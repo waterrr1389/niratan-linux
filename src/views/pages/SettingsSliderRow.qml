@@ -1,38 +1,55 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
+// NativeMac/NativeReuseViews.swift: NativeSettingsSliderRow.
 
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
 import Niratan
 
-SettingRow {
-    id: sliderRow
+ColumnLayout {
+    id: row
 
+    required property string label
     required property real from
     required property real to
     required property real stepSize
     required property int decimals
     required property real value
+    property string suffix
     signal edited(real value)
+
+    Layout.fillWidth: true
+    Layout.leftMargin: 16
+    Layout.rightMargin: 16
+    Layout.topMargin: 10
+    Layout.bottomMargin: 10
+    spacing: Theme.spacingSm
+
+    RowLayout {
+        Layout.fillWidth: true
+
+        Label {
+            Layout.fillWidth: true
+            text: row.label
+            font.weight: Font.Medium
+        }
+
+        Label {
+            text: slider.value.toLocaleString(Qt.locale(), "f", row.decimals) + row.suffix
+            font.weight: Font.DemiBold
+        }
+    }
 
     Slider {
         id: slider
 
-        Accessible.name: sliderRow.label
-        Layout.preferredWidth: 8 * Theme.spacingLg
-        Layout.minimumWidth: 4 * Theme.spacingLg
-        from: sliderRow.from
-        to: sliderRow.to
-        stepSize: sliderRow.stepSize
+        Layout.fillWidth: true
+        Accessible.name: row.label
+        from: row.from
+        to: row.to
+        stepSize: row.stepSize
         snapMode: Slider.SnapAlways
-        value: sliderRow.value
-        onMoved: sliderRow.edited(slider.value)
-    }
-
-    Label {
-        Layout.minimumWidth: 3 * Theme.spacingMd
-        text: slider.value.toLocaleString(Qt.locale(), "f", sliderRow.decimals)
-        color: Theme.textSecondary
-        horizontalAlignment: Text.AlignRight
+        value: row.value
+        onMoved: row.edited(value)
     }
 }

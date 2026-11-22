@@ -1,141 +1,115 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-//
-// The Settings section rail, extracted from SettingsPage.qml. It follows the
-// settings sidebar of NativeMac/NativeReuseViews.swift
-// NativeSettingsReuseView.settingsSidebar and Features/Settings/SettingsHomeView.swift:
-// one selectable row per section over the page background, with the selected
-// row carrying an accent bar. Profiles opens its own page first, as the
-// sidebar's Library group orders it; the repo keeps its Reader, Dictionary and
-// Statistics destinations, adds Sasayaki (Audiobooks) after Statistics as the
-// sidebar does, adds the Dictionaries management page after Dictionary, and
-// appends Anki, which opens AnkiView's own page.
-// SettingsHomeView.swift gives each settings link an SF Symbol; the rail is
-// text-only, so the `waveform` and `tray.full` icons are not reproduced.
+// NativeMac/NativeReuseViews.swift: NativeSettingsReuseView.settingsSidebar and NativeSettingsSection.
 
 pragma ComponentBehavior: Bound
 
 import QtQuick
 import QtQuick.Controls
-import QtQuick.Layouts
 import Niratan
 
-Pane {
-    id: rail
+Rectangle {
+    id: sidebar
 
-    property int selected: 0
+    property int selected: 1
+    property real toolbarInset: 0
+    readonly property int toolbarHeight: 52
+    readonly property var sections: [
+        { key: "profiles", title: qsTr("Profiles"), symbol: "person.crop.circle.badge.checkmark" },
+        { key: "appearance", title: qsTr("Appearance"), symbol: "paintpalette" },
+        { key: "dictionaries", title: qsTr("Dictionaries"), symbol: "character.book.closed.ja" },
+        { key: "anki", title: qsTr("Anki"), symbol: "tray.full" },
+        { key: "statistics", title: qsTr("Statistics"), symbol: "chart.xyaxis.line" },
+        { key: "sasayaki", title: qsTr("Sasayaki (Audiobooks)"), symbol: "waveform" },
+        { key: "report", title: qsTr("Report an Issue"), symbol: "exclamationmark.bubble" }
+    ]
+    readonly property int lastSection: sections.length - 2
 
-    signal sectionSelected(int index)
-    signal ankiRequested()
-    signal dictionariesRequested()
-    signal profilesRequested()
+    objectName: "settingsColumn"
+    color: Theme.columnBackground
+    activeFocusOnTab: true
+    Keys.onUpPressed: selected = Math.max(0, selected - 1)
+    Keys.onDownPressed: selected = Math.min(lastSection, selected + 1)
 
-    Layout.fillHeight: true
-    padding: Theme.spacingSm
-
-    background: Rectangle {
-        color: Theme.cardBackground
-
-        Rectangle {
-            anchors.top: parent.top
-            anchors.right: parent.right
-            anchors.bottom: parent.bottom
-            width: Theme.cardBorderWidth
-            color: Theme.cardStroke
-        }
+    Text {
+        objectName: "settingsTitle"
+        x: 16 + sidebar.toolbarInset
+        width: sidebar.width - x - 12
+        height: sidebar.toolbarHeight
+        verticalAlignment: Text.AlignVCenter
+        text: sidebar.sections[sidebar.selected].title
+        color: Theme.textPrimary
+        font.pixelSize: Theme.fontTitle
+        font.weight: Font.Bold
+        elide: Text.ElideRight
     }
 
-    component RailRow: Button {
-        id: railRow
+    Flickable {
+        id: list
 
-        property bool current: false
-        signal activated()
+        anchors.fill: parent
+        anchors.topMargin: sidebar.toolbarHeight
+        contentHeight: rows.implicitHeight + 8
+        clip: true
+        boundsBehavior: Flickable.StopAtBounds
+        ScrollBar.vertical: ScrollBar {}
 
-        Layout.fillWidth: true
-        leftPadding: Theme.spacingLg
-        rightPadding: Theme.spacingLg
-        Accessible.selected: railRow.current
-        onClicked: railRow.activated()
+        Column {
+            id: rows
 
-        contentItem: Label {
-            text: railRow.text
-            color: Theme.textPrimary
-            font.pixelSize: Theme.fontBody
-            font.weight: railRow.current ? Font.DemiBold : Font.Normal
-            verticalAlignment: Text.AlignVCenter
-        }
+            x: 6
+            width: list.width - 12
+            spacing: 2
 
-        background: Item {
-            Rectangle {
-                anchors.fill: parent
-                visible: railRow.current || railRow.hovered || railRow.activeFocus
-                color: Theme.windowBackground
-                radius: Theme.controlRadius
-                border.width: railRow.visualFocus ? 1 : 0
-                border.color: Theme.accent
+            Repeater {
+                model: sidebar.sections
+
+                delegate: Column {
+                    id: entry
+
+                    required property int index
+                    required property var modelData
+                    width: rows.width
+
+                    Text {
+                        visible: entry.index === 0 || entry.index === 4
+                        leftPadding: 6
+                        topPadding: 14
+                        bottomPadding: 4
+                        text: entry.index === 0 ? qsTr("Library") : qsTr("Reader")
+                        color: Theme.textSecondary
+                        font.pixelSize: Theme.fontSubheadline
+                        font.weight: Font.DemiBold
+                    }
+
+                    Item {
+                        visible: entry.index > sidebar.lastSection
+                        height: Theme.spacingMd
+                        width: parent.width
+                    }
+
+                    SourceListRow {
+                        id: row
+
+                        objectName: "settingsRow-" + entry.modelData.key
+                        width: entry.width
+                        title: entry.modelData.title
+                        symbol: entry.modelData.symbol
+                        selected: sidebar.selected === entry.index
+                        emphasized: sidebar.activeFocus
+                        activeFocusOnTab: entry.index > sidebar.lastSection
+                        Accessible.onPressAction: row.clicked()
+                        Keys.onSpacePressed: row.clicked()
+                        Keys.onReturnPressed: row.clicked()
+                        onClicked: {
+                            sidebar.forceActiveFocus()
+                            if (entry.index > sidebar.lastSection)
+                                Qt.openUrlExternally("https://github.com/W1ght/Niratan/issues")
+                            else
+                                sidebar.selected = entry.index
+                        }
+                    }
+                }
             }
-
-            Rectangle {
-                anchors.left: parent.left
-                anchors.leftMargin: Theme.spacingXs
-                anchors.verticalCenter: parent.verticalCenter
-                width: 2
-                height: Theme.spacingLg
-                radius: 1
-                visible: railRow.current
-                color: Theme.accent
-            }
-        }
-    }
-
-    contentItem: ColumnLayout {
-        spacing: Theme.spacingXs
-
-        // Profiles opens its own page first, as NativeReuseViews.swift puts the
-        // Profiles screen at the top of the sidebar's Library group (O1).
-        RailRow {
-            text: qsTr("Profiles")
-            onActivated: rail.profilesRequested()
-        }
-
-        RailRow {
-            text: qsTr("Reader")
-            current: rail.selected === 0
-            onActivated: rail.sectionSelected(0)
-        }
-
-        RailRow {
-            text: qsTr("Dictionary")
-            current: rail.selected === 1
-            onActivated: rail.sectionSelected(1)
-        }
-
-        // The managed dictionary library is its own page, reached from the
-        // settings rail the way Anki is, and sits after the Dictionary
-        // behaviour settings.
-        RailRow {
-            text: qsTr("Dictionaries")
-            onActivated: rail.dictionariesRequested()
-        }
-
-        RailRow {
-            text: qsTr("Statistics")
-            current: rail.selected === 2
-            onActivated: rail.sectionSelected(2)
-        }
-
-        RailRow {
-            text: qsTr("Sasayaki (Audiobooks)")
-            current: rail.selected === 3
-            onActivated: rail.sectionSelected(3)
-        }
-
-        RailRow {
-            text: qsTr("Anki")
-            onActivated: rail.ankiRequested()
-        }
-
-        Item {
-            Layout.fillHeight: true
         }
     }
 }

@@ -1,25 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-//
-// The Anki settings page, following Features/Settings/AnkiView.swift (body,
-// connectionStatus, ankiConfigToggle, duplicateScopeText, the onAppear and
-// onDisappear lifecycle and the alerts in AnkiSettingsAlerts.qml),
-// AnkiConnectView.swift (the masked API Key row) and
-// NativeMac/NativeReuseViews.swift (NativeSettingsForm, NativeSettingsSectionCard
-// including its footer, NativeSettingsRow, NativeSettingsToggle,
-// NativeGlassSegmentedPicker with a minimum segment width of 82,
-// NativeGlassMenuPicker with a minimum width of 160, and the field row in
-// AnkiFieldRow.qml).
-//
-// The AnkiConnect card always shows Address, the masked API key, the
-// "Status: Connected"/"Status: Not connected" line and Connect. Refresh,
-// AnkiConnect Settings, Config and Settings exist only while connected; Fields
-// also needs a selected note type among the available ones, so both conditions
-// create the cards instead of hiding them, as Swift's `if` does. Every edit
-// saves at once through the view model, and leaving the page saves once more.
-//
-// Out of scope: audio and image compression rows, the AVIF rows, Force Sync on
-// adding card and Embed Media. The AnkiMobile footer sentence is dropped and
-// the card-creation footer loses "Mac" (Decisions accepted).
+// Features/Settings/AnkiView.swift: body, duplicateScopeText and its open/save
+// lifecycle; AnkiConnectView.swift: the masked API key.
 
 pragma ComponentBehavior: Bound
 
@@ -28,248 +9,99 @@ import QtQuick.Controls
 import QtQuick.Layouts
 import Niratan
 
-Page {
+SettingsForm {
     id: page
 
-    signal backRequested
-
-    padding: 0
-    palette.window: Theme.windowBackground
-    palette.windowText: Theme.textPrimary
-    palette.base: Theme.popupBackground
-    palette.alternateBase: Theme.cardBackground
-    palette.text: Theme.textPrimary
-    palette.button: Theme.cardBackground
-    palette.buttonText: Theme.textPrimary
-    palette.mid: Theme.cardStroke
-    palette.midlight: Theme.cardStroke
-    palette.dark: Theme.textSecondary
-    palette.light: Theme.cardBackground
-    palette.highlight: Theme.accent
-    palette.highlightedText: Theme.popupBackground
-    palette.placeholderText: Theme.textSecondary
-
-    background: Rectangle {
-        color: Theme.windowBackground
-    }
+    objectName: "settings-anki"
+    readonly property list<string> scopes: ["collection", "deck", "deckroot"]
+    readonly property real addressFieldWidth: Math.min(360, Math.max(0, cardWidth - 32) * 0.65)
 
     AnkiSettingsViewModel {
         id: settings
     }
 
-    // AnkiView.swift onAppear loads the profile and pings; onDisappear saves.
     Component.onCompleted: settings.open()
     Component.onDestruction: settings.close()
 
-    // AnkiView.swift duplicateScopeText.
-    function scopeLabel(value) {
-        switch (value) {
-        case "deck":
-            return qsTr("Deck");
-        case "deckroot":
-            return qsTr("Deck Root");
-        default:
-            return qsTr("Collection");
-        }
+    component ConfigPicker: ComboBox {
+        id: picker
+
+        readonly property real listHeight: popup.implicitContentHeight + popup.topPadding + popup.bottomPadding
+
+        Layout.preferredWidth: 160
+        // The list must scroll even when opened near the bottom of the window.
+        popup.height: Math.min(picker.listHeight,
+                               Math.max(0, (picker.Window.window?.height ?? picker.listHeight)
+                                        - popup.topMargin - popup.bottomMargin))
     }
 
-    component Section: ColumnLayout {
-        id: section
+    SettingsCard {
+        title: qsTr("AnkiConnect")
+        footer: qsTr("Card creation uses AnkiConnect.")
 
-        required property string title
-        property string footer: ""
-        default property alias rows: body.data
+        SettingRow {
+            id: addressRow
+            label: qsTr("Address")
 
-        Layout.fillWidth: true
-        spacing: Theme.spacingSm
+            TextField {
+                id: addressInput
 
-        Label {
-            Layout.fillWidth: true
-            text: section.title
-            color: Theme.textPrimary
-            font.pixelSize: Theme.fontTitle
-            font.weight: Font.DemiBold
-            wrapMode: Text.WordWrap
-        }
+                Layout.preferredWidth: page.addressFieldWidth
+                Accessible.name: addressRow.label
+                placeholderText: addressRow.label
+                selectByMouse: true
+                text: settings.address
+                onTextEdited: settings.address = text
 
-        Pane {
-            Layout.fillWidth: true
-            padding: Theme.spacingMd
-            contentItem: ColumnLayout {
-                id: body
-                spacing: Theme.spacingSm
-            }
-            background: Rectangle {
-                color: Theme.cardBackground
-                radius: Theme.cardRadius
-                border.color: Theme.cardStroke
-                border.width: Theme.cardBorderWidth
-            }
-        }
+                Connections {
+                    target: settings
 
-        Label {
-            Layout.fillWidth: true
-            visible: section.footer.length > 0
-            text: section.footer
-            color: Theme.textSecondary
-            font.pixelSize: Theme.fontCaption
-            wrapMode: Text.WordWrap
-        }
-    }
-
-    component Separator: Rectangle {
-        Layout.fillWidth: true
-        Layout.preferredHeight: 1
-        color: Theme.cardStroke
-    }
-
-    component ToggleRow: SettingRow {
-        id: toggleRow
-
-        required property bool checked
-        signal edited(bool value)
-
-        Switch {
-            Accessible.name: toggleRow.label
-            palette.dark: Theme.accent
-            checked: toggleRow.checked
-            onToggled: toggleRow.edited(checked)
-        }
-    }
-
-    // NativeGlassSegmentedPicker segment: the selected value carries the glass
-    // fill, the others read as secondary text in the shared capsule.
-    component Segment: Button {
-        id: segment
-
-        Layout.minimumWidth: 82
-        leftPadding: 10
-        rightPadding: 10
-        topPadding: 4
-        bottomPadding: 4
-        Accessible.selected: segment.checked
-
-        contentItem: Label {
-            text: segment.text
-            color: segment.checked ? Theme.textPrimary : Theme.textSecondary
-            font.pixelSize: Theme.fontBody
-            font.weight: Font.DemiBold
-            horizontalAlignment: Text.AlignHCenter
-            elide: Text.ElideRight
-        }
-
-        background: Rectangle {
-            radius: Theme.controlRadius
-            color: segment.checked ? Theme.cardBackground : "transparent"
-            border.width: segment.checked ? Theme.cardBorderWidth : 0
-            border.color: Theme.cardStroke
-        }
-    }
-
-    ColumnLayout {
-        anchors.fill: parent
-        spacing: 0
-
-        PageHeader {
-            title: qsTr("Anki")
-            onBackRequested: page.backRequested()
-        }
-
-        ScrollView {
-            id: scroll
-
-            Layout.fillWidth: true
-            Layout.fillHeight: true
-            padding: Theme.spacingLg
-            rightPadding: Theme.spacingXl
-            clip: true
-            contentWidth: scroll.availableWidth
-            ScrollBar.horizontal.policy: ScrollBar.AlwaysOff
-
-            ColumnLayout {
-                width: scroll.availableWidth
-                spacing: Theme.spacingLg
-
-                Section {
-                    title: qsTr("AnkiConnect")
-                    footer: qsTr("Card creation uses AnkiConnect.")
-
-                    SettingRow {
-                        label: qsTr("Address")
-
-                        TextField {
-                            id: addressInput
-
-                            Layout.preferredWidth: 360
-                            placeholderText: qsTr("Address")
-                            selectByMouse: true
-                            text: settings.address
-                            onTextEdited: settings.address = addressInput.text
-
-                            Connections {
-                                target: settings
-
-                                function onSettingsChanged() {
-                                    if (addressInput.text !== settings.address)
-                                        addressInput.text = settings.address;
-                                }
-                            }
-                        }
-                    }
-
-                    Separator {
-                    }
-
-                    SettingRow {
-                        label: qsTr("API Key (optional)")
-
-                        TextField {
-                            id: apiKeyInput
-
-                            Layout.preferredWidth: 360
-                            placeholderText: qsTr("API Key (optional)")
-                            selectByMouse: true
-                            echoMode: TextInput.Password
-                            text: settings.apiKey
-                            onTextEdited: settings.apiKey = apiKeyInput.text
-                        }
-                    }
-
-                    Separator {
-                    }
-
-                    RowLayout {
-                        Layout.fillWidth: true
-                        spacing: Theme.spacingMd
-
-                        Label {
-                            Layout.fillWidth: true
-                            text: settings.connected ? qsTr("Status: Connected")
-                                                     : qsTr("Status: Not connected")
-                            color: Theme.textSecondary
-                            font.pixelSize: Theme.fontBody
-                            wrapMode: Text.Wrap
-                        }
-
-                        Button {
-                            text: qsTr("Connect")
-                            onClicked: settings.connectToAnki()
-                        }
+                    function onSettingsChanged() {
+                        if (addressInput.text !== settings.address)
+                            addressInput.text = settings.address
                     }
                 }
-
-                Loader {
-                    Layout.fillWidth: true
-                    active: settings.connected
-                    sourceComponent: connectedSections
-                }
             }
         }
+
+        SettingsSeparator {}
+        SettingRow {
+            id: keyRow
+            label: qsTr("API Key (optional)")
+
+            TextField {
+                Layout.preferredWidth: page.addressFieldWidth
+                Accessible.name: keyRow.label
+                placeholderText: keyRow.label
+                selectByMouse: true
+                echoMode: TextInput.Password
+                text: settings.apiKey
+                onTextEdited: settings.apiKey = text
+            }
+        }
+
+        SettingsSeparator {}
+        SettingRow {
+            label: settings.connected ? qsTr("Status: Connected") : qsTr("Status: Not connected")
+            labelColor: Theme.textSecondary
+
+            Button {
+                text: qsTr("Connect")
+                onClicked: settings.connectToAnki()
+            }
+        }
+    }
+
+    Loader {
+        Layout.fillWidth: true
+        active: settings.connected
+        sourceComponent: connectedSections
     }
 
     AnkiSettingsAlerts {
         id: alerts
 
+        parent: page
         anchors.fill: parent
         errorText: settings.errorMessage
         onFetchRequested: settings.fetchMetadata()
@@ -281,138 +113,96 @@ Page {
         id: connectedSections
 
         ColumnLayout {
-            spacing: Theme.spacingLg
+            spacing: 22
 
-            Section {
+            SettingsCard {
                 title: qsTr("Refresh")
                 footer: qsTr("Fetching refreshes decks and models while preserving mappings for fields that still exist.")
 
-                Button {
-                    text: qsTr("Fetch decks and models from AnkiConnect")
-                    onClicked: alerts.openFetch()
+                SettingsActions {
+                    Button {
+                        text: qsTr("Fetch decks and models from AnkiConnect")
+                        onClicked: alerts.openFetch()
+                    }
                 }
             }
 
-            Section {
+            SettingsCard {
                 title: qsTr("AnkiConnect Settings")
 
                 SettingRow {
+                    id: scopeRow
                     label: qsTr("Duplicate Scope")
 
-                    Pane {
-                        padding: 2
-
-                        contentItem: RowLayout {
-                            spacing: 0
-
-                            Repeater {
-                                model: ["collection", "deck", "deckroot"]
-
-                                delegate: Segment {
-                                    id: scopeSegment
-
-                                    required property string modelData
-                                    readonly property bool segmentSelected: settings.duplicateScope === scopeSegment.modelData
-
-                                    text: page.scopeLabel(scopeSegment.modelData)
-                                    checked: scopeSegment.segmentSelected
-                                    onClicked: settings.duplicateScope = scopeSegment.modelData
-                                }
-                            }
-                        }
-
-                        background: Rectangle {
-                            color: Theme.windowBackground
-                            radius: Theme.controlRadius
-                            border.width: Theme.cardBorderWidth
-                            border.color: Theme.cardStroke
-                        }
+                    SettingsSegments {
+                        Accessible.name: scopeRow.label
+                        labels: [qsTr("Collection"), qsTr("Deck"), qsTr("Deck Root")]
+                        minimumSegmentWidth: 82
+                        selectedIndex: page.scopes.indexOf(settings.duplicateScope)
+                        onEdited: index => settings.duplicateScope = page.scopes[index]
                     }
                 }
 
-                Separator {
-                }
-
-                ToggleRow {
+                SettingsSeparator {}
+                SettingsToggle {
                     label: qsTr("Check All Models")
                     checked: settings.checkAllModels
-                    onEdited: value => {
-                        settings.checkAllModels = value;
-                    }
+                    onEdited: value => settings.checkAllModels = value
                 }
             }
 
-            Section {
+            SettingsCard {
                 title: qsTr("Config")
 
                 SettingRow {
+                    id: deckRow
                     label: qsTr("Deck")
 
-                    ComboBox {
-                        id: deckBox
-
-                        Layout.preferredWidth: 160
-                        Accessible.name: qsTr("Deck")
+                    ConfigPicker {
+                        Accessible.name: deckRow.label
                         model: settings.availableDecks
                         currentIndex: settings.availableDecks.indexOf(settings.selectedDeck)
-                        displayText: settings.selectedDeck.length > 0 ? settings.selectedDeck
-                                                                      : qsTr("Deck")
-                        onActivated: settings.selectedDeck = settings.availableDecks[deckBox.currentIndex]
+                        displayText: settings.selectedDeck.length > 0 ? settings.selectedDeck : deckRow.label
+                        onActivated: index => settings.selectedDeck = settings.availableDecks[index]
                     }
                 }
 
-                Separator {
-                }
-
+                SettingsSeparator {}
                 SettingRow {
+                    id: modelRow
                     label: qsTr("Model")
 
-                    ComboBox {
-                        id: modelBox
-
-                        Layout.preferredWidth: 160
-                        Accessible.name: qsTr("Model")
+                    ConfigPicker {
+                        Accessible.name: modelRow.label
                         model: settings.availableNoteTypes
                         currentIndex: settings.availableNoteTypes.indexOf(settings.selectedNoteType)
-                        displayText: settings.selectedNoteType.length > 0 ? settings.selectedNoteType
-                                                                          : qsTr("Model")
-                        onActivated: settings.selectedNoteType = settings.availableNoteTypes[modelBox.currentIndex]
+                        displayText: settings.selectedNoteType.length > 0 ? settings.selectedNoteType : modelRow.label
+                        onActivated: index => settings.selectedNoteType = settings.availableNoteTypes[index]
                     }
                 }
             }
 
-            Section {
+            SettingsCard {
                 title: qsTr("Settings")
-                footer: qsTr("Higher quality produces larger cards. Image compression applies to book covers and video screenshots; repeated cards reuse matching media files.")
 
-                ToggleRow {
+                SettingsToggle {
                     label: qsTr("Allow Duplicates")
                     checked: settings.allowDuplicates
-                    onEdited: value => {
-                        settings.allowDuplicates = value;
-                    }
+                    onEdited: value => settings.allowDuplicates = value
                 }
 
-                Separator {
-                }
-
-                ToggleRow {
+                SettingsSeparator {}
+                SettingsToggle {
                     label: qsTr("Compact Glossaries")
                     checked: settings.compactGlossaries
-                    onEdited: value => {
-                        settings.compactGlossaries = value;
-                    }
+                    onEdited: value => settings.compactGlossaries = value
                 }
 
-                Separator {
-                }
-
-                ToggleRow {
+                SettingsSeparator {}
+                SettingsToggle {
                     label: qsTr("Compress Images")
                     checked: settings.compressImages
-                    onEdited: value => {
-                        settings.compressImages = value;
-                    }
+                    onEdited: value => settings.compressImages = value
                 }
             }
 
@@ -427,18 +217,19 @@ Page {
     Component {
         id: fieldsSection
 
-        Section {
+        SettingsCard {
             title: qsTr("Fields")
 
-            Button {
+            SettingsActions {
                 visible: settings.hasFieldDefaults
-                text: qsTr("Apply Defaults")
-                onClicked: alerts.openDefaults()
+
+                Button {
+                    text: qsTr("Apply Defaults")
+                    onClicked: alerts.openDefaults()
+                }
             }
 
-            Separator {
-                visible: settings.hasFieldDefaults
-            }
+            SettingsSeparator { visible: settings.hasFieldDefaults }
 
             Repeater {
                 model: settings.fields
@@ -450,14 +241,11 @@ Page {
                     required property int index
 
                     Layout.fillWidth: true
-                    spacing: Theme.spacingSm
+                    spacing: 0
 
-                    Separator {
-                        visible: fieldSection.index > 0
-                    }
+                    SettingsSeparator { visible: fieldSection.index > 0 }
 
                     AnkiFieldRow {
-                        Layout.fillWidth: true
                         field: fieldSection.modelData
                         mapping: settings.fieldMappings[fieldSection.modelData] ?? ""
                         options: settings.mappingOptions
@@ -467,30 +255,14 @@ Page {
                 }
             }
 
-            Separator {
-            }
+            SettingsSeparator { visible: settings.fields.length > 0 }
 
-            ColumnLayout {
-                Layout.fillWidth: true
-                spacing: 6
-
-                Label {
-                    Layout.fillWidth: true
-                    text: qsTr("Tags")
-                    color: Theme.textSecondary
-                    font.pixelSize: Theme.fontCaption
-                    wrapMode: Text.Wrap
-                }
-
-                TextField {
-                    id: tagsInput
-
-                    Layout.fillWidth: true
-                    placeholderText: qsTr("None")
-                    selectByMouse: true
-                    text: settings.tags
-                    onTextEdited: settings.tags = tagsInput.text
-                }
+            AnkiFieldRow {
+                field: qsTr("Tags")
+                mapping: settings.tags
+                options: []
+                showMenu: false
+                onEdited: text => settings.tags = text
             }
         }
     }

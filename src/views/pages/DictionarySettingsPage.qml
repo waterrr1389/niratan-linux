@@ -1,18 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-//
-// The Dictionaries settings page, following Features/Settings/DictionaryView.swift
-// (body, the Download/Import card, dictionaryTypePicker, the dictionary list
-// rows with their enable toggle, DictionaryCategoryPicker, delete and drag
-// reorder, the recommended sheet and the error alert) and
-// NativeMac/NativeReuseViews.swift (the `.dictionaries` settings sidebar
-// destination and its title). The page is pushed from SettingsPage's rail.
-//
-// Local zips are the only install path (Decision O3): the recommended list
-// names the dictionaries for the profile's language, says a zip is imported
-// above, and offers no download action. Reordering uses Up and Down buttons
-// instead of Swift's drag gesture, and a row shows the directory name only
-// because the library list carries no revision caption. The import runs
-// synchronously in the view model, so there is no loading overlay.
+// Features/Settings/DictionaryView.swift: body, DictionaryBehaviorSettingsSections,
+// dictionaryTypePicker and DictionaryCategoryPicker.
+// Local imports are synchronous; recommendations are read-only and reordering
+// uses menu actions. The library does not expose revision captions.
 
 pragma ComponentBehavior: Bound
 
@@ -21,70 +11,23 @@ import QtQuick.Controls
 import QtQuick.Dialogs
 import QtQuick.Layouts
 import Niratan
+import "../icons/icon_map.js" as IconMap
 
-Page {
+SettingsForm {
     id: page
 
-    signal backRequested
+    objectName: "settings-dictionaries"
+    readonly property list<string> types: ["Term", "Frequency", "Pitch", "Kanji"]
+    readonly property list<string> categories: ["none", "monolingual", "bilingual", "exclude"]
+    readonly property list<string> collapseModes: ["Expand All", "Collapse All", "Custom"]
 
-    padding: 0
-    palette.window: Theme.windowBackground
-    palette.windowText: Theme.textPrimary
-    palette.base: Theme.popupBackground
-    palette.alternateBase: Theme.cardBackground
-    palette.text: Theme.textPrimary
-    palette.button: Theme.cardBackground
-    palette.buttonText: Theme.textPrimary
-    palette.mid: Theme.cardStroke
-    palette.midlight: Theme.cardStroke
-    palette.dark: Theme.textSecondary
-    palette.light: Theme.cardBackground
-    palette.highlight: Theme.accent
-    palette.highlightedText: Theme.popupBackground
-
-    background: Rectangle {
-        color: Theme.windowBackground
+    SettingsViewModel {
+        id: preferences
     }
 
     DictionarySettingsViewModel {
-        id: settings
-
-        Component.onCompleted: settings.refresh()
-    }
-
-    readonly property var categories: ["none", "monolingual", "bilingual", "exclude"]
-    readonly property var categoryLabels: [
-        qsTr("No Category"), qsTr("Monolingual"), qsTr("Bilingual"), qsTr("Exclude")
-    ]
-
-    // The recommended table has at most seven English entries; each row binds
-    // to its index so the page shows the list without a dynamically created
-    // delegate.
-    component RecommendedRow: RowLayout {
-        id: recommendedRow
-
-        property int recommendationIndex: 0
-
-        readonly property var entry: recommendationIndex < settings.recommended.length
-            ? settings.recommended[recommendationIndex] : null
-
-        Layout.fillWidth: true
-        spacing: Theme.spacingSm
-        visible: entry !== null
-
-        Label {
-            Layout.fillWidth: true
-            text: recommendedRow.entry ? recommendedRow.entry.name : ""
-            color: Theme.textPrimary
-            font.pixelSize: Theme.fontBody
-            elide: Text.ElideRight
-        }
-
-        Label {
-            text: recommendedRow.entry ? recommendedRow.entry.type : ""
-            color: Theme.textSecondary
-            font.pixelSize: Theme.fontCaption
-        }
+        id: library
+        Component.onCompleted: library.refresh()
     }
 
     FileDialog {
@@ -93,219 +36,278 @@ Page {
         title: qsTr("Import Dictionaries")
         fileMode: FileDialog.OpenFiles
         nameFilters: [qsTr("Yomitan dictionaries (*.zip)")]
-
-        onAccepted: settings.importFiles(selectedFiles)
+        onAccepted: library.importFiles(selectedFiles)
     }
 
-    ColumnLayout {
-        anchors.fill: parent
-        spacing: 0
+    Dialog {
+        id: cssDialog
 
-        PageHeader {
-            title: qsTr("Dictionaries")
+        parent: Overlay.overlay
+        anchors.centerIn: parent
+        width: Math.min(580, parent ? parent.width : 580)
+        modal: true
+        title: qsTr("Custom CSS")
+        onAboutToShow: cssInput.text = preferences.customCSS
+        onClosed: preferences.customCSS = cssInput.text
 
-            onBackRequested: page.backRequested()
+        contentItem: ScrollView {
+            implicitHeight: 240
+            contentWidth: availableWidth
+            clip: true
+
+            TextArea {
+                id: cssInput
+
+                Accessible.name: cssDialog.title
+                font.family: "monospace"
+                textFormat: TextEdit.PlainText
+                wrapMode: TextEdit.Wrap
+            }
         }
 
-        ScrollView {
-            id: scroll
+        footer: DialogButtonBox {
+            Button {
+                text: qsTr("Reset")
+                DialogButtonBox.buttonRole: DialogButtonBox.ResetRole
+                onClicked: cssInput.clear()
+            }
 
-            Layout.fillWidth: true
-            Layout.fillHeight: true
-            padding: Theme.spacingLg
-            clip: true
-            contentWidth: scroll.availableWidth
-            ScrollBar.horizontal.policy: ScrollBar.AlwaysOff
+            Button {
+                text: qsTr("Close")
+                DialogButtonBox.buttonRole: DialogButtonBox.AcceptRole
+                onClicked: cssDialog.close()
+            }
+        }
+    }
 
-            ColumnLayout {
-                width: scroll.availableWidth
-                spacing: Theme.spacingLg
+    Dialog {
+        id: recommendedDialog
 
-                SettingsNote {
-                    visible: settings.error !== ""
-                    color: Theme.popupDanger
-                    text: settings.error
-                }
+        parent: Overlay.overlay
+        anchors.centerIn: parent
+        width: Math.min(480, parent ? parent.width : 480)
+        modal: true
+        title: qsTr("Recommended for this profile")
+        standardButtons: Dialog.Close
 
-                RowLayout {
-                    Layout.fillWidth: true
-                    spacing: Theme.spacingMd
+        contentItem: ColumnLayout {
+            SettingsNote {
+                text: qsTr("Use Import to install a local .zip of one of these dictionaries.")
+            }
 
-                    Button {
-                        text: qsTr("Import")
+            Repeater {
+                model: library.recommended
 
-                        onClicked: importDialog.open()
-                    }
+                delegate: RowLayout {
+                    id: recommendation
 
-                    ColumnLayout {
+                    required property var modelData
+
+                    Label {
                         Layout.fillWidth: true
-                        spacing: Theme.spacingXs
+                        text: recommendation.modelData.name
+                        wrapMode: Text.Wrap
+                    }
 
-                        Label {
-                            text: qsTr("Supported Formats")
-                            color: Theme.textPrimary
-                            font.pixelSize: Theme.fontBody
-                            font.weight: Font.DemiBold
-                        }
-
-                        Label {
-                            Layout.fillWidth: true
-                            text: qsTr("Yomitan term, frequency, pitch and kanji dictionaries (.zip) are supported")
-                            color: Theme.textSecondary
-                            font.pixelSize: Theme.fontCaption
-                            wrapMode: Text.WordWrap
-                        }
+                    SettingsNote {
+                        Layout.fillWidth: false
+                        text: recommendation.modelData.type
                     }
                 }
+            }
+        }
+    }
 
-                RowLayout {
-                    Layout.fillWidth: true
-                    spacing: Theme.spacingSm
+    SettingsNote {
+        visible: library.error.length > 0 || preferences.error.length > 0
+        text: [library.error, preferences.error].filter(message => message.length > 0).join("\n")
+        color: Theme.popupDanger
+    }
 
-                    Button {
-                        text: qsTr("Term")
-                        checkable: true
-                        checked: settings.dictionaryType === "Term"
-                        onClicked: settings.selectType("Term")
+    SettingsCard {
+        title: qsTr("Dictionaries")
+
+        SettingsActions {
+            Button {
+                objectName: "recommendedDictionariesButton"
+                text: qsTr("Recommended Dictionaries")
+                enabled: library.recommended.length > 0
+                onClicked: recommendedDialog.open()
+            }
+
+            Button {
+                text: qsTr("Import")
+                icon.source: IconMap.source("plus")
+                onClicked: importDialog.open()
+            }
+
+            Button {
+                objectName: "dictionaryCssButton"
+                text: qsTr("Custom CSS")
+                icon.source: IconMap.source("curlybraces")
+                onClicked: cssDialog.open()
+            }
+        }
+
+        SettingsSeparator {}
+        SettingRow {
+            label: qsTr("Supported Formats")
+
+            SettingsNote {
+                Layout.preferredWidth: 220
+                Layout.minimumWidth: 0
+                horizontalAlignment: Text.AlignRight
+                text: qsTr("Yomitan term, frequency, pitch and kanji dictionaries (.zip) are supported")
+            }
+        }
+    }
+
+    SettingsCard {
+        title: qsTr("Settings")
+
+        SettingsToggle {
+            label: qsTr("Default to Dictionary Tab")
+            checked: preferences.dictionaryTabDefault
+            onEdited: value => preferences.dictionaryTabDefault = value
+        }
+    }
+
+    SettingsCard {
+        title: qsTr("Lookup")
+
+        SettingsToggle {
+            label: qsTr("Scan Non-Japanese Text")
+            checked: preferences.scanNonJapaneseText
+            onEdited: value => preferences.scanNonJapaneseText = value
+        }
+
+        SettingsSeparator {}
+        SettingsInteger {
+            label: qsTr("Max Results")
+            from: 1
+            to: 50
+            value: preferences.maxResults
+            onEdited: value => preferences.maxResults = value
+        }
+
+        SettingsSeparator {}
+        SettingsInteger {
+            label: qsTr("Scan Length")
+            from: 1
+            to: 64
+            value: preferences.scanLength
+            onEdited: value => preferences.scanLength = value
+        }
+    }
+
+    SettingsCard {
+        title: qsTr("Collapse Dictionaries")
+
+        SettingRow {
+            id: collapseRow
+            label: qsTr("Mode")
+
+            SettingsSegments {
+                Accessible.name: collapseRow.label
+                labels: [qsTr("Expand All"), qsTr("Collapse All"), qsTr("Custom")]
+                minimumSegmentWidth: 82
+                selectedIndex: page.collapseModes.indexOf(preferences.collapseMode)
+                onEdited: index => preferences.collapseMode = page.collapseModes[index]
+            }
+        }
+    }
+
+    SettingsCard {
+        title: qsTr("Behaviour")
+        footer: qsTr("Two-column layout is recommended only on larger screens or when using full-width.")
+
+        SettingsToggle {
+            label: qsTr("Two-Column Layout")
+            checked: preferences.twoColumnLayout
+            onEdited: value => preferences.twoColumnLayout = value
+        }
+
+        SettingsSeparator {}
+        SettingsToggle {
+            label: qsTr("Compact Glossaries")
+            checked: preferences.compactGlossaries
+            onEdited: value => preferences.compactGlossaries = value
+        }
+    }
+
+    SettingsCard {
+        title: qsTr("Dictionaries")
+        footer: library.dictionaryType === "Term" && library.rows.length > 0
+                ? qsTr("Category for Anki definition fields") : ""
+        headerControls: SettingsSegments {
+            Accessible.name: qsTr("Dictionary Type")
+            labels: [qsTr("Term"), qsTr("Frequency"), qsTr("Pitch"), qsTr("Kanji")]
+            minimumSegmentWidth: 72
+            selectedIndex: page.types.indexOf(library.dictionaryType)
+            onEdited: index => library.selectType(page.types[index])
+        }
+
+        Repeater {
+            model: library.rows
+
+            delegate: ColumnLayout {
+                id: entry
+
+                required property var modelData
+                required property int index
+
+                Layout.fillWidth: true
+                spacing: 0
+
+                SettingsSeparator { visible: entry.index > 0 }
+
+                SettingRow {
+                    label: entry.modelData.title
+
+                    ComboBox {
+                        visible: library.dictionaryType === "Term"
+                        Accessible.name: qsTr("Category")
+                        model: [qsTr("No Category"), qsTr("Monolingual"), qsTr("Bilingual"), qsTr("Exclude")]
+                        currentIndex: page.categories.indexOf(entry.modelData.category)
+                        onActivated: index => library.setCategory(entry.modelData.title, page.categories[index])
                     }
 
-                    Button {
-                        text: qsTr("Frequency")
-                        checkable: true
-                        checked: settings.dictionaryType === "Frequency"
-                        onClicked: settings.selectType("Frequency")
+                    Switch {
+                        Accessible.name: entry.modelData.title
+                        checked: entry.modelData.enabled
+                        onToggled: library.setEnabled(entry.modelData.title, checked)
                     }
 
-                    Button {
-                        text: qsTr("Pitch")
-                        checkable: true
-                        checked: settings.dictionaryType === "Pitch"
-                        onClicked: settings.selectType("Pitch")
-                    }
+                    ToolButton {
+                        id: actions
 
-                    Button {
-                        text: qsTr("Kanji")
-                        checkable: true
-                        checked: settings.dictionaryType === "Kanji"
-                        onClicked: settings.selectType("Kanji")
-                    }
+                        Accessible.name: qsTr("Dictionary Actions")
+                        text: "\u22EF"
+                        onClicked: actionsMenu.popup(actions)
 
-                    Item {
-                        Layout.fillWidth: true
-                    }
-                }
+                        Menu {
+                            id: actionsMenu
 
-                ColumnLayout {
-                    Layout.fillWidth: true
-                    spacing: Theme.spacingSm
+                            MenuItem {
+                                text: qsTr("Move Up")
+                                enabled: entry.index > 0
+                                onTriggered: library.move(entry.modelData.title, library.rows[entry.index - 1].title)
+                            }
 
-                    Repeater {
-                        model: settings.rows
+                            MenuItem {
+                                text: qsTr("Move Down")
+                                enabled: entry.index + 1 < library.rows.length
+                                onTriggered: library.move(entry.modelData.title, library.rows[entry.index + 1].title)
+                            }
 
-                        delegate: Rectangle {
-                            id: row
+                            MenuSeparator {}
 
-                            required property var modelData
-                            required property int index
-
-                            Layout.fillWidth: true
-                            implicitHeight: 48
-                            radius: Theme.controlRadius
-                            color: Theme.cardBackground
-                            border.width: Theme.cardBorderWidth
-                            border.color: Theme.cardStroke
-
-                            RowLayout {
-                                anchors.fill: parent
-                                anchors.leftMargin: Theme.spacingMd
-                                anchors.rightMargin: Theme.spacingSm
-                                spacing: Theme.spacingSm
-
-                                Label {
-                                    Layout.fillWidth: true
-                                    text: row.modelData.title
-                                    color: Theme.textPrimary
-                                    font.pixelSize: Theme.fontBody
-                                    elide: Text.ElideRight
-                                }
-
-                                ComboBox {
-                                    visible: settings.dictionaryType === "Term"
-                                    implicitWidth: 160
-                                    model: page.categoryLabels
-                                    currentIndex: page.categories.indexOf(row.modelData.category)
-                                    onActivated: settings.setCategory(
-                                                     row.modelData.title,
-                                                     page.categories[currentIndex])
-                                }
-
-                                Switch {
-                                    checked: row.modelData.enabled
-                                    onToggled: settings.setEnabled(row.modelData.title, checked)
-                                }
-
-                                Button {
-                                    text: qsTr("Up")
-                                    enabled: row.index > 0
-                                    onClicked: settings.move(
-                                                   row.modelData.title,
-                                                   settings.rows[row.index - 1].title)
-                                }
-
-                                Button {
-                                    text: qsTr("Down")
-                                    enabled: row.index + 1 < settings.rows.length
-                                    onClicked: settings.move(
-                                                   row.modelData.title,
-                                                   settings.rows[row.index + 1].title)
-                                }
-
-                                Button {
-                                    text: qsTr("Delete")
-                                    onClicked: settings.remove(row.modelData.title)
-                                }
+                            MenuItem {
+                                text: qsTr("Delete")
+                                onTriggered: library.remove(entry.modelData.title)
                             }
                         }
                     }
-
-                    Label {
-                        visible: settings.dictionaryType === "Term"
-                        text: qsTr("Category for Anki definition fields")
-                        color: Theme.textSecondary
-                        font.pixelSize: Theme.fontCaption
-                    }
-                }
-
-                ColumnLayout {
-                    Layout.fillWidth: true
-                    spacing: Theme.spacingXs
-
-                    Label {
-                        text: qsTr("Recommended for this profile")
-                        color: Theme.textPrimary
-                        font.pixelSize: Theme.fontBody
-                        font.weight: Font.DemiBold
-                    }
-
-                    Label {
-                        Layout.fillWidth: true
-                        text: qsTr("Import a local .zip of these dictionaries above")
-                        color: Theme.textSecondary
-                        font.pixelSize: Theme.fontCaption
-                        wrapMode: Text.WordWrap
-                    }
-
-                    RecommendedRow { recommendationIndex: 0 }
-                    RecommendedRow { recommendationIndex: 1 }
-                    RecommendedRow { recommendationIndex: 2 }
-                    RecommendedRow { recommendationIndex: 3 }
-                    RecommendedRow { recommendationIndex: 4 }
-                    RecommendedRow { recommendationIndex: 5 }
-                    RecommendedRow { recommendationIndex: 6 }
-                }
-
-                Item {
-                    Layout.fillHeight: true
                 }
             }
         }

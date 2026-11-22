@@ -1,18 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-//
-// The profile management page, following Features/Settings/ProfilesView.swift:
-// the active profile list with a checkmark, a language caption and the
-// Built-in marker, the Create Profile and Rename editors (420 wide, name field,
-// language picker locked while renaming), the delete confirmation and the error
-// alert. The dialog width and the footer sentence about per-profile settings
-// come from the same view.
-//
-// Activating a row only switches the stored profile. The reader and dictionary
-// pages read their settings from the active profile the next time they load
-// them, so this page never claims to have swapped them in place.
-//
-// Every colour comes from Theme; the list keeps the repository order, so the
-// built-in profile stays first.
+// Features/Settings/ProfilesView.swift: body, profileRow and profileEditor.
+// Profile activation affects the next load of reader and dictionary settings.
 
 pragma ComponentBehavior: Bound
 
@@ -20,37 +8,26 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
 import Niratan
+import "../icons/icon_map.js" as IconMap
 
-Item {
+SettingsForm {
     id: page
 
-    signal backRequested()
+    objectName: "settings-profiles"
 
-    // The language a new profile starts with: the active profile's language,
-    // as ProfilesView.swift sets draftLanguage = repository.activeProfile.language.
     function activeLanguage() {
-        for (var i = 0; i < profilesModel.profiles.length; ++i) {
-            if (profilesModel.profiles[i].active)
-                return profilesModel.profiles[i].language
+        for (const profile of profilesModel.profiles) {
+            if (profile.active)
+                return profile.language
         }
         return "ja"
     }
 
-    function openCreate() {
+    function openEditor(profile) {
         profilesModel.clearError()
-        editorDialog.renaming = false
-        editorDialog.profileId = ""
-        editorDialog.profileName = ""
-        editorDialog.profileLanguage = "ja"
-        editorDialog.open()
-    }
-
-    function openRename(profile) {
-        profilesModel.clearError()
-        editorDialog.renaming = true
-        editorDialog.profileId = profile.id
-        editorDialog.profileName = profile.name
-        editorDialog.profileLanguage = profile.language
+        editorDialog.profileId = profile ? profile.id : ""
+        nameField.text = profile ? profile.name : ""
+        languageBox.currentIndex = (profile ? profile.language : page.activeLanguage()) === "en" ? 1 : 0
         editorDialog.open()
     }
 
@@ -65,210 +42,117 @@ Item {
         id: profilesModel
     }
 
-    ColumnLayout {
-        anchors.fill: parent
-        spacing: 0
+    SettingRow {
+        visible: profilesModel.error.length > 0 && !editorDialog.opened
+        label: profilesModel.error
 
-        PageHeader {
-            title: qsTr("Profiles")
-            onBackRequested: page.backRequested()
+        Button {
+            text: qsTr("Dismiss")
+            onClicked: profilesModel.clearError()
         }
+    }
 
-        Rectangle {
-            Layout.fillWidth: true
-            Layout.leftMargin: 24
-            Layout.rightMargin: 24
-            Layout.topMargin: 12
-            Layout.preferredHeight: bannerRow.implicitHeight + 16
-            visible: profilesModel.error.length > 0
-            radius: Theme.cardRadius
-            color: Theme.cardBackground
-            border.width: Theme.cardBorderWidth
-            border.color: Theme.popupDanger
+    SettingsCard {
+        title: qsTr("Active Profile")
+        footer: qsTr("Dictionary, reader appearance and Anki mining settings follow the active profile. Open pages keep the settings they already loaded until they load them again.")
 
-            RowLayout {
-                id: bannerRow
-                anchors.left: parent.left
-                anchors.right: parent.right
-                anchors.verticalCenter: parent.verticalCenter
-                anchors.margins: 8
-                spacing: 8
+        Repeater {
+            model: profilesModel.profiles
 
-                Label {
+            delegate: ColumnLayout {
+                id: profileEntry
+
+                required property int index
+                required property var modelData
+
+                Layout.fillWidth: true
+                spacing: 0
+
+                SettingsSeparator { visible: profileEntry.index > 0 }
+
+                ItemDelegate {
+                    id: profileRow
+
                     Layout.fillWidth: true
-                    text: profilesModel.error
-                    color: Theme.popupDanger
-                    font.pixelSize: 12
-                    wrapMode: Text.WordWrap
-                }
+                    Layout.leftMargin: 12
+                    Layout.rightMargin: 12
+                    leftPadding: 4
+                    rightPadding: 4
+                    implicitHeight: 46
+                    Accessible.name: profileEntry.modelData.name
+                    onClicked: profilesModel.activateProfile(profileEntry.modelData.id)
 
-                Button {
-                    text: qsTr("Dismiss")
-                    onClicked: profilesModel.clearError()
+                    TapHandler {
+                        acceptedButtons: Qt.RightButton
+                        onTapped: profileMenu.popup(profileRow)
+                    }
+
+                    contentItem: RowLayout {
+                        spacing: Theme.spacingSm
+
+                        Icon {
+                            size: 16
+                            name: profileEntry.modelData.active ? "checkmark.circle.fill" : "circle"
+                            color: profileEntry.modelData.active ? Theme.accent : Theme.textSecondary
+                        }
+
+                        ColumnLayout {
+                            Layout.fillWidth: true
+                            spacing: 2
+
+                            Label {
+                                Layout.fillWidth: true
+                                text: profileEntry.modelData.name
+                                elide: Text.ElideRight
+                            }
+
+                            SettingsNote {
+                                text: profileEntry.modelData.language === "en" ? qsTr("English") : qsTr("Japanese")
+                            }
+                        }
+
+                        SettingsNote {
+                            Layout.fillWidth: false
+                            visible: profileEntry.modelData.builtIn
+                            text: qsTr("Built-in")
+                        }
+
+                        ToolButton {
+                            id: menuButton
+
+                            text: "\u22EF"
+                            Accessible.name: qsTr("Profile Actions")
+                            ToolTip.visible: hovered
+                            ToolTip.text: qsTr("Profile Actions")
+                            onClicked: profileMenu.popup(menuButton)
+                        }
+                    }
+
+                    Menu {
+                        id: profileMenu
+
+                        MenuItem {
+                            text: qsTr("Rename")
+                            onTriggered: page.openEditor(profileEntry.modelData)
+                        }
+
+                        MenuItem {
+                            text: qsTr("Delete")
+                            visible: !profileEntry.modelData.isDefault
+                            onTriggered: page.confirmDelete(profileEntry.modelData)
+                        }
+                    }
                 }
             }
         }
 
-        ScrollView {
-            Layout.fillWidth: true
-            Layout.fillHeight: true
-            clip: true
-
-            ColumnLayout {
-                width: page.width
-                spacing: 0
-
-                Rectangle {
-                    Layout.fillWidth: true
-                    Layout.leftMargin: 24
-                    Layout.rightMargin: 24
-                    Layout.topMargin: 16
-                    implicitHeight: sectionColumn.implicitHeight + 24
-                    radius: Theme.cardRadius
-                    color: Theme.cardBackground
-                    border.width: Theme.cardBorderWidth
-                    border.color: Theme.cardStroke
-
-                    ColumnLayout {
-                        id: sectionColumn
-                        anchors.fill: parent
-                        anchors.margins: 12
-                        spacing: 2
-
-                        Repeater {
-                            model: profilesModel.profiles
-
-                            delegate: ItemDelegate {
-                                id: profileRow
-                                required property var modelData
-
-                                Layout.fillWidth: true
-                                implicitHeight: 56
-                                onClicked: profilesModel.activateProfile(profileRow.modelData.id)
-
-                                TapHandler {
-                                    acceptedButtons: Qt.RightButton
-                                    onTapped: profileMenu.popup(profileRow)
-                                }
-
-                                contentItem: RowLayout {
-                                    spacing: 10
-
-                                    Label {
-                                        Layout.preferredWidth: 20
-                                        text: profileRow.modelData.active
-                                            ? "\u2713" : "\u25CB"
-                                        color: profileRow.modelData.active
-                                            ? Theme.accent : Theme.textSecondary
-                                        font.pixelSize: 16
-                                        horizontalAlignment: Text.AlignHCenter
-                                    }
-
-                                    ColumnLayout {
-                                        Layout.fillWidth: true
-                                        spacing: 2
-
-                                        Label {
-                                            Layout.fillWidth: true
-                                            text: profileRow.modelData.name
-                                            color: Theme.textPrimary
-                                            font.pixelSize: 14
-                                            elide: Text.ElideRight
-                                        }
-
-                                        Label {
-                                            Layout.fillWidth: true
-                                            text: profileRow.modelData.language === "en"
-                                                ? qsTr("English") : qsTr("Japanese")
-                                            color: Theme.textSecondary
-                                            font.pixelSize: 11
-                                        }
-                                    }
-
-                                    Label {
-                                        visible: profileRow.modelData.builtIn
-                                        text: qsTr("Built-in")
-                                        color: Theme.textSecondary
-                                        font.pixelSize: 11
-                                    }
-
-                                    Button {
-                                        id: rowMenuButton
-                                        implicitWidth: 32
-                                        implicitHeight: 28
-                                        padding: 0
-                                        text: "\u22EF"
-                                        onClicked: profileMenu.popup(rowMenuButton)
-
-                                        ToolTip.visible: hovered
-                                        ToolTip.text: qsTr("Profile Actions")
-                                    }
-                                }
-
-                                Menu {
-                                    id: profileMenu
-
-                                    MenuItem {
-                                        text: qsTr("Rename")
-                                        onClicked: page.openRename(profileRow.modelData)
-                                    }
-
-                                    MenuItem {
-                                        text: qsTr("Delete")
-                                        visible: !profileRow.modelData.isDefault
-                                        onClicked: page.confirmDelete(profileRow.modelData)
-                                    }
-                                }
-                            }
-                        }
-
-                        Rectangle {
-                            Layout.fillWidth: true
-                            Layout.topMargin: 6
-                            Layout.bottomMargin: 6
-                            Layout.preferredHeight: 1
-                            color: Theme.cardStroke
-                        }
-
-                        ItemDelegate {
-                            id: createRow
-                            Layout.fillWidth: true
-                            implicitHeight: 44
-                            onClicked: page.openCreate()
-
-                            contentItem: RowLayout {
-                                spacing: 10
-
-                                Label {
-                                    Layout.preferredWidth: 20
-                                    text: "+"
-                                    color: Theme.accent
-                                    font.pixelSize: 16
-                                    horizontalAlignment: Text.AlignHCenter
-                                }
-
-                                Label {
-                                    Layout.fillWidth: true
-                                    text: qsTr("Create Profile")
-                                    color: Theme.textPrimary
-                                    font.pixelSize: 14
-                                }
-                            }
-                        }
-                    }
-                }
-
-                Label {
-                    Layout.fillWidth: true
-                    Layout.leftMargin: 24
-                    Layout.rightMargin: 24
-                    Layout.topMargin: 8
-                    Layout.bottomMargin: 24
-                    text: qsTr("Dictionary, reader appearance and Anki mining settings follow the active profile. Open pages keep the settings they already loaded until they load them again.")
-                    color: Theme.textSecondary
-                    font.pixelSize: 11
-                    wrapMode: Text.WordWrap
-                }
+        SettingsSeparator {}
+        SettingsActions {
+            Button {
+                objectName: "createProfileButton"
+                text: qsTr("Create Profile")
+                icon.source: IconMap.source("plus")
+                onClicked: page.openEditor(null)
             }
         }
     }
@@ -276,98 +160,88 @@ Item {
     Dialog {
         id: editorDialog
 
-        property bool renaming: false
-        property string profileId: ""
-        property string profileName: ""
-        property string profileLanguage: "ja"
+        objectName: "profileEditor"
+        property string profileId
+        readonly property bool renaming: profileId.length > 0
 
-        modal: true
+        parent: Overlay.overlay
         anchors.centerIn: parent
+        modal: true
         width: 420
-        padding: 24
-        title: editorDialog.renaming ? qsTr("Rename Profile") : qsTr("New Profile")
+        title: renaming ? qsTr("Rename Profile") : qsTr("New Profile")
 
         function confirm() {
-            const language = languageBox.currentIndex === 1 ? "en" : "ja"
-            const changed = editorDialog.renaming
-                ? profilesModel.renameProfile(editorDialog.profileId, nameField.text)
-                : profilesModel.createProfile(nameField.text, language)
+            if (nameField.text.trim().length === 0)
+                return
+            const changed = renaming
+                ? profilesModel.renameProfile(profileId, nameField.text)
+                : profilesModel.createProfile(nameField.text, languageBox.currentIndex === 1 ? "en" : "ja")
             if (changed)
-                editorDialog.accept()
+                accept()
             else
                 nameField.forceActiveFocus()
-        }
-
-        onAboutToShow: {
-            nameField.text = editorDialog.renaming ? editorDialog.profileName : ""
-            const language = editorDialog.renaming
-                ? editorDialog.profileLanguage : page.activeLanguage()
-            languageBox.currentIndex = language === "en" ? 1 : 0
         }
 
         onOpened: nameField.forceActiveFocus()
 
         contentItem: ColumnLayout {
-            spacing: 12
-
-            Label {
-                Layout.fillWidth: true
-                text: qsTr("Profile Name")
-                color: Theme.textPrimary
-                font.pixelSize: 12
-            }
+            spacing: Theme.spacingMd
 
             TextField {
                 id: nameField
+
+                objectName: "profileNameField"
                 Layout.fillWidth: true
+                Accessible.name: qsTr("Profile Name")
                 placeholderText: qsTr("Profile Name")
                 selectByMouse: true
-                onAccepted: {
-                    if (nameField.text.trim().length > 0)
-                        editorDialog.confirm()
+                onAccepted: editorDialog.confirm()
+            }
+
+            RowLayout {
+                Layout.fillWidth: true
+
+                Label {
+                    Layout.fillWidth: true
+                    text: qsTr("Language")
+                }
+
+                ComboBox {
+                    id: languageBox
+
+                    Accessible.name: qsTr("Language")
+                    model: [qsTr("Japanese"), qsTr("English")]
+                    enabled: !editorDialog.renaming
                 }
             }
 
-            Label {
-                Layout.fillWidth: true
-                text: qsTr("Language")
-                color: Theme.textPrimary
-                font.pixelSize: 12
-            }
-
-            ComboBox {
-                id: languageBox
-                Layout.fillWidth: true
-                model: [qsTr("Japanese"), qsTr("English")]
-                enabled: !editorDialog.renaming
-            }
-
-            Label {
-                Layout.fillWidth: true
+            SettingsNote {
                 visible: profilesModel.error.length > 0
                 text: profilesModel.error
                 color: Theme.popupDanger
-                font.pixelSize: 12
-                wrapMode: Text.WordWrap
             }
         }
 
-        footer: RowLayout {
-            spacing: 8
+        // The wrapper prevents Dialog from accepting automatically when the
+        // button box emits accepted; only a successful write closes the editor.
+        footer: Item {
+            implicitHeight: buttons.implicitHeight
 
-            Item {
-                Layout.fillWidth: true
-            }
+            DialogButtonBox {
+                id: buttons
 
-            Button {
-                text: qsTr("Cancel")
-                onClicked: editorDialog.reject()
-            }
+                anchors.fill: parent
+                standardButtons: DialogButtonBox.Cancel
+                onRejected: editorDialog.reject()
+                onAccepted: editorDialog.confirm()
 
-            Button {
-                text: editorDialog.renaming ? qsTr("Save") : qsTr("Create")
-                enabled: nameField.text.trim().length > 0
-                onClicked: editorDialog.confirm()
+                Button {
+                    objectName: "saveProfileButton"
+                    text: editorDialog.renaming ? qsTr("Save") : qsTr("Create")
+                    DialogButtonBox.buttonRole: DialogButtonBox.AcceptRole
+                    prominent: true
+                    enabled: nameField.text.trim().length > 0
+                }
             }
         }
     }
@@ -375,21 +249,22 @@ Item {
     Dialog {
         id: deleteDialog
 
-        property string profileId: ""
-        property string profileName: ""
+        property string profileId
+        property string profileName
 
-        modal: true
+        parent: Overlay.overlay
         anchors.centerIn: parent
+        modal: true
         width: 400
         title: qsTr("Delete Profile")
-        standardButtons: Dialog.Yes | Dialog.No
+        standardButtons: Dialog.Ok | Dialog.Cancel
+        Component.onCompleted: standardButton(Dialog.Ok).text = qsTr("Delete")
 
         contentItem: Label {
             text: qsTr("Delete \"%1\"? This cannot be undone.").arg(deleteDialog.profileName)
-            color: Theme.textPrimary
             wrapMode: Text.WordWrap
         }
 
-        onAccepted: profilesModel.deleteProfile(deleteDialog.profileId)
+        onAccepted: profilesModel.deleteProfile(profileId)
     }
 }

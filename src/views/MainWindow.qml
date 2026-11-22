@@ -17,10 +17,9 @@
 // Sections follow NativeMacSection: Bookshelf, Dictionary, Video and Settings;
 // manga is out of scope. Bookshelf shows LibraryPage and keeps its toolbar
 // statistics page as an overlay with a back that returns to the shelf.
-// Dictionary hides its dead back control; Settings keeps its band and back
-// control until the settings page is split, and its rail still reaches Anki,
-// Dictionaries and Profiles inside the Settings detail. The Video section is
-// the interim PlayerPage.
+// Dictionary hides its back control. Settings draws its own toolbar and
+// source list, following NativeMac/NativeReuseViews.swift NativeSettingsReuseView.
+// The Video section is the interim PlayerPage.
 //
 // The reader is not a section: opening a book opens or raises the single
 // ReaderWindow after ReaderViewModel.openBook succeeds, following
@@ -52,10 +51,8 @@ ApplicationWindow {
     property int readerCloses: 0
 
     readonly property int toolbarHeight: 52
-    // The bookshelf's shelf page draws its own toolbar row; the statistics
-    // page pushed over it and the other sections still sit below the band.
-    readonly property bool pageOwnsToolbar: window.sectionIndex === 0
-                                            && window.bookshelfDepth === 1
+    readonly property bool pageOwnsToolbar: window.sectionIndex === 3
+                                            || (window.sectionIndex === 0 && window.bookshelfDepth === 1)
 
     readonly property var sectionTitles: [
         qsTr("Bookshelf"),
@@ -175,38 +172,8 @@ ApplicationWindow {
     Component {
         id: settingsDetail
 
-        StackView {
-            id: settingsStack
-
-            initialItem: SettingsPage {
-                onAnkiRequested: settingsStack.push(ankiDetail)
-                onDictionariesRequested: settingsStack.push(dictionariesDetail)
-                onProfilesRequested: settingsStack.push(profilesDetail)
-            }
-
-            Component {
-                id: ankiDetail
-
-                AnkiSettingsPage {
-                    onBackRequested: settingsStack.pop()
-                }
-            }
-
-            Component {
-                id: dictionariesDetail
-
-                DictionarySettingsPage {
-                    onBackRequested: settingsStack.pop()
-                }
-            }
-
-            Component {
-                id: profilesDetail
-
-                ProfilesPage {
-                    onBackRequested: settingsStack.pop()
-                }
-            }
+        SettingsPage {
+            toolbarInset: window.sidebarVisible ? 0 : 44
         }
     }
 }

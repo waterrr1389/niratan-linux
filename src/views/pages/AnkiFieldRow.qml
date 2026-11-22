@@ -22,18 +22,20 @@ ColumnLayout {
     required property string field
     required property string mapping
     required property var options
+    property bool showMenu: true
 
     signal edited(string text)
     signal optionChosen(string option)
 
-    spacing: 6
+    Layout.fillWidth: true
+    Layout.leftMargin: 16
+    Layout.rightMargin: 16
+    Layout.topMargin: 10
+    Layout.bottomMargin: 10
+    spacing: Theme.spacingXs
 
-    Label {
-        Layout.fillWidth: true
+    SettingsNote {
         text: fieldRow.field
-        color: Theme.textSecondary
-        font.pixelSize: Theme.fontCaption
-        wrapMode: Text.Wrap
     }
 
     RowLayout {
@@ -44,6 +46,7 @@ ColumnLayout {
             id: mappingInput
 
             Layout.fillWidth: true
+            Accessible.name: fieldRow.field
             placeholderText: qsTr("None")
             selectByMouse: true
             text: fieldRow.mapping
@@ -53,9 +56,7 @@ ColumnLayout {
         Button {
             id: menuButton
 
-            implicitWidth: 32
-            implicitHeight: 28
-            padding: 0
+            visible: fieldRow.showMenu
             text: "\u25BE"
 
             Accessible.name: qsTr("Fields")

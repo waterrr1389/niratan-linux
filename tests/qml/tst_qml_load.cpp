@@ -6,7 +6,7 @@
 // cannot load without real data is reported rather than silenced.
 //
 // The process mirrors src/main.cpp: URL schemes are registered and
-// QtWebEngineQuick initialized before the application object, and the Basic
+// QtWebEngineQuick initialized before the application object, and the Niratan
 // style is selected before a component is created. Pages are parented to a
 // window before they complete, because Overlay.overlay and Window.window only
 // resolve inside one, as in the application.
@@ -25,10 +25,12 @@
 #include <QQmlApplicationEngine>
 #include <QQmlComponent>
 #include <QQmlError>
+#include <QPointer>
 #include <QQuickItem>
 #include <QQuickStyle>
 #include <QQuickWindow>
 #include <QRegularExpression>
+#include <QScopeGuard>
 #include <QScopedPointer>
 #include <QTemporaryDir>
 #include <QUrl>
@@ -36,6 +38,7 @@
 #include <QtTest>
 #include <QtWebEngineQuick/QtWebEngineQuick>
 
+#include <algorithm>
 #include <clocale>
 #include <filesystem>
 #include <memory>
@@ -91,6 +94,47 @@ QStringList visual_page_texts(QQuickItem* page) {
     return texts;
 }
 
+QList<QQuickItem*> visual_items(QQuickItem* item) {
+    QList<QQuickItem*> items{item};
+    for (QQuickItem* child : item->childItems()) {
+        items.append(visual_items(child));
+    }
+    return items;
+}
+
+bool fits_settings_viewport(const QQuickItem& item, const QRectF& window_bounds) {
+    auto visible_bounds = item.mapRectToScene(item.boundingRect());
+    if (visible_bounds.isEmpty()) {
+        return false;
+    }
+
+    QList<QRectF> clips{window_bounds};
+    for (auto* parent = item.parentItem(); parent; parent = parent->parentItem()) {
+        if (!parent->clip()) {
+            continue;
+        }
+        const auto viewport = parent->mapRectToScene(parent->boundingRect());
+        if (parent->inherits("QQuickFlickable")) {
+            // Only vertical scrolling can move a row out of view. Keep its
+            // full horizontal extent for the viewport and window checks.
+            visible_bounds.setTop(std::max(visible_bounds.top(), viewport.top()));
+            visible_bounds.setBottom(std::min(visible_bounds.bottom(), viewport.bottom()));
+        }
+        clips.append(viewport);
+    }
+    const auto fits_horizontally = [&](const QRectF& clip) {
+        return visible_bounds.left() >= clip.left() && visible_bounds.right() <= clip.right();
+    };
+    if (!std::ranges::all_of(clips, fits_horizontally)) {
+        return false;
+    }
+    if (visible_bounds.height() <= 0) {
+        return true;
+    }
+    return std::ranges::all_of(clips,
+                               [&](const QRectF& clip) { return clip.contains(visible_bounds); });
+}
+
 // QML reports compile errors and binding failures through the message handler.
 // Binding loops arrive with the default category and the source file in the
 // text, so the file suffix is part of the match.
@@ -119,11 +163,11 @@ class QmlLoadTest : public QObject {
     void page_components_load();
     void video_lookup_surface_loads();
     void anki_settings_page_connection_rows();
-    void settings_page_offers_anki_section();
-    void settings_page_offers_dictionaries_section();
-    void settings_page_offers_profiles_section();
+    void settings_column_switches_details();
+    void settings_fit_allows_only_vertical_scrolling();
     void dictionary_settings_page_lists_the_management_controls();
     void profiles_page_lists_the_management_controls();
+    void profile_editor_stays_open_when_save_fails();
     void icon_table_resolves();
     void icon_table_entries_have_files();
     void shared_components_load();
@@ -263,7 +307,6 @@ void QmlLoadTest::anki_settings_page_connection_rows() {
     const QStringList texts = page_texts(item);
 
     const QStringList shown{
-        QStringLiteral("Anki"),
         QStringLiteral("AnkiConnect"),
         QStringLiteral("Address"),
         QStringLiteral("API Key (optional)"),
@@ -321,71 +364,137 @@ void QmlLoadTest::anki_settings_page_connection_rows() {
     QVERIFY2(warnings.isEmpty(), qPrintable(warnings));
 }
 
-// SettingsHomeView.swift lists Anki in the settings sidebar; the repo's
-// SettingsPage rail reaches the Anki page through a signal instead.
-void QmlLoadTest::settings_page_offers_anki_section() {
-    QQuickWindow window;
-    window.resize(960, 640);
-    QString error;
-    std::unique_ptr<QObject> object = create_page(QStringLiteral("SettingsPage"), window, error);
-    QVERIFY2(object != nullptr, qPrintable(error));
-    auto* item = qobject_cast<QQuickItem*>(object.get());
-    QVERIFY2(item != nullptr, "SettingsPage is not an Item");
+// NativeSettingsReuseView: source-list order, Appearance by default, and
+// independently recreated details rather than pushed pages.
+void QmlLoadTest::settings_column_switches_details() {
+    QQmlComponent component(&engine_);
+    component.loadFromModule(QStringLiteral("Niratan"), QStringLiteral("MainWindow"));
+    std::unique_ptr<QObject> object(
+        component.createWithInitialProperties({{QStringLiteral("sectionIndex"), 3}}));
+    QVERIFY2(object != nullptr, qPrintable(error_text(component)));
+    auto* window = qobject_cast<QQuickWindow*>(object.get());
+    QVERIFY(window);
+    window->resize(960, 640);
+    QVERIFY(QTest::qWaitForWindowExposed(window));
 
-    QVERIFY2(item->metaObject()->indexOfSignal("ankiRequested()") >= 0,
-             "SettingsPage has no ankiRequested signal");
+    auto* column = window->findChild<QQuickItem*>(QStringLiteral("settingsColumn"));
+    QVERIFY(column);
+    const auto column_items = visual_items(column);
+    QList<QQuickItem*> rows;
+    for (auto* item : column_items) {
+        if (item->objectName().startsWith(QStringLiteral("settingsRow-"))) {
+            rows.append(item);
+        }
+    }
+    const QStringList keys{"profiles",   "appearance", "dictionaries", "anki",
+                           "statistics", "sasayaki",   "report"};
+    const QStringList titles{"Profiles",       "Appearance", "Dictionaries",
+                             "Anki",           "Statistics", "Sasayaki (Audiobooks)",
+                             "Report an Issue"};
+    QCOMPARE(rows.size(), keys.size());
+    auto* title = window->findChild<QQuickItem*>(QStringLiteral("settingsTitle"));
+    QVERIFY(title);
+    QCOMPARE(title->property("text").toString(), titles.at(1));
+    QVERIFY(rows.at(1)->property("selected").toBool());
+    auto* page = window->findChild<QQuickItem*>(QStringLiteral("settingsPage"));
+    QVERIFY(page);
+    QPointer<QQuickItem> detail =
+        page->findChild<QQuickItem*>(QStringLiteral("settings-appearance"));
+    QVERIFY(detail);
 
-    const QStringList texts = page_texts(item);
-    QVERIFY2(texts.contains(QStringLiteral("Anki")), qPrintable(texts.join(QStringLiteral(" | "))));
+    for (qsizetype index = 0; index < rows.size(); ++index) {
+        auto* row = rows.at(index);
+        QCOMPARE(row->objectName(), QStringLiteral("settingsRow-") + keys.at(index));
+        QCOMPARE(row->property("title").toString(), titles.at(index));
+        if (keys.at(index) == QStringLiteral("report")) {
+            continue;
+        }
+        const QString detail_name = QStringLiteral("settings-") + keys.at(index);
+        if (index == 1) {
+            QTest::keyClick(window, Qt::Key_Down);
+        } else {
+            QTest::mouseClick(window, Qt::LeftButton, Qt::NoModifier,
+                              row->mapToScene(row->boundingRect().center()).toPoint());
+        }
+        QTRY_VERIFY(page->findChild<QQuickItem*>(detail_name));
+        QTRY_VERIFY(detail.isNull());
+        detail = page->findChild<QQuickItem*>(detail_name);
+        QCOMPARE(title->property("text").toString(), titles.at(index));
+        QVERIFY(row->property("selected").toBool());
 
-    const QString warnings = warnings_after(QStringLiteral("SettingsPage"));
+        for (auto* item : visual_items(window->contentItem())) {
+            QVERIFY(!item->inherits("QQuickStackView"));
+            QVERIFY(item->metaObject()->indexOfSignal("backRequested()") < 0);
+            if (!item->isVisible() || !item->inherits("QQuickControl")) {
+                continue;
+            }
+            const auto bounds = QRectF(0, 0, window->width(), window->height());
+            QVERIFY2(fits_settings_viewport(*item, bounds),
+                     qPrintable(QStringLiteral("%1: %2").arg(item->metaObject()->className(),
+                                                             item->property("text").toString())));
+        }
+    }
+    const qreal expanded_x = title->x();
+    QVERIFY(window->setProperty("sidebarVisible", false));
+    QTRY_VERIFY(title->x() > expanded_x);
+    QCOMPARE(title->property("text").toString(), titles.at(5));
+    QTest::keyClick(window, Qt::Key_Up);
+    QTRY_COMPARE(title->property("text").toString(), titles.at(4));
+    QQuickItem* statistics = nullptr;
+    QTRY_VERIFY((statistics = page->findChild<QQuickItem*>(QStringLiteral("settings-statistics"))));
+    const auto controls = visual_items(statistics);
+    const auto enable = std::ranges::find_if(controls, [](const QQuickItem* item) {
+        return item->isVisible() && item->inherits("QQuickSwitch");
+    });
+    QVERIFY(enable != controls.end());
+    const bool statistics_enabled = (*enable)->property("checked").toBool();
+    const auto autostart_visible = [&] {
+        for (const auto* item : visual_items(statistics)) {
+            if (item->isVisible() &&
+                item->property("text").toString() == QStringLiteral("Autostart")) {
+                return true;
+            }
+        }
+        return false;
+    };
+    QCOMPARE(autostart_visible(), statistics_enabled);
+    QVERIFY(QMetaObject::invokeMethod(*enable, "click"));
+    QTRY_COMPARE(autostart_visible(), !statistics_enabled);
+    QVERIFY(QMetaObject::invokeMethod(*enable, "click"));
+    QTRY_COMPARE(autostart_visible(), statistics_enabled);
+    const QString warnings = warnings_after(QStringLiteral("Settings in MainWindow"));
     QVERIFY2(warnings.isEmpty(), qPrintable(warnings));
 }
 
-// NativeMac/NativeReuseViews.swift settingsSidebar lists Dictionary and, after
-// it, the Dictionaries destination; MainWindow loads the page from its signal.
-void QmlLoadTest::settings_page_offers_dictionaries_section() {
-    QQuickWindow window;
-    window.resize(960, 640);
-    QString error;
-    std::unique_ptr<QObject> object = create_page(QStringLiteral("SettingsPage"), window, error);
-    QVERIFY2(object != nullptr, qPrintable(error));
-    auto* item = qobject_cast<QQuickItem*>(object.get());
-    QVERIFY2(item != nullptr, "SettingsPage is not an Item");
-
-    QVERIFY2(item->metaObject()->indexOfSignal("dictionariesRequested()") >= 0,
-             "SettingsPage has no dictionariesRequested signal");
-
-    const QStringList texts = page_texts(item);
-    QVERIFY2(texts.contains(QStringLiteral("Dictionary")),
-             qPrintable(texts.join(QStringLiteral(" | "))));
-    QVERIFY2(texts.contains(QStringLiteral("Dictionaries")),
-             qPrintable(texts.join(QStringLiteral(" | "))));
-
-    const QString warnings = warnings_after(QStringLiteral("SettingsPage"));
-    QVERIFY2(warnings.isEmpty(), qPrintable(warnings));
-}
-
-// B5: NativeMac/NativeReuseViews.swift settingsSidebar puts Profiles first in
-// the Library group; the port's Settings rail requests the page (O1).
-void QmlLoadTest::settings_page_offers_profiles_section() {
-    QQuickWindow window;
-    window.resize(960, 640);
-    QString error;
-    std::unique_ptr<QObject> object = create_page(QStringLiteral("SettingsPage"), window, error);
-    QVERIFY2(object != nullptr, qPrintable(error));
-    auto* item = qobject_cast<QQuickItem*>(object.get());
-    QVERIFY2(item != nullptr, "SettingsPage is not an Item");
-
-    QVERIFY2(item->metaObject()->indexOfSignal("profilesRequested()") >= 0,
-             "SettingsPage has no profilesRequested signal");
-
-    const QStringList texts = page_texts(item);
-    QVERIFY2(texts.contains(QStringLiteral("Profiles")),
-             qPrintable(texts.join(QStringLiteral(" | "))));
-
-    const QString warnings = warnings_after(QStringLiteral("SettingsPage"));
-    QVERIFY2(warnings.isEmpty(), qPrintable(warnings));
+void QmlLoadTest::settings_fit_allows_only_vertical_scrolling() {
+    QQmlComponent component(&engine_);
+    component.setData(R"(
+        import QtQuick
+        Flickable {
+            width: 100; height: 100
+            contentWidth: width; contentHeight: 200
+            clip: true
+            Item { objectName: "row"; x: 10; y: 90; width: 80; height: 20 }
+        }
+    )",
+                      QUrl());
+    const std::unique_ptr<QObject> fixture(component.create());
+    QVERIFY2(fixture, qPrintable(error_text(component)));
+    auto* row = fixture->findChild<QQuickItem*>(QStringLiteral("row"));
+    QVERIFY(row);
+    const QRectF window_bounds(0, 0, 120, 100);
+    QVERIFY(fits_settings_viewport(*row, window_bounds));
+    QVERIFY(!fits_settings_viewport(*row, QRectF(0, 0, 85, 100)));
+    row->setX(30);
+    QVERIFY(!fits_settings_viewport(*row, window_bounds));
+    row->setX(105);
+    QVERIFY(!fits_settings_viewport(*row, window_bounds));
+    row->setX(10);
+    row->setY(110);
+    QVERIFY(fits_settings_viewport(*row, window_bounds));
+    QVERIFY(!fits_settings_viewport(*row, QRectF(0, 0, 85, 100)));
+    row->setX(30);
+    QVERIFY(!fits_settings_viewport(*row, window_bounds));
 }
 
 // Features/Settings/DictionaryView.swift body, dictionaryTypePicker and
@@ -401,10 +510,7 @@ void QmlLoadTest::dictionary_settings_page_lists_the_management_controls() {
     auto* item = qobject_cast<QQuickItem*>(object.get());
     QVERIFY2(item != nullptr, "DictionarySettingsPage is not an Item");
 
-    QVERIFY2(item->metaObject()->indexOfSignal("backRequested()") >= 0,
-             "DictionarySettingsPage has no backRequested signal");
-
-    const QStringList texts = page_texts(item);
+    const QStringList texts = visual_page_texts(item);
     const QStringList shown{
         QStringLiteral("Dictionaries"),
         QStringLiteral("Import"),
@@ -413,8 +519,7 @@ void QmlLoadTest::dictionary_settings_page_lists_the_management_controls() {
         QStringLiteral("Frequency"),
         QStringLiteral("Pitch"),
         QStringLiteral("Kanji"),
-        QStringLiteral("Recommended for this profile"),
-        QStringLiteral("JMdict"),
+        QStringLiteral("Recommended Dictionaries"),
     };
     for (const QString& text : shown) {
         QVERIFY2(
@@ -422,12 +527,32 @@ void QmlLoadTest::dictionary_settings_page_lists_the_management_controls() {
             qPrintable(text + QStringLiteral(" missing: ") + texts.join(QStringLiteral(" | "))));
     }
 
+    auto* css = item->findChild<QQuickItem*>(QStringLiteral("dictionaryCssButton"));
+    QVERIFY(css);
+    QVERIFY(QMetaObject::invokeMethod(css, "click"));
+    QTRY_VERIFY(visual_page_texts(window.contentItem()).contains(QStringLiteral("Reset")));
+    const auto dialog_items = visual_items(window.contentItem());
+    const auto close = std::ranges::find_if(dialog_items, [](const QQuickItem* child) {
+        return child->isVisible() &&
+            child->property("text").toString() == QStringLiteral("Close") &&
+            child->inherits("QQuickAbstractButton");
+    });
+    QVERIFY(close != dialog_items.end());
+    QVERIFY(QMetaObject::invokeMethod(*close, "click"));
+    QTRY_VERIFY(!visual_page_texts(window.contentItem()).contains(QStringLiteral("Reset")));
+
+    auto* recommendations =
+        item->findChild<QQuickItem*>(QStringLiteral("recommendedDictionariesButton"));
+    QVERIFY(recommendations);
+    QVERIFY(QMetaObject::invokeMethod(recommendations, "click"));
+    QVERIFY(visual_page_texts(window.contentItem()).contains(QStringLiteral("JMdict")));
+
     const QString warnings = warnings_after(QStringLiteral("DictionarySettingsPage"));
     QVERIFY2(warnings.isEmpty(), qPrintable(warnings));
 }
 
-// B5: Features/Settings/ProfilesView.swift body and profileRow: the back
-// signal, the Create row, the Built-in marker, the language caption and the
+// Features/Settings/ProfilesView.swift body and profileRow: the Create row,
+// the Built-in marker, the language caption and the
 // footer sentence about per-profile settings.
 void QmlLoadTest::profiles_page_lists_the_management_controls() {
     QQuickWindow window;
@@ -438,12 +563,9 @@ void QmlLoadTest::profiles_page_lists_the_management_controls() {
     auto* item = qobject_cast<QQuickItem*>(object.get());
     QVERIFY2(item != nullptr, "ProfilesPage is not an Item");
 
-    QVERIFY2(item->metaObject()->indexOfSignal("backRequested()") >= 0,
-             "ProfilesPage has no backRequested signal");
-
     const QStringList texts = visual_page_texts(item);
     const QStringList shown{
-        QStringLiteral("Profiles"),
+        QStringLiteral("Active Profile"),
         QStringLiteral("Create Profile"),
         QStringLiteral("Built-in"),
         QStringLiteral("Japanese"),
@@ -458,6 +580,58 @@ void QmlLoadTest::profiles_page_lists_the_management_controls() {
     }
 
     const QString warnings = warnings_after(QStringLiteral("ProfilesPage"));
+    QVERIFY2(warnings.isEmpty(), qPrintable(warnings));
+}
+
+// ProfilesView.profileEditor closes only after the repository accepts the change.
+void QmlLoadTest::profile_editor_stays_open_when_save_fails() {
+    QTemporaryDir profile_root;
+    QVERIFY(profile_root.isValid());
+    const auto previous_root = qgetenv("XDG_DATA_HOME");
+    const auto restore_root = qScopeGuard([&] { qputenv("XDG_DATA_HOME", previous_root); });
+    QVERIFY(qputenv("XDG_DATA_HOME", profile_root.path().toUtf8()));
+
+    QQuickWindow window;
+    window.resize(960, 640);
+    window.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&window));
+    QString error;
+    const auto page = create_page(QStringLiteral("ProfilesPage"), window, error);
+    QVERIFY2(page, qPrintable(error));
+
+    const auto index = niratan::storage::data_root() / "Profiles" / "profiles.json";
+    QVERIFY(std::filesystem::remove(index));
+    QVERIFY(std::filesystem::create_directory(index));
+
+    auto* create = page->findChild<QObject*>(QStringLiteral("createProfileButton"));
+    auto* editor = page->findChild<QObject*>(QStringLiteral("profileEditor"));
+    auto* name = page->findChild<QObject*>(QStringLiteral("profileNameField"));
+    auto* save = page->findChild<QObject*>(QStringLiteral("saveProfileButton"));
+    QVERIFY(create && editor && name && save);
+    QVERIFY(QMetaObject::invokeMethod(create, "click"));
+    QTRY_VERIFY(editor->property("opened").toBool());
+    auto* save_button = qobject_cast<QQuickItem*>(save);
+    QVERIFY(save_button);
+    const auto dialog_items = visual_items(window.contentItem());
+    const auto cancel = std::ranges::find_if(dialog_items, [](const QQuickItem* item) {
+        return item->isVisible() && item->property("text").toString() == QStringLiteral("Cancel");
+    });
+    QVERIFY(cancel != dialog_items.end());
+    QVERIFY((*cancel)->mapToScene((*cancel)->boundingRect().center()).x() <
+            save_button->mapToScene(save_button->boundingRect().center()).x());
+    QVERIFY(name->setProperty("text", QStringLiteral("Demo Reader")));
+    QVERIFY(save->property("enabled").toBool());
+    QVERIFY(QMetaObject::invokeMethod(save, "click"));
+    QTRY_VERIFY(visual_page_texts(window.contentItem())
+                    .contains(QStringLiteral("Could not write the profile index.")));
+    QVERIFY(editor->property("opened").toBool());
+    QCOMPARE(name->property("text").toString(), QStringLiteral("Demo Reader"));
+
+    QVERIFY(std::filesystem::remove(index));
+    QVERIFY(QMetaObject::invokeMethod(save, "click"));
+    QTRY_VERIFY(!editor->property("visible").toBool());
+    QVERIFY(visual_page_texts(window.contentItem()).contains(QStringLiteral("Demo Reader")));
+    const QString warnings = warnings_after(QStringLiteral("Profile editor"));
     QVERIFY2(warnings.isEmpty(), qPrintable(warnings));
 }
 
