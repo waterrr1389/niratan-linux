@@ -808,6 +808,14 @@ add_test(NAME reader_selection COMMAND tst_reader_selection)
 set_tests_properties(reader_selection PROPERTIES
     ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QTWEBENGINE_CHROMIUM_FLAGS=--disable-gpu")
 
+# Demo data for offscreen renders of the views; built, never run by ctest.
+qt_add_executable(niratan_demo_seed
+    demo/demo_seed.cpp
+)
+target_include_directories(niratan_demo_seed PRIVATE ${CMAKE_SOURCE_DIR}/src)
+target_link_libraries(niratan_demo_seed PRIVATE niratan_core Qt6::Gui)
+target_compile_options(niratan_demo_seed PRIVATE -Wall -Wextra -Wpedantic -Werror)
+
 # Flow tests: one per first-release flow, driving view models and services from
 # a user action to its result with fixtures (EPUB, dictionary, AnkiConnect).
 # Put them under tests/flows and add them here; scripts/check-wired.sh treats
