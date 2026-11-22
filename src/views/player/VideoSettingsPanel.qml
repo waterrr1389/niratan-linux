@@ -50,7 +50,7 @@ Dialog {
             }
             Toggle { key: "videoAutoPlayNext"; text: qsTr("Auto-Play Next Episode"); enabled: false }
             Toggle { key: "videoRememberPlaybackPosition"; text: qsTr("Remember Playback State") }
-            Toggle { key: "videoAutoPauseOnLookup"; text: qsTr("Auto-pause on Lookup"); enabled: false }
+            Toggle { key: "videoAutoPauseOnLookup"; text: qsTr("Auto-pause on Lookup") }
             Toggle { key: "videoSubtitleGapFastForwardEnabled"; text: qsTr("Fast-forward Subtitle Gaps"); enabled: false }
             NumberRow {
                 key: "videoSubtitleGapFastForwardSpeed"; title: qsTr("Fast-forward Speed")

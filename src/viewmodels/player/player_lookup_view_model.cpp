@@ -86,6 +86,21 @@ void PlayerLookupViewModel::setSubtitleDocument(const QUrl& file, const QByteArr
     state_->refresh_current_cues(*this);
 }
 
+void PlayerLookupViewModel::setEmbeddedSubtitle(const QByteArray& bytes) {
+    state_->document.reset();
+    state_->cue_store.reset();
+    if (!bytes.isEmpty()) {
+        // SubtitleParser.parse(data:format: .embedded): an extracted embedded
+        // track is SRT whatever its source name would suggest.
+        auto parsed = player::parse_subtitle_document(bytes, QUrl(), player::SubtitleFormat::srt);
+        if (parsed.document) {
+            state_->cue_store.emplace(*parsed.document);
+            state_->document = std::move(parsed.document);
+        }
+    }
+    state_->refresh_current_cues(*this);
+}
+
 void PlayerLookupViewModel::updatePlayback(double position, double subtitleDelay) {
     state_->position = position;
     state_->subtitle_delay = subtitleDelay;

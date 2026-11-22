@@ -27,6 +27,10 @@
 // config=no, osc=no, input-default-bindings=no, keep-open=yes, vo=libmpv.
 // Hardware decoding defaults to auto-safe; if the render context cannot be
 // created the item reports an error and stays black.
+//
+// nativeSubtitleRendering selects who draws subtitles. It stays true for mpv
+// (image tracks and no text document); the player sets it false while the
+// lookup overlay draws a parsed text document.
 
 #pragma once
 
@@ -75,6 +79,8 @@ class MpvItem : public QQuickFramebufferObject {
     Q_PROPERTY(qreal subtitleEnd READ subtitleEnd NOTIFY subtitleCueChanged)
     Q_PROPERTY(bool subtitlesVisible READ subtitlesVisible WRITE setSubtitlesVisible NOTIFY
                    subtitlesVisibleChanged)
+    Q_PROPERTY(bool nativeSubtitleRendering READ nativeSubtitleRendering WRITE
+                   setNativeSubtitleRendering NOTIFY nativeSubtitleRenderingChanged)
 
    public:
     explicit MpvItem(QQuickItem* parent = nullptr);
@@ -112,6 +118,10 @@ class MpvItem : public QQuickFramebufferObject {
     qreal subtitleEnd() const;
     bool subtitlesVisible() const;
     void setSubtitlesVisible(bool visible);
+    // False while the overlay draws a text subtitle document; mpv then keeps
+    // its own renderer off. Image tracks and no document keep it true.
+    bool nativeSubtitleRendering() const;
+    void setNativeSubtitleRendering(bool native);
 
     Q_INVOKABLE void open(const QUrl& file, bool fromBeginning = false);
     Q_INVOKABLE void unload();
@@ -170,6 +180,7 @@ class MpvItem : public QQuickFramebufferObject {
     void subtitleCueChanged();
     void subtitleLoadFailed();
     void subtitlesVisibleChanged();
+    void nativeSubtitleRenderingChanged();
     void subtitleDocumentChanged(const QUrl& file, const QByteArray& bytes, bool readable);
 
    private:
@@ -240,4 +251,5 @@ class MpvItem : public QQuickFramebufferObject {
     qreal subtitle_start_ = -1.0;
     qreal subtitle_end_ = -1.0;
     bool subtitles_visible_ = true;
+    bool native_subtitle_rendering_ = true;
 };

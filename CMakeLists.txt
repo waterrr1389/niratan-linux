@@ -234,6 +234,11 @@ qt_add_qml_module(niratan_app
         src/views/player/StudyTimelineRow.qml
         src/views/player/VideoOpenMenu.qml
         src/views/player/VideoSettingsPanel.qml
+        src/views/player/PlayerEmptyState.qml
+        src/views/player/VideoLookupLayer.qml
+        src/views/player/VideoLookupSurface.qml
+        src/views/player/VideoSubtitleOverlay.qml
+        src/views/player/VideoSubtitleText.qml
         src/views/pages/ReaderPage.qml
         src/views/theme/Theme.qml
         src/views/theme/ThemePreview.qml

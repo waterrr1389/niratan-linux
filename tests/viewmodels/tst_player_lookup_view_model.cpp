@@ -105,6 +105,7 @@ class PlayerLookupViewModelTest : public QObject {
     void b10_current_cues_follow_position_and_delay();
     void b11_popup_model_is_reused_and_needs_a_result();
     void mining_selection_follows_the_active_cue();
+    void embedded_subtitle_is_parsed_as_srt();
 
    private:
     std::unique_ptr<TempDataRoot> root_;
@@ -512,6 +513,25 @@ void PlayerLookupViewModelTest::mining_selection_follows_the_active_cue() {
     QVERIFY(loaded_without_active.miningSelection().isEmpty());
     PlayerLookupViewModel without_document;
     QVERIFY(without_document.miningSelection().isEmpty());
+}
+
+void PlayerLookupViewModelTest::embedded_subtitle_is_parsed_as_srt() {
+    QVERIFY(use_profile(kJapaneseProfile));
+    PlayerLookupViewModel model;
+    model.setEmbeddedSubtitle(srt(QStringLiteral("1\n00:00:01,000 --> 00:00:02,000\n星\n")));
+    model.updatePlayback(1.5, 0.0);
+    QCOMPARE(ids(model.current_cues()), QStringList{"1"});
+    QVERIFY(!model.lookupAt(QStringLiteral("1"), 0).isEmpty());
+
+    model.setEmbeddedSubtitle(srt(QStringLiteral("2\n00:00:03,000 --> 00:00:04,000\n星\n")));
+    model.updatePlayback(3.5, 0.0);
+    QCOMPARE(ids(model.current_cues()), QStringList{"2"});
+
+    model.setEmbeddedSubtitle(QByteArray());
+    QVERIFY(model.current_cues().isEmpty());
+
+    model.setEmbeddedSubtitle(QByteArray("not a subtitle"));
+    QVERIFY(model.current_cues().isEmpty());
 }
 
 QTEST_MAIN(PlayerLookupViewModelTest)

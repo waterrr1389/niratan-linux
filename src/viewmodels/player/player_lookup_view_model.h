@@ -36,6 +36,10 @@
 // clicked cue's text and timing and its list neighbours. It is empty when no
 // cue is active or no document is loaded. The mining-context selection sheet
 // is out of scope (Decision D4).
+//
+// setEmbeddedSubtitle replaces the document with an extracted embedded SRT
+// track's bytes, parsed as SRT regardless of a source name; empty bytes or a
+// document with no cue leaves the cue store empty.
 
 #pragma once
 
@@ -71,6 +75,7 @@ class PlayerLookupViewModel : public QObject {
     int hover_delay_ms() const;
 
     Q_INVOKABLE void setSubtitleDocument(const QUrl& file, const QByteArray& bytes, bool readable);
+    Q_INVOKABLE void setEmbeddedSubtitle(const QByteArray& bytes);
     Q_INVOKABLE void updatePlayback(double position, double subtitleDelay);
     Q_INVOKABLE void setPlaying(bool playing);
     Q_INVOKABLE void setLookupSettings(bool autoPauseOnLookup, int hoverDelayMs);

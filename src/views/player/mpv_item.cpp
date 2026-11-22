@@ -275,11 +275,24 @@ qreal MpvItem::subtitleEnd() const { return subtitle_end_; }
 bool MpvItem::subtitlesVisible() const { return subtitles_visible_; }
 
 void MpvItem::setSubtitlesVisible(bool visible) {
-    set_property("sub-visibility", visible);
+    set_property("sub-visibility", visible && native_subtitle_rendering_);
     if (subtitles_visible_ != visible) {
         subtitles_visible_ = visible;
         emit subtitlesVisibleChanged();
     }
+}
+
+bool MpvItem::nativeSubtitleRendering() const {
+    return native_subtitle_rendering_;
+}
+
+void MpvItem::setNativeSubtitleRendering(bool native) {
+    if (native_subtitle_rendering_ == native) {
+        return;
+    }
+    native_subtitle_rendering_ = native;
+    set_property("sub-visibility", subtitles_visible_ && native_subtitle_rendering_);
+    emit nativeSubtitleRenderingChanged();
 }
 
 void MpvItem::open(const QUrl& file, bool fromBeginning) {

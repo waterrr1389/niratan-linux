@@ -13,6 +13,8 @@
 
 #include "views/dictionary/audio_scheme_handler.h"
 #include "views/reader/reader_scheme_handler.h"
+#include "viewmodels/anki/mining_view_model.h"
+#include "viewmodels/dictionary/dictionary_popup_model.h"
 
 #include <QGuiApplication>
 #include <QQmlApplicationEngine>
@@ -88,6 +90,7 @@ class QmlLoadTest : public QObject {
     void initTestCase();
     void main_window_loads();
     void page_components_load();
+    void video_lookup_surface_loads();
     void anki_settings_page_connection_rows();
     void settings_page_offers_anki_section();
 
@@ -170,6 +173,35 @@ std::unique_ptr<QObject> QmlLoadTest::create_page(const QString& page, QQuickWin
     item->setHeight(640);
     component.completeCreate();
     return object;
+}
+
+// PopupView.swift popupContent and VideoPlayerScreen.swift popupView: the
+// video lookup surface is its own item and loads with the two models the page
+// supplies, before any lookup exists.
+void QmlLoadTest::video_lookup_surface_loads() {
+    QQuickWindow window;
+    window.resize(960, 640);
+    QQmlComponent component(
+        &engine_,
+        QUrl(QStringLiteral("qrc:/qt/qml/Niratan/src/views/player/VideoLookupSurface.qml")));
+    QVERIFY2(!component.isError(), qPrintable(error_text(component)));
+
+    niratan::viewmodels::DictionaryPopupModel popup;
+    niratan::viewmodels::MiningViewModel mining;
+    std::unique_ptr<QObject> object(component.createWithInitialProperties(
+        {{QStringLiteral("popupModel"), QVariant::fromValue(&popup)},
+         {QStringLiteral("miningModel"), QVariant::fromValue(&mining)}},
+        engine_.rootContext()));
+    QVERIFY2(object != nullptr, qPrintable(error_text(component)));
+    auto* item = qobject_cast<QQuickItem*>(object.get());
+    QVERIFY2(item != nullptr, "VideoLookupSurface is not an Item");
+    item->setParentItem(window.contentItem());
+    item->setWidth(960);
+    item->setHeight(640);
+    QVERIFY2(!component.isError(), qPrintable(error_text(component)));
+
+    const QString warnings = warnings_after(QStringLiteral("VideoLookupSurface"));
+    QVERIFY2(warnings.isEmpty(), qPrintable(warnings));
 }
 
 // Features/Settings/AnkiView.swift body: the connection card exists before any

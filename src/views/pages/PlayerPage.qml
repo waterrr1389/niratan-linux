@@ -69,6 +69,8 @@ Item {
     property string osdTitle: ""
     property string osdValue: ""
     property real osdMeter: -1
+    // The loaded local video, for the video mining context.
+    property url videoFile
 
     onStudyOpenChanged: page.scheduleHide()
 
@@ -76,6 +78,12 @@ Item {
     Keys.priority: Keys.BeforeItem
     Keys.onPressed: function (event) {
         page.handleKey(event)
+    }
+    Keys.onReleased: function (event) {
+        if (event.key === Qt.Key_Shift) {
+            lookupLayer.setShiftPressed(false)
+            event.accepted = true
+        }
     }
 
     // VideoTimeFormatter.string(from:): floor to seconds, h:mm:ss only when
@@ -347,6 +355,7 @@ Item {
         page.osdTitle = ""
         page.osdValue = ""
         osdTimer.stop()
+        page.videoFile = url
         studyModel.setVideo(url)
         page.forceActiveFocus()
         mpv.open(url, fromBeginning === true)
@@ -387,6 +396,11 @@ Item {
     }
 
     function handleKey(event) {
+        if (event.key === Qt.Key_Shift) {
+            lookupLayer.setShiftPressed(true)
+            event.accepted = true
+            return
+        }
         if (event.key === Qt.Key_Escape && page.fullScreen) {
             event.accepted = true
             if (event.isAutoRepeat)
@@ -475,6 +489,15 @@ Item {
         }
         if (handled)
             event.accepted = true
+    }
+
+    MiningViewModel {
+        id: miningModel
+    }
+
+    AnkiMiningToast {
+        status: miningModel.toastStatus
+        message: miningModel.toastMessage
     }
 
     PlayerStudyViewModel {
@@ -602,6 +625,19 @@ Item {
                 page.forceActiveFocus()
             }
         }
+
+        // VideoPlayerScreen.swift draws the overlay and the lookup popup in
+        // the video canvas above the surface.
+        VideoLookupLayer {
+            id: lookupLayer
+            anchors.fill: parent
+            z: 2
+            engine: mpv
+            miningModel: miningModel
+            videoFile: page.videoFile
+            paused: mpv.paused
+            bottomInset: page.compactChrome ? 28 : 56
+        }
     }
 
     MouseArea {
@@ -620,53 +656,13 @@ Item {
         onDoubleTapped: page.toggleFullScreen()
     }
 
-    Rectangle {
-        id: emptyState
+    PlayerEmptyState {
         anchors.centerIn: stage
         width: Math.min(440, Math.max(0, stage.width - 64))
-        height: emptyColumn.implicitHeight + 40
         visible: !mpv.loaded
-        radius: Theme.cardRadius
-        color: Theme.floatingBackground
-        border.width: Theme.cardBorderWidth
-        border.color: Theme.floatingStroke
-
-        Column {
-            id: emptyColumn
-            anchors.centerIn: parent
-            width: parent.width - 32
-            spacing: 10
-
-            Label {
-                width: parent.width
-                text: qsTr("No Video Open")
-                color: Theme.textPrimary
-                font.pixelSize: 18
-                font.bold: true
-                horizontalAlignment: Text.AlignHCenter
-            }
-
-            Button {
-                width: parent.width
-                text: qsTr("Open a video")
-                onClicked: openMenu.popup()
-            }
-
-            Button {
-                width: parent.width
-                text: qsTr("Video Settings")
-                onClicked: videoSettings.open()
-            }
-
-            Label {
-                width: parent.width
-                text: qsTr("Supported files: %1").arg(page.extensionList)
-                color: Theme.textSecondary
-                font.pixelSize: 11
-                wrapMode: Text.WordWrap
-                horizontalAlignment: Text.AlignHCenter
-            }
-        }
+        extensionList: page.extensionList
+        onOpenRequested: openMenu.popup()
+        onSettingsRequested: videoSettings.open()
     }
 
     // VideoPlayerScreen+OSD.swift places the OSD 30 from the top and 28 from
