@@ -145,7 +145,11 @@ module is written from Swift logic.
    modifiers. A value with no Swift source follows Niratan-win; if neither
    has one, ask the owner a product question rather than invent it.
 3. The reviewing agent compares the QML against the SwiftUI source item by
-   item. Screenshots are not a verification method.
+   item, then renders the page offscreen at the window's default size and
+   looks at it beside Niratan's `Pictures/*_mac.png` where one exists. The
+   render finds what reading code misses: controls outside the window,
+   clipped text, misalignment, missing icons. A problem found this way is
+   fixed from the Swift source, never by tuning values to match the image.
 
 A view is not finished until it is wired: every command it shows reaches a
 view model, and every view model command reaches the service that does the
