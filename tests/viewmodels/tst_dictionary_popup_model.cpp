@@ -36,6 +36,7 @@ class DictionaryPopupModelTest : public QObject {
     void initTestCase();
     void lookup_builds_popup_html();
     void whitespace_clears_results();
+    void matched_text_is_the_first_result();
     void invalid_audio_url_is_reported();
     void shell_globals_come_from_the_anki_configuration();
     void shell_globals_follow_the_active_profile();
@@ -84,6 +85,16 @@ void DictionaryPopupModelTest::whitespace_clears_results() {
     QCOMPARE(html_spy.count(), 1);
     QVERIFY(!model.has_results());
     QVERIFY(model.html().isEmpty());
+}
+
+void DictionaryPopupModelTest::matched_text_is_the_first_result() {
+    DictionaryPopupModel model;
+    QVERIFY(model.matched_text().isEmpty());
+    model.lookup(QStringLiteral("decide"));
+    QVERIFY(model.has_results());
+    QCOMPARE(model.matched_text(), QStringLiteral("decide"));
+    model.clear();
+    QVERIFY(model.matched_text().isEmpty());
 }
 
 void DictionaryPopupModelTest::invalid_audio_url_is_reported() {

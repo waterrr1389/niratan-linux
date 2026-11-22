@@ -143,6 +143,10 @@ qt_add_library(niratan_app STATIC
     src/viewmodels/sasayaki/sasayaki_view_model.h
     src/viewmodels/statistics/statistics_view_model.cpp
     src/viewmodels/statistics/statistics_view_model.h
+    src/viewmodels/player/player_lookup_policy.cpp
+    src/viewmodels/player/player_lookup_policy.h
+    src/viewmodels/player/player_lookup_view_model.cpp
+    src/viewmodels/player/player_lookup_view_model.h
     src/viewmodels/player/player_study_view_model.cpp
     src/viewmodels/player/player_study_view_model.h
     src/viewmodels/settings/settings_view_model.cpp

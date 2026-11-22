@@ -45,6 +45,7 @@ struct DictionaryPopupModel::State {
     std::string language_id;
     QString last_query;
     QString html;
+    QString matched_text;
     QString error;
     QString audio_error;
     QAudioOutput audio_output;
@@ -84,6 +85,10 @@ QString DictionaryPopupModel::error() const {
 
 QString DictionaryPopupModel::audio_error() const {
     return state_->audio_error;
+}
+
+QString DictionaryPopupModel::matched_text() const {
+    return state_->matched_text;
 }
 
 void DictionaryPopupModel::set_audio_error(const QString& error) {
@@ -192,6 +197,7 @@ void DictionaryPopupModel::run_lookup() {
                                                         settings.max_results, settings.scan_length);
     if (!outcome.ok) {
         state_->html.clear();
+        state_->matched_text.clear();
         state_->error = QString::fromStdString(outcome.error);
         emit errorChanged();
         emit htmlChanged();
@@ -244,6 +250,10 @@ void DictionaryPopupModel::run_lookup() {
     config.theme.background = state_->background.name(QColor::HexRgb).toStdString();
     config.theme.text = state_->text_color.name(QColor::HexRgb).toStdString();
 
+    // PopupPresentationCoordinator.present passes the first result's matched
+    // input span to SelectionData.applyLookupMatch, so it is kept beside the
+    // HTML and cleared with the results.
+    state_->matched_text = QString::fromStdString(outcome.entries.front().matched);
     state_->html = QString::fromStdString(
         popup_shell_html(entries, styles, config, state_->assets.css, state_->assets.js));
     state_->error.clear();
@@ -259,6 +269,7 @@ void DictionaryPopupModel::clear() {
 void DictionaryPopupModel::clear_results() {
     set_audio_error({});
     state_->html.clear();
+    state_->matched_text.clear();
     state_->error.clear();
     emit errorChanged();
     emit htmlChanged();

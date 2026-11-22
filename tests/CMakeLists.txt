@@ -618,6 +618,25 @@ add_test(NAME dictionary_popup_model COMMAND tst_dictionary_popup_model)
 set_tests_properties(dictionary_popup_model PROPERTIES
     ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QTWEBENGINE_CHROMIUM_FLAGS=--disable-gpu")
 
+qt_add_executable(tst_player_lookup_view_model
+    viewmodels/tst_player_lookup_view_model.cpp
+)
+target_include_directories(tst_player_lookup_view_model PRIVATE ${CMAKE_SOURCE_DIR}/src
+    ${CMAKE_CURRENT_SOURCE_DIR}/dictionary)
+target_link_libraries(tst_player_lookup_view_model PRIVATE niratan_app Qt6::Test)
+target_compile_options(tst_player_lookup_view_model PRIVATE -Wall -Wextra -Wpedantic -Werror)
+add_test(NAME player_lookup_view_model COMMAND tst_player_lookup_view_model)
+set_tests_properties(player_lookup_view_model PROPERTIES
+    ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QTWEBENGINE_CHROMIUM_FLAGS=--disable-gpu")
+
+qt_add_executable(tst_player_study_view_model
+    viewmodels/tst_player_study_view_model.cpp
+)
+target_include_directories(tst_player_study_view_model PRIVATE ${CMAKE_SOURCE_DIR}/src)
+target_link_libraries(tst_player_study_view_model PRIVATE niratan_app Qt6::Test)
+target_compile_options(tst_player_study_view_model PRIVATE -Wall -Wextra -Wpedantic -Werror)
+add_test(NAME player_study_view_model COMMAND tst_player_study_view_model)
+
 qt_add_executable(tst_reader_mining_context
     viewmodels/tst_reader_mining_context.cpp
 )

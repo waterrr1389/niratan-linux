@@ -49,6 +49,7 @@ class DictionaryPopupModel : public QObject {
     Q_PROPERTY(QString bridgeScript READ bridge_script CONSTANT)
     Q_PROPERTY(QString error READ error NOTIFY errorChanged)
     Q_PROPERTY(QString audioError READ audio_error NOTIFY audioErrorChanged)
+    Q_PROPERTY(QString matchedText READ matched_text NOTIFY htmlChanged)
     Q_PROPERTY(bool hasResults READ has_results NOTIFY htmlChanged)
     Q_PROPERTY(bool dark READ dark WRITE setDark NOTIFY themeChanged)
     Q_PROPERTY(QColor background READ background WRITE setBackground NOTIFY themeChanged)
@@ -62,6 +63,7 @@ class DictionaryPopupModel : public QObject {
     QString bridge_script() const;
     QString error() const;
     QString audio_error() const;
+    QString matched_text() const;
     bool has_results() const;
 
     bool dark() const;

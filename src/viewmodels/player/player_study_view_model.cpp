@@ -32,29 +32,19 @@ struct Cue {
     QString text;
 };
 
-QString subtitle_format(const QUrl& file) {
-    const QString suffix = file.fileName().section(QLatin1Char('.'), -1).toLower();
-    if (suffix == QStringLiteral("vtt")) {
-        return QStringLiteral("webVTT");
-    }
-    if (suffix == QStringLiteral("srt") || suffix == QStringLiteral("ass") ||
-        suffix == QStringLiteral("ssa")) {
-        return suffix;
+// SubtitleFormat raw values, as the mining history stores them.
+QString subtitle_format_value(player::SubtitleFormat format) {
+    switch (format) {
+        case player::SubtitleFormat::srt:
+            return QStringLiteral("srt");
+        case player::SubtitleFormat::web_vtt:
+            return QStringLiteral("webVTT");
+        case player::SubtitleFormat::ass:
+            return QStringLiteral("ass");
+        case player::SubtitleFormat::ssa:
+            return QStringLiteral("ssa");
     }
     return {};
-}
-
-player::SubtitleFormat format_hint(const QString& format) {
-    if (format == QStringLiteral("webVTT")) {
-        return player::SubtitleFormat::web_vtt;
-    }
-    if (format == QStringLiteral("ass")) {
-        return player::SubtitleFormat::ass;
-    }
-    if (format == QStringLiteral("ssa")) {
-        return player::SubtitleFormat::ssa;
-    }
-    return player::SubtitleFormat::srt;
 }
 
 QList<Cue> cues_from_document(const player::SubtitleDocument& document) {
@@ -245,19 +235,22 @@ void PlayerStudyViewModel::setSubtitleDocument(const QUrl& file, const QByteArra
     if (!file.isEmpty()) {
         set_notice({});
     }
-    state_->subtitle_format = subtitle_format(file);
+    state_->subtitle_format.clear();
     state_->transcript_error.clear();
     state_->cues.clear();
     if (!file.isEmpty()) {
         if (!readable) {
             state_->transcript_error = tr("Could not read the subtitle file.");
-        } else if (state_->subtitle_format.isEmpty()) {
-            state_->transcript_error = tr("This subtitle format is not supported for transcripts.");
         } else {
-            const auto parsed =
-                player::parse_subtitle_document(bytes, file, format_hint(state_->subtitle_format));
+            // The source path's extension decides the format
+            // (SubtitleParser.format(for:)), so no hint is passed.
+            const auto parsed = player::parse_subtitle_document(bytes, file);
             if (parsed.document) {
                 state_->cues = cues_from_document(*parsed.document);
+                state_->subtitle_format = subtitle_format_value(parsed.document->format);
+            } else if (parsed.error == player::SubtitleParseError::unsupported_format) {
+                state_->transcript_error =
+                    tr("This subtitle format is not supported for transcripts.");
             } else {
                 state_->transcript_error = tr("No readable cues were found in this subtitle file.");
             }

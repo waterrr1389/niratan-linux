@@ -3,4 +3,3 @@
 
 services/anki/media_naming.h
 services/dictionary/frequency_rank.h
-services/dictionary/text_selection.h
