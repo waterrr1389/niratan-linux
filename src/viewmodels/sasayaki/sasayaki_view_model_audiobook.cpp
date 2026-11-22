@@ -62,6 +62,24 @@ QByteArray SasayakiViewModel::audiobook_artwork() const {
     return state_->audiobook_metadata.artwork_data.value_or(QByteArray());
 }
 
+QString SasayakiViewModel::audiobook_artwork_source() const {
+    if (!state_->audiobook_metadata.artwork_data.has_value()) {
+        return {};
+    }
+    const QByteArray& bytes = *state_->audiobook_metadata.artwork_data;
+    const char* mime = nullptr;
+    if (bytes.startsWith(QByteArrayLiteral("\x89PNG\r\n\x1A\n"))) {
+        mime = "image/png";
+    } else if (bytes.startsWith(QByteArrayLiteral("\xFF\xD8\xFF"))) {
+        mime = "image/jpeg";
+    }
+    if (mime == nullptr) {
+        return {};
+    }
+    return QStringLiteral("data:%1;base64,%2")
+        .arg(QLatin1String(mime), QString::fromLatin1(bytes.toBase64()));
+}
+
 int SasayakiViewModel::current_audiobook_chapter_id() const {
     return audiobook::current_audiobook_chapter_id(state_->audiobook_chapters, state_->position)
         .value_or(-1);

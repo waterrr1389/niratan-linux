@@ -1,35 +1,40 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
 // The Sasayaki inspector for the reader page, following
-// Features/Sasayaki/SasayakiSheet.swift (the playback header, the audio and
-// subtitle pickers, the cue list and the rate and delay controls) and
-// Features/Sasayaki/SasayakiMatchView.swift (the subtitle match section).
+// Features/Sasayaki/SasayakiSheet.swift (body, playbackHeader, audiobookCover,
+// currentChapterTitle, the tab selection rule and the Resources, Chapters and
+// Settings tabs), Features/Sasayaki/SasayakiMatchView.swift,
+// NativeMac/NativeReaderInspector.swift (NativeReaderInspectorHeader and
+// NativeReaderInspectorTabBar) and NativeMac/NativeReaderView.swift
+// (NativeReaderSidePanel width 440).
 //
-// ReaderPage owns the Sasayaki model and points this panel at it, then opens
-// the panel from the toolbar. Cue ranges and the active highlight are applied
-// by the page through window.hoshiReader after each chapter loads. The panel is
-// a right-side drawer, so it opens over the page and leaves the text behind it
-// visible; `opened` tells the page when it covers the text.
+// D4 removes the cue list and the current-cue box. The drawer leaves the page
+// visible behind it and closes with its close control or Escape. The playback
+// header and the transport stay; the tabs own their content in
+// SasayakiResourcesTab, SasayakiChaptersTab and SasayakiSettingsTab.
 //
-// The rate and delay sliders write through the model, which clamps and
-// persists them. The scrubber is bound to the model's position and only seeks
-// on release, so dragging does not fight the playback ticks.
+// The settings model is created here and reloaded when the drawer opens. A
+// colour pick rebuilds the reader document through ReaderViewModel so cue
+// colours change without reopening the book.
 
 pragma ComponentBehavior: Bound
 
 import QtQuick
 import QtQuick.Controls
-import QtQuick.Dialogs
 import QtQuick.Layouts
 import Niratan
 
 Item {
     id: root
 
-    // The page's model; the panel never creates its own.
+    // The page's model; the panel never creates the player.
     required property SasayakiViewModel player
     readonly property bool opened: panel.visible
     signal closed
+
+    property int selectedTab: 0
+    property bool userSelectedTab: false
+    property real scrubTime: -1
 
     function open() {
         panel.open();
@@ -37,6 +42,24 @@ Item {
 
     function close() {
         panel.close();
+    }
+
+    function selectDefaultTabIfNeeded() {
+        if (userSelectedTab)
+            return;
+        selectedTab = (player.hasAudio && player.chapters.length > 0) ? 1 : 0;
+    }
+
+    function currentChapterTitle() {
+        const id = player.currentAudiobookChapterId;
+        if (id < 0)
+            return "";
+        const chapters = player.chapters;
+        for (var index = 0; index < chapters.length; ++index) {
+            if (chapters[index].id === id)
+                return chapters[index].title;
+        }
+        return "";
     }
 
     function formatTime(seconds) {
@@ -47,64 +70,47 @@ Item {
         return (hours < 10 ? "0" : "") + hours + ":" + (minutes < 10 ? "0" : "") + minutes + ":" + (rest < 10 ? "0" : "") + rest;
     }
 
-    function formatCueTime(seconds) {
-        var total = Math.max(0, Math.floor(seconds));
-        var hours = Math.floor(total / 3600);
-        var minutes = Math.floor((total % 3600) / 60);
-        var rest = total % 60;
-        var paddedRest = (rest < 10 ? "0" : "") + rest;
-        if (hours > 0)
-            return hours + ":" + (minutes < 10 ? "0" : "") + minutes + ":" + paddedRest;
-        return minutes + ":" + paddedRest;
+    SasayakiSettingsViewModel {
+        id: sasayakiSettings
     }
 
     Connections {
         target: root.player
 
-        function onCuesChanged() {
-            cueList.syncCurrent();
-        }
-
-        function onCurrentCueChanged() {
-            cueList.syncCurrent();
-        }
-
         function onMatchApplied() {
             // ReaderPage owns this panel. Its apply path also highlights the
             // current cue after installing the ranges in the web view.
-            var readerPage = root.parent;
+            const readerPage = root.parent;
             if (readerPage && typeof readerPage.applySasayakiCues === "function")
                 readerPage.applySasayakiCues();
         }
-    }
 
-    FileDialog {
-        id: audioDialog
-        title: qsTr("Load Audio")
-        nameFilters: [qsTr("Audiobooks (*.mp3 *.m4b)"), qsTr("All files (*)")]
-        onAccepted: root.player.openAudio(audioDialog.selectedFile)
-    }
+        function onHasAudioChanged() {
+            root.selectDefaultTabIfNeeded();
+        }
 
-    FileDialog {
-        id: subtitleDialog
-        title: qsTr("Load Subtitles")
-        nameFilters: [qsTr("SubRip subtitles (*.srt)"), qsTr("All files (*)")]
-        onAccepted: root.player.openSubtitles(subtitleDialog.selectedFile)
+        function onChaptersChanged() {
+            root.selectDefaultTabIfNeeded();
+        }
     }
 
     Drawer {
         id: panel
         edge: Qt.RightEdge
-        width: Math.min(420, (Overlay.overlay ? Overlay.overlay.width : 640) * 0.75)
+        width: 440
         height: Overlay.overlay ? Overlay.overlay.height : 640
-        modal: true
+        modal: false
         padding: 0
-        closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
-        onAboutToShow: root.player.matchSearchWindow = undefined
-        onAboutToHide: root.player.cancelSubtitleMatch()
-        onOpened: {
-            cueList.syncCurrent();
+        closePolicy: Popup.CloseOnEscape
+        onAboutToShow: {
+            sasayakiSettings.reload();
+            root.scrubTime = -1;
+            // Swift builds the sheet per presentation, so its search window
+            // starts from the default; RESET restores the model's 200.
+            root.player.matchSearchWindow = undefined;
         }
+        onAboutToHide: root.player.cancelSubtitleMatch()
+        onOpened: root.selectDefaultTabIfNeeded()
         onClosed: root.closed()
 
         background: Rectangle {
@@ -117,9 +123,14 @@ Item {
             anchors.fill: parent
             spacing: 0
 
+            // NativeReaderInspectorHeader: 28 px round close control, 18/16/10
+            // padding.
             RowLayout {
                 Layout.fillWidth: true
-                Layout.margins: 16
+                Layout.leftMargin: 18
+                Layout.rightMargin: 18
+                Layout.topMargin: 16
+                Layout.bottomMargin: 10
                 spacing: 8
 
                 ColumnLayout {
@@ -130,385 +141,303 @@ Item {
                         Layout.fillWidth: true
                         text: qsTr("Sasayaki")
                         color: Theme.textPrimary
-                        font.pixelSize: 18
+                        font.pixelSize: 20
                         font.bold: true
                     }
 
                     Label {
                         Layout.fillWidth: true
-                        text: ReaderViewModel.hasBook ? ReaderViewModel.title : qsTr("No book open")
+                        visible: root.currentChapterTitle().length > 0
+                        text: root.currentChapterTitle()
                         color: Theme.textSecondary
                         font.pixelSize: 12
                         elide: Text.ElideRight
+                        maximumLineCount: 1
                     }
                 }
 
-                ToolButton {
+                RoundButton {
+                    implicitWidth: 28
+                    implicitHeight: 28
                     text: "\u2715"
+                    font.pixelSize: 11
                     onClicked: panel.close()
+                    ToolTip.visible: hovered
+                    ToolTip.text: qsTr("Close")
+                    Accessible.name: qsTr("Close")
                 }
             }
 
-            RowLayout {
-                Layout.fillWidth: true
-                Layout.leftMargin: 16
-                Layout.rightMargin: 16
-                spacing: 8
-
-                Button {
-                    Layout.fillWidth: true
-                    text: qsTr("Load Audio")
-                    onClicked: audioDialog.open()
-                }
-
-                Button {
-                    Layout.fillWidth: true
-                    text: qsTr("Load Subtitles")
-                    onClicked: subtitleDialog.open()
-                }
-            }
-
-            Label {
-                Layout.fillWidth: true
-                Layout.leftMargin: 16
-                Layout.rightMargin: 16
-                Layout.topMargin: 8
-                visible: player.audioName.length > 0
-                text: player.audioName
-                color: Theme.textSecondary
-                font.pixelSize: 12
-                elide: Text.ElideMiddle
-            }
-
-            Label {
-                Layout.fillWidth: true
-                Layout.leftMargin: 16
-                Layout.rightMargin: 16
-                Layout.topMargin: 8
-                visible: player.error.length > 0
-                text: player.error
-                color: Theme.popupDanger
-                font.pixelSize: 12
-                wrapMode: Text.WordWrap
-            }
-
+            // SasayakiSheet.playbackHeader: 12 spacing, 18 horizontal, 14
+            // bottom. The shadow is omitted with the other glass surfaces.
             ColumnLayout {
                 Layout.fillWidth: true
-                Layout.leftMargin: 16
-                Layout.rightMargin: 16
-                Layout.topMargin: 12
-                spacing: 2
-                visible: player.hasAudio
-
-                Slider {
-                    id: scrubber
-                    Layout.fillWidth: true
-                    from: 0
-                    to: Math.max(player.duration, 1)
-                    live: false
-                    value: player.position
-                    enabled: player.duration > 0
-                    onMoved: player.seek(scrubber.value)
-                }
-
-                RowLayout {
-                    Layout.fillWidth: true
-                    spacing: 8
-
-                    Label {
-                        text: root.formatTime(player.position)
-                        color: Theme.textSecondary
-                        font.pixelSize: 11
-                    }
-
-                    Item {
-                        Layout.fillWidth: true
-                    }
-
-                    Label {
-                        text: "-" + root.formatTime(Math.max(player.duration - player.position, 0))
-                        color: Theme.textSecondary
-                        font.pixelSize: 11
-                    }
-                }
-            }
-
-            RowLayout {
-                Layout.alignment: Qt.AlignHCenter
-                Layout.topMargin: 4
-                spacing: 6
-                visible: player.hasAudio
-
-                ToolButton {
-                    text: "\u221215"
-                    font.pixelSize: 11
-                    onClicked: player.skipForward(false)
-                    ToolTip.visible: hovered
-                    ToolTip.text: qsTr("Back 15 seconds")
-                }
-
-                ToolButton {
-                    text: "\u00AB"
-                    font.pixelSize: 18
-                    onClicked: player.previousCue()
-                    ToolTip.visible: hovered
-                    ToolTip.text: qsTr("Previous cue")
-                }
-
-                Button {
-                    Layout.preferredWidth: 48
-                    Layout.preferredHeight: 48
-                    text: player.playing ? "\u275A\u275A" : "\u25B6"
-                    font.pixelSize: 18
-                    onClicked: player.togglePlayback()
-                    ToolTip.visible: hovered
-                    ToolTip.text: player.playing ? qsTr("Pause") : qsTr("Play")
-                }
-
-                ToolButton {
-                    text: "\u00BB"
-                    font.pixelSize: 18
-                    onClicked: player.nextCue()
-                    ToolTip.visible: hovered
-                    ToolTip.text: qsTr("Next cue")
-                }
-
-                ToolButton {
-                    text: "+15"
-                    font.pixelSize: 11
-                    onClicked: player.skipForward(true)
-                    ToolTip.visible: hovered
-                    ToolTip.text: qsTr("Forward 15 seconds")
-                }
-            }
-
-            GridLayout {
-                Layout.fillWidth: true
-                Layout.leftMargin: 16
-                Layout.rightMargin: 16
-                Layout.topMargin: 8
-                columns: 3
-                columnSpacing: 8
-                rowSpacing: 2
-
-                Label {
-                    text: qsTr("Delay")
-                    color: Theme.textSecondary
-                    font.pixelSize: 12
-                }
-
-                Slider {
-                    id: delaySlider
-                    Layout.fillWidth: true
-                    from: -2
-                    to: 2
-                    stepSize: 0.05
-                    value: player.delay
-                    onMoved: player.setDelay(delaySlider.value)
-                }
-
-                Label {
-                    Layout.preferredWidth: 48
-                    horizontalAlignment: Text.AlignRight
-                    text: (player.delay >= 0 ? "+" : "") + player.delay.toFixed(2) + "s"
-                    color: Theme.textPrimary
-                    font.pixelSize: 11
-                }
-
-                Label {
-                    text: qsTr("Speed")
-                    color: Theme.textSecondary
-                    font.pixelSize: 12
-                }
-
-                Slider {
-                    id: rateSlider
-                    Layout.fillWidth: true
-                    from: 0.5
-                    to: 2.5
-                    stepSize: 0.05
-                    value: player.rate
-                    onMoved: player.setRate(rateSlider.value)
-                }
-
-                Label {
-                    Layout.preferredWidth: 48
-                    horizontalAlignment: Text.AlignRight
-                    text: player.rate.toFixed(2) + "x"
-                    color: Theme.textPrimary
-                    font.pixelSize: 11
-                }
-            }
-
-            Rectangle {
-                Layout.fillWidth: true
-                Layout.leftMargin: 16
-                Layout.rightMargin: 16
-                Layout.topMargin: 12
-                Layout.preferredHeight: currentCueText.implicitHeight + 20
-                visible: player.cues.length > 0
-                color: Theme.windowBackground
-                radius: 10
-
-                Label {
-                    id: currentCueText
-                    anchors.fill: parent
-                    anchors.margins: 10
-                    text: player.currentCueText.length > 0 ? player.currentCueText : qsTr("No cue at this position")
-                    color: Theme.textPrimary
-                    font.pixelSize: 12
-                    wrapMode: Text.WordWrap
-                    maximumLineCount: 5
-                    elide: Text.ElideRight
-                }
-            }
-
-            ColumnLayout {
-                Layout.fillWidth: true
-                Layout.leftMargin: 16
-                Layout.rightMargin: 16
-                Layout.topMargin: 12
-                spacing: 4
+                Layout.leftMargin: 18
+                Layout.rightMargin: 18
+                Layout.bottomMargin: 14
+                spacing: 12
                 visible: root.player.hasAudio
 
-                Label {
-                    text: qsTr("Subtitle Match")
-                    color: Theme.textPrimary
-                    font.bold: true
-                }
-
                 RowLayout {
                     Layout.fillWidth: true
+                    spacing: 12
 
-                    Label {
+                    Rectangle {
+                        implicitWidth: 64
+                        implicitHeight: 64
+                        radius: 10
+                        color: Qt.rgba(Theme.textSecondary.r, Theme.textSecondary.g,
+                                       Theme.textSecondary.b, 0.10)
+                        clip: true
+
+                        Image {
+                            anchors.fill: parent
+                            fillMode: Image.PreserveAspectFit
+                            source: root.player.audiobookArtworkSource.length > 0
+                                    ? root.player.audiobookArtworkSource : ReaderViewModel.coverUrl
+                            visible: source.toString().length > 0
+                        }
+
+                        Rectangle {
+                            anchors.fill: parent
+                            visible: root.player.audiobookArtworkSource.length === 0
+                                     && ReaderViewModel.coverUrl.length === 0
+                            color: Qt.rgba(Theme.textSecondary.r, Theme.textSecondary.g,
+                                           Theme.textSecondary.b, 0.14)
+                            radius: 10
+
+                            Label {
+                                anchors.centerIn: parent
+                                text: "\u224b"
+                                color: Theme.textSecondary
+                                font.pixelSize: 22
+                            }
+                        }
+                    }
+
+                    ColumnLayout {
                         Layout.fillWidth: true
-                        text: root.player.subtitleName || qsTr("No subtitle file selected")
-                        color: Theme.textSecondary
-                        font.pixelSize: 12
-                        elide: Text.ElideMiddle
-                    }
+                        spacing: 2
 
-                    Button {
-                        text: root.player.matching ? qsTr("Matching…") : qsTr("Match")
-                        enabled: root.player.subtitleName.length > 0 && !root.player.matching
-                        onClicked: root.player.matchSubtitles(root.player.matchSearchWindow)
-                    }
-                }
+                        Label {
+                            Layout.fillWidth: true
+                            text: root.player.audiobookTitle.length > 0
+                                  ? root.player.audiobookTitle : ReaderViewModel.title
+                            color: Theme.textPrimary
+                            font.pixelSize: 14
+                            font.bold: true
+                            wrapMode: Text.WordWrap
+                            maximumLineCount: 2
+                            elide: Text.ElideRight
+                        }
 
-                RowLayout {
-                    Layout.fillWidth: true
-
-                    Label {
-                        text: qsTr("Search Window")
-                        color: Theme.textSecondary
-                        font.pixelSize: 12
-                    }
-
-                    Slider {
-                        id: searchWindowSlider
-                        Layout.fillWidth: true
-                        from: 50
-                        to: 1000
-                        stepSize: 50
-                        snapMode: Slider.SnapAlways
-                        value: root.player.matchSearchWindow
-                        enabled: !root.player.matching
-                        Accessible.name: qsTr("Search Window")
-                        onMoved: root.player.matchSearchWindow = searchWindowSlider.value
-                    }
-
-                    Label {
-                        Layout.preferredWidth: 48
-                        horizontalAlignment: Text.AlignRight
-                        text: root.player.matchSearchWindow.toString()
-                        color: Theme.textPrimary
-                        font.pixelSize: 11
-                    }
-                }
-
-                ProgressBar {
-                    Layout.fillWidth: true
-                    visible: root.player.matching
-                    indeterminate: true
-                    Accessible.name: qsTr("Matching subtitles")
-                }
-
-                Label {
-                    Layout.fillWidth: true
-                    visible: root.player.hasMatch
-                    text: qsTr("Match rate: %1").arg(root.player.matchRateLabel)
-                    color: Theme.textPrimary
-                    font.pixelSize: 12
-                    wrapMode: Text.WordWrap
-                }
-
-                Label {
-                    Layout.fillWidth: true
-                    visible: root.player.hasMatch && root.player.inferredCount > 0
-                    text: qsTr("%n inferred from surrounding narration; highlights may be approximate.", "", root.player.inferredCount)
-                    color: Theme.textSecondary
-                    font.pixelSize: 12
-                    wrapMode: Text.WordWrap
-                }
-
-                Label {
-                    Layout.fillWidth: true
-                    visible: root.player.matchError.length > 0
-                    text: root.player.matchError
-                    color: Theme.popupDanger
-                    font.pixelSize: 12
-                    wrapMode: Text.WordWrap
-                }
-
-                Label {
-                    Layout.fillWidth: true
-                    visible: !root.player.hasMatch
-                    text: qsTr("Match the subtitles to this book to highlight narration in the reader.")
-                    color: Theme.textSecondary
-                    font.pixelSize: 12
-                    wrapMode: Text.WordWrap
-                }
-            }
-
-            ListView {
-                id: cueList
-                Layout.fillWidth: true
-                Layout.fillHeight: true
-                Layout.topMargin: 12
-                Layout.bottomMargin: 8
-                clip: true
-                model: player.cues
-                spacing: 0
-
-                function syncCurrent() {
-                    if (root.player.currentCueId.length === 0)
-                        return;
-                    for (var index = 0; index < root.player.cues.length; ++index) {
-                        if (root.player.cues[index].id === root.player.currentCueId) {
-                            cueList.currentIndex = index;
-                            cueList.positionViewAtIndex(index, ListView.Contain);
-                            return;
+                        Label {
+                            Layout.fillWidth: true
+                            visible: root.player.audiobookArtist.length > 0
+                            text: root.player.audiobookArtist
+                            color: Theme.textSecondary
+                            font.pixelSize: 13
+                            maximumLineCount: 1
+                            elide: Text.ElideRight
                         }
                     }
                 }
 
-                ScrollBar.vertical: ScrollBar {}
+                ColumnLayout {
+                    Layout.fillWidth: true
+                    spacing: 2
 
-                delegate: ItemDelegate {
-                    id: cueItem
-                    required property int index
-                    required property var modelData
-                    width: ListView.view.width
-                    highlighted: cueItem.modelData.id === root.player.currentCueId
-                    onClicked: root.player.jumpCue(cueItem.modelData.id)
-
-                    contentItem: Label {
-                        text: root.formatCueTime(cueItem.modelData.start) + "  " + cueItem.modelData.text
-                        color: cueItem.highlighted ? Theme.accent : Theme.textPrimary
-                        font.pixelSize: 12
-                        elide: Text.ElideRight
-                        verticalAlignment: Text.AlignVCenter
+                    Slider {
+                        id: scrubber
+                        Layout.fillWidth: true
+                        from: 0
+                        to: Math.max(root.player.duration, 1)
+                        enabled: root.player.duration > 0
+                        value: root.scrubTime >= 0 ? root.scrubTime : root.player.position
+                        onMoved: root.scrubTime = value
+                        onPressedChanged: {
+                            if (!pressed && root.scrubTime >= 0) {
+                                root.player.seek(root.scrubTime);
+                                root.scrubTime = -1;
+                            }
+                        }
                     }
+
+                    RowLayout {
+                        Layout.fillWidth: true
+
+                        Label {
+                            text: root.formatTime(root.scrubTime >= 0 ? root.scrubTime : root.player.position)
+                            color: Theme.textSecondary
+                            font.pixelSize: 11
+                            font.family: "monospace"
+                        }
+
+                        Item {
+                            Layout.fillWidth: true
+                        }
+
+                        Label {
+                            text: "-" + root.formatTime(Math.max(root.player.duration - (root.scrubTime >= 0 ? root.scrubTime : root.player.position), 0))
+                            color: Theme.textSecondary
+                            font.pixelSize: 11
+                            font.family: "monospace"
+                        }
+                    }
+                }
+
+                RowLayout {
+                    Layout.alignment: Qt.AlignHCenter
+                    spacing: 10
+
+                    RoundButton {
+                        implicitWidth: 34
+                        implicitHeight: 34
+                        text: "15\u21ba"
+                        font.pixelSize: 11
+                        onClicked: root.player.skipForward(false)
+                        ToolTip.visible: hovered
+                        ToolTip.text: qsTr("Back 15 seconds")
+                    }
+
+                    RoundButton {
+                        implicitWidth: 34
+                        implicitHeight: 34
+                        text: "\u00ab"
+                        font.pixelSize: 13
+                        onClicked: root.player.previousCue()
+                        ToolTip.visible: hovered
+                        ToolTip.text: qsTr("Previous cue")
+                    }
+
+                    RoundButton {
+                        implicitWidth: 48
+                        implicitHeight: 48
+                        text: root.player.playing ? "\u275a\u275a" : "\u25b6"
+                        font.pixelSize: 18
+                        font.bold: true
+                        onClicked: root.player.togglePlayback()
+                        ToolTip.visible: hovered
+                        ToolTip.text: root.player.playing ? qsTr("Pause") : qsTr("Play")
+                    }
+
+                    RoundButton {
+                        implicitWidth: 34
+                        implicitHeight: 34
+                        text: "\u00bb"
+                        font.pixelSize: 13
+                        onClicked: root.player.nextCue()
+                        ToolTip.visible: hovered
+                        ToolTip.text: qsTr("Next cue")
+                    }
+
+                    RoundButton {
+                        implicitWidth: 34
+                        implicitHeight: 34
+                        text: "15\u21bb"
+                        font.pixelSize: 11
+                        onClicked: root.player.skipForward(true)
+                        ToolTip.visible: hovered
+                        ToolTip.text: qsTr("Forward 15 seconds")
+                    }
+                }
+            }
+
+            // NativeReaderInspectorTabBar: equal widths, glyph over label,
+            // 7 px spacing, callout text, 2 px accent underline, a divider
+            // under the bar and 10 px below it.
+            ColumnLayout {
+                Layout.fillWidth: true
+                Layout.bottomMargin: 10
+                spacing: 0
+
+                RowLayout {
+                    Layout.fillWidth: true
+                    Layout.leftMargin: 12
+                    Layout.rightMargin: 12
+                    spacing: 0
+
+                    Repeater {
+                        model: [
+                            { title: qsTr("Resources"), glyph: "\u2913" },
+                            { title: qsTr("Chapters"), glyph: "\u2630" },
+                            { title: qsTr("Settings"), glyph: "\u2699" }
+                        ]
+
+                        delegate: Item {
+                            id: tabItem
+                            required property var modelData
+                            required property int index
+                            Layout.fillWidth: true
+                            implicitHeight: 44
+
+                            readonly property bool selected: root.selectedTab === tabItem.index
+
+                            ColumnLayout {
+                                anchors.fill: parent
+                                spacing: 7
+
+                                Label {
+                                    Layout.fillWidth: true
+                                    Layout.topMargin: 6
+                                    text: tabItem.modelData.glyph
+                                    color: tabItem.selected ? Theme.textPrimary : Theme.textSecondary
+                                    font.pixelSize: 15
+                                    horizontalAlignment: Text.AlignHCenter
+                                }
+
+                                Label {
+                                    Layout.fillWidth: true
+                                    text: tabItem.modelData.title
+                                    color: tabItem.selected ? Theme.textPrimary : Theme.textSecondary
+                                    font.pixelSize: 13
+                                    font.bold: tabItem.selected
+                                    horizontalAlignment: Text.AlignHCenter
+                                    elide: Text.ElideRight
+                                }
+
+                                Rectangle {
+                                    Layout.fillWidth: true
+                                    height: 2
+                                    radius: 1
+                                    color: tabItem.selected ? Theme.accent : "transparent"
+                                }
+                            }
+
+                            MouseArea {
+                                anchors.fill: parent
+                                onClicked: {
+                                    root.userSelectedTab = true;
+                                    root.selectedTab = tabItem.index;
+                                }
+                            }
+                        }
+                    }
+                }
+
+                Rectangle {
+                    Layout.fillWidth: true
+                    height: 1
+                    color: Theme.popupDivider
+                }
+            }
+
+            StackLayout {
+                Layout.fillWidth: true
+                Layout.fillHeight: true
+                currentIndex: root.selectedTab
+
+                SasayakiResourcesTab {
+                    player: root.player
+                }
+
+                SasayakiChaptersTab {
+                    player: root.player
+                }
+
+                SasayakiSettingsTab {
+                    player: root.player
+                    settings: sasayakiSettings
                 }
             }
         }

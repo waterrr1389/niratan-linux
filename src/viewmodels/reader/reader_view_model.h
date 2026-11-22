@@ -256,6 +256,10 @@ class ReaderViewModel : public QObject {
     bool restoring() const;
     Q_INVOKABLE void revealAfterLoadFailure(const QString& url);
     Q_INVOKABLE void setReaderColors(const QString& background, const QString& text);
+    // Rebuilds the reader document so changed cue colours apply without
+    // reopening the book (NativeReaderView.updateSasayakiColors). Defined here
+    // because reader_view_model.cpp is frozen at its size baseline.
+    Q_INVOKABLE void refreshSasayakiColors() { reload_document(); }
 
     bool vertical_writing() const;
     void setVerticalWriting(bool vertical);

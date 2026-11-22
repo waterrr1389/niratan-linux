@@ -111,6 +111,8 @@ class SasayakiViewModel : public QObject {
     Q_PROPERTY(QString audiobookTitle READ audiobook_title NOTIFY audiobookMetadataChanged)
     Q_PROPERTY(QString audiobookArtist READ audiobook_artist NOTIFY audiobookMetadataChanged)
     Q_PROPERTY(QByteArray audiobookArtwork READ audiobook_artwork NOTIFY audiobookMetadataChanged)
+    Q_PROPERTY(QString audiobookArtworkSource READ audiobook_artwork_source NOTIFY
+                   audiobookMetadataChanged)
     Q_PROPERTY(int currentAudiobookChapterId READ current_audiobook_chapter_id NOTIFY
                    audiobookChaptersChanged)
     Q_PROPERTY(bool isLoadingAudiobookChapters READ is_loading_audiobook_chapters NOTIFY
@@ -150,7 +152,10 @@ class SasayakiViewModel : public QObject {
     QString audiobook_title() const;
     QString audiobook_artist() const;
     QByteArray audiobook_artwork() const;
-    // Index into chapters(), or -1 when no chapter contains the position.
+    // The embedded artwork as a data: URL (PNG or JPEG by signature), else
+    // empty.
+    QString audiobook_artwork_source() const;
+    // The id of the chapter containing the position, or -1 when none does.
     int current_audiobook_chapter_id() const;
     bool is_loading_audiobook_chapters() const;
 
@@ -170,6 +175,8 @@ class SasayakiViewModel : public QObject {
     Q_INVOKABLE void seek(double seconds);
     // SasayakiPlayer.skip(forward:): 15 s, clamped to the duration.
     Q_INVOKABLE void skipForward(bool forward);
+    // Seeks to the chapter's start (no delay) and clears a pending stop.
+    Q_INVOKABLE void seekToAudiobookChapter(int chapterId);
     Q_INVOKABLE void previousCue();
     Q_INVOKABLE void nextCue();
     // Seeks to the current cue's start + delay, or to 0 when no cue is active.

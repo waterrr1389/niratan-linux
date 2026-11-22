@@ -202,6 +202,17 @@ void SasayakiViewModel::playCue(const QString& cueId, bool stop) {
          play_cue_stop_time(cue->end_time, state_->delay, stop));
 }
 
+void SasayakiViewModel::seekToAudiobookChapter(int chapterId) {
+    for (const niratan::sasayaki::SasayakiAudiobookChapter& chapter : state_->audiobook_chapters) {
+        if (chapter.id != chapterId) {
+            continue;
+        }
+        state_->stop_playback_time.reset();
+        seek(chapter.start_time, false, true, std::nullopt);
+        return;
+    }
+}
+
 bool SasayakiViewModel::pauseForLookup() {
     if (!pause_for_lookup(state_->playing, state_->auto_pause)) {
         return false;

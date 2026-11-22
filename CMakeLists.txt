@@ -136,6 +136,8 @@ qt_add_library(niratan_app STATIC
     src/viewmodels/profiles/profiles_view_model.h
     src/viewmodels/sasayaki/sasayaki_player_policy.cpp
     src/viewmodels/sasayaki/sasayaki_player_policy.h
+    src/viewmodels/sasayaki/sasayaki_settings_view_model.cpp
+    src/viewmodels/sasayaki/sasayaki_settings_view_model.h
     src/viewmodels/sasayaki/sasayaki_view_model.cpp
     src/viewmodels/sasayaki/sasayaki_view_model_match.cpp
     src/viewmodels/sasayaki/sasayaki_view_model_playback.cpp
@@ -204,7 +206,10 @@ qt_add_qml_module(niratan_app
         src/views/pages/SettingsSectionRail.qml
         src/views/pages/SettingRow.qml
         src/views/pages/SettingsSliderRow.qml
+        src/views/reader/SasayakiChaptersTab.qml
         src/views/reader/SasayakiPanel.qml
+        src/views/reader/SasayakiResourcesTab.qml
+        src/views/reader/SasayakiSettingsTab.qml
         src/views/reader/ReaderStatisticsInspector.qml
         src/views/reader/ReaderProgress.qml
         src/views/reader/ReaderContents.qml
