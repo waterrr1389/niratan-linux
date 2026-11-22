@@ -96,6 +96,10 @@ Item {
         ReaderViewModel.setDark(ThemeState.systemDark)
     }
     onStatisticsContextActiveChanged: ReaderViewModel.setReaderActive(statisticsContextActive)
+    onReaderWindowActiveChanged: {
+        if (readerWindowActive)
+            sasayakiSettings.reload()
+    }
 
     Connections {
         target: ThemeState
@@ -197,6 +201,10 @@ Item {
         id: sasayaki
     }
 
+    SasayakiSettingsViewModel {
+        id: sasayakiSettings
+    }
+
     QtObject {
         id: readerBridge
         WebChannel.id: "readerBridge"
@@ -274,11 +282,14 @@ Item {
                 ToolTip.text: text
                 onClicked: statisticsPanel.open()
             }
-            ReaderChrome { player: sasayaki }
+            ReaderChrome {
+                player: sasayaki
+                sasayakiEnabled: sasayakiSettings.enable
+            }
             ToolButton {
                 text: qsTr("Sasayaki")
                 font.pixelSize: 12
-                enabled: ReaderViewModel.hasBook
+                visible: sasayakiSettings.enable && ReaderViewModel.hasBook
                 onClicked: sasayakiPanel.open()
             }
         }

@@ -1,16 +1,19 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
-// The Settings tab of the Sasayaki panel, following
-// Features/Sasayaki/SasayakiSheet.swift (settingsTab and its Playback and
-// appearance rows) and Core/UserConfig.swift (readerShowSasayakiToggle, the
-// sasayakiAutoScroll and sasayakiAutoPause booleans, the four sasayaki
-// colours and UserConfig.init's defaults).
+// The Sasayaki settings model, following Features/Sasayaki/SasayakiSheet.swift
+// (settingsTab and its Playback and appearance rows),
+// Features/Settings/SasayakiSettingsView.swift (the Enable, Settings, Command
+// Center, Light Theme and Dark Theme cards) and Core/UserConfig.swift
+// (enableSasayaki, readerShowSasayakiToggle, sasayakiAutoScroll,
+// sasayakiAutoPause, sasayakiSkipControls, the four sasayaki colours and
+// UserConfig.init's defaults).
 //
 // The show toggle lives in the active profile's reader_settings.json through
-// services/settings/settings_store.h, following D3: the other six keys live in
-// the global settings document through services/settings/global_settings.h and
-// keep module 3's defaults and colour normalization:
-//   showSasayakiToggle  false
+// services/settings/settings_store.h, following D3: the other eight keys live
+// in the global settings document through services/settings/global_settings.h
+// and keep module 3's defaults and colour normalization:
+//   enable              false
+//   skipControls        false
 //   autoScroll          true
 //   autoPause           true
 //   textColor           #000000
@@ -23,6 +26,9 @@
 // save that fails writes nothing and leaves the exposed value unchanged. A
 // reader settings document that does not decode is never replaced by defaults:
 // its failed read counts as a failed save, like a damaged file.
+//
+// UserConfig.init's `?? false` means a global key that is not a JSON boolean
+// reads as false, which is also each key's default.
 
 #pragma once
 
@@ -37,6 +43,9 @@ namespace niratan::viewmodels {
 class SasayakiSettingsViewModel : public QObject {
     Q_OBJECT
     QML_ELEMENT
+    Q_PROPERTY(bool enable READ enable WRITE setEnable NOTIFY enableChanged)
+    Q_PROPERTY(
+        bool skipControls READ skip_controls WRITE setSkipControls NOTIFY skipControlsChanged)
     Q_PROPERTY(bool showSasayakiToggle READ show_sasayaki_toggle WRITE setShowSasayakiToggle NOTIFY
                    showSasayakiToggleChanged)
     Q_PROPERTY(bool autoScroll READ auto_scroll WRITE setAutoScroll NOTIFY autoScrollChanged)
@@ -53,6 +62,8 @@ class SasayakiSettingsViewModel : public QObject {
     explicit SasayakiSettingsViewModel(QObject* parent = nullptr);
     ~SasayakiSettingsViewModel() override;
 
+    bool enable() const;
+    bool skip_controls() const;
     bool show_sasayaki_toggle() const;
     bool auto_scroll() const;
     bool auto_pause() const;
@@ -61,6 +72,8 @@ class SasayakiSettingsViewModel : public QObject {
     QString dark_text_color() const;
     QString dark_background_color() const;
 
+    void setEnable(bool value);
+    void setSkipControls(bool value);
     void setShowSasayakiToggle(bool value);
     void setAutoScroll(bool value);
     void setAutoPause(bool value);
@@ -73,6 +86,8 @@ class SasayakiSettingsViewModel : public QObject {
     Q_INVOKABLE void reload();
 
    signals:
+    void enableChanged();
+    void skipControlsChanged();
     void showSasayakiToggleChanged();
     void autoScrollChanged();
     void autoPauseChanged();

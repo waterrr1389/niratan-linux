@@ -24,6 +24,8 @@ struct SasayakiSettingsViewModel::State {
     GlobalSettings global = GlobalSettings::at_data_root();
     std::optional<SettingsStore> store;
 
+    bool enable = false;
+    bool skip_controls = false;
     bool show_sasayaki_toggle = false;
     bool auto_scroll = true;
     bool auto_pause = true;
@@ -39,6 +41,14 @@ SasayakiSettingsViewModel::SasayakiSettingsViewModel(QObject* parent)
 }
 
 SasayakiSettingsViewModel::~SasayakiSettingsViewModel() = default;
+
+bool SasayakiSettingsViewModel::enable() const {
+    return state_->enable;
+}
+
+bool SasayakiSettingsViewModel::skip_controls() const {
+    return state_->skip_controls;
+}
 
 bool SasayakiSettingsViewModel::show_sasayaki_toggle() const {
     return state_->show_sasayaki_toggle;
@@ -79,6 +89,14 @@ void SasayakiSettingsViewModel::reload() {
     }
 
     const sasayaki::SasayakiSettings settings = state_->global.sasayaki_settings();
+    if (settings.enable != state_->enable) {
+        state_->enable = settings.enable;
+        emit enableChanged();
+    }
+    if (settings.skip_controls != state_->skip_controls) {
+        state_->skip_controls = settings.skip_controls;
+        emit skipControlsChanged();
+    }
     if (settings.auto_scroll != state_->auto_scroll) {
         state_->auto_scroll = settings.auto_scroll;
         emit autoScrollChanged();
@@ -106,6 +124,28 @@ void SasayakiSettingsViewModel::reload() {
     if (dark_background != state_->dark_background_color) {
         state_->dark_background_color = dark_background;
         emit darkBackgroundColorChanged();
+    }
+}
+
+void SasayakiSettingsViewModel::setEnable(bool enabled) {
+    if (state_->global.save_enable_sasayaki(enabled) != StoreError::none) {
+        return;
+    }
+    const bool stored = state_->global.sasayaki_settings().enable;
+    if (stored != state_->enable) {
+        state_->enable = stored;
+        emit enableChanged();
+    }
+}
+
+void SasayakiSettingsViewModel::setSkipControls(bool enabled) {
+    if (state_->global.save_sasayaki_skip_controls(enabled) != StoreError::none) {
+        return;
+    }
+    const bool stored = state_->global.sasayaki_settings().skip_controls;
+    if (stored != state_->skip_controls) {
+        state_->skip_controls = stored;
+        emit skipControlsChanged();
     }
 }
 

@@ -126,7 +126,7 @@ SettingsViewModel::~SettingsViewModel() = default;
 int SettingsViewModel::section() const { return section_; }
 
 void SettingsViewModel::setSection(int value) {
-    if (value >= 0 && value <= 2 && section_ != value) {
+    if (value >= 0 && value <= 3 && section_ != value) {
         section_ = value;
         emit sectionChanged();
     }

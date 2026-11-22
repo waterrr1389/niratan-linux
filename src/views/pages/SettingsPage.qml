@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
-// Reader, dictionary and statistics controls follow AppearanceView,
-// DictionaryBehaviorSettingsSections and StatisticsSettingsView. The section
-// rail itself is SettingsSectionRail.qml; its Anki entry reports
+// Reader, dictionary, statistics and Sasayaki controls follow AppearanceView,
+// DictionaryBehaviorSettingsSections, StatisticsSettingsView and
+// SasayakiSettingsView; the Sasayaki form itself is SasayakiSettingsForm.qml.
+// The section rail itself is SettingsSectionRail.qml; its Anki entry reports
 // ankiRequested(), which MainWindow turns into the Anki settings page.
 
 pragma ComponentBehavior: Bound
@@ -89,13 +90,6 @@ Page {
                 border.width: Theme.cardBorderWidth
             }
         }
-    }
-
-    component Note: Label {
-        Layout.fillWidth: true
-        color: Theme.textSecondary
-        font.pixelSize: Theme.fontCaption
-        wrapMode: Text.WordWrap
     }
 
     component ToggleRow: SettingRow {
@@ -192,7 +186,7 @@ Page {
                     width: scroll.availableWidth
                     spacing: Theme.spacingLg
 
-                    Note {
+                    SettingsNote {
                         visible: settings.error !== ""
                         color: Theme.popupDanger
                         text: settings.error
@@ -200,7 +194,7 @@ Page {
 
                     Loader {
                         Layout.fillWidth: true
-                        sourceComponent: settings.section === 1 ? dictionaryForm : settings.section === 2 ? statisticsForm : readerForm
+                        sourceComponent: settings.section === 1 ? dictionaryForm : settings.section === 2 ? statisticsForm : settings.section === 3 ? sasayakiForm : readerForm
                         onLoaded: {
                             const flickable = scroll.contentItem as Flickable;
                             if (flickable)
@@ -218,7 +212,7 @@ Page {
         ColumnLayout {
             spacing: Theme.spacingLg
 
-            Note {
+            SettingsNote {
                 text: qsTr("Reader changes take effect the next time you open a book.")
             }
 
@@ -524,7 +518,7 @@ Page {
                     }
                 }
 
-                Note {
+                SettingsNote {
                     visible: settings.progressCount === "Pages" && (settings.showProgress || settings.showChapterProgress)
                     text: qsTr("Page counts depend on the layout and window size and are unavailable in continuous mode.")
                 }
@@ -666,6 +660,12 @@ Page {
     }
 
     Component {
+        id: sasayakiForm
+
+        SasayakiSettingsForm {}
+    }
+
+    Component {
         id: statisticsForm
 
         ColumnLayout {
@@ -729,7 +729,7 @@ Page {
                     }
                 }
 
-                Note {
+                SettingsNote {
                     text: qsTr("Reading before this local time counts toward the previous day. This does not change your reading goals.")
                 }
             }

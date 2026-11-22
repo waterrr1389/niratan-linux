@@ -5,9 +5,10 @@
 // NativeSettingsReuseView.settingsSidebar and Features/Settings/SettingsHomeView.swift:
 // one selectable row per section over the page background, with the selected
 // row carrying an accent bar. The repo keeps its Reader, Dictionary and
-// Statistics destinations and appends Anki, which opens AnkiView's own page.
+// Statistics destinations, adds Sasayaki (Audiobooks) after Statistics as the
+// sidebar does, and appends Anki, which opens AnkiView's own page.
 // SettingsHomeView.swift gives each settings link an SF Symbol; the rail is
-// text-only, so the `tray.full` icon beside Anki is not reproduced.
+// text-only, so the `waveform` and `tray.full` icons are not reproduced.
 
 pragma ComponentBehavior: Bound
 
@@ -86,7 +87,8 @@ Pane {
         spacing: Theme.spacingXs
 
         Repeater {
-            model: [qsTr("Reader"), qsTr("Dictionary"), qsTr("Statistics")]
+            model: [qsTr("Reader"), qsTr("Dictionary"), qsTr("Statistics"),
+                qsTr("Sasayaki (Audiobooks)")]
 
             delegate: RailRow {
                 required property int index

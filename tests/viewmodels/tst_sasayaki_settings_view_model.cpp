@@ -1,11 +1,12 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
-// The Sasayaki panel's settings bridge, following
-// Features/Sasayaki/SasayakiSheet.swift (settingsTab) and the didSet observers
-// of readerShowSasayakiToggle, sasayakiAutoScroll, sasayakiAutoPause and the
-// four sasayaki colours in Core/UserConfig.swift. Each test runs in a
-// temporary data root so the active profile and both settings documents are
-// real files.
+// The Sasayaki panel's settings bridge and the app-level Enable and Show Skip
+// switches, following Features/Sasayaki/SasayakiSheet.swift (settingsTab),
+// Features/Settings/SasayakiSettingsView.swift and the didSet observers of
+// enableSasayaki, sasayakiSkipControls, readerShowSasayakiToggle,
+// sasayakiAutoScroll, sasayakiAutoPause and the four sasayaki colours in
+// Core/UserConfig.swift. Each test runs in a temporary data root so the active
+// profile and both settings documents are real files.
 
 #include "viewmodels/sasayaki/sasayaki_settings_view_model.h"
 
@@ -71,6 +72,7 @@ class SasayakiSettingsViewModelTest : public QObject {
 
    private slots:
     void defaultsInFreshRoot();
+    void enableAndSkipControls();
     void settersWriteTheirOwnKeys();
     void secondInstanceReadsStoredValues();
     void showToggleKeepsTheOtherReaderSettings();
@@ -92,6 +94,46 @@ void SasayakiSettingsViewModelTest::defaultsInFreshRoot() {
     QCOMPARE(model.dark_text_color(), QStringLiteral("#FFFFFF"));
     QCOMPARE(model.dark_background_color(), QStringLiteral("#87CFFA66"));
     QVERIFY(!std::filesystem::exists(settings_file()));
+}
+
+// B2: enableSasayaki and sasayakiSkipControls: UserConfig.init's `?? false`
+// defaults, the two didSet observers each writing only their own key, and a
+// stored value of another type reading as false.
+void SasayakiSettingsViewModelTest::enableAndSkipControls() {
+    TempDataRoot data;
+    QVERIFY(data.isValid());
+    SasayakiSettingsViewModel model;
+    QCOMPARE(model.enable(), false);
+    QCOMPARE(model.skip_controls(), false);
+    QVERIFY(!std::filesystem::exists(settings_file()));
+
+    QSignalSpy enable_spy(&model, &SasayakiSettingsViewModel::enableChanged);
+    QSignalSpy skip_spy(&model, &SasayakiSettingsViewModel::skipControlsChanged);
+
+    model.setEnable(true);
+    QCOMPARE(model.enable(), true);
+    QCOMPARE(read_object(settings_file()), (QJsonObject{{"enableSasayaki", true}}));
+
+    model.setSkipControls(true);
+    QCOMPARE(model.skip_controls(), true);
+    QCOMPARE(read_object(settings_file()),
+             (QJsonObject{{"enableSasayaki", true}, {"sasayakiSkipControls", true}}));
+    QCOMPARE(enable_spy.count(), 1);
+    QCOMPARE(skip_spy.count(), 1);
+
+    SasayakiSettingsViewModel second;
+    QCOMPARE(second.enable(), true);
+    QCOMPARE(second.skip_controls(), true);
+
+    QCOMPARE(GlobalSettings(settings_file()).save_enable_sasayaki(false), StoreError::none);
+    model.reload();
+    QCOMPARE(model.enable(), false);
+    QCOMPARE(model.skip_controls(), true);
+
+    write_text(settings_file(), R"({"enableSasayaki":"true","sasayakiSkipControls":1})");
+    SasayakiSettingsViewModel typed;
+    QCOMPARE(typed.enable(), false);
+    QCOMPARE(typed.skip_controls(), false);
 }
 
 // S2: every setter writes exactly its own key and exposes the stored value,

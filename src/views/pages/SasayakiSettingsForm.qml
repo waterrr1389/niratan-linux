@@ -1,0 +1,284 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+//
+// The app-level Sasayaki settings form inside the Settings page, following
+// Features/Settings/SasayakiSettingsView.swift (body: the Enable card and its
+// footer, the Settings card, the Command Center card, the Light Theme and Dark
+// Theme cards) and Core/UserConfig.swift (enableSasayaki,
+// readerShowSasayakiToggle, sasayakiAutoScroll, sasayakiAutoPause,
+// sasayakiSkipControls and the four colours with their init defaults).
+//
+// Every card below Enable appears only while Enable is on, as in Swift. Each
+// toggle writes through SasayakiSettingsViewModel's setter: the three reader
+// booleans to the active profile's reader settings and the global keys to the
+// global settings document. A colour pick renormalizes the stored hex and
+// rebuilds the reader palette through ReaderViewModel, as the panel's own
+// settings tab does.
+//
+// The first release shows the footer's two markdown links (SubPlz and More...)
+// as plain text: the asterisks are dropped and no URL is opened. That is the
+// only content difference from Swift.
+//
+// The card and row chrome follows NativeMac/NativeReuseViews.swift
+// (NativeSettingsSectionCard, NativeSettingsRow, NativeSettingsToggle), the
+// same shapes SettingsPage.qml draws for its other forms.
+
+pragma ComponentBehavior: Bound
+
+import QtQuick
+import QtQuick.Controls
+import QtQuick.Dialogs
+import QtQuick.Layouts
+import Niratan
+
+ColumnLayout {
+    id: form
+
+    spacing: Theme.spacingLg
+
+    SasayakiSettingsViewModel {
+        id: settings
+    }
+
+    component Section: ColumnLayout {
+        id: section
+
+        required property string title
+        default property alias rows: body.data
+
+        Layout.fillWidth: true
+        spacing: Theme.spacingSm
+
+        Label {
+            Layout.fillWidth: true
+            text: section.title
+            color: Theme.textPrimary
+            font.pixelSize: Theme.fontTitle
+            font.weight: Font.DemiBold
+            wrapMode: Text.WordWrap
+        }
+
+        Pane {
+            Layout.fillWidth: true
+            padding: Theme.spacingMd
+
+            contentItem: ColumnLayout {
+                id: body
+
+                spacing: Theme.spacingSm
+            }
+
+            background: Rectangle {
+                color: Theme.cardBackground
+                radius: Theme.cardRadius
+                border.color: Theme.cardStroke
+                border.width: Theme.cardBorderWidth
+            }
+        }
+    }
+
+    component Note: Label {
+        Layout.fillWidth: true
+        color: Theme.textSecondary
+        font.pixelSize: Theme.fontCaption
+        wrapMode: Text.WordWrap
+    }
+
+    component ToggleRow: SettingRow {
+        id: toggleRow
+
+        required property bool checked
+        signal edited(bool value)
+
+        Switch {
+            Accessible.name: toggleRow.label
+            palette.dark: Theme.accent
+            checked: toggleRow.checked
+            onToggled: toggleRow.edited(checked)
+        }
+    }
+
+    // A row whose accessory is the colour swatch of a hidden-label
+    // ColorPicker. The store keeps #RRGGBBAA; the swatch needs #AARRGGBB.
+    component ColorRow: SettingRow {
+        id: colorRow
+
+        required property string hex
+        signal picked(string color)
+
+        readonly property color swatch: colorRow.hex.length === 9
+                                        ? "#" + colorRow.hex.slice(7) + colorRow.hex.slice(1, 7)
+                                        : colorRow.hex
+
+        Item {
+            Layout.preferredWidth: 24
+            Layout.preferredHeight: 24
+            Accessible.name: colorRow.label
+
+            Rectangle {
+                anchors.fill: parent
+                radius: 6
+                color: colorRow.swatch
+                border.width: 1
+                border.color: Theme.cardStroke
+            }
+
+            TapHandler {
+                onTapped: {
+                    picker.selectedColor = colorRow.swatch;
+                    picker.open();
+                }
+            }
+        }
+
+        ColorDialog {
+            id: picker
+
+            title: colorRow.label
+            options: ColorDialog.ShowAlphaChannel
+            onAccepted: {
+                const rgba = [selectedColor.r, selectedColor.g, selectedColor.b, selectedColor.a];
+                colorRow.picked("#" + rgba.map(function(channel) {
+                    return Math.round(channel * 255).toString(16).padStart(2, "0");
+                }).join(""));
+            }
+        }
+    }
+
+    Section {
+        title: qsTr("Sasayaki")
+
+        ToggleRow {
+            label: qsTr("Enable")
+            checked: settings.enable
+            onEdited: value => {
+                settings.enable = value;
+            }
+        }
+
+        Note {
+            text: qsTr("Listen to audiobooks and read along with highlighted text.")
+        }
+
+        Note {
+            visible: settings.enable
+            text: qsTr("An .srt file generated by SubPlz and an audiobook (.mp3/.m4b) are required.")
+        }
+
+        Note {
+            visible: settings.enable
+            text: qsTr("Long press a book and choose Match.")
+        }
+
+        Note {
+            visible: settings.enable
+            text: qsTr("Choose the .srt and press Match. Matching only has to be done once.")
+        }
+
+        Note {
+            visible: settings.enable
+            text: qsTr("You can now open the book and choose Sasayaki from the context menu.")
+        }
+
+        Note {
+            visible: settings.enable
+            text: qsTr("Load the audiobook and press play, lines will be highlighted as the audiobook plays.")
+        }
+
+        Note {
+            visible: settings.enable
+            text: qsTr("More...")
+        }
+    }
+
+    Section {
+        visible: settings.enable
+        title: qsTr("Settings")
+
+        ToggleRow {
+            label: qsTr("Show Sasayaki Toggle")
+            checked: settings.showSasayakiToggle
+            onEdited: value => {
+                settings.showSasayakiToggle = value;
+            }
+        }
+
+        ToggleRow {
+            label: qsTr("Auto-Scroll")
+            checked: settings.autoScroll
+            onEdited: value => {
+                settings.autoScroll = value;
+            }
+        }
+
+        ToggleRow {
+            label: qsTr("Auto-Pause on Lookup")
+            checked: settings.autoPause
+            onEdited: value => {
+                settings.autoPause = value;
+            }
+        }
+    }
+
+    Section {
+        visible: settings.enable
+        title: qsTr("Command Center")
+
+        ToggleRow {
+            label: qsTr("Show Skip (\u00b115s) Controls")
+            checked: settings.skipControls
+            onEdited: value => {
+                settings.skipControls = value;
+            }
+        }
+
+        Note {
+            text: qsTr("Skip Controls will replace Next/Previous Cue controls as media controls.")
+        }
+    }
+
+    Section {
+        visible: settings.enable
+        title: qsTr("Light Theme")
+
+        ColorRow {
+            label: qsTr("Text Color")
+            hex: settings.textColor
+            onPicked: color => {
+                settings.textColor = color;
+                ReaderViewModel.refreshSasayakiColors();
+            }
+        }
+
+        ColorRow {
+            label: qsTr("Background Color")
+            hex: settings.backgroundColor
+            onPicked: color => {
+                settings.backgroundColor = color;
+                ReaderViewModel.refreshSasayakiColors();
+            }
+        }
+    }
+
+    Section {
+        visible: settings.enable
+        title: qsTr("Dark Theme")
+
+        ColorRow {
+            label: qsTr("Text Color")
+            hex: settings.darkTextColor
+            onPicked: color => {
+                settings.darkTextColor = color;
+                ReaderViewModel.refreshSasayakiColors();
+            }
+        }
+
+        ColorRow {
+            label: qsTr("Background Color")
+            hex: settings.darkBackgroundColor
+            onPicked: color => {
+                settings.darkBackgroundColor = color;
+                ReaderViewModel.refreshSasayakiColors();
+            }
+        }
+    }
+}

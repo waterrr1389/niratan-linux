@@ -204,9 +204,11 @@ qt_add_qml_module(niratan_app
         src/views/pages/LibraryShelfSidebar.qml
         src/views/pages/PlayerPage.qml
         src/views/pages/ProfilesPage.qml
+        src/views/pages/SasayakiSettingsForm.qml
         src/views/pages/StatisticsPage.qml
         src/views/statistics/StatisticsDeleteDialog.qml
         src/views/pages/SettingsPage.qml
+        src/views/pages/SettingsNote.qml
         src/views/pages/SettingsSectionRail.qml
         src/views/pages/SettingRow.qml
         src/views/pages/SettingsSliderRow.qml

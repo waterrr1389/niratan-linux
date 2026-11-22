@@ -8,10 +8,13 @@ import QtQuick.Layouts
 import Niratan
 
 // NativeReaderView.statisticsString and nativeBottomControls, in the header's
-// trailing slot alongside the existing inspector buttons.
+// trailing slot alongside the existing inspector buttons. The Sasayaki
+// play/pause control follows NativeReaderView's enableSasayaki &&
+// readerShowSasayakiToggle && hasAudio gate (B5).
 RowLayout {
     id: chrome
     required property SasayakiViewModel player
+    required property bool sasayakiEnabled
     spacing: Theme.spacingSm
 
     Label {
@@ -46,7 +49,7 @@ RowLayout {
     }
 
     ToolButton {
-        visible: ReaderViewModel.showSasayakiToggle && chrome.player.hasAudio
+        visible: chrome.sasayakiEnabled && ReaderViewModel.showSasayakiToggle && chrome.player.hasAudio
         text: chrome.player.playing ? "\u275A\u275A" : "\u25B6"
         Accessible.name: chrome.player.playing ? qsTr("Pause Sasayaki") : qsTr("Play Sasayaki")
         ToolTip.text: Accessible.name
