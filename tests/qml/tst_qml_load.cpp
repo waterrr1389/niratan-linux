@@ -135,6 +135,7 @@ class QmlLoadTest : public QObject {
     void dictionary_page_search_field_uses_the_profile_text_size();
     void icon_table_resolves();
     void shared_components_load();
+    void main_window_controls_fit();
 
    private:
     // Empty when the component loaded without a QML warning.
@@ -650,6 +651,47 @@ void QmlLoadTest::shared_components_load() {
 
     const QString warnings = warnings_after(QStringLiteral("shared components"));
     QVERIFY2(warnings.isEmpty(), qPrintable(warnings));
+}
+
+// B8 of the views-shell module: every visible control of the default window
+// lies inside the 960x640 frame. The failure names each clipped control by its
+// text, or its class when it has none, so a control pushed out by the toolbar
+// is identifiable.
+void QmlLoadTest::main_window_controls_fit() {
+    QQmlApplicationEngine engine;
+    engine.loadFromModule(QStringLiteral("Niratan"), QStringLiteral("MainWindow"));
+    QVERIFY2(!engine.rootObjects().isEmpty(), "MainWindow was not created");
+    auto* window = qobject_cast<QQuickWindow*>(engine.rootObjects().value(0));
+    QVERIFY2(window != nullptr, "MainWindow is not a Window");
+    window->resize(960, 640);
+    QTest::qWait(100);
+
+    QStringList offenders;
+    auto visit = [&](auto&& self, QQuickItem* parent) -> void {
+        for (QQuickItem* item : parent->childItems()) {
+            if (item->isVisible() && item->width() > 0 && item->height() > 0 &&
+                (item->inherits("QQuickControl") || item->inherits("QQuickTextInput"))) {
+                const QPointF top_left = item->mapToItem(window->contentItem(), QPointF(0, 0));
+                const qreal right = top_left.x() + item->width();
+                const qreal bottom = top_left.y() + item->height();
+                if (top_left.x() < 0 || top_left.y() < 0 || right > window->width() ||
+                    bottom > window->height()) {
+                    QString name = item->property("text").toString();
+                    if (name.isEmpty())
+                        name = QString::fromLatin1(item->metaObject()->className());
+                    offenders.append(QStringLiteral("%1 at (%2,%3) size %4x%5")
+                                         .arg(name)
+                                         .arg(top_left.x())
+                                         .arg(top_left.y())
+                                         .arg(item->width())
+                                         .arg(item->height()));
+                }
+            }
+            self(self, item);
+        }
+    };
+    visit(visit, window->contentItem());
+    QVERIFY2(offenders.isEmpty(), qPrintable(offenders.join(QLatin1Char('\n'))));
 }
 
 int main(int argc, char* argv[]) {

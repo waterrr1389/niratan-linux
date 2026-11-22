@@ -9,6 +9,11 @@ import QtQuick.Layouts
 import Niratan
 
 // Cover geometry and badges follow BookView.swift (BookshelfLayout, ShelfCoverFrame).
+// The toolbar actions follow NativeMac/NativeReuseViews.swift
+// NativeBookshelfReuseView.toolbarContent: the Dictionary, Video, Profiles and
+// Settings buttons are gone (they are sidebar sections or inside Settings), and
+// Select, Statistics and Import are 38 px IconButtons. The shelf column width
+// follows Features/Bookshelf/LibraryShelfSidebar.swift LibraryShelfLayout.sidebarWidth.
 Item {
     id: page
     signal bookOpened(string folder)
@@ -179,7 +184,7 @@ Item {
         spacing: 0
         LibraryShelfSidebar {
             Layout.fillHeight: true
-            Layout.preferredWidth: 208
+            Layout.preferredWidth: Math.min(230, Math.max(176, page.width * 0.24))
             model: library
         }
 
@@ -226,15 +231,16 @@ Item {
                         onActivated: library.sortOption = currentIndex
                     }
                     Slider {
-                        width: 120
+                        Layout.preferredWidth: 120
                         from: 110
                         to: 240
                         stepSize: 10
                         value: library.coverWidth
                         onMoved: library.coverWidth = Math.round(value)
                     }
-                    Button {
-                        text: page.selecting ? qsTr("Done") : qsTr("Select")
+                    IconButton {
+                        icon: "checklist"
+                        accessibleName: page.selecting ? qsTr("Done") : qsTr("Select Books")
                         ToolTip.visible: hovered
                         ToolTip.text: qsTr("Select Books")
                         ToolTip.delay: 700
@@ -263,28 +269,17 @@ Item {
                             bulkDeleteDialog.open()
                         }
                     }
-                    Button {
-                        text: qsTr("Dictionary")
-                        onClicked: page.dictionaryRequested()
-                    }
-                    Button {
-                        text: qsTr("Video")
-                        onClicked: page.videoRequested()
-                    }
-                    Button {
-                        text: qsTr("Profiles")
-                        onClicked: page.profilesRequested()
-                    }
-                    Button {
-                        text: qsTr("Statistics")
+                    IconButton {
+                        icon: "chart.xyaxis.line"
+                        accessibleName: qsTr("Statistics")
+                        ToolTip.visible: hovered
+                        ToolTip.text: qsTr("Statistics")
+                        ToolTip.delay: 700
                         onClicked: page.statisticsRequested()
                     }
-                    Button {
-                        text: qsTr("Settings")
-                        onClicked: page.settingsRequested()
-                    }
-                    Button {
-                        text: qsTr("Import")
+                    IconButton {
+                        icon: "plus"
+                        accessibleName: qsTr("Import EPUB")
                         ToolTip.visible: hovered
                         ToolTip.text: qsTr("Import EPUB")
                         ToolTip.delay: 700

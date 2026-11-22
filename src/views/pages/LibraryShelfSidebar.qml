@@ -75,13 +75,6 @@ Rectangle {
         anchors.fill: parent
         anchors.margins: 8
         spacing: 2
-        Label {
-            Layout.margins: 8
-            text: "Niratan"
-            color: Theme.textPrimary
-            font.pixelSize: 20
-            font.bold: true
-        }
 
         Repeater {
             model: [

@@ -33,6 +33,17 @@ bool ThemeState::isDark() const {
 }
 
 bool ThemeState::isSystemDark() const {
+    // NIRATAN_THEME stands in for the desktop appearance, like Niratan's
+    // HOSHI_DEBUG_SYSTEM_APPEARANCE. It is read here rather than only applied
+    // to QStyleHints, because platforms such as offscreen and vnc ignore a
+    // requested color scheme. An explicit profile theme still wins in isDark.
+    const QByteArray requested = qgetenv("NIRATAN_THEME");
+    if (requested == "dark") {
+        return true;
+    }
+    if (requested == "light") {
+        return false;
+    }
     return QGuiApplication::styleHints()->colorScheme() == Qt::ColorScheme::Dark;
 }
 

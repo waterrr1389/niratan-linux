@@ -227,9 +227,16 @@ qt_add_qml_module(niratan_app
         src/views/icons/phosphor/fill/x-circle-fill.svg
         src/views/icons/phosphor/regular/book-open-text.svg
         src/views/icons/phosphor/regular/books.svg
+        src/views/icons/phosphor/regular/chart-line.svg
         src/views/icons/phosphor/regular/gear.svg
+        src/views/icons/phosphor/regular/list-checks.svg
         src/views/icons/phosphor/regular/magnifying-glass.svg
+        src/views/icons/phosphor/regular/plus.svg
+        src/views/icons/phosphor/regular/sidebar-simple.svg
         src/views/icons/phosphor/regular/video.svg
+        src/views/shell/ReaderWindow.qml
+        src/views/shell/Sidebar.qml
+        src/views/shell/niratan-sidebar-icon.png
         src/views/pages/AnkiFieldRow.qml
         src/views/pages/AnkiSettingsAlerts.qml
         src/views/pages/AnkiSettingsPage.qml

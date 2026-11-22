@@ -102,6 +102,7 @@ Item {
             id: dictionaryHeader
             width: parent.width
             title: qsTr("Dictionary")
+            showBack: false
             onBackRequested: page.backRequested()
 
             TextField {

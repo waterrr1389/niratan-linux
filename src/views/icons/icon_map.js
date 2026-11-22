@@ -16,4 +16,8 @@ var icons = {
     "gearshape": { weight: "regular", name: "gear" },
     "magnifyingglass": { weight: "regular", name: "magnifying-glass" },
     "xmark.circle.fill": { weight: "fill", name: "x-circle" },
+    "checklist": { weight: "regular", name: "list-checks" },
+    "chart.xyaxis.line": { weight: "regular", name: "chart-line" },
+    "plus": { weight: "regular", name: "plus" },
+    "sidebar.leading": { weight: "regular", name: "sidebar-simple" },
 }
