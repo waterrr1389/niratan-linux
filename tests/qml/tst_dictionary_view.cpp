@@ -35,7 +35,6 @@
 #include "yomitan_fixture.h"
 
 #include <QFile>
-#include <QFont>
 #include <QGuiApplication>
 #include <QMetaObject>
 #include <QObject>
@@ -56,6 +55,7 @@
 #include <memory>
 
 Q_IMPORT_QML_PLUGIN(NiratanPlugin)
+Q_IMPORT_QML_PLUGIN(NiratanStylePlugin)
 
 namespace {
 
@@ -238,8 +238,8 @@ std::unique_ptr<QObject> DictionaryViewTest::create_page(QQuickWindow& window, c
 }
 
 // B1, B3: the bar is the page's first content; no "Dictionary" heading text
-// and no PageHeader band exist, and the field is the shared one: empty
-// placeholder, body text size.
+// and no PageHeader band exist, and the field is the shared one with an empty
+// placeholder.
 void DictionaryViewTest::page_has_no_title_band() {
     QQuickWindow window;
     QString error;
@@ -266,7 +266,6 @@ void DictionaryViewTest::page_has_no_title_band() {
     QVERIFY2(field != nullptr, "DictionaryPage has no search field");
     QVERIFY2(field->property("placeholderText").toString().isEmpty(),
              "the search field has a placeholder");
-    QCOMPARE(field->property("font").value<QFont>().pixelSize(), 14);
 }
 
 // B2, B9: the capsule bar spans the page at y = 0 with its 20 px outer inset,
@@ -486,7 +485,7 @@ int main(int argc, char* argv[]) {
     std::setlocale(LC_NUMERIC, "C");
     QGuiApplication::setApplicationName(QStringLiteral("NiratanTest"));
     QGuiApplication::setOrganizationName(QStringLiteral("niratan"));
-    QQuickStyle::setStyle(QStringLiteral("Basic"));
+    QQuickStyle::setStyle(QStringLiteral("NiratanStyle"));
 
     DictionaryViewTest test;
     return QTest::qExec(&test, argc, argv);

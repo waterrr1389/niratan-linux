@@ -3,6 +3,8 @@
 #include <QGuiApplication>
 
 #include <clocale>
+#include <QFont>
+#include <QFontDatabase>
 #include <QQmlApplicationEngine>
 #include <QQmlContext>
 #include <QQuickStyle>
@@ -16,9 +18,10 @@
 #include "views/dictionary/dictionary_media_scheme_handler.h"
 #include "views/reader/reader_scheme_handler.h"
 
-// The Niratan QML module is built as a static library, so its plugin is
-// imported here instead of being discovered at run time.
+// The Niratan QML module and its control style are built as static libraries,
+// so their plugins are imported here instead of being discovered at run time.
 Q_IMPORT_QML_PLUGIN(NiratanPlugin)
+Q_IMPORT_QML_PLUGIN(NiratanStylePlugin)
 
 namespace {
 
@@ -31,6 +34,19 @@ void apply_debug_color_scheme() {
     } else if (requested == "dark") {
         QGuiApplication::styleHints()->setColorScheme(Qt::ColorScheme::Dark);
     }
+}
+
+// Inter for Latin text with Noto Sans CJK JP named next so Han characters take
+// their Japanese forms; at 13 px, the size of the macOS body text style.
+// Hinting is off so glyph shapes and spacing stay those of the outlines, as on
+// macOS.
+void apply_interface_font() {
+    QFontDatabase::addApplicationFont(QStringLiteral(":/niratan/fonts/InterVariable.ttf"));
+    QFont font;
+    font.setFamilies({QStringLiteral("Inter Variable"), QStringLiteral("Noto Sans CJK JP")});
+    font.setPixelSize(13);
+    font.setHintingPreference(QFont::PreferNoHinting);
+    QGuiApplication::setFont(font);
 }
 
 }  // namespace
@@ -55,10 +71,11 @@ int main(int argc, char* argv[]) {
     std::setlocale(LC_NUMERIC, "C");
     QGuiApplication::setApplicationName("Niratan");
     QGuiApplication::setOrganizationName("niratan");
+    apply_interface_font();
 
-    // Basic keeps the platform style out of later specs; M1 replaces it
-    // with theme-drawn controls.
-    QQuickStyle::setStyle("Basic");
+    // Controls are drawn by the Niratan style, after their macOS
+    // counterparts, rather than by the desktop's style.
+    QQuickStyle::setStyle("NiratanStyle");
     apply_debug_color_scheme();
 
     const bool theme_preview = qEnvironmentVariableIsSet("NIRATAN_THEME_PREVIEW");

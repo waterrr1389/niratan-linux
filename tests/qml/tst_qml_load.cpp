@@ -40,6 +40,7 @@
 #include <memory>
 
 Q_IMPORT_QML_PLUGIN(NiratanPlugin)
+Q_IMPORT_QML_PLUGIN(NiratanStylePlugin)
 
 namespace {
 
@@ -656,7 +657,7 @@ int main(int argc, char* argv[]) {
     std::setlocale(LC_NUMERIC, "C");
     QGuiApplication::setApplicationName(QStringLiteral("NiratanTest"));
     QGuiApplication::setOrganizationName(QStringLiteral("niratan"));
-    QQuickStyle::setStyle(QStringLiteral("Basic"));
+    QQuickStyle::setStyle(QStringLiteral("NiratanStyle"));
 
     QmlLoadTest test;
     return QTest::qExec(&test, argc, argv);

@@ -38,7 +38,7 @@ Item {
         if (!known)
             return ""
         const weight = entry.weight
-        const suffix = weight === "fill" ? "-fill" : ""
+        const suffix = weight === "regular" ? "" : "-" + weight
         return "qrc:/qt/qml/Niratan/src/views/icons/phosphor/" + weight + "/"
             + entry.name + suffix + ".svg"
     }

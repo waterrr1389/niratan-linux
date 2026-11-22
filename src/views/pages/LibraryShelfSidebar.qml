@@ -24,7 +24,7 @@ Rectangle {
         standardButtons: Dialog.Ok | Dialog.Cancel
         TextField {
             id: shelfField
-            width: 240
+            implicitWidth: 240
             placeholderText: qsTr("Shelf name")
         }
         onAboutToShow: shelfField.text = qsTr("New Shelf")
@@ -45,7 +45,7 @@ Rectangle {
         standardButtons: Dialog.Ok | Dialog.Cancel
         TextField {
             id: renameShelfField
-            width: 240
+            implicitWidth: 240
             onAccepted: renameShelfDialog.accept()
         }
         onAboutToShow: renameShelfField.text = renameShelfDialog.fromName

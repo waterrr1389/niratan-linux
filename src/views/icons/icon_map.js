@@ -3,8 +3,10 @@
 // The one mapping from Niratan's SF Symbol names to Phosphor Icons 2.1.1
 // assets. Every entry is keyed by the name Swift passes to
 // `Image(systemName:)` and holds the Phosphor weight and basename; a filled SF
-// symbol maps to the Phosphor fill weight, whose files carry a `-fill` suffix,
-// so `xmark.circle.fill` names `x-circle` and resolves to `x-circle-fill.svg`.
+// symbol maps to the Phosphor fill weight, and a glyph macOS draws heavy (the
+// check mark) to the bold weight. Files of a weight other than regular carry
+// it as a suffix, so `xmark.circle.fill` names `x-circle` and resolves to
+// `fill/x-circle-fill.svg`.
 // Page modules add the rows their Swift views draw.
 
 .pragma library
@@ -19,6 +21,10 @@ var icons = {
     "checklist": { weight: "regular", name: "list-checks" },
     "chart.xyaxis.line": { weight: "regular", name: "chart-line" },
     "plus": { weight: "regular", name: "plus" },
+    "chevron.up.chevron.down": { weight: "regular", name: "caret-up-down" },
+    "chevron.down": { weight: "regular", name: "caret-down" },
+    "chevron.up": { weight: "regular", name: "caret-up" },
+    "checkmark": { weight: "bold", name: "check" },
     "sidebar.leading": { weight: "regular", name: "sidebar-simple" },
     "list.bullet": { weight: "regular", name: "list-bullets" },
     "paintpalette": { weight: "regular", name: "palette" },

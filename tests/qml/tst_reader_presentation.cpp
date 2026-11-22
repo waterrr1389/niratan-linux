@@ -92,6 +92,7 @@
 #include "yomitan_fixture.h"
 
 Q_IMPORT_QML_PLUGIN(NiratanPlugin)
+Q_IMPORT_QML_PLUGIN(NiratanStylePlugin)
 
 using niratan::viewmodels::ReaderViewModel;
 using niratan::viewmodels::SasayakiViewModel;
@@ -1358,7 +1359,7 @@ int main(int argc, char* argv[]) {
     std::setlocale(LC_NUMERIC, "C");
     QGuiApplication::setApplicationName(QStringLiteral("NiratanTest"));
     QGuiApplication::setOrganizationName(QStringLiteral("niratan"));
-    QQuickStyle::setStyle(QStringLiteral("Basic"));
+    QQuickStyle::setStyle(QStringLiteral("NiratanStyle"));
 
     ReaderPresentationTest test;
     return QTest::qExec(&test, argc, argv);

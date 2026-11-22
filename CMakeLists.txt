@@ -18,6 +18,9 @@ find_package(Qt6 6.12 REQUIRED COMPONENTS Quick QuickControls2 Test Network WebE
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(MPV REQUIRED IMPORTED_TARGET mpv)
 qt_standard_project_setup(REQUIRES 6.12)
+# Each QML module gets its own directory under one import path, so the control
+# style can name the Niratan module it draws from.
+set(QT_QML_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/qml)
 find_package(SQLite3 REQUIRED)
 find_package(libzip REQUIRED)
 
@@ -257,6 +260,10 @@ qt_add_qml_module(niratan_app
         src/views/icons/phosphor/regular/list-checks.svg
         src/views/icons/phosphor/regular/magnifying-glass.svg
         src/views/icons/phosphor/regular/plus.svg
+        src/views/icons/phosphor/regular/caret-up-down.svg
+        src/views/icons/phosphor/regular/caret-down.svg
+        src/views/icons/phosphor/regular/caret-up.svg
+        src/views/icons/phosphor/bold/check-bold.svg
         src/views/icons/phosphor/regular/sidebar-simple.svg
         src/views/icons/phosphor/regular/caret-left.svg
         src/views/icons/phosphor/regular/caret-right.svg
@@ -331,6 +338,13 @@ qt_add_qml_module(niratan_app
         src/views/theme/Theme.qml
         src/views/theme/ThemePreview.qml
 )
+# The interface font, Inter, stands in for SF Pro; Japanese falls back to the
+# system's Noto Sans CJK JP.
+qt_add_resources(niratan_app "interface_font"
+    PREFIX "/niratan/fonts"
+    BASE third_party/fonts/inter
+    FILES third_party/fonts/inter/InterVariable.ttf
+)
 target_link_libraries(niratan_app PUBLIC niratan_core Qt6::Quick Qt6::QuickControls2
     Qt6::WebEngineQuick Qt6::WebChannelQuick Qt6::QuickDialogs2 Qt6::OpenGL
     Qt6::Multimedia PkgConfig::MPV)
@@ -340,10 +354,54 @@ target_include_directories(niratan_app PUBLIC src/views/theme src/viewmodels/dic
     src/viewmodels/player src/viewmodels/settings src/viewmodels/video)
 target_compile_options(niratan_app PRIVATE -Wall -Wextra -Wpedantic -Werror)
 
+# The Niratan control style: every Qt Quick control drawn after its macOS
+# counterpart from Theme tokens. Controls it does not define come from Basic.
+qt_add_library(niratan_style STATIC)
+qt_add_qml_module(niratan_style
+    URI NiratanStyle
+    VERSION 1.0
+    IMPORTS QtQuick.Controls.Basic
+    DEPENDENCIES Niratan
+    QML_FILES
+        src/views/style/ApplicationWindow.qml
+        src/views/style/BusyIndicator.qml
+        src/views/style/Button.qml
+        src/views/style/CheckBox.qml
+        src/views/style/ComboBox.qml
+        src/views/style/Dialog.qml
+        src/views/style/DialogButtonBox.qml
+        src/views/style/FloatingBackground.qml
+        src/views/style/ItemDelegate.qml
+        src/views/style/Label.qml
+        src/views/style/Menu.qml
+        src/views/style/MenuItem.qml
+        src/views/style/MenuSeparator.qml
+        src/views/style/Page.qml
+        src/views/style/Pane.qml
+        src/views/style/Popup.qml
+        src/views/style/ProgressBar.qml
+        src/views/style/RadioButton.qml
+        src/views/style/ScrollBar.qml
+        src/views/style/ScrollIndicator.qml
+        src/views/style/ScrollView.qml
+        src/views/style/Slider.qml
+        src/views/style/SpinBox.qml
+        src/views/style/Switch.qml
+        src/views/style/TabBar.qml
+        src/views/style/TabButton.qml
+        src/views/style/TextArea.qml
+        src/views/style/TextField.qml
+        src/views/style/ToolButton.qml
+        src/views/style/ToolTip.qml
+)
+target_link_libraries(niratan_style PRIVATE Qt6::Quick Qt6::QuickControls2
+    Qt6::QuickTemplates2)
+
 # The QML module is static, so its generated plugin must be imported by the
 # application for the module's types and resources to be registered.
 qt_add_executable(niratan src/main.cpp)
-target_link_libraries(niratan PRIVATE niratan_app niratan_appplugin)
+target_link_libraries(niratan PRIVATE niratan_app niratan_appplugin niratan_style
+    niratan_styleplugin)
 target_compile_options(niratan PRIVATE -Wall -Wextra -Wpedantic -Werror)
 
 enable_testing()

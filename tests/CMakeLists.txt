@@ -753,7 +753,8 @@ qt_add_executable(tst_qml_load
     qml/tst_qml_load.cpp
 )
 target_include_directories(tst_qml_load PRIVATE ${CMAKE_SOURCE_DIR}/src)
-target_link_libraries(tst_qml_load PRIVATE niratan_app niratan_appplugin Qt6::Test
+target_link_libraries(tst_qml_load PRIVATE niratan_app niratan_appplugin niratan_style
+    niratan_styleplugin Qt6::Test
     Qt6::Quick Qt6::QuickControls2 Qt6::WebEngineQuick)
 target_compile_options(tst_qml_load PRIVATE -Wall -Wextra -Wpedantic -Werror)
 add_test(NAME qml_load COMMAND tst_qml_load)
@@ -765,7 +766,8 @@ qt_add_executable(tst_dictionary_view
 )
 target_include_directories(tst_dictionary_view PRIVATE ${CMAKE_SOURCE_DIR}/src
     ${CMAKE_SOURCE_DIR}/tests/dictionary)
-target_link_libraries(tst_dictionary_view PRIVATE niratan_app niratan_appplugin Qt6::Test
+target_link_libraries(tst_dictionary_view PRIVATE niratan_app niratan_appplugin niratan_style
+    niratan_styleplugin Qt6::Test
     Qt6::Quick Qt6::QuickControls2 Qt6::WebEngineQuick)
 target_compile_options(tst_dictionary_view PRIVATE -Wall -Wextra -Wpedantic -Werror)
 add_test(NAME dictionary_view COMMAND tst_dictionary_view)
@@ -781,7 +783,8 @@ target_include_directories(tst_reader_presentation PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/flows
     ${CMAKE_CURRENT_SOURCE_DIR}/dictionary
 )
-target_link_libraries(tst_reader_presentation PRIVATE niratan_app niratan_appplugin Qt6::Test
+target_link_libraries(tst_reader_presentation PRIVATE niratan_app niratan_appplugin niratan_style
+    niratan_styleplugin Qt6::Test
     Qt6::Quick Qt6::QuickControls2 Qt6::WebEngineQuick)
 target_compile_options(tst_reader_presentation PRIVATE -Wall -Wextra -Wpedantic -Werror)
 add_test(NAME reader_presentation COMMAND tst_reader_presentation)
