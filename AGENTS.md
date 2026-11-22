@@ -135,21 +135,38 @@ Directory names follow Niratan-win (`Services/Dictionary` becomes
 
 ## Writing a view
 
-A QML view is written from the SwiftUI view that implements it, the way a
-module is written from Swift logic.
+A QML view is written from the SwiftUI view that implements it. The goal is
+a page recognisable as Mac Niratan, not numeric parity: layout, hierarchy,
+spacing and control shapes follow Mac, adapted where Linux differs. Windows
+keep the desktop's title bar; toolbars sit below it. Glass is a solid theme
+surface with a thin border.
 
 1. The top comment of each QML file names the Swift files and views it
    follows.
-2. Carry over structure, sizes, spacing, fonts, colors (through the theme),
-   visibility conditions and state bindings from the SwiftUI `body` and its
-   modifiers. A value with no Swift source follows Niratan-win; if neither
-   has one, ask the owner a product question rather than invent it.
-3. The reviewing agent compares the QML against the SwiftUI source item by
-   item, then renders the page offscreen at the window's default size and
-   looks at it beside Niratan's `Pictures/*_mac.png` where one exists. The
-   render finds what reading code misses: controls outside the window,
-   clipped text, misalignment, missing icons. A problem found this way is
-   fixed from the Swift source, never by tuning values to match the image.
+2. Structure, visibility conditions and state bindings come from the SwiftUI
+   `body` and its modifiers. Sizes and spacing follow Swift where it states
+   them. The look comes from the Niratan control style, the shared components
+   in `src/views/components/` and the theme; pages do not style raw controls
+   themselves.
+3. Views are written in a render loop: the author renders each changed page
+   offscreen with demo data, in light and dark, and corrects it from the
+   Swift source until it reads as Mac Niratan. Authoring and reviewing views
+   need a model that reads images.
+4. The reviewing agent, a separate session, judges the renders against the
+   SwiftUI source and the Mac screenshots in Niratan's `Pictures/`. The
+   README images (`bookshelf.png`, `book1.png`, `dictionary.png`,
+   `video.png`, `video1.png`, `video2.png`, `popup.png`, `popup1.png`,
+   `setting.png`) show the pinned sidebar design; `*_mac.png` show an older
+   tab layout and only count for detail the README images lack:
+   controls outside the window, clipped text, misalignment, missing icons,
+   hierarchy and spacing. A problem found this way is fixed from the Swift
+   source, never by tuning values to match the image.
+5. Tests for a view cover loading, fitting the default window and wiring.
+   Layout values are not frozen in tests, so views skip the task file and
+   the frozen-test steps of Workflow.
+
+The owner sees renders of finished pages in batches and answers in plain
+language; the owner is not asked to judge layout values.
 
 A view is not finished until it is wired: every command it shows reaches a
 view model, and every view model command reaches the service that does the
