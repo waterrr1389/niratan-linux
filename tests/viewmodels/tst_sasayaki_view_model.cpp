@@ -12,14 +12,18 @@
 
 #include <QtTest>
 
+#include <cstddef>
 #include <limits>
 #include <optional>
+#include <vector>
 
+using niratan::sasayaki::SasayakiMatch;
 using niratan::viewmodels::clamp_delay;
 using niratan::viewmodels::clamp_rate;
 using niratan::viewmodels::clamped_seek_target;
 using niratan::viewmodels::clamped_skip_target;
 using niratan::viewmodels::cue_follow_decision;
+using niratan::viewmodels::cue_index_at_offset;
 using niratan::viewmodels::cue_needs_chapter_load;
 using niratan::viewmodels::cue_reference_time;
 using niratan::viewmodels::CueFollowAction;
@@ -71,6 +75,7 @@ class SasayakiViewModelTest : public QObject {
     void transitionResumes();
     void restoreCueDecision();
     void cueFollowDecision();
+    void cueIndexAtOffset();
 };
 
 // B1: playCue(stop:) sets cue.endTime + delay only when stop is true.
@@ -300,6 +305,55 @@ void SasayakiViewModelTest::cueFollowDecision() {
              decision(CueFollowAction::clear, false));
     QCOMPARE(cue_follow_decision(true, true, false, "b", 1, "a", 0, true, false),
              decision(CueFollowAction::clear, false));
+}
+
+// B1: SasayakiPlayer.findCue picks the first match of the chapter whose stored
+// range contains the offset; a range end, a gap and another chapter find
+// nothing.
+void SasayakiViewModelTest::cueIndexAtOffset() {
+    const auto match = [](int chapter, int start, int length) {
+        SasayakiMatch value;
+        value.chapter_index = chapter;
+        value.start = start;
+        value.length = length;
+        return value;
+    };
+    const std::vector<SasayakiMatch> matches{match(0, 10, 5), match(0, 20, 5), match(1, 0, 4),
+                                             match(1, 10, 2)};
+    const std::optional<std::size_t> a{std::size_t{0}};
+    const std::optional<std::size_t> b{std::size_t{1}};
+    const std::optional<std::size_t> c{std::size_t{2}};
+    const std::optional<std::size_t> d{std::size_t{3}};
+
+    struct Case {
+        int chapter;
+        int offset;
+        std::optional<std::size_t> expected;
+    };
+    const Case cases[] = {
+        {0, 10, a},
+        {0, 12, a},
+        {0, 14, a},
+        {0, 15, std::nullopt},
+        {0, 20, b},
+        {0, 5, std::nullopt},
+        {0, 25, std::nullopt},
+        {0, -1, std::nullopt},
+        {1, 0, c},
+        {1, 2, c},
+        {1, 4, std::nullopt},
+        {1, 10, d},
+        {1, 11, d},
+        {1, 12, std::nullopt},
+        {2, 0, std::nullopt},
+    };
+    for (const Case& item : cases) {
+        QVERIFY2(
+            cue_index_at_offset(matches, item.chapter, item.offset) == item.expected,
+            qPrintable(QStringLiteral("chapter %1 offset %2").arg(item.chapter).arg(item.offset)));
+    }
+
+    QVERIFY(!cue_index_at_offset({}, 0, 0).has_value());
 }
 
 QTEST_APPLESS_MAIN(SasayakiViewModelTest)

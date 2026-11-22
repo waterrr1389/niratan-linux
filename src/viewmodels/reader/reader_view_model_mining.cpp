@@ -4,6 +4,8 @@
 
 #include <QJsonObject>
 
+#include <cmath>
+#include <limits>
 #include <string_view>
 #include <utility>
 
@@ -73,6 +75,10 @@ QString ReaderViewModel::cover_url() const {
     return QString::fromStdString(reader::document_cover_url(*path));
 }
 
+int ReaderViewModel::lookup_offset() const {
+    return state_->lookup_offset;
+}
+
 void ReaderViewModel::handle_text_selected(const QJsonObject& data) {
     const auto text = data.value(QStringLiteral("text"));
     const auto sentence = data.value(QStringLiteral("sentence"));
@@ -89,6 +95,23 @@ void ReaderViewModel::handle_text_selected(const QJsonObject& data) {
     if (lookup_text.trimmed().isEmpty() || width.toDouble() <= 0 || height.toDouble() <= 0) {
         return;
     }
+
+    // SelectionData.normalizedOffset is an Int; another JSON type has none.
+    int lookup_offset = -1;
+    const QJsonValue normalized = data.value(QStringLiteral("normalizedOffset"));
+    if (normalized.isDouble()) {
+        const double value = normalized.toDouble();
+        if (std::isfinite(value) && std::floor(value) == value &&
+            value >= static_cast<double>(std::numeric_limits<int>::min()) &&
+            value <= static_cast<double>(std::numeric_limits<int>::max())) {
+            lookup_offset = static_cast<int>(value);
+        }
+    }
+    if (state_->lookup_offset != lookup_offset) {
+        state_->lookup_offset = lookup_offset;
+        emit lookupOffsetChanged();
+    }
+
     emit lookupRequested(lookup_text, sentence.toString(),
                          QRectF(x.toDouble(), y.toDouble(), width.toDouble(), height.toDouble()));
 }

@@ -11,6 +11,8 @@
 // chapter change is in flight, and should_resume whether playback returns
 // after it, following SasayakiPlayer's properties of the same names. The
 // pending cue's start is the reader progress the chapter loads at.
+// find_match_by_id is SasayakiPlayer's match lookup by id, shared by the
+// playback and popup splits.
 
 #pragma once
 
@@ -20,6 +22,7 @@
 
 #include <optional>
 #include <string>
+#include <string_view>
 #include <thread>
 #include <vector>
 
@@ -31,6 +34,21 @@ class QMediaPlayer;
 class QTimer;
 
 namespace niratan::viewmodels {
+
+// SasayakiPlayer's match lookup by id, shared by the playback and popup
+// splits.
+inline const sasayaki::SasayakiMatch*
+find_match_by_id(const std::optional<sasayaki::SasayakiMatchData>& match, std::string_view id) {
+    if (!match.has_value()) {
+        return nullptr;
+    }
+    for (const sasayaki::SasayakiMatch& candidate : match->matches) {
+        if (candidate.id == id) {
+            return &candidate;
+        }
+    }
+    return nullptr;
+}
 
 struct SasayakiViewModel::State {
     QMediaPlayer* player = nullptr;

@@ -144,4 +144,25 @@ CueFollowDecision cue_follow_decision(bool has_audio, bool has_match, bool chapt
     return {CueFollowAction::clear, false};
 }
 
+std::optional<std::size_t> cue_index_at_offset(const std::vector<sasayaki::SasayakiMatch>& matches,
+                                               int chapter, int offset) {
+    std::size_t low = 0;
+    std::size_t high = matches.size();
+    while (low < high) {
+        const std::size_t mid = low + (high - low) / 2;
+        const sasayaki::SasayakiMatch& match = matches[mid];
+        if (match.chapter_index < chapter ||
+            (match.chapter_index == chapter && match.start + match.length <= offset)) {
+            low = mid + 1;
+        } else {
+            high = mid;
+        }
+    }
+    if (low < matches.size() && matches[low].chapter_index == chapter &&
+        matches[low].start <= offset) {
+        return low;
+    }
+    return std::nullopt;
+}
+
 }  // namespace niratan::viewmodels

@@ -43,6 +43,8 @@ class ReaderMiningContextTest : public QObject {
     void relays_the_js_sentence_and_lookup_text_independently();
     void rejects_invalid_selections_data();
     void rejects_invalid_selections();
+    void reports_the_lookup_offset_data();
+    void reports_the_lookup_offset();
     void exposes_current_book_context_and_clears_it();
     void keeps_url_for_an_unreadable_cover();
     void serves_cover_and_gallery_on_the_fixed_port();
@@ -246,6 +248,36 @@ void ReaderMiningContextTest::rejects_invalid_selections() {
     }
     send(*reader_, "textSelected", payload);
     QCOMPARE(lookup.size(), 1);
+}
+
+// B2: SelectionData.normalizedOffset reaches lookupOffset; only an integral
+// JSON number counts.
+void ReaderMiningContextTest::reports_the_lookup_offset_data() {
+    QTest::addColumn<QJsonValue>("offset");
+    QTest::addColumn<int>("expected");
+
+    QTest::newRow("integer") << QJsonValue(42) << 42;
+    QTest::newRow("absent") << QJsonValue(QJsonValue::Undefined) << -1;
+    QTest::newRow("null") << QJsonValue() << -1;
+    QTest::newRow("fractional") << QJsonValue(42.5) << -1;
+    QTest::newRow("boolean") << QJsonValue(true) << -1;
+}
+
+void ReaderMiningContextTest::reports_the_lookup_offset() {
+    QFETCH(QJsonValue, offset);
+    QFETCH(int, expected);
+
+    QVERIFY(open_book("Second"));
+    QSignalSpy lookup(reader_, &ReaderViewModel::lookupRequested);
+    auto payload = selection(*reader_, "本文です。");
+    if (offset.isUndefined()) {
+        payload.remove("normalizedOffset");
+    } else {
+        payload.insert("normalizedOffset", offset);
+    }
+    send(*reader_, "textSelected", payload);
+    QCOMPARE(lookup.size(), 1);
+    QCOMPARE(reader_->lookup_offset(), expected);
 }
 
 // B9–B13: NativeReaderModel.title and coverURL, popupLayer, PopupView.mineEntry,

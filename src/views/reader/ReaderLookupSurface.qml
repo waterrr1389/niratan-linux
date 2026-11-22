@@ -1,12 +1,16 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
-// Follows Features/Popup/PopupView.swift (popupContent) and
-// PopupWebView.swift (Coordinator.userContentController, updateUIView).
+// Follows Features/Popup/PopupView.swift (popupContent, sasayakiControls and
+// the wasPaused/onPause/onSasayakiJumpDismiss wiring),
+// PopupWebView.swift (Coordinator.userContentController, updateUIView) and
+// NativeMac/NativeReaderView.swift (handleSelection's cue and auto-pause,
+// closePopup(resumePausedPlayback:)).
 
 pragma ComponentBehavior: Bound
 
 import QtQuick
 import QtQuick.Controls
+import QtQuick.Layouts
 import QtWebChannel
 import QtWebEngine
 import Niratan
@@ -16,8 +20,14 @@ Item {
 
     required property DictionaryPopupModel popupModel
     required property MiningViewModel miningModel
+    required property SasayakiViewModel player
     property rect selectionAnchor
-    signal dismissRequested()
+    // The cue captured at selection time and the pause this lookup recorded
+    // (NativeReaderPopup.sasayakiCue and NativeReaderModel.wasPaused).
+    property var popupCue: ({})
+    property bool wasPaused: false
+    readonly property bool hasPopupCue: visible && popupCue.id !== undefined
+    signal dismissRequested(bool resumePausedPlayback)
 
     // PopupModels.swift: PopupLayout positions the surface in reader coordinates.
     readonly property int gap: 4
@@ -37,8 +47,67 @@ Item {
     property bool swipeDismissed: false
 
     function showResults(html: string): void {
+        // NativeReaderView.handleSelection pauses only once results exist.
+        if (player.playing)
+            wasPaused = player.pauseForLookup()
         results.loadingPopupDocument = true
         results.loadHtml(html, "about:blank")
+    }
+
+    // NativeReaderView.handleSelection: the selection's offset picks the cue of
+    // the reader's current chapter before the popup is built.
+    function captureCue(): void {
+        popupCue = ReaderViewModel.lookupOffset >= 0
+            ? player.findPopupCue(ReaderViewModel.chapterIndex, ReaderViewModel.lookupOffset)
+            : ({})
+    }
+
+    // NativeReaderView.closePopup(resumePausedPlayback:): only a recorded pause
+    // resumes, and every close forgets it.
+    function dismiss(resumePausedPlayback: bool): void {
+        const recorded = wasPaused
+        wasPaused = false
+        if (resumePausedPlayback)
+            player.resumeAfterLookup(recorded)
+    }
+
+    // The header control clears the remembered pause before toggling.
+    function togglePlayback(): void {
+        wasPaused = false
+        player.togglePlayback()
+    }
+
+    // PopupView.sasayakiControls: all three stop word audio first.
+    function replayCue(): void {
+        if (!hasPopupCue)
+            return
+        surface.popupModel.stopWordAudio()
+        player.playCue(popupCue.id, true)
+    }
+
+    function toggleCuePlayback(): void {
+        if (!hasPopupCue)
+            return
+        surface.popupModel.stopWordAudio()
+        if (wasPaused)
+            wasPaused = false
+        else
+            player.togglePlayback()
+    }
+
+    // NativeReaderView.onSasayakiJumpDismiss and jumpToSasayakiCue: sync the
+    // bookmark at the cue's reader progress, play without a stop, and close
+    // without resuming.
+    function jumpToCue(): void {
+        if (!hasPopupCue)
+            return
+        const cue = popupCue
+        surface.popupModel.stopWordAudio()
+        if (cue.chapterIndex !== ReaderViewModel.chapterIndex)
+            player.prepareTransition()
+        ReaderViewModel.syncBookmarkToProgress(cue.chapterIndex, cue.progress)
+        player.playCue(cue.id, false)
+        surface.dismissRequested(false)
     }
 
     Connections {
@@ -94,10 +163,52 @@ Item {
                          ? anchorBottom + gap : selectionAnchor.y - gap - height))))
     opacity: ReaderViewModel.popupDisableTransparency ? 1.0 : 0.95
 
+    // PopupView.sasayakiControls: replay, play/pause and jump, above the
+    // action bar, only while the popup holds a cue and the player has audio.
+    Rectangle {
+        id: sasayakiBar
+
+        anchors.top: parent.top
+        width: parent.width
+        height: visible ? 36 : 0
+        visible: surface.hasPopupCue && surface.player.hasAudio
+        color: Theme.popupBackground
+
+        RowLayout {
+            anchors.centerIn: parent
+            spacing: 20
+
+            ToolButton {
+                text: "\u21bb"
+                Accessible.name: qsTr("Replay cue")
+                ToolTip.visible: hovered
+                ToolTip.text: Accessible.name
+                onClicked: surface.replayCue()
+            }
+
+            ToolButton {
+                text: surface.player.playing || surface.wasPaused ? "\u275A\u275A" : "\u25B6"
+                Accessible.name: surface.player.playing || surface.wasPaused
+                                 ? qsTr("Pause Sasayaki") : qsTr("Play Sasayaki")
+                ToolTip.visible: hovered
+                ToolTip.text: Accessible.name
+                onClicked: surface.toggleCuePlayback()
+            }
+
+            ToolButton {
+                text: "\u23ED"
+                Accessible.name: qsTr("Jump to cue")
+                ToolTip.visible: hovered
+                ToolTip.text: Accessible.name
+                onClicked: surface.jumpToCue()
+            }
+        }
+    }
+
     // PopupView.swift places the action bar outside the scaled results.
     Rectangle {
         id: actionBar
-        anchors.top: parent.top
+        anchors.top: sasayakiBar.bottom
         width: parent.width
         height: visible ? Math.min(parent.height, closeButton.implicitHeight) : 0
         visible: ReaderViewModel.popupActionBar
@@ -112,7 +223,7 @@ Item {
             Accessible.name: qsTr("Close lookup")
             ToolTip.visible: hovered
             ToolTip.text: Accessible.name
-            onClicked: surface.dismissRequested()
+            onClicked: surface.dismissRequested(true)
         }
     }
 
@@ -162,7 +273,7 @@ Item {
                 if (!surface.swipeDismissed &&
                     Math.abs(persistentTranslation.y) > ReaderViewModel.popupSwipeThreshold) {
                     surface.swipeDismissed = true
-                    surface.dismissRequested()
+                    surface.dismissRequested(true)
                 }
             }
         }

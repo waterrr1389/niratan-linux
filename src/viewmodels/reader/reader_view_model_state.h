@@ -54,6 +54,7 @@ struct ReaderViewModel::State {
     std::string content_language = "ja";
     int scan_length = 16;
     bool scan_non_japanese = true;
+    int lookup_offset = -1;
     std::optional<reader::BookSession> session;
     std::string epub_path;
     std::size_t search_revision = 0;

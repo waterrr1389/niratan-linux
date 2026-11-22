@@ -25,6 +25,8 @@
 // model accepts only HTTP(S) clip URLs and reports player errors to the view.
 // PopupWebView.swift (showAudioSourceMenu, audioSourceSelected) keeps the
 // selection in the current web document; the model relays names and indices.
+// stopWordAudio stops the current clip, which the popup's Sasayaki controls do
+// before playing an audiobook cue (WordAudioPlayer.shared.stop()).
 //
 // The theme properties are pushed from QML's Theme singleton, because colors
 // outside src/views/theme are not allowed.
@@ -77,6 +79,7 @@ class DictionaryPopupModel : public QObject {
     Q_INVOKABLE void lookup(const QString& text);
     Q_INVOKABLE void clear();
     Q_INVOKABLE void playWordAudio(const QString& audioUrl);
+    Q_INVOKABLE void stopWordAudio();
     Q_INVOKABLE void showAudioSourceMenu(const QVariantMap& data);
     Q_INVOKABLE void selectAudioSource(int entryIndex, int sourceIndex);
 

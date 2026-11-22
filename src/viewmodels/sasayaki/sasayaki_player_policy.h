@@ -5,7 +5,8 @@
 // (skipInterval, seekLandingTolerance, tick, seek, playCue(from:stop:),
 // flushPlayback, persistPlaybackPosition, updateCue, displayCue,
 // togglePlayback, nextCue, prevCue, skip(forward:), seekRelative,
-// navigateToCue, prepareTransition and handleRestoreCompleted) and
+// navigateToCue, prepareTransition, handleRestoreCompleted and
+// findCue(chapterIndex:offset:)) and
 // NativeMac/NativeReaderView.swift (pushPopups and
 // closePopup(resumePausedPlayback:)).
 //
@@ -32,8 +33,12 @@
 
 #pragma once
 
+#include <cstddef>
 #include <optional>
 #include <string>
+#include <vector>
+
+#include "models/sasayaki/sasayaki.h"
 
 namespace niratan::viewmodels {
 
@@ -126,5 +131,11 @@ CueFollowDecision cue_follow_decision(bool has_audio, bool has_match, bool chapt
                                       const std::string& cue_id, int cue_chapter,
                                       const std::string& current_id, int current_chapter,
                                       bool auto_scroll, bool has_played_once);
+
+// B1: SasayakiPlayer.findCue(chapterIndex:offset:): the first match of the
+// chapter whose stored range start..<start + length> contains the offset, or
+// no value for a gap, another chapter or an offset past the range.
+std::optional<std::size_t> cue_index_at_offset(const std::vector<sasayaki::SasayakiMatch>& matches,
+                                               int chapter, int offset);
 
 }  // namespace niratan::viewmodels

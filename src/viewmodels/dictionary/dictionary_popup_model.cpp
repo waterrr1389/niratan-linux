@@ -114,6 +114,10 @@ void DictionaryPopupModel::playWordAudio(const QString& audioUrl) {
     state_->audio_player.play();
 }
 
+void DictionaryPopupModel::stopWordAudio() {
+    state_->audio_player.stop();
+}
+
 void DictionaryPopupModel::showAudioSourceMenu(const QVariantMap& data) {
     bool valid_entry = false;
     const int entry = data.value(QStringLiteral("entryIndex")).toInt(&valid_entry);

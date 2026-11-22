@@ -63,6 +63,12 @@
 // current chapter's new ranges, and the model re-emits activeCueChanged even
 // if the current cue ID is unchanged. The model never touches the web view.
 //
+// The lookup popup asks findPopupCue() for the cue under the selection. It is
+// SasayakiPlayer.findCue over the match data, only while audio is loaded, and
+// carries the cue's reader progress so the popup can write the bookmark with
+// ReaderViewModel.syncBookmarkToProgress before playCue(stop: false). An empty
+// map means no cue or no audio.
+//
 // Cue following mirrors SasayakiPlayer.navigateToCue, prepareTransition and
 // handleRestoreCompleted. A cue in the open chapter seeks to its start + delay.
 // A cue in another chapter remembers it as the pending cue, with the reveal
@@ -81,6 +87,7 @@
 #include <QString>
 #include <QUrl>
 #include <QVariantList>
+#include <QVariantMap>
 #include <QtQml/qqmlregistration.h>
 
 #include <memory>
@@ -221,6 +228,12 @@ class SasayakiViewModel : public QObject {
     // The current chapter's cue ranges as reader.js applySasayakiCues expects:
     // a compact JSON array of {id, start, length}. Empty without match data.
     Q_INVOKABLE QString applyCuesJson() const;
+
+    // The popup cue at the reader chapter and selection character offset, or
+    // an empty map when audio, match data or a covering cue is missing. Keys:
+    // id, chapterIndex, start, length, startTime, endTime, text and progress,
+    // the cue's reader progress for the bookmark sync.
+    Q_INVOKABLE QVariantMap findPopupCue(int chapterIndex, int offset) const;
 
    signals:
     void hasAudioChanged();

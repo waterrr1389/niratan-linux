@@ -29,6 +29,7 @@ Item {
 
     // The page's model; the panel never creates the player.
     required property SasayakiViewModel player
+    required property var shortcuts
     readonly property bool opened: panel.visible
     signal closed
 
@@ -38,10 +39,6 @@ Item {
 
     function open() {
         panel.open();
-    }
-
-    function close() {
-        panel.close();
     }
 
     function selectDefaultTabIfNeeded() {
@@ -122,6 +119,7 @@ Item {
         ColumnLayout {
             anchors.fill: parent
             spacing: 0
+            Keys.onPressed: function (event) { event.accepted = root.shortcuts.handleKey(event) }
 
             // NativeReaderInspectorHeader: 28 px round close control, 18/16/10
             // padding.

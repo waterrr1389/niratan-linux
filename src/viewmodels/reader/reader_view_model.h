@@ -137,6 +137,7 @@ class ReaderViewModel : public QObject {
     Q_PROPERTY(double progress READ progress NOTIFY progressChanged)
     Q_PROPERTY(double chapterProgress READ chapter_progress NOTIFY progressChanged)
     Q_PROPERTY(double logicalChapterProgress READ logical_chapter_progress NOTIFY progressChanged)
+    Q_PROPERTY(int lookupOffset READ lookup_offset NOTIFY lookupOffsetChanged)
     Q_PROPERTY(int characterOffset READ character_offset NOTIFY progressChanged)
     Q_PROPERTY(int chapterCharactersRemaining READ chapter_characters_remaining NOTIFY progressChanged)
     Q_PROPERTY(int pageCount READ page_count NOTIFY paginationChanged)
@@ -213,6 +214,8 @@ class ReaderViewModel : public QObject {
     double progress() const;
     double chapter_progress() const;
     double logical_chapter_progress() const;
+    // The last selection's normalizedOffset, or -1 when it had none.
+    int lookup_offset() const;
     int character_offset() const;
     int chapter_characters_remaining() const;
     int page_count() const;
@@ -310,6 +313,10 @@ class ReaderViewModel : public QObject {
     // are flushed at the old position, then the destination chapter and
     // progress are stored with their bookmark before the document reloads.
     Q_INVOKABLE void goToChapterAt(int index, double progress);
+    // NativeReaderView.syncBookmarkToSasayakiCue's reader side: the same
+    // chapter stores the cue progress and resets the statistics baseline
+    // without reloading; another chapter loads at that progress.
+    Q_INVOKABLE void syncBookmarkToProgress(int index, double progress);
     // The chapter's readable characters; 0 for an unknown index or chapter.
     int chapterCharacterCount(int index) const;
 
@@ -356,6 +363,8 @@ class ReaderViewModel : public QObject {
     // Sasayaki player pauses first (NativeReaderView's prepareTransition calls).
     void chapterTransitionStarted();
     void lookupRequested(const QString& text, const QString& sentence, const QRectF& anchor);
+    // The selection's normalizedOffset changed, or became -1 without one.
+    void lookupOffsetChanged();
     void readerTappedOutside();
     void searchChanged();
     void highlightsChanged();

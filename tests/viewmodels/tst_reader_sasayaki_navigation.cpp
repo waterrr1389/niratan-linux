@@ -47,6 +47,7 @@ class ReaderSasayakiNavigationTest : public QObject {
     void chapterCharacterCount();
     void readerChapterLoadsStartATransition();
     void goToChapterAtResetsTheStatisticsBaseline();
+    void syncBookmarkToProgress();
 
    private:
     bool open_book();
@@ -272,6 +273,44 @@ void ReaderSasayakiNavigationTest::goToChapterAtResetsTheStatisticsBaseline() {
     wait_for_clock_tick();
     reader_->updateChapterProgress(1.0);
     QCOMPARE(reader_->statistics_today_characters(), 2);
+}
+
+// B5: NativeReaderView.syncBookmarkToSasayakiCue's reader side. In the open
+// chapter the cue destination is stored without a reload; another chapter
+// loads at the cue's progress with its bookmark written first.
+void ReaderSasayakiNavigationTest::syncBookmarkToProgress() {
+    const auto directory = BookStorage(niratan::storage::data_root()).book_directory("Cue");
+    QVERIFY(directory.has_value());
+    QFile::remove(QString::fromStdString((*directory / "bookmark.json").string()));
+    QVERIFY(open_book());
+    QVERIFY(!stored_bookmark().has_value());
+
+    reader_->syncBookmarkToProgress(0, 0.5);
+    QCOMPARE(reader_->chapter_index(), 0);
+    QCOMPARE(reader_->chapter_progress(), 0.5);
+    QVERIFY(!reader_->restoring());
+    auto bookmark = stored_bookmark();
+    QVERIFY(bookmark.has_value());
+    QCOMPARE(bookmark->chapter_index, 0);
+    QCOMPARE(bookmark->progress, 0.5);
+    QCOMPARE(bookmark->character_count, 2);
+
+    reader_->syncBookmarkToProgress(1, 0.4);
+    QCOMPARE(reader_->chapter_index(), 1);
+    QCOMPARE(reader_->chapter_progress(), 0.4);
+    QVERIFY(reader_->restoring());
+    bookmark = stored_bookmark();
+    QVERIFY(bookmark.has_value());
+    QCOMPARE(bookmark->chapter_index, 1);
+    QCOMPARE(bookmark->progress, 0.4);
+    QCOMPARE(bookmark->character_count, 6);
+
+    reader_->syncBookmarkToProgress(2, 0.5);
+    bookmark = stored_bookmark();
+    QVERIFY(bookmark.has_value());
+    QCOMPARE(bookmark->chapter_index, 1);
+    QCOMPARE(bookmark->progress, 0.4);
+    QCOMPARE(bookmark->character_count, 6);
 }
 
 QTEST_GUILESS_MAIN(ReaderSasayakiNavigationTest)

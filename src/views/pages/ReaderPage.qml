@@ -22,7 +22,8 @@ Item {
     readonly property bool statisticsContextActive: visible && readerWindowActive
         && (statisticsPanel.visible || (!toc.visible && !sasayakiPanel.opened))
 
-    function dismissLookup() {
+    function dismissLookup(resumePausedPlayback) {
+        lookupSurface.dismiss(resumePausedPlayback !== false)
         lookupModel.clear()
         web.runJavaScript("window.hoshiSelection?.clearSelection()")
     }
@@ -116,6 +117,8 @@ Item {
     }
 
     Keys.onPressed: function (event) {
+        if (sasayakiShortcuts.handleKey(event))
+            return
         var forward = false
         var handled = true
         if (event.key === Qt.Key_Right || event.key === Qt.Key_Down
@@ -163,6 +166,7 @@ Item {
         }
         function onLookupRequested(text, sentence, anchor) {
             lookupSurface.selectionAnchor = anchor
+            lookupSurface.captureCue()
             mining.setContext(sentence, ReaderViewModel.documentTitle, ReaderViewModel.coverUrl, ReaderViewModel.coverPath)
             lookupModel.lookup(text)
         }
@@ -203,6 +207,12 @@ Item {
 
     SasayakiSettingsViewModel {
         id: sasayakiSettings
+    }
+
+    SasayakiShortcuts {
+        id: sasayakiShortcuts
+        surface: lookupSurface
+        active: sasayakiSettings.enable && !toc.opened && !statisticsPanel.opened && !gallery.opened
     }
 
     QtObject {
@@ -285,6 +295,8 @@ Item {
             ReaderChrome {
                 player: sasayaki
                 sasayakiEnabled: sasayakiSettings.enable
+                pausedByLookup: lookupSurface.wasPaused
+                onSasayakiToggleRequested: lookupSurface.togglePlayback()
             }
             ToolButton {
                 text: qsTr("Sasayaki")
@@ -346,9 +358,10 @@ Item {
                 id: lookupSurface
                 popupModel: lookupModel
                 miningModel: mining
+                player: sasayaki
                 z: 1
                 visible: ReaderViewModel.hasBook && lookupModel.hasResults
-                onDismissRequested: page.dismissLookup()
+                onDismissRequested: resume => page.dismissLookup(resume)
             }
 
             ColumnLayout {
@@ -591,8 +604,7 @@ Item {
 
     SasayakiPanel {
         id: sasayakiPanel
-        anchors.fill: parent
-        player: sasayaki
+        anchors.fill: parent; player: sasayaki; shortcuts: sasayakiShortcuts
     }
 
     ReaderGallery {

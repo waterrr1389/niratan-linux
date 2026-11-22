@@ -61,19 +61,6 @@ const SasayakiCue* find_cue(const std::vector<SasayakiCue>& cues, const QString&
     return nullptr;
 }
 
-const SasayakiMatch* find_match(const std::optional<SasayakiMatchData>& match,
-                                std::string_view id) {
-    if (!match.has_value()) {
-        return nullptr;
-    }
-    for (const SasayakiMatch& candidate : match->matches) {
-        if (candidate.id == id) {
-            return &candidate;
-        }
-    }
-    return nullptr;
-}
-
 niratan::books::BookStorage book_storage() {
     return niratan::books::BookStorage(niratan::storage::data_root());
 }
@@ -279,7 +266,8 @@ void SasayakiViewModel::update_cue(bool refresh_highlight) {
     if (state_->has_audio && !state_->timeline.empty()) {
         cue = state_->timeline.cue_at(state_->position - state_->delay);
     }
-    const SasayakiMatch* match = cue != nullptr ? find_match(state_->match, cue->id) : nullptr;
+    const SasayakiMatch* match =
+        cue != nullptr ? find_match_by_id(state_->match, cue->id) : nullptr;
     ReaderViewModel* reader = ReaderViewModel::instance();
     const CueFollowDecision decision =
         cue_follow_decision(state_->has_audio, state_->has_match, state_->chapter_transition,
@@ -337,7 +325,7 @@ void SasayakiViewModel::restoreCompleted(int currentIndex) {
     std::optional<std::string> timeline_id;
     int timeline_chapter = 0;
     if (const SasayakiCue* active = state_->timeline.cue_at(state_->position - state_->delay)) {
-        if (const SasayakiMatch* match = find_match(state_->match, active->id)) {
+        if (const SasayakiMatch* match = find_match_by_id(state_->match, active->id)) {
             timeline_id = active->id;
             timeline_chapter = match->chapter_index;
         }
@@ -467,7 +455,7 @@ void SasayakiViewModel::navigate_to_cue(const SasayakiCue& cue, bool start_playb
     }
     state_->stop_playback_time.reset();
     const double target = cue.start_time + state_->delay;
-    const SasayakiMatch* match = find_match(state_->match, cue.id);
+    const SasayakiMatch* match = find_match_by_id(state_->match, cue.id);
     ReaderViewModel* reader = ReaderViewModel::instance();
     const int cue_chapter = match != nullptr ? match->chapter_index : reader->chapter_index();
     if (!cue_needs_chapter_load(cue_chapter, reader->chapter_index())) {

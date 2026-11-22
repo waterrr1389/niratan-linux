@@ -92,6 +92,34 @@ void ReaderViewModel::goToChapterAt(int index, double progress) {
     load_chapter(index, state_->chapter_progress);
 }
 
+void ReaderViewModel::syncBookmarkToProgress(int index, double progress) {
+    if (!state_->session.has_value()) {
+        return;
+    }
+    if (index < 0 || index >= state_->session->spine_count()) {
+        return;
+    }
+    const double clamped = clamp_progress(progress);
+    // establishProgrammaticDestination: store the destination and reset the
+    // statistics baseline there, so the jump is not credited as read.
+    const bool same_chapter = index == state_->chapter_index;
+    if (!same_chapter) {
+        save_statistics();
+    }
+    state_->chapter_index = index;
+    state_->chapter_progress = clamped;
+    persist_bookmark();
+    if (state_->tracker) {
+        state_->tracker->reset_position(character_offset(), now_milliseconds());
+    }
+    if (same_chapter) {
+        emit progressChanged();
+        refresh_statistics();
+        return;
+    }
+    load_chapter(index, clamped);
+}
+
 int ReaderViewModel::chapterCharacterCount(int index) const {
     if (!state_->session.has_value()) {
         return 0;
