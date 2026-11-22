@@ -7,8 +7,10 @@
 // three statistics keys are global. Older optional reader fields use Swift's
 // legacy furigana and count flags or the corresponding defaults. Enum values
 // are the untranslated Swift raw strings; only the UI labels are translated.
-// The text reveal speed defaults to 35 and edits are limited to AppearanceView's
-// 25–100 range; the editor supplies its increment of 5.
+// The text reveal speed defaults to 35. Bounded reader setters clamp to the
+// range and round to the step of their AppearanceView control, so a stored
+// value is always one the control can show; a value read from a file is not
+// re-bounded.
 // Changes are saved on edit and do not reload any running consumer. Consumers
 // should load the reader preferences on book open and the reset minute on
 // dashboard refresh rather than subscribing to settings-change signals.

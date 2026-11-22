@@ -696,6 +696,14 @@ target_link_libraries(tst_profiles_view_model PRIVATE niratan_app Qt6::Test)
 target_compile_options(tst_profiles_view_model PRIVATE -Wall -Wextra -Wpedantic -Werror)
 add_test(NAME profiles_view_model COMMAND tst_profiles_view_model)
 
+qt_add_executable(tst_settings_view_model
+    viewmodels/tst_settings_view_model.cpp
+)
+target_include_directories(tst_settings_view_model PRIVATE ${CMAKE_SOURCE_DIR}/src)
+target_link_libraries(tst_settings_view_model PRIVATE niratan_app Qt6::Test)
+target_compile_options(tst_settings_view_model PRIVATE -Wall -Wextra -Wpedantic -Werror)
+add_test(NAME settings_view_model COMMAND tst_settings_view_model)
+
 qt_add_executable(tst_dictionary_settings_view_model
     viewmodels/tst_dictionary_settings_view_model.cpp
 )

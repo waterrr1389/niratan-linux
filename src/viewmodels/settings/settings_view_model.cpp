@@ -255,7 +255,7 @@ void SettingsViewModel::setTextAnimation(bool value) {
 int SettingsViewModel::textSpeed() const { return state_->reader.text_speed.value_or(35); }
 
 void SettingsViewModel::setTextSpeed(int value) {
-    update_reader(state_->reader.text_speed, std::clamp(value, 25, 100));
+    update_reader(state_->reader.text_speed, std::lround(std::clamp(value, 25, 100) / 5.0) * 5);
 }
 
 bool SettingsViewModel::twoColumnHorizontalPages() const {
@@ -269,13 +269,13 @@ void SettingsViewModel::setTwoColumnHorizontalPages(bool value) {
 int SettingsViewModel::horizontalPadding() const { return state_->reader.horizontal_padding; }
 
 void SettingsViewModel::setHorizontalPadding(int value) {
-    update_reader(state_->reader.horizontal_padding, std::clamp(value, 0, 30));
+    update_reader(state_->reader.horizontal_padding, std::clamp(value, 0, 80));
 }
 
 int SettingsViewModel::verticalPadding() const { return state_->reader.vertical_padding; }
 
 void SettingsViewModel::setVerticalPadding(int value) {
-    update_reader(state_->reader.vertical_padding, std::clamp(value, 0, 30));
+    update_reader(state_->reader.vertical_padding, std::clamp(value, 0, 50));
 }
 
 bool SettingsViewModel::avoidPageBreak() const { return state_->reader.avoid_page_break; }
@@ -305,19 +305,19 @@ void SettingsViewModel::setLayoutAdvanced(bool value) {
 double SettingsViewModel::lineHeight() const { return state_->reader.line_height; }
 
 void SettingsViewModel::setLineHeight(double value) {
-    update_reader(state_->reader.line_height, snap(value, 1.0, 3.0, 100));
+    update_reader(state_->reader.line_height, snap(value, 1.0, 2.5, 20));
 }
 
 double SettingsViewModel::characterSpacing() const { return state_->reader.character_spacing; }
 
 void SettingsViewModel::setCharacterSpacing(double value) {
-    update_reader(state_->reader.character_spacing, snap(value, -0.1, 0.5, 100));
+    update_reader(state_->reader.character_spacing, snap(value, -10.0, 10.0, 1));
 }
 
 double SettingsViewModel::paragraphSpacing() const { return state_->reader.paragraph_spacing; }
 
 void SettingsViewModel::setParagraphSpacing(double value) {
-    update_reader(state_->reader.paragraph_spacing, snap(value, 0.0, 3.0, 100));
+    update_reader(state_->reader.paragraph_spacing, snap(value, 0.0, 3.0, 10));
 }
 
 bool SettingsViewModel::showTitle() const { return state_->reader.show_title; }
