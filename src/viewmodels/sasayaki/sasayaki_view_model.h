@@ -62,6 +62,17 @@
 // highlightSasayakiCue. After matching, the panel asks the page to install the
 // current chapter's new ranges, and the model re-emits activeCueChanged even
 // if the current cue ID is unchanged. The model never touches the web view.
+//
+// Cue following mirrors SasayakiPlayer.navigateToCue, prepareTransition and
+// handleRestoreCompleted. A cue in the open chapter seeks to its start + delay.
+// A cue in another chapter remembers it as the pending cue, with the reveal
+// flag, and asks ReaderViewModel to load that chapter at the cue's reader
+// progress; the model pauses before that load and resumes after the restore
+// when playback was running or the cue asked to start it. The page calls
+// prepareTransition() for every reader-initiated chapter change (the
+// chapterTransitionStarted signal) and restoreCompleted() after it installs
+// the restored chapter's cue ranges. Without match data the displayed cue does
+// not change, as in Swift, while the SRT timeline still seeks and navigates.
 
 #pragma once
 
@@ -194,6 +205,16 @@ class SasayakiViewModel : public QObject {
     // Persists a pending seek target as-is, or the playing position. A paused
     // player writes nothing.
     Q_INVOKABLE void flushPlayback();
+    // SasayakiPlayer.prepareTransition: remember whether playback was running,
+    // mark the chapter transition, clear the stop boundary and the displayed
+    // cue, and pause a playing player. Called by the page before a
+    // reader-initiated chapter change.
+    Q_INVOKABLE void prepareTransition();
+    // SasayakiPlayer.handleRestoreCompleted(currentIndex:): choose the cue of
+    // the restored chapter, display it, and resume playback when the
+    // transition was playing. A book without match data leaves every flag
+    // untouched.
+    Q_INVOKABLE void restoreCompleted(int currentIndex);
     // Re-reads auto-scroll and auto-pause from the global settings document.
     Q_INVOKABLE void reloadSasayakiSettings();
 
@@ -250,6 +271,10 @@ class SasayakiViewModel : public QObject {
     void seek(double seconds, bool start_playback, bool update_cue,
               std::optional<double> stop_playback_time);
     void navigate_to_cue(const sasayaki::SasayakiCue& cue);
+    void navigate_to_cue(const sasayaki::SasayakiCue& cue, bool start_playback);
+    // SasayakiPlayer.displayCue and clearDisplayedCue.
+    void display_cue(const sasayaki::SasayakiCue& cue, bool reveal);
+    void clear_displayed_cue();
     void set_error(const QString& message);
     void set_match_error(const QString& message);
     void set_match_progress(double progress);

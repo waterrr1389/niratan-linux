@@ -5,6 +5,12 @@
 // the class comment gives them; audiobook_metadata, audiobook_chapters and
 // loading_audiobook_chapters follow SasayakiPlayer.audiobookMetadata,
 // audiobookChapters and isLoadingAudiobookChapters.
+//
+// pending_cue is the cue of a chapter the model asked the reader to load,
+// reveal_pending_cue_on_restore its reveal flag, chapter_transition whether a
+// chapter change is in flight, and should_resume whether playback returns
+// after it, following SasayakiPlayer's properties of the same names. The
+// pending cue's start is the reader progress the chapter loads at.
 
 #pragma once
 
@@ -54,6 +60,12 @@ struct SasayakiViewModel::State {
     QString current_cue_id;
     QString current_cue_text;
     QVariantList cue_list;
+
+    // SasayakiPlayer.pendingCue and its restore flags.
+    std::optional<sasayaki::SasayakiMatch> pending_cue;
+    bool reveal_pending_cue_on_restore = false;
+    bool chapter_transition = false;
+    bool should_resume = false;
 
     double position = 0.0;
     double duration = 0.0;

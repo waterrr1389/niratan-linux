@@ -23,6 +23,17 @@
 // NativeReaderView.navigate and textAnimationScript reveal text only after a
 // successful forward turn in paginated paragraph mode with animation enabled.
 //
+// A chapter load the reader starts itself (a page turn into the next chapter,
+// a contents entry, a character or progress jump) emits chapterTransitionStarted
+// before the document reloads, so the Sasayaki player can pause for the
+// transition. A Sasayaki cue load uses goToChapterAt, which does not emit it:
+// the player already prepared the transition. goToChapterAt flushes statistics
+// at the old position, writes the destination bookmark before the restore and
+// resets the statistics baseline at the destination, following
+// NativeReaderView.loadChapterForSasayaki and establishProgrammaticDestination.
+// chapterCharacterCount is the chapter's readable characters, which turns a
+// cue's character offset into reader progress.
+//
 // Appearance settings from the active profile's reader_settings.json apply
 // live. The chapter reloads at its recorded progress because layout can
 // change which scripts are injected. This restore neither saves the bookmark
@@ -295,6 +306,12 @@ class ReaderViewModel : public QObject {
     Q_INVOKABLE void goToChapter(int index);
     Q_INVOKABLE void goToContentsEntry(int index, const QString& fragment);
     Q_INVOKABLE void goToProgress(double progress);
+    // The reader half of NativeReaderView.loadChapterForSasayaki: statistics
+    // are flushed at the old position, then the destination chapter and
+    // progress are stored with their bookmark before the document reloads.
+    Q_INVOKABLE void goToChapterAt(int index, double progress);
+    // The chapter's readable characters; 0 for an unknown index or chapter.
+    int chapterCharacterCount(int index) const;
 
     // A JavaScript expression for the page to run, or empty when no book is
     // open.
@@ -335,6 +352,9 @@ class ReaderViewModel : public QObject {
     void paginationChanged();
     void pageChanged(int index);
     void documentRestored(bool revealCue);
+    // The reader is about to reload a chapter it started itself, so the
+    // Sasayaki player pauses first (NativeReaderView's prepareTransition calls).
+    void chapterTransitionStarted();
     void lookupRequested(const QString& text, const QString& sentence, const QRectF& anchor);
     void readerTappedOutside();
     void searchChanged();

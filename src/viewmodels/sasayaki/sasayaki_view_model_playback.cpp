@@ -1,17 +1,25 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
-// Transport, cue display and position persistence of SasayakiViewModel,
-// following Features/Sasayaki/SasayakiPlayer.swift (playCue(from:stop:), tick,
-// seek, startPlayback, pausePlayback, persistPlaybackPosition, flushPlayback,
-// togglePlayback, skip(forward:), seekRelative, nextCue, prevCue, updateCue,
-// displayCue, clearDisplayedCue and the rate and delay didSet observers) and
-// the pure decisions in sasayaki_player_policy.h.
+// Transport, cue display, cue following and position persistence of
+// SasayakiViewModel, following Features/Sasayaki/SasayakiPlayer.swift
+// (playCue(from:stop:), tick, seek, startPlayback, pausePlayback,
+// persistPlaybackPosition, flushPlayback, togglePlayback, skip(forward:),
+// seekRelative, nextCue, prevCue, navigateToCue, prepareTransition,
+// handleRestoreCompleted, updateCue, displayCue, clearDisplayedCue and the rate
+// and delay didSet observers) and the pure decisions in
+// sasayaki_player_policy.h.
 //
 // A position tick applies the landing options of the seek in flight, then the
 // stop time, the whole-second write and the cue lookup, in that order. A seek
 // persists its target before moving the player; the timer only drops a target
 // that never landed. The active cue is the displayed cue, so cue navigation
 // uses its start rather than a new lookup, as Swift does.
+//
+// A cue in another chapter is remembered as the pending cue, the reader loads
+// that chapter at the cue's progress and restoreCompleted() displays it, with
+// the reveal and resume rules of handleRestoreCompleted. The displayed cue is
+// only replaced when the cue belongs to the open chapter or the following
+// rules allow a chapter load.
 
 #include "sasayaki_view_model.h"
 
@@ -28,7 +36,6 @@
 #include "models/sasayaki/sasayaki.h"
 #include "sasayaki_player_policy.h"
 #include "sasayaki_view_model_state.h"
-#include "services/audiobook/audiobook_metadata.h"
 #include "services/books/book_storage.h"
 #include "services/sasayaki/matcher.h"
 #include "services/storage/app_paths.h"
@@ -202,17 +209,6 @@ void SasayakiViewModel::playCue(const QString& cueId, bool stop) {
          play_cue_stop_time(cue->end_time, state_->delay, stop));
 }
 
-void SasayakiViewModel::seekToAudiobookChapter(int chapterId) {
-    for (const niratan::sasayaki::SasayakiAudiobookChapter& chapter : state_->audiobook_chapters) {
-        if (chapter.id != chapterId) {
-            continue;
-        }
-        state_->stop_playback_time.reset();
-        seek(chapter.start_time, false, true, std::nullopt);
-        return;
-    }
-}
-
 bool SasayakiViewModel::pauseForLookup() {
     if (!pause_for_lookup(state_->playing, state_->auto_pause)) {
         return false;
@@ -279,52 +275,116 @@ void SasayakiViewModel::setDelay(double delay) {
 }
 
 void SasayakiViewModel::update_cue(bool refresh_highlight) {
-    QString id;
-    QString text;
-    const SasayakiMatch* match = nullptr;
+    const SasayakiCue* cue = nullptr;
     if (state_->has_audio && !state_->timeline.empty()) {
-        if (const SasayakiCue* cue = state_->timeline.cue_at(state_->position - state_->delay)) {
-            id = QString::fromStdString(cue->id);
-            text = QString::fromStdString(cue->text);
-            match = find_match(state_->match, cue->id);
-        }
+        cue = state_->timeline.cue_at(state_->position - state_->delay);
+    }
+    const SasayakiMatch* match = cue != nullptr ? find_match(state_->match, cue->id) : nullptr;
+    ReaderViewModel* reader = ReaderViewModel::instance();
+    const CueFollowDecision decision =
+        cue_follow_decision(state_->has_audio, state_->has_match, state_->chapter_transition,
+                            cue != nullptr ? cue->id : std::string{},
+                            match != nullptr ? match->chapter_index : reader->chapter_index(),
+                            state_->current_cue_id.toStdString(), reader->chapter_index(),
+                            state_->auto_scroll, state_->has_played_once);
+
+    switch (decision.action) {
+        case CueFollowAction::none:
+            break;
+        case CueFollowAction::clear:
+            clear_displayed_cue();
+            break;
+        case CueFollowAction::display:
+            display_cue(*cue, decision.reveal);
+            break;
+        case CueFollowAction::follow:
+            // The restore displays the pending cue with the reveal and resume
+            // rules of handleRestoreCompleted.
+            state_->pending_cue = *match;
+            prepareTransition();
+            reader->goToChapterAt(match->chapter_index,
+                                  niratan::sasayaki::reader_progress(
+                                      *match, reader->chapterCharacterCount(match->chapter_index)));
+            break;
     }
 
-    const bool reveal = follows_playback(state_->auto_scroll, state_->has_played_once);
-    if (match != nullptr && match->chapter_index != ReaderViewModel::instance()->chapter_index()) {
-        if (!reveal) {
-            if (!state_->current_cue_id.isEmpty() || !state_->current_cue_text.isEmpty()) {
-                state_->current_cue_id.clear();
-                state_->current_cue_text.clear();
-                emit currentCueChanged();
-            }
-            emit activeCueChanged(QString(), false);
-            return;
-        }
-        // The cross-chapter follow is decided here; module 8 loads the chapter
-        // and restores the pending cue there.
-        if (id != state_->current_cue_id || text != state_->current_cue_text) {
-            state_->current_cue_id = id;
-            state_->current_cue_text = text;
-            emit currentCueChanged();
-        }
-        emit activeCueChanged(id, reveal);
-        return;
-    }
-
-    const bool changed = id != state_->current_cue_id || text != state_->current_cue_text;
-    if (changed) {
-        state_->current_cue_id = id;
-        state_->current_cue_text = text;
-        emit currentCueChanged();
-    }
     if (refresh_highlight) {
         // Install new ranges even if the playback cue still has the same ID.
         emit matchApplied();
+        emit activeCueChanged(state_->current_cue_id,
+                              follows_playback(state_->auto_scroll, state_->has_played_once));
     }
-    if (changed || refresh_highlight) {
-        emit activeCueChanged(id, reveal);
+}
+
+void SasayakiViewModel::prepareTransition() {
+    state_->should_resume = transition_resumes(state_->playing);
+    state_->chapter_transition = true;
+    state_->stop_playback_time.reset();
+    clear_displayed_cue();
+    if (state_->playing) {
+        pause();
     }
+}
+
+void SasayakiViewModel::restoreCompleted(int currentIndex) {
+    std::optional<std::string> pending_id;
+    int pending_chapter = 0;
+    if (state_->pending_cue.has_value()) {
+        pending_id = state_->pending_cue->id;
+        pending_chapter = state_->pending_cue->chapter_index;
+    }
+
+    std::optional<std::string> timeline_id;
+    int timeline_chapter = 0;
+    if (const SasayakiCue* active = state_->timeline.cue_at(state_->position - state_->delay)) {
+        if (const SasayakiMatch* match = find_match(state_->match, active->id)) {
+            timeline_id = active->id;
+            timeline_chapter = match->chapter_index;
+        }
+    }
+
+    const RestoreCueDecision decision = restore_cue_decision(
+        state_->has_match, state_->chapter_transition, pending_id, pending_chapter,
+        state_->reveal_pending_cue_on_restore, state_->should_resume, state_->auto_scroll,
+        currentIndex, timeline_id, timeline_chapter);
+    if (!decision.handled) {
+        return;
+    }
+
+    state_->chapter_transition = false;
+    state_->should_resume = false;
+    state_->reveal_pending_cue_on_restore = false;
+    state_->pending_cue.reset();
+
+    const SasayakiCue* cue = decision.cue_id.has_value()
+        ? find_cue(state_->timeline.cues(), QString::fromStdString(*decision.cue_id))
+        : nullptr;
+    if (cue != nullptr) {
+        display_cue(*cue, decision.reveal);
+    } else {
+        clear_displayed_cue();
+    }
+
+    if (decision.resume) {
+        play();
+    }
+}
+
+void SasayakiViewModel::display_cue(const SasayakiCue& cue, bool reveal) {
+    state_->current_cue_id = QString::fromStdString(cue.id);
+    state_->current_cue_text = QString::fromStdString(cue.text);
+    emit currentCueChanged();
+    emit activeCueChanged(state_->current_cue_id, reveal);
+}
+
+void SasayakiViewModel::clear_displayed_cue() {
+    if (state_->current_cue_id.isEmpty() && state_->current_cue_text.isEmpty()) {
+        return;
+    }
+    state_->current_cue_id.clear();
+    state_->current_cue_text.clear();
+    emit currentCueChanged();
+    emit activeCueChanged(QString(), false);
 }
 
 void SasayakiViewModel::position_tick(double seconds) {
@@ -397,37 +457,37 @@ void SasayakiViewModel::save_playback(double position) {
     book_storage().save_sasayaki_playback(state_->folder, data);
 }
 
-void SasayakiViewModel::update_audiobook_chapter() {
-    const int chapter =
-        audiobook::current_audiobook_chapter_id(state_->audiobook_chapters, state_->position)
-            .value_or(-1);
-    if (chapter != state_->last_audiobook_chapter_id) {
-        state_->last_audiobook_chapter_id = chapter;
-        emit audiobookChaptersChanged();
-    }
+void SasayakiViewModel::navigate_to_cue(const SasayakiCue& cue) {
+    navigate_to_cue(cue, false);
 }
 
-void SasayakiViewModel::navigate_to_cue(const SasayakiCue& cue) {
+void SasayakiViewModel::navigate_to_cue(const SasayakiCue& cue, bool start_playback) {
     if (!state_->has_audio) {
         return;
     }
     state_->stop_playback_time.reset();
-    seek(niratan::sasayaki::seek_target(cue, state_->delay), false, true, std::nullopt);
-    if (!state_->match.has_value()) {
+    const double target = cue.start_time + state_->delay;
+    const SasayakiMatch* match = find_match(state_->match, cue.id);
+    ReaderViewModel* reader = ReaderViewModel::instance();
+    const int cue_chapter = match != nullptr ? match->chapter_index : reader->chapter_index();
+    if (!cue_needs_chapter_load(cue_chapter, reader->chapter_index())) {
+        seek(target, start_playback, true, std::nullopt);
         return;
     }
-    for (const SasayakiMatch& match : state_->match->matches) {
-        if (match.id != cue.id) {
-            continue;
-        }
-        ReaderViewModel* reader = ReaderViewModel::instance();
-        if (match.chapter_index != reader->chapter_index()) {
-            reader->goToChapter(match.chapter_index);
-            // The chapter load re-applies cue ranges, which clears the
-            // highlight that the seek just requested.
-            emit activeCueChanged(state_->current_cue_id, true);
-        }
-        return;
+
+    const bool should_start_after_restore = starts_after_restore(state_->playing, start_playback);
+    state_->pending_cue = *match;
+    state_->reveal_pending_cue_on_restore = true;
+    prepareTransition();
+    reader->goToChapterAt(match->chapter_index,
+                          niratan::sasayaki::reader_progress(
+                              *match, reader->chapterCharacterCount(match->chapter_index)));
+    state_->current_cue_id = QString::fromStdString(cue.id);
+    state_->current_cue_text = QString::fromStdString(cue.text);
+    emit currentCueChanged();
+    seek(target, false, false, std::nullopt);
+    if (should_start_after_restore) {
+        state_->should_resume = true;
     }
 }
 

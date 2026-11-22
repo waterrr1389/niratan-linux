@@ -160,6 +160,7 @@ qt_add_library(niratan_app STATIC
     src/viewmodels/reader/reader_view_model_gallery.cpp
     src/viewmodels/reader/reader_view_model.h
     src/viewmodels/reader/reader_view_model_mining.cpp
+    src/viewmodels/reader/reader_view_model_navigation.cpp
     src/viewmodels/reader/reader_view_model_pagination.cpp
     src/viewmodels/reader/reader_view_model_state.h
     src/viewmodels/reader/reader_view_model_statistics.cpp

@@ -8,6 +8,7 @@
 #include <QLatin1StringView>
 #include <QString>
 
+#include <algorithm>
 #include <cmath>
 #include <optional>
 #include <string>
@@ -211,6 +212,15 @@ QJsonDocument playback_data_to_json(const SasayakiPlaybackData& data) {
                       QString::fromLatin1(data.audio_bookmark->toBase64()));
     }
     return QJsonDocument(object);
+}
+
+double reader_progress(const SasayakiMatch& match, int chapter_character_count) {
+    if (chapter_character_count <= 0) {
+        return 0.0;
+    }
+    const double progress =
+        static_cast<double>(match.start) / static_cast<double>(chapter_character_count);
+    return std::min(std::max(progress, 0.0), 1.0);
 }
 
 }  // namespace niratan::sasayaki

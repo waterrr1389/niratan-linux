@@ -60,8 +60,9 @@ Item {
 
     // Re-applies the current chapter's cue ranges. The model's JSON is an
     // array literal, so it is inserted as an expression like the Swift reader
-    // does; anything else is dropped rather than evaluated.
-    function applySasayakiCues(reveal) {
+    // does; anything else is dropped rather than evaluated. The display of the
+    // restored cue follows through restoreCompleted and activeCueChanged.
+    function applySasayakiCues() {
         if (!ReaderViewModel.hasBook || !sasayaki.hasMatch)
             return
         var cues = sasayaki.applyCuesJson()
@@ -72,11 +73,7 @@ Item {
         } catch (error) {
             return
         }
-        const url = ReaderViewModel.chapterUrl
-        web.runJavaScript("window.hoshiReader.applySasayakiCues(" + cues + ");", function () {
-            if (url === ReaderViewModel.chapterUrl)
-                page.highlightSasayakiCue(sasayaki.currentCueId, reveal)
-        })
+        web.runJavaScript("window.hoshiReader.applySasayakiCues(" + cues + ");")
     }
 
     function highlightSasayakiCue(cueId, reveal) {
@@ -154,7 +151,11 @@ Item {
             page.turnPage(direction === "forward")
         }
         function onDocumentRestored(revealCue) {
-            page.applySasayakiCues(revealCue)
+            page.applySasayakiCues()
+            sasayaki.restoreCompleted(ReaderViewModel.chapterIndex)
+        }
+        function onChapterTransitionStarted() {
+            sasayaki.prepareTransition()
         }
         function onLookupRequested(text, sentence, anchor) {
             lookupSurface.selectionAnchor = anchor

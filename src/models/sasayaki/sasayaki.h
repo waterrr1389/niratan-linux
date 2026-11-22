@@ -26,6 +26,10 @@
 //
 // A document whose root is not an object is rejected. Encoding omits an absent
 // optional key rather than writing null, matching synthesized Codable.
+//
+// reader_progress is SasayakiMatch.readerProgress: the cue's character offset
+// over the chapter's character count, clamped to 0...1, and 0 for a chapter
+// with no characters.
 
 #pragma once
 
@@ -98,6 +102,11 @@ struct SasayakiAudiobookMetadata {
 
     bool operator==(const SasayakiAudiobookMetadata&) const = default;
 };
+
+// SasayakiMatch.readerProgress(chapterCharacterCount:): start over the
+// chapter's character count, clamped to 0...1; an unknown count (zero or
+// negative) reads as 0.
+double reader_progress(const SasayakiMatch& match, int chapter_character_count);
 
 // sasayaki_match.json
 std::optional<SasayakiMatchData> match_data_from_json(const QJsonDocument& document);

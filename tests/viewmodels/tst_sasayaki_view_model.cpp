@@ -2,9 +2,11 @@
 //
 // The pure Sasayaki player policy, following Features/Sasayaki/SasayakiPlayer.swift
 // (playCue(from:stop:), tick, seek, flushPlayback, skip(forward:),
-// seekRelative, updateCue, the rate and delay didSet observers and the
+// seekRelative, updateCue, navigateToCue, prepareTransition,
+// handleRestoreCompleted, the rate and delay didSet observers and the
 // constants skipInterval and seekLandingTolerance) and
-// NativeMac/NativeReaderView.swift (pushPopups, closePopup(resumePausedPlayback:)).
+// NativeMac/NativeReaderView.swift (pushPopups, closePopup(resumePausedPlayback:),
+// loadChapterForSasayaki and handleRestoreCompleted).
 
 #include "viewmodels/sasayaki/sasayaki_player_policy.h"
 
@@ -17,15 +19,23 @@ using niratan::viewmodels::clamp_delay;
 using niratan::viewmodels::clamp_rate;
 using niratan::viewmodels::clamped_seek_target;
 using niratan::viewmodels::clamped_skip_target;
+using niratan::viewmodels::cue_follow_decision;
+using niratan::viewmodels::cue_needs_chapter_load;
 using niratan::viewmodels::cue_reference_time;
+using niratan::viewmodels::CueFollowAction;
+using niratan::viewmodels::CueFollowDecision;
 using niratan::viewmodels::flush_position;
 using niratan::viewmodels::follows_playback;
 using niratan::viewmodels::pause_for_lookup;
 using niratan::viewmodels::persisted_second;
 using niratan::viewmodels::play_cue_stop_time;
+using niratan::viewmodels::restore_cue_decision;
+using niratan::viewmodels::RestoreCueDecision;
 using niratan::viewmodels::resume_after_lookup;
+using niratan::viewmodels::starts_after_restore;
 using niratan::viewmodels::stop_reached;
 using niratan::viewmodels::tick_lands;
+using niratan::viewmodels::transition_resumes;
 
 namespace {
 
@@ -56,6 +66,11 @@ class SasayakiViewModelTest : public QObject {
     void followsPlayback();
     void lookupPauseAndResume();
     void nextAndPreviousReference();
+    void cueChapterLoad();
+    void startsAfterRestore();
+    void transitionResumes();
+    void restoreCueDecision();
+    void cueFollowDecision();
 };
 
 // B1: playCue(stop:) sets cue.endTime + delay only when stop is true.
@@ -195,6 +210,96 @@ void SasayakiViewModelTest::nextAndPreviousReference() {
     QCOMPARE(cue_reference_time(false, 0.0, -2.0, false), -2.0);
     QCOMPARE(cue_reference_time(false, 0.0, 7.5, true), 7.5);
     QCOMPARE(cue_reference_time(false, 0.0, -2.0, true), 0.0);
+}
+
+// B2: navigateToCue loads another chapter only when the cue is outside the
+// open one.
+void SasayakiViewModelTest::cueChapterLoad() {
+    QVERIFY(!cue_needs_chapter_load(0, 0));
+    QVERIFY(cue_needs_chapter_load(1, 0));
+    QVERIFY(cue_needs_chapter_load(0, 1));
+}
+
+// B3: a cross-chapter cue jump resumes after the restore when playback was
+// running or the jump asked to start it.
+void SasayakiViewModelTest::startsAfterRestore() {
+    QVERIFY(starts_after_restore(true, false));
+    QVERIFY(starts_after_restore(false, true));
+    QVERIFY(starts_after_restore(true, true));
+    QVERIFY(!starts_after_restore(false, false));
+}
+
+// B4: prepareTransition resumes only a playing player.
+void SasayakiViewModelTest::transitionResumes() {
+    QVERIFY(transition_resumes(true));
+    QVERIFY(!transition_resumes(false));
+}
+
+// B6: handleRestoreCompleted picks the pending cue of the restored chapter,
+// else the timeline cue of that chapter, and leaves every flag untouched
+// without match data.
+void SasayakiViewModelTest::restoreCueDecision() {
+    const std::optional<std::string> pending{"p"};
+    const std::optional<std::string> timeline{"t"};
+
+    // Without match data nothing is handled and no flag changes.
+    QCOMPARE(restore_cue_decision(false, true, pending, 0, true, true, true, 0, timeline, 0),
+             (RestoreCueDecision{false, std::nullopt, false, false}));
+    // A pending cue of the restored chapter wins; the reveal flag and a resume
+    // with auto-scroll each request a reveal.
+    QCOMPARE(restore_cue_decision(true, true, pending, 0, true, false, false, 0, std::nullopt, 0),
+             (RestoreCueDecision{true, pending, true, false}));
+    QCOMPARE(restore_cue_decision(true, true, pending, 0, false, true, true, 0, std::nullopt, 0),
+             (RestoreCueDecision{true, pending, true, true}));
+    QCOMPARE(restore_cue_decision(true, true, pending, 0, false, true, false, 0, std::nullopt, 0),
+             (RestoreCueDecision{true, pending, false, true}));
+    // A pending cue of another chapter falls back to the timeline cue of the
+    // restored chapter, else to no cue.
+    QCOMPARE(restore_cue_decision(true, true, pending, 1, false, true, true, 0, timeline, 0),
+             (RestoreCueDecision{true, timeline, true, true}));
+    QCOMPARE(restore_cue_decision(true, true, pending, 1, false, true, true, 0, std::nullopt, 0),
+             (RestoreCueDecision{true, std::nullopt, false, true}));
+    // Without a transition the timeline cue still displays when it belongs to
+    // the restored chapter, and reveals only with a resume and auto-scroll.
+    QCOMPARE(restore_cue_decision(true, false, std::nullopt, 0, false, false, true, 0, timeline, 0),
+             (RestoreCueDecision{true, timeline, false, false}));
+    QCOMPARE(restore_cue_decision(true, false, std::nullopt, 0, false, false, true, 0, timeline, 1),
+             (RestoreCueDecision{true, std::nullopt, false, false}));
+    QCOMPARE(
+        restore_cue_decision(true, false, std::nullopt, 0, false, false, true, 0, std::nullopt, 0),
+        (RestoreCueDecision{true, std::nullopt, false, false}));
+}
+
+// B7: updateCue clears without a cue, ignores the displayed cue, displays one
+// in the open chapter and follows another chapter only with auto-scroll and a
+// first start.
+void SasayakiViewModelTest::cueFollowDecision() {
+    const auto decision = [](CueFollowAction action, bool reveal) {
+        return CueFollowDecision{action, reveal};
+    };
+
+    QCOMPARE(cue_follow_decision(false, true, false, "a", 0, "", 0, true, true),
+             decision(CueFollowAction::none, false));
+    QCOMPARE(cue_follow_decision(true, false, false, "a", 0, "", 0, true, true),
+             decision(CueFollowAction::none, false));
+    QCOMPARE(cue_follow_decision(true, true, true, "a", 0, "", 0, true, true),
+             decision(CueFollowAction::none, false));
+
+    QCOMPARE(cue_follow_decision(true, true, false, "", 0, "", 0, true, true),
+             decision(CueFollowAction::clear, false));
+    QCOMPARE(cue_follow_decision(true, true, false, "a", 0, "a", 0, true, true),
+             decision(CueFollowAction::none, false));
+    QCOMPARE(cue_follow_decision(true, true, false, "a", 0, "", 0, false, false),
+             decision(CueFollowAction::display, false));
+    QCOMPARE(cue_follow_decision(true, true, false, "a", 0, "b", 0, true, true),
+             decision(CueFollowAction::display, true));
+
+    QCOMPARE(cue_follow_decision(true, true, false, "b", 1, "a", 0, true, true),
+             decision(CueFollowAction::follow, false));
+    QCOMPARE(cue_follow_decision(true, true, false, "b", 1, "a", 0, false, true),
+             decision(CueFollowAction::clear, false));
+    QCOMPARE(cue_follow_decision(true, true, false, "b", 1, "a", 0, true, false),
+             decision(CueFollowAction::clear, false));
 }
 
 QTEST_APPLESS_MAIN(SasayakiViewModelTest)

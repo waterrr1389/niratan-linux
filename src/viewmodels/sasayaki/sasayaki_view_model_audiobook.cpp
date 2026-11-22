@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
-// Audiobook metadata and chapter state of SasayakiViewModel, following
-// Features/Sasayaki/SasayakiPlayer.swift (loadAudiobookMetadata,
-// currentAudiobookChapterID, teardown) and
-// Features/Sasayaki/SasayakiAudiobookMetadata.swift.
+// Audiobook metadata, chapter state and chapter commands of
+// SasayakiViewModel, following Features/Sasayaki/SasayakiPlayer.swift
+// (loadAudiobookMetadata, currentAudiobookChapterID, seekToAudiobookChapter,
+// teardown) and Features/Sasayaki/SasayakiAudiobookMetadata.swift.
 //
 // When an audio file becomes the source, open_audio_source resets the previous
 // values, then reads the embedded metadata and the chpl chapter list from that
@@ -12,13 +12,15 @@
 // predecessor's metadata stays. chapters exposes id, title, startTime and
 // endTime (null when unknown), and currentAudiobookChapterId follows the
 // player's last-chapter inclusive end rule; -1 means no chapter contains the
-// position. The reads themselves live in services/audiobook.
+// position. A chapter seek clears the stop boundary and seeks to the chapter's
+// start. The reads themselves live in services/audiobook.
 
 #include "sasayaki_view_model.h"
 
 #include <QMediaPlayer>
 #include <QVariantMap>
 
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -118,6 +120,27 @@ void SasayakiViewModel::open_audio_source() {
     emit audiobookMetadataChanged();
     emit chaptersChanged();
     emit audiobookChaptersChanged();
+}
+
+void SasayakiViewModel::seekToAudiobookChapter(int chapterId) {
+    for (const niratan::sasayaki::SasayakiAudiobookChapter& chapter : state_->audiobook_chapters) {
+        if (chapter.id != chapterId) {
+            continue;
+        }
+        state_->stop_playback_time.reset();
+        seek(chapter.start_time, false, true, std::nullopt);
+        return;
+    }
+}
+
+void SasayakiViewModel::update_audiobook_chapter() {
+    const int chapter =
+        audiobook::current_audiobook_chapter_id(state_->audiobook_chapters, state_->position)
+            .value_or(-1);
+    if (chapter != state_->last_audiobook_chapter_id) {
+        state_->last_audiobook_chapter_id = chapter;
+        emit audiobookChaptersChanged();
+    }
 }
 
 }  // namespace niratan::viewmodels

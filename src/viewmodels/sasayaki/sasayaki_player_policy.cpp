@@ -87,4 +87,61 @@ double cue_reference_time(bool has_current, double current_start, double lookup,
     return previous ? std::max(0.0, lookup) : lookup;
 }
 
+bool cue_needs_chapter_load(int cue_chapter, int current_chapter) {
+    return cue_chapter != current_chapter;
+}
+
+bool starts_after_restore(bool playing, bool start_playback) {
+    return playing || start_playback;
+}
+
+bool transition_resumes(bool playing) {
+    return playing;
+}
+
+RestoreCueDecision restore_cue_decision(bool has_match, bool chapter_transition,
+                                        const std::optional<std::string>& pending_id,
+                                        int pending_chapter, bool reveal_pending,
+                                        bool should_resume, bool auto_scroll, int current_index,
+                                        const std::optional<std::string>& timeline_id,
+                                        int timeline_chapter) {
+    if (!has_match) {
+        return {};
+    }
+
+    RestoreCueDecision decision;
+    decision.handled = true;
+    if (chapter_transition && pending_id.has_value() && pending_chapter == current_index) {
+        decision.cue_id = pending_id;
+        decision.reveal = reveal_pending || (should_resume && auto_scroll);
+    } else if (timeline_id.has_value() && timeline_chapter == current_index) {
+        decision.cue_id = timeline_id;
+        decision.reveal = should_resume && auto_scroll;
+    }
+    decision.resume = should_resume;
+    return decision;
+}
+
+CueFollowDecision cue_follow_decision(bool has_audio, bool has_match, bool chapter_transition,
+                                      const std::string& cue_id, int cue_chapter,
+                                      const std::string& current_id, int current_chapter,
+                                      bool auto_scroll, bool has_played_once) {
+    if (!has_audio || !has_match || chapter_transition) {
+        return {};
+    }
+    if (cue_id.empty()) {
+        return {CueFollowAction::clear, false};
+    }
+    if (cue_id == current_id) {
+        return {};
+    }
+    if (cue_chapter == current_chapter) {
+        return {CueFollowAction::display, auto_scroll && has_played_once};
+    }
+    if (auto_scroll && has_played_once) {
+        return {CueFollowAction::follow, false};
+    }
+    return {CueFollowAction::clear, false};
+}
+
 }  // namespace niratan::viewmodels

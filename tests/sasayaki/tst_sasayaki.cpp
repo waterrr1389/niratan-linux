@@ -18,10 +18,6 @@
 #include <string>
 #include <vector>
 
-using niratan::sasayaki::SasayakiCue;
-using niratan::sasayaki::SasayakiMatch;
-using niratan::sasayaki::SasayakiMatchData;
-using niratan::sasayaki::SasayakiPlaybackData;
 using niratan::sasayaki::encode_cues;
 using niratan::sasayaki::match_data_from_json;
 using niratan::sasayaki::match_data_to_json;
@@ -29,6 +25,11 @@ using niratan::sasayaki::parse_cues;
 using niratan::sasayaki::playback_data_from_json;
 using niratan::sasayaki::playback_data_to_json;
 using niratan::sasayaki::read_cue_file;
+using niratan::sasayaki::reader_progress;
+using niratan::sasayaki::SasayakiCue;
+using niratan::sasayaki::SasayakiMatch;
+using niratan::sasayaki::SasayakiMatchData;
+using niratan::sasayaki::SasayakiPlaybackData;
 
 // Models/Sasayaki.swift and Features/Sasayaki/{SasayakiParser,SasayakiSRT}.swift
 // are the specification; script/test_sasayaki_text_matcher.swift supplies the
@@ -98,6 +99,7 @@ class SasayakiTest : public QObject {
     void match_data_defaults_context_inferred_to_false();
     void match_data_rejects_missing_or_mistyped_keys();
     void match_data_ignores_extra_keys();
+    void reader_progress_clamps_to_the_chapter();
     void playback_data_round_trips_with_a_bookmark();
     void playback_data_defaults_and_omits_the_bookmark();
     void playback_data_rejects_missing_or_mistyped_keys();
@@ -409,6 +411,23 @@ void SasayakiTest::match_data_ignores_extra_keys() {
     QCOMPARE(decoded->unmatched, 5);
     QVERIFY(decoded->matches.size() == std::size_t(1));
     QCOMPARE(decoded->matches[0].id, std::string("a"));
+}
+
+// B1: SasayakiMatch.readerProgress clamps start over the chapter count to
+// 0...1 and reads an unknown chapter count as 0.
+void SasayakiTest::reader_progress_clamps_to_the_chapter() {
+    SasayakiMatch match;
+    const auto progress = [&match](int start, int chapter_character_count) {
+        match.start = start;
+        return reader_progress(match, chapter_character_count);
+    };
+
+    QCOMPARE(progress(50, 200), 0.25);
+    QCOMPARE(progress(-10, 200), 0.0);
+    QCOMPARE(progress(250, 200), 1.0);
+    QCOMPARE(progress(50, 0), 0.0);
+    QCOMPARE(progress(0, 200), 0.0);
+    QCOMPARE(progress(200, 200), 1.0);
 }
 
 void SasayakiTest::playback_data_round_trips_with_a_bookmark() {

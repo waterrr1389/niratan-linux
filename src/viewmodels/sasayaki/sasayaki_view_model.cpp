@@ -277,6 +277,10 @@ void SasayakiViewModel::reload_book() {
     state_->seek_update_cue = true;
     state_->seek_stop_time.reset();
     state_->stop_playback_time.reset();
+    state_->pending_cue.reset();
+    state_->reveal_pending_cue_on_restore = false;
+    state_->chapter_transition = false;
+    state_->should_resume = false;
     state_->last_second = -1;
     state_->audiobook_metadata = {};
     state_->audiobook_chapters.clear();

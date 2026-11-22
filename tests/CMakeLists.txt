@@ -668,6 +668,13 @@ target_link_libraries(tst_reader_mining_context PRIVATE niratan_app Qt6::Test)
 target_compile_options(tst_reader_mining_context PRIVATE -Wall -Wextra -Wpedantic -Werror)
 add_test(NAME reader_mining_context COMMAND tst_reader_mining_context)
 
+qt_add_executable(tst_reader_sasayaki_navigation
+    viewmodels/tst_reader_sasayaki_navigation.cpp
+)
+target_link_libraries(tst_reader_sasayaki_navigation PRIVATE niratan_app Qt6::Test)
+target_compile_options(tst_reader_sasayaki_navigation PRIVATE -Wall -Wextra -Wpedantic -Werror)
+add_test(NAME reader_sasayaki_navigation COMMAND tst_reader_sasayaki_navigation)
+
 qt_add_executable(tst_qml_load
     qml/tst_qml_load.cpp
 )
