@@ -14,6 +14,17 @@
 // Changes are saved on edit and do not reload any running consumer. Consumers
 // should load the reader preferences on book open and the reset minute on
 // dashboard refresh rather than subscribing to settings-change signals.
+//
+// The Popup card of AppearanceView.nativeAppearanceContent writes the eight
+// popup preferences: Width 100...1400 step 10, Height 100...800 step 10,
+// Scale 0.8...1.5 step 0.05, Swipe Threshold 20...80 step 5, and the four
+// toggles of UserConfig.popupActionBar, popupDisableTransparency,
+// popupFullWidth and popupSwipeToDismiss. Defaults are 320, 250, 1.0, 40 and
+// false, matching UserConfig.init. The four sliders clamp to their range and
+// round to their step with std::round, ties away from zero; the threshold also
+// keeps its value while Swipe to Dismiss is off. All eight stay in
+// the active profile's reader_settings.json under the Swift keys. Full-width
+// reaches the reader popup only; the video popup passes false in Swift.
 
 #pragma once
 
@@ -62,6 +73,17 @@ class SettingsViewModel : public QObject {
     Q_PROPERTY(QString progressCount READ progressCount WRITE setProgressCount NOTIFY readerChanged)
     Q_PROPERTY(bool showPercentage READ showPercentage WRITE setShowPercentage NOTIFY readerChanged)
     Q_PROPERTY(bool showProgressTop READ showProgressTop WRITE setShowProgressTop NOTIFY readerChanged)
+    Q_PROPERTY(int popupWidth READ popupWidth WRITE setPopupWidth NOTIFY readerChanged)
+    Q_PROPERTY(int popupHeight READ popupHeight WRITE setPopupHeight NOTIFY readerChanged)
+    Q_PROPERTY(double popupScale READ popupScale WRITE setPopupScale NOTIFY readerChanged)
+    Q_PROPERTY(bool popupActionBar READ popupActionBar WRITE setPopupActionBar NOTIFY readerChanged)
+    Q_PROPERTY(bool popupDisableTransparency READ popupDisableTransparency WRITE
+                   setPopupDisableTransparency NOTIFY readerChanged)
+    Q_PROPERTY(bool popupFullWidth READ popupFullWidth WRITE setPopupFullWidth NOTIFY readerChanged)
+    Q_PROPERTY(bool popupSwipeToDismiss READ popupSwipeToDismiss WRITE setPopupSwipeToDismiss NOTIFY
+                   readerChanged)
+    Q_PROPERTY(int popupSwipeThreshold READ popupSwipeThreshold WRITE setPopupSwipeThreshold NOTIFY
+                   readerChanged)
 
     Q_PROPERTY(bool dictionaryTabDefault READ dictionaryTabDefault WRITE setDictionaryTabDefault NOTIFY dictionaryChanged)
     Q_PROPERTY(bool scanNonJapaneseText READ scanNonJapaneseText WRITE setScanNonJapaneseText NOTIFY dictionaryChanged)
@@ -140,6 +162,23 @@ class SettingsViewModel : public QObject {
     void setShowPercentage(bool value);
     bool showProgressTop() const;
     void setShowProgressTop(bool value);
+
+    int popupWidth() const;
+    void setPopupWidth(int value);
+    int popupHeight() const;
+    void setPopupHeight(int value);
+    double popupScale() const;
+    void setPopupScale(double value);
+    bool popupActionBar() const;
+    void setPopupActionBar(bool value);
+    bool popupDisableTransparency() const;
+    void setPopupDisableTransparency(bool value);
+    bool popupFullWidth() const;
+    void setPopupFullWidth(bool value);
+    bool popupSwipeToDismiss() const;
+    void setPopupSwipeToDismiss(bool value);
+    int popupSwipeThreshold() const;
+    void setPopupSwipeThreshold(int value);
 
     bool dictionaryTabDefault() const;
     void setDictionaryTabDefault(bool value);

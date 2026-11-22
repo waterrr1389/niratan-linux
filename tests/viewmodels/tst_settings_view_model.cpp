@@ -11,6 +11,13 @@
 // range, round to the step with std::round, then persist. Values read from an
 // existing file are not re-clamped, as with Swift's Codable load, so a second
 // model on the same data folder must see the stored value unchanged.
+//
+// The popup cases follow the Popup card of AppearanceView.nativeAppearanceContent
+// (Width Slider 100...1400 step 10, Height Slider 100...800 step 10, Scale
+// Slider 0.8...1.5 step 0.05, Swipe Threshold Slider 20...80 step 5 that stays
+// visible only while Swipe to Dismiss is on, and the four toggles) and the
+// defaults and keys of UserConfig.swift. Each edit saves the whole active
+// reader document, so the other reader fields survive a popup edit.
 
 #include "viewmodels/settings/settings_view_model.h"
 
@@ -48,6 +55,13 @@ class SettingsViewModelTest : public QObject {
     void lineHeight_rounds_to_the_step_and_clamps();
     void characterSpacing_is_a_percent();
     void paragraphSpacing_rounds_to_the_step_and_clamps();
+    void popup_defaults();
+    void popupWidth_rounds_to_the_step_and_clamps();
+    void popupHeight_rounds_to_the_step_and_clamps();
+    void popupScale_rounds_to_the_step_and_clamps();
+    void popup_toggles_round_trip();
+    void popupSwipeThreshold_rounds_to_the_step_and_clamps();
+    void popup_edits_keep_the_other_reader_settings();
 };
 
 // B1: the Font Size Stepper is 16...40 with no off-step values.
@@ -152,6 +166,145 @@ void SettingsViewModelTest::paragraphSpacing_rounds_to_the_step_and_clamps() {
     expect_round_trip(set, get, 3.1, 3.0);
     expect_round_trip(set, get, 0.16, 0.2);
     expect_round_trip(set, get, 2.96, 3.0);
+}
+
+// B1: a fresh data root returns the UserConfig.init defaults.
+void SettingsViewModelTest::popup_defaults() {
+    TempDataRoot data;
+    QVERIFY(data.isValid());
+    SettingsViewModel model;
+    QCOMPARE(model.popupWidth(), 320);
+    QCOMPARE(model.popupHeight(), 250);
+    QCOMPARE(model.popupScale(), 1.0);
+    QCOMPARE(model.popupActionBar(), false);
+    QCOMPARE(model.popupDisableTransparency(), false);
+    QCOMPARE(model.popupFullWidth(), false);
+    QCOMPARE(model.popupSwipeToDismiss(), false);
+    QCOMPARE(model.popupSwipeThreshold(), 40);
+}
+
+// B2: Width is 100...1400, step 10.
+void SettingsViewModelTest::popupWidth_rounds_to_the_step_and_clamps() {
+    TempDataRoot data;
+    QVERIFY(data.isValid());
+    const auto set = [](SettingsViewModel& model, int value) { model.setPopupWidth(value); };
+    const auto get = [](const SettingsViewModel& model) { return model.popupWidth(); };
+
+    expect_round_trip(set, get, 110, 110);
+    expect_round_trip(set, get, 1390, 1390);
+    expect_round_trip(set, get, 90, 100);
+    expect_round_trip(set, get, 1410, 1400);
+    expect_round_trip(set, get, 104, 100);
+    expect_round_trip(set, get, 1396, 1400);
+}
+
+// B3: Height is 100...800, step 10.
+void SettingsViewModelTest::popupHeight_rounds_to_the_step_and_clamps() {
+    TempDataRoot data;
+    QVERIFY(data.isValid());
+    const auto set = [](SettingsViewModel& model, int value) { model.setPopupHeight(value); };
+    const auto get = [](const SettingsViewModel& model) { return model.popupHeight(); };
+
+    expect_round_trip(set, get, 110, 110);
+    expect_round_trip(set, get, 790, 790);
+    expect_round_trip(set, get, 90, 100);
+    expect_round_trip(set, get, 810, 800);
+    expect_round_trip(set, get, 106, 110);
+    expect_round_trip(set, get, 794, 790);
+}
+
+// B4: Scale is 0.8...1.5, step 0.05.
+void SettingsViewModelTest::popupScale_rounds_to_the_step_and_clamps() {
+    TempDataRoot data;
+    QVERIFY(data.isValid());
+    const auto set = [](SettingsViewModel& model, double value) { model.setPopupScale(value); };
+    const auto get = [](const SettingsViewModel& model) { return model.popupScale(); };
+
+    expect_round_trip(set, get, 0.85, 0.85);
+    expect_round_trip(set, get, 1.45, 1.45);
+    expect_round_trip(set, get, 0.7, 0.8);
+    expect_round_trip(set, get, 1.6, 1.5);
+    expect_round_trip(set, get, 0.83, 0.85);
+    expect_round_trip(set, get, 1.42, 1.4);
+}
+
+// B5-B8: the four popup toggles store both values and persist.
+void SettingsViewModelTest::popup_toggles_round_trip() {
+    TempDataRoot data;
+    QVERIFY(data.isValid());
+
+    SettingsViewModel first;
+    first.setPopupActionBar(true);
+    first.setPopupDisableTransparency(true);
+    first.setPopupFullWidth(true);
+    first.setPopupSwipeToDismiss(true);
+    QCOMPARE(first.popupActionBar(), true);
+    QCOMPARE(first.popupDisableTransparency(), true);
+    QCOMPARE(first.popupFullWidth(), true);
+    QCOMPARE(first.popupSwipeToDismiss(), true);
+
+    SettingsViewModel second;
+    QCOMPARE(second.popupActionBar(), true);
+    QCOMPARE(second.popupDisableTransparency(), true);
+    QCOMPARE(second.popupFullWidth(), true);
+    QCOMPARE(second.popupSwipeToDismiss(), true);
+    second.setPopupActionBar(false);
+    second.setPopupDisableTransparency(false);
+    second.setPopupFullWidth(false);
+    second.setPopupSwipeToDismiss(false);
+
+    SettingsViewModel third;
+    QCOMPARE(third.popupActionBar(), false);
+    QCOMPARE(third.popupDisableTransparency(), false);
+    QCOMPARE(third.popupFullWidth(), false);
+    QCOMPARE(third.popupSwipeToDismiss(), false);
+}
+
+// B9: Swipe Threshold is 20...80, step 5, and persists while the toggle is off.
+void SettingsViewModelTest::popupSwipeThreshold_rounds_to_the_step_and_clamps() {
+    TempDataRoot data;
+    QVERIFY(data.isValid());
+    const auto set = [](SettingsViewModel& model, int value) {
+        model.setPopupSwipeThreshold(value);
+    };
+    const auto get = [](const SettingsViewModel& model) { return model.popupSwipeThreshold(); };
+
+    expect_round_trip(set, get, 25, 25);
+    expect_round_trip(set, get, 75, 75);
+    expect_round_trip(set, get, 15, 20);
+    expect_round_trip(set, get, 85, 80);
+    expect_round_trip(set, get, 22, 20);
+    expect_round_trip(set, get, 78, 80);
+}
+
+// B10: an edit saves the whole reader document, so other fields survive.
+void SettingsViewModelTest::popup_edits_keep_the_other_reader_settings() {
+    TempDataRoot data;
+    QVERIFY(data.isValid());
+
+    SettingsViewModel first;
+    first.setTheme(QStringLiteral("Dark"));
+    first.setFontSize(30);
+    first.setPopupWidth(110);
+    first.setPopupHeight(790);
+    first.setPopupScale(1.45);
+    first.setPopupSwipeThreshold(75);
+    first.setPopupActionBar(true);
+    first.setPopupDisableTransparency(true);
+    first.setPopupFullWidth(true);
+    first.setPopupSwipeToDismiss(true);
+
+    SettingsViewModel second;
+    QCOMPARE(second.theme(), QStringLiteral("Dark"));
+    QCOMPARE(second.fontSize(), 30);
+    QCOMPARE(second.popupWidth(), 110);
+    QCOMPARE(second.popupHeight(), 790);
+    QCOMPARE(second.popupScale(), 1.45);
+    QCOMPARE(second.popupSwipeThreshold(), 75);
+    QCOMPARE(second.popupActionBar(), true);
+    QCOMPARE(second.popupDisableTransparency(), true);
+    QCOMPARE(second.popupFullWidth(), true);
+    QCOMPARE(second.popupSwipeToDismiss(), true);
 }
 
 QTEST_APPLESS_MAIN(SettingsViewModelTest)

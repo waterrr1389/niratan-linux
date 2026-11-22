@@ -193,8 +193,10 @@ qt_add_library(niratan_app STATIC
     src/viewmodels/player/player_lookup_view_model.h
     src/viewmodels/player/player_study_view_model.cpp
     src/viewmodels/player/player_study_view_model.h
+    src/viewmodels/settings/settings_popup_settings.cpp
     src/viewmodels/settings/settings_view_model.cpp
     src/viewmodels/settings/settings_view_model.h
+    src/viewmodels/settings/settings_view_model_state.h
     src/viewmodels/reader/reader_view_model.cpp
     src/viewmodels/reader/reader_view_model_gallery.cpp
     src/viewmodels/reader/reader_view_model.h

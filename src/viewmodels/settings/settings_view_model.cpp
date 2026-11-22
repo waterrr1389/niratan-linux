@@ -2,6 +2,8 @@
 
 #include "settings_view_model.h"
 
+#include "settings_view_model_state.h"
+
 #include <QStringList>
 
 #include <algorithm>
@@ -58,22 +60,6 @@ double snap(double value, double minimum, double maximum, int increments_per_uni
 }
 
 }  // namespace
-
-struct SettingsViewModel::State {
-    ReaderProfileSettings reader = profiles::default_reader_settings();
-    DictionaryProfileSettings dictionary = profiles::default_dictionary_settings();
-    settings::StatisticsPreferences statistics;
-
-    bool reader_writable = false;
-    bool dictionary_writable = false;
-    QString profile_error;
-    QString reader_error;
-    QString dictionary_error;
-    QString statistics_error;
-
-    std::optional<SettingsStore> store;
-    std::optional<GlobalSettings> global;
-};
 
 SettingsViewModel::SettingsViewModel(QObject* parent)
     : QObject(parent), state_(std::make_unique<State>()) {
@@ -141,15 +127,6 @@ QString SettingsViewModel::error() const {
         }
     }
     return errors.join(u'\n');
-}
-
-template <typename Field, typename Value>
-void SettingsViewModel::update_reader(Field& field, Value value) {
-    if (field != value) {
-        field = std::move(value);
-        save_reader();
-        emit readerChanged();
-    }
 }
 
 template <typename Field, typename Value>
