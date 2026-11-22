@@ -38,3 +38,17 @@ target_compile_options(tst_flow_video_mining PRIVATE -Wall -Wextra -Wpedantic -W
 add_test(NAME flow_video_mining COMMAND tst_flow_video_mining)
 set_tests_properties(flow_video_mining PROPERTIES
     ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QTWEBENGINE_CHROMIUM_FLAGS=--disable-gpu")
+
+qt_add_executable(tst_flow_sasayaki
+    tst_flow_sasayaki.cpp
+)
+target_include_directories(tst_flow_sasayaki PRIVATE
+    ${CMAKE_SOURCE_DIR}/src
+    ${CMAKE_CURRENT_SOURCE_DIR}/../viewmodels
+)
+target_link_libraries(tst_flow_sasayaki PRIVATE niratan_app Qt6::Test
+    Qt6::WebEngineQuick Qt6::WebChannelQuick)
+target_compile_options(tst_flow_sasayaki PRIVATE -Wall -Wextra -Wpedantic -Werror)
+add_test(NAME flow_sasayaki COMMAND tst_flow_sasayaki)
+set_tests_properties(flow_sasayaki PROPERTIES
+    ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QTWEBENGINE_CHROMIUM_FLAGS=--disable-gpu")
