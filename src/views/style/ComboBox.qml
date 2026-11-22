@@ -107,11 +107,11 @@ T.ComboBox {
 
     popup: T.Popup {
         y: control.height + 4
-        width: Math.max(control.width, contentItem.implicitWidth + leftPadding + rightPadding)
-        // The popup margins keep a long list inside the window.
+        // As wide as the widest item, as a macOS pop-up menu is; the margins
+        // keep a long or wide list inside the window.
+        width: Math.max(control.width, control.implicitContentWidth + 24 + 12 + leftPadding + rightPadding)
         height: contentItem.implicitHeight + topPadding + bottomPadding
-        topMargin: 6
-        bottomMargin: 6
+        margins: 6
         padding: 5
         font: control.font
 
@@ -122,7 +122,7 @@ T.ComboBox {
             currentIndex: control.highlightedIndex
             highlightMoveDuration: 0
 
-            T.ScrollIndicator.vertical: ScrollIndicator {}
+            T.ScrollBar.vertical: ScrollBar {}
         }
 
         background: FloatingBackground {}

@@ -12,7 +12,6 @@ pragma ComponentBehavior: Bound
 
 import QtQuick
 import QtQuick.Controls
-import QtQuick.Layouts
 import Niratan
 
 Item {
@@ -47,26 +46,18 @@ Item {
             wrapMode: Text.WordWrap
         }
 
-        footer: RowLayout {
-            spacing: Theme.spacingSm
-
-            Item {
-                Layout.fillWidth: true
-            }
-
+        footer: DialogButtonBox {
             Button {
                 text: qsTr("Cancel")
-                onClicked: fetchDialog.reject()
+                DialogButtonBox.buttonRole: DialogButtonBox.RejectRole
             }
-
             Button {
                 text: qsTr("OK")
-                onClicked: {
-                    fetchDialog.accept();
-                    alerts.fetchRequested();
-                }
+                DialogButtonBox.buttonRole: DialogButtonBox.AcceptRole
             }
         }
+
+        onAccepted: alerts.fetchRequested()
     }
 
     Dialog {
@@ -84,26 +75,18 @@ Item {
             wrapMode: Text.WordWrap
         }
 
-        footer: RowLayout {
-            spacing: Theme.spacingSm
-
-            Item {
-                Layout.fillWidth: true
-            }
-
+        footer: DialogButtonBox {
             Button {
                 text: qsTr("Cancel")
-                onClicked: defaultsDialog.reject()
+                DialogButtonBox.buttonRole: DialogButtonBox.RejectRole
             }
-
             Button {
                 text: qsTr("Apply")
-                onClicked: {
-                    defaultsDialog.accept();
-                    alerts.defaultsRequested();
-                }
+                DialogButtonBox.buttonRole: DialogButtonBox.AcceptRole
             }
         }
+
+        onAccepted: alerts.defaultsRequested()
     }
 
     Dialog {
@@ -122,16 +105,10 @@ Item {
             wrapMode: Text.WordWrap
         }
 
-        footer: RowLayout {
-            spacing: Theme.spacingSm
-
-            Item {
-                Layout.fillWidth: true
-            }
-
+        footer: DialogButtonBox {
             Button {
                 text: qsTr("OK")
-                onClicked: errorDialog.close()
+                DialogButtonBox.buttonRole: DialogButtonBox.AcceptRole
             }
         }
 

@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
 // Dialog buttons in the Niratan control style: push buttons at the trailing
-// edge, the accepting one drawn as the default button with the accent fill.
+// edge in the macOS order, the cancelling button before the default one,
+// which is drawn with the accent fill.
 import QtQuick
 import QtQuick.Templates as T
 import Niratan
@@ -19,6 +20,7 @@ T.DialogButtonBox {
     padding: 20
     topPadding: 12
     alignment: Qt.AlignRight
+    buttonLayout: T.DialogButtonBox.MacLayout
 
     delegate: Button {
         prominent: T.DialogButtonBox.buttonRole === T.DialogButtonBox.AcceptRole
