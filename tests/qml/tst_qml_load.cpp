@@ -14,9 +14,15 @@
 #include "views/dictionary/audio_scheme_handler.h"
 #include "views/reader/reader_scheme_handler.h"
 #include "models/profiles/dictionary_settings.h"
+#include "services/dictionary/dictionary_store.h"
+#include "services/profiles/profile_repository.h"
 #include "services/storage/app_paths.h"
 #include "viewmodels/anki/mining_view_model.h"
 #include "viewmodels/dictionary/dictionary_popup_model.h"
+#include "viewmodels/settings/settings_view_model.h"
+
+#include "../dictionary/yomitan_fixture.h"
+#include "../viewmodels/data_root.h"
 
 #include <QFile>
 #include <QFont>
@@ -166,6 +172,7 @@ class QmlLoadTest : public QObject {
     void settings_column_switches_details();
     void settings_fit_allows_only_vertical_scrolling();
     void dictionary_settings_page_lists_the_management_controls();
+    void dictionary_settings_page_shows_sort_and_text_rows();
     void profiles_page_lists_the_management_controls();
     void profile_editor_stays_open_when_save_fails();
     void icon_table_resolves();
@@ -546,6 +553,109 @@ void QmlLoadTest::dictionary_settings_page_lists_the_management_controls() {
     QVERIFY(recommendations);
     QVERIFY(QMetaObject::invokeMethod(recommendations, "click"));
     QVERIFY(visual_page_texts(window.contentItem()).contains(QStringLiteral("JMdict")));
+
+    const QString warnings = warnings_after(QStringLiteral("DictionarySettingsPage"));
+    QVERIFY2(warnings.isEmpty(), qPrintable(warnings));
+}
+
+// Features/Settings/DictionaryView.swift DictionaryBehaviorSettingsSections:
+// the Frequency Sorting picker writes the order, the conditional Frequency
+// Dictionary picker offers the enabled titles with None first, and the Search
+// Text card's Text Size row writes the size. A local data root keeps the
+// page's SettingsViewModel out of the developer's settings.
+void QmlLoadTest::dictionary_settings_page_shows_sort_and_text_rows() {
+    niratan::test::TempDataRoot data;
+    QVERIFY(data.isValid());
+
+    const auto zip = std::filesystem::path(data.path().toStdString()) / "probe.zip";
+    niratan::test::write_stored_zip(
+        zip,
+        {{QStringLiteral("index.json"), niratan::test::minimal_index(QStringLiteral("Probe"))},
+         {QStringLiteral("term_bank_1.json"), niratan::test::minimal_term_bank()},
+         {QStringLiteral("term_meta_bank_1.json"),
+          QByteArrayLiteral(R"([["decide","freq",100]])")}});
+    QVERIFY(niratan::dictionary::DictionaryStore(niratan::storage::dictionaries_root())
+                .import_zip(zip)
+                .ok);
+    niratan::profiles::ProfileRepository profiles{niratan::storage::data_root()};
+    const auto directory = profiles.profile_directory(std::string("default-ja"));
+    QVERIFY(directory.has_value());
+    QFile config(QString::fromStdString((*directory / "dictionary_config.json").string()));
+    QVERIFY(config.open(QIODevice::WriteOnly | QIODevice::Truncate));
+    const QByteArray config_bytes =
+        R"({"termDictionaries":[],"frequencyDictionaries":[{"fileName":"Probe","isEnabled":true,"order":0}],"pitchDictionaries":[]})";
+    QCOMPARE(config.write(config_bytes), config_bytes.size());
+    config.close();
+
+    QQuickWindow window;
+    window.resize(960, 640);
+    QString error;
+    std::unique_ptr<QObject> object =
+        create_page(QStringLiteral("DictionarySettingsPage"), window, error);
+    QVERIFY2(object != nullptr, qPrintable(error));
+    auto* item = qobject_cast<QQuickItem*>(object.get());
+    QVERIFY2(item != nullptr, "DictionarySettingsPage is not an Item");
+
+    const QString footer = QStringLiteral("Results with the same match are ranked by the selected "
+                                          "frequency dictionary. Results without a value are "
+                                          "listed last.");
+    const auto footer_shown = [item, &footer] {
+        const auto items = visual_items(item);
+        return std::ranges::any_of(items, [&footer](const QQuickItem* child) {
+            return child->isVisible() && child->property("text").toString() == footer;
+        });
+    };
+
+    auto* sort = item->findChild<QQuickItem*>(QStringLiteral("frequencySortPicker"));
+    QVERIFY2(sort != nullptr, "DictionarySettingsPage has no Frequency Sorting picker");
+    QVERIFY2(visual_page_texts(item).contains(QStringLiteral("Frequency Sorting")),
+             "the Frequency Sorting label is missing");
+    QCOMPARE(sort->property("model").toStringList(),
+             (QStringList{QStringLiteral("Auto"), QStringLiteral("Ascending"),
+                          QStringLiteral("Descending")}));
+    QVERIFY(!footer_shown());
+
+    auto* text_size = item->findChild<QQuickItem*>(QStringLiteral("searchTextSizeRow"));
+    QVERIFY2(text_size != nullptr, "DictionarySettingsPage has no Text Size row");
+    QCOMPARE(text_size->property("from").toInt(), 12);
+    QCOMPARE(text_size->property("to").toInt(), 48);
+
+    QVERIFY2(item->findChild<QObject*>(QStringLiteral("frequencyDictionaryPicker")) == nullptr,
+             "the Frequency Dictionary row shows while the order is Auto");
+
+    QVERIFY(QMetaObject::invokeMethod(sort, "activated", Q_ARG(int, 2)));
+    QTRY_VERIFY2(item->findChild<QObject*>(QStringLiteral("frequencyDictionaryPicker")) != nullptr,
+                 "the Frequency Dictionary row did not appear");
+    auto* dictionary = item->findChild<QQuickItem*>(QStringLiteral("frequencyDictionaryPicker"));
+    QVERIFY2(dictionary != nullptr, "the Frequency Dictionary row has no picker");
+    QTRY_COMPARE(dictionary->property("model").toStringList(),
+                 (QStringList{QStringLiteral("None"), QStringLiteral("Probe")}));
+    QVERIFY2(visual_page_texts(item).contains(QStringLiteral("Frequency Dictionary")),
+             "the Frequency Dictionary label is missing");
+    QTRY_VERIFY(footer_shown());
+
+    const QRectF bounds(0, 0, window.width(), window.height());
+    QVERIFY(fits_settings_viewport(*sort, bounds));
+    QVERIFY(fits_settings_viewport(*text_size, bounds));
+    QVERIFY(fits_settings_viewport(*dictionary, bounds));
+
+    QVERIFY(QMetaObject::invokeMethod(dictionary, "activated", Q_ARG(int, 1)));
+    niratan::viewmodels::SettingsViewModel chosen;
+    QCOMPARE(chosen.frequencySortDictionary(), QStringLiteral("Probe"));
+    QTRY_COMPARE(dictionary->property("model").toStringList(),
+                 QStringList{QStringLiteral("Probe")});
+
+    QVERIFY2(visual_page_texts(item).contains(QStringLiteral("Search Text")),
+             "the Search Text card is missing");
+    QVERIFY2(visual_page_texts(item).contains(QStringLiteral("Text Size")),
+             "the Text Size label is missing");
+
+    niratan::viewmodels::SettingsViewModel sorted;
+    QCOMPARE(sorted.frequencySortOrder(), QStringLiteral("Descending"));
+
+    QVERIFY(QMetaObject::invokeMethod(text_size, "edited", Q_ARG(int, 30)));
+    niratan::viewmodels::SettingsViewModel sized;
+    QCOMPARE(sized.searchTextSize(), 30);
 
     const QString warnings = warnings_after(QStringLiteral("DictionarySettingsPage"));
     QVERIFY2(warnings.isEmpty(), qPrintable(warnings));

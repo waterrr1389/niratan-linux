@@ -3,6 +3,14 @@
 // dictionaryTypePicker and DictionaryCategoryPicker.
 // Local imports are synchronous; recommendations are read-only and reordering
 // uses menu actions. The library does not expose revision captions.
+//
+// The Lookup card follows DictionaryBehaviorSettingsSections in order:
+// Frequency Sorting writes one of LookupFrequencySortOrder's raw strings, and
+// while the order is not Auto a Frequency Dictionary picker and the ranking
+// footer appear. The picker lists None first when the stored name is not an
+// enabled title, carrying the stored name so choosing it changes nothing, then
+// the enabled titles in resolved order. The Search Text card's Text Size row
+// writes the resolved searchTextSize.
 
 pragma ComponentBehavior: Bound
 
@@ -20,6 +28,15 @@ SettingsForm {
     readonly property list<string> types: ["Term", "Frequency", "Pitch", "Kanji"]
     readonly property list<string> categories: ["none", "monolingual", "bilingual", "exclude"]
     readonly property list<string> collapseModes: ["Expand All", "Collapse All", "Custom"]
+    readonly property list<string> frequencySortOrders: ["Auto", "Ascending", "Descending"]
+    readonly property var frequencySortLabels: [qsTr("Auto"), qsTr("Ascending"), qsTr("Descending")]
+    readonly property bool frequencyDictionaryUnknown:
+        library.frequencyDictionaryTitles.indexOf(preferences.frequencySortDictionary) < 0
+    readonly property var frequencyDictionaryValues:
+        (frequencyDictionaryUnknown ? [preferences.frequencySortDictionary] : [])
+            .concat(library.frequencyDictionaryTitles)
+    readonly property var frequencyDictionaryLabels:
+        (frequencyDictionaryUnknown ? [qsTr("None")] : []).concat(library.frequencyDictionaryTitles)
 
     SettingsViewModel {
         id: preferences
@@ -174,6 +191,8 @@ SettingsForm {
 
     SettingsCard {
         title: qsTr("Lookup")
+        footer: preferences.frequencySortOrder !== "Auto"
+                ? qsTr("Results with the same match are ranked by the selected frequency dictionary. Results without a value are listed last.") : ""
 
         SettingsToggle {
             label: qsTr("Scan Non-Japanese Text")
@@ -197,6 +216,58 @@ SettingsForm {
             to: 64
             value: preferences.scanLength
             onEdited: value => preferences.scanLength = value
+        }
+
+        SettingsSeparator {}
+        SettingRow {
+            id: frequencySortRow
+            label: qsTr("Frequency Sorting")
+
+            ComboBox {
+                objectName: "frequencySortPicker"
+                Accessible.name: frequencySortRow.label
+                Layout.preferredWidth: 160
+                model: page.frequencySortLabels
+                currentIndex: Math.max(0, page.frequencySortOrders.indexOf(preferences.frequencySortOrder))
+                onActivated: index => preferences.frequencySortOrder = page.frequencySortOrders[index]
+            }
+        }
+
+        Loader {
+            Layout.fillWidth: true
+            active: preferences.frequencySortOrder !== "Auto"
+
+            sourceComponent: ColumnLayout {
+                spacing: 0
+
+                SettingsSeparator {}
+                SettingRow {
+                    id: frequencyDictionaryRow
+                    label: qsTr("Frequency Dictionary")
+
+                    ComboBox {
+                        objectName: "frequencyDictionaryPicker"
+                        Accessible.name: frequencyDictionaryRow.label
+                        Layout.preferredWidth: 200
+                        model: page.frequencyDictionaryLabels
+                        currentIndex: Math.max(0, page.frequencyDictionaryValues.indexOf(preferences.frequencySortDictionary))
+                        onActivated: index => preferences.frequencySortDictionary = page.frequencyDictionaryValues[index]
+                    }
+                }
+            }
+        }
+    }
+
+    SettingsCard {
+        title: qsTr("Search Text")
+
+        SettingsInteger {
+            objectName: "searchTextSizeRow"
+            label: qsTr("Text Size")
+            from: 12
+            to: 48
+            value: preferences.searchTextSize
+            onEdited: value => preferences.searchTextSize = value
         }
     }
 
