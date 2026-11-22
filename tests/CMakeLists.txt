@@ -475,6 +475,14 @@ target_link_libraries(tst_transcript_extractor PRIVATE niratan_core Qt6::Test)
 target_compile_options(tst_transcript_extractor PRIVATE -Wall -Wextra -Wpedantic -Werror)
 add_test(NAME transcript_extractor COMMAND tst_transcript_extractor)
 
+qt_add_executable(tst_video_mining
+    player/tst_video_mining.cpp
+)
+target_include_directories(tst_video_mining PRIVATE ${CMAKE_SOURCE_DIR}/src)
+target_link_libraries(tst_video_mining PRIVATE niratan_core Qt6::Test)
+target_compile_options(tst_video_mining PRIVATE -Wall -Wextra -Wpedantic -Werror)
+add_test(NAME video_mining COMMAND tst_video_mining)
+
 qt_add_executable(tst_sasayaki
     sasayaki/tst_sasayaki.cpp
 )

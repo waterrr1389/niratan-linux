@@ -178,6 +178,8 @@ class MiningTest : public QObject {
     void direct_media_and_cache();
     void unusable_media_directory_is_cached_data();
     void unusable_media_directory_is_cached();
+    void media_directory_isCachedAndValidated();
+    void media_directory_sharesTheCardCache();
     void direct_write_or_move_failure_falls_back_data();
     void direct_write_or_move_failure_falls_back();
     void add_failure_does_not_keep_old_error();
@@ -678,6 +680,73 @@ void MiningTest::unusable_media_directory_is_cached() {
     QCOMPARE(f.events.count("getMediaDirPath"), 1);
     QCOMPARE(f.note().value("fields").toObject(), QJsonObject{});
     QVERIFY(!f.note().contains("audio"));
+}
+
+void MiningTest::media_directory_isCachedAndValidated() {
+    Fixture f;
+    QTemporaryDir media;
+    QVERIFY(media.isValid());
+    f.replies["getMediaDirPath"] = {true, media.path(), {}};
+    std::optional<std::filesystem::path> first;
+    std::optional<std::filesystem::path> second;
+    f.service.media_directory([&first](auto path) { first = std::move(path); });
+    f.service.media_directory([&second](auto path) { second = std::move(path); });
+    const auto as_string = [](const std::optional<std::filesystem::path>& path) {
+        return path ? QString::fromStdString(path->string()) : QString();
+    };
+    QCOMPARE(as_string(first), media.path());
+    QCOMPARE(as_string(second), media.path());
+    QCOMPARE(f.events, (QStringList{"getMediaDirPath"}));
+
+    f.settings.transport->url = "http://failed.test";
+    f.replies["getMediaDirPath"] = {false, {}, "Media directory request failed"};
+    std::optional<std::filesystem::path> failed;
+    f.service.media_directory([&failed](auto path) { failed = std::move(path); });
+    QVERIFY(!failed);
+    f.replies["getMediaDirPath"] = {true, media.path(), {}};
+    std::optional<std::filesystem::path> cached_failure;
+    f.service.media_directory([&cached_failure](auto path) { cached_failure = std::move(path); });
+    QVERIFY(!cached_failure);
+    QCOMPARE(f.events.count("getMediaDirPath"), 2);
+
+    f.settings.transport->url = "http://missing.test";
+    f.replies["getMediaDirPath"] = {true, f.data.filePath("missing"), {}};
+    std::optional<std::filesystem::path> missing;
+    f.service.media_directory([&missing](auto path) { missing = std::move(path); });
+    QVERIFY(!missing);
+
+    f.settings.transport->url = "http://file.test";
+    const auto file = f.data.filePath("not-a-directory");
+    QVERIFY(write_file(file, "abc"));
+    f.replies["getMediaDirPath"] = {true, file, {}};
+    std::optional<std::filesystem::path> not_a_directory;
+    f.service.media_directory([&not_a_directory](auto path) { not_a_directory = std::move(path); });
+    QVERIFY(!not_a_directory);
+
+    f.settings.transport->url = "http://non-string.test";
+    f.replies["getMediaDirPath"] = {true, QJsonValue(42), {}};
+    std::optional<std::filesystem::path> non_string;
+    f.service.media_directory([&non_string](auto path) { non_string = std::move(path); });
+    QVERIFY(!non_string);
+}
+
+void MiningTest::media_directory_sharesTheCardCache() {
+    Fixture f;
+    QTemporaryDir media;
+    QVERIFY(media.isValid());
+    f.replies["getMediaDirPath"] = {true, media.path(), {}};
+    f.settings.field_mappings = {{"Frame", "{video-screenshot}"}};
+    MiningAttempt attempt;
+    attempt.preflight_already_passed = true;
+    attempt.context.video.emplace().screenshot_filename = "frame image.png";
+    std::optional<std::filesystem::path> resolved;
+    f.service.media_directory([&resolved](auto path) { resolved = std::move(path); });
+    QVERIFY(resolved);
+    QCOMPARE(QString::fromStdString(resolved->string()), media.path());
+    f.mine(attempt);
+    QCOMPARE(f.events.count("getMediaDirPath"), 1);
+    QCOMPARE(f.note().value("fields").toObject(),
+             (QJsonObject{{"Frame", "<img src=\"frame_image.png\">"}}));
 }
 
 void MiningTest::direct_write_or_move_failure_falls_back_data() {

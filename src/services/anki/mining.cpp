@@ -22,6 +22,11 @@ using NoteReady = std::function<void(QJsonObject)>;
 void build_card(const MiningDependencies& deps, MediaDirectories& cache, MiningAttempt attempt,
                 const AnkiSettings& settings, NoteReady ready);
 
+// Defined in mining_card.cpp so video capture and card building share one
+// transport cache.
+void resolve_media_directory(const MiningDependencies& deps, MediaDirectories& cache,
+                             std::function<void(MediaDirectory)> callback);
+
 }  // namespace mining_detail
 
 namespace {
@@ -194,6 +199,11 @@ void MiningService::mine(MiningAttempt attempt, Callback callback) {
     } else {
         preflight(std::move(preflight_content), std::move(begin_add));
     }
+}
+
+void MiningService::media_directory(
+    std::function<void(std::optional<std::filesystem::path>)> callback) {
+    mining_detail::resolve_media_directory(dependencies_, media_directories_, std::move(callback));
 }
 
 }  // namespace niratan::anki

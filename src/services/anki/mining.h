@@ -114,6 +114,15 @@ class MiningService {
     void preflight(Strings content, PreflightCallback callback);
     void mine(MiningAttempt attempt, Callback callback);
 
+    // The active transport's Anki media directory for video capture, following
+    // getMediaDirPath. The answer is the path only when it is an existing
+    // writable directory. One getMediaDirPath is sent per transport URL and
+    // API key, and both usable and unavailable answers are cached; card
+    // building reads the same cache, so a capture followed by an add sends one
+    // request. A failed request and a non-string result are unavailable.
+    // Completes once on the calling thread, possibly inline.
+    void media_directory(std::function<void(std::optional<std::filesystem::path>)> callback);
+
    private:
     DuplicateLookupService& duplicate_lookup_;
     MiningDependencies dependencies_;

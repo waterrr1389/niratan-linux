@@ -70,32 +70,6 @@ std::vector<DictionaryMedia> dictionary_items(const Strings& content) {
     return items;
 }
 
-void resolve_media_directory(const MiningDependencies& deps, MediaDirectories& cache,
-                             std::function<void(MediaDirectory)> callback) {
-    const auto transport = deps.settings().transport.value_or(AnkiTransportConfig{});
-    auto url = transport.url.value_or("");
-    if (QString::fromStdString(url).trimmed().isEmpty()) {
-        url = *AnkiTransportConfig{}.url;
-    }
-    const auto key = std::pair{url, transport.api_key.value_or("")};
-    if (const auto found = cache.find(key); found != cache.end()) {
-        callback(found->second);
-        return;
-    }
-    send(deps, media_dir_path_request(),
-         [&cache, key, callback = std::move(callback)](AnkiConnectResult reply) {
-             MediaDirectory directory;
-             if (const auto path = parse_media_dir_path_result(reply)) {
-                 const QFileInfo info(QString::fromStdString(*path));
-                 if (info.isDir() && info.isWritable()) {
-                     directory = info.filesystemAbsoluteFilePath();
-                 }
-             }
-             cache.insert_or_assign(key, directory);
-             callback(std::move(directory));
-         });
-}
-
 std::optional<std::string> write_direct_media(const MediaDirectory& directory,
                                               const std::string& filename,
                                               const QByteArray& bytes) {
@@ -357,6 +331,32 @@ class NoteBuilder : public std::enable_shared_from_this<NoteBuilder> {
 };
 
 }  // namespace
+
+void resolve_media_directory(const MiningDependencies& deps, MediaDirectories& cache,
+                             std::function<void(MediaDirectory)> callback) {
+    const auto transport = deps.settings().transport.value_or(AnkiTransportConfig{});
+    auto url = transport.url.value_or("");
+    if (QString::fromStdString(url).trimmed().isEmpty()) {
+        url = *AnkiTransportConfig{}.url;
+    }
+    const auto key = std::pair{url, transport.api_key.value_or("")};
+    if (const auto found = cache.find(key); found != cache.end()) {
+        callback(found->second);
+        return;
+    }
+    send(deps, media_dir_path_request(),
+         [&cache, key, callback = std::move(callback)](AnkiConnectResult reply) {
+             MediaDirectory directory;
+             if (const auto path = parse_media_dir_path_result(reply)) {
+                 const QFileInfo info(QString::fromStdString(*path));
+                 if (info.isDir() && info.isWritable()) {
+                     directory = info.filesystemAbsoluteFilePath();
+                 }
+             }
+             cache.insert_or_assign(key, directory);
+             callback(std::move(directory));
+         });
+}
 
 void build_card(const MiningDependencies& deps, MediaDirectories& cache, MiningAttempt attempt,
                 const AnkiSettings& settings, NoteReady ready) {
