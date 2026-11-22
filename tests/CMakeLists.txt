@@ -38,6 +38,14 @@ target_link_libraries(tst_dictionary_config PRIVATE niratan_core Qt6::Test)
 target_compile_options(tst_dictionary_config PRIVATE -Wall -Wextra -Wpedantic -Werror)
 add_test(NAME dictionary_config COMMAND tst_dictionary_config)
 
+qt_add_executable(tst_dictionary_recommendation
+    dictionary/tst_dictionary_recommendation.cpp
+)
+target_include_directories(tst_dictionary_recommendation PRIVATE ${CMAKE_SOURCE_DIR}/src)
+target_link_libraries(tst_dictionary_recommendation PRIVATE niratan_core Qt6::Test)
+target_compile_options(tst_dictionary_recommendation PRIVATE -Wall -Wextra -Wpedantic -Werror)
+add_test(NAME dictionary_recommendation COMMAND tst_dictionary_recommendation)
+
 qt_add_executable(tst_lookup_configuration
     dictionary/tst_lookup_configuration.cpp
 )
@@ -647,6 +655,15 @@ target_include_directories(tst_anki_settings_view_model PRIVATE ${CMAKE_SOURCE_D
 target_link_libraries(tst_anki_settings_view_model PRIVATE niratan_app Qt6::Test)
 target_compile_options(tst_anki_settings_view_model PRIVATE -Wall -Wextra -Wpedantic -Werror)
 add_test(NAME anki_settings_view_model COMMAND tst_anki_settings_view_model)
+
+qt_add_executable(tst_dictionary_settings_view_model
+    viewmodels/tst_dictionary_settings_view_model.cpp
+)
+target_include_directories(tst_dictionary_settings_view_model PRIVATE ${CMAKE_SOURCE_DIR}/src
+    ${CMAKE_CURRENT_SOURCE_DIR}/dictionary)
+target_link_libraries(tst_dictionary_settings_view_model PRIVATE niratan_app Qt6::Test)
+target_compile_options(tst_dictionary_settings_view_model PRIVATE -Wall -Wextra -Wpedantic -Werror)
+add_test(NAME dictionary_settings_view_model COMMAND tst_dictionary_settings_view_model)
 
 qt_add_executable(tst_dictionary_popup_model
     viewmodels/tst_dictionary_popup_model.cpp

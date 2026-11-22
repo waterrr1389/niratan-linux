@@ -2,9 +2,7 @@
 //
 // Reader, dictionary, statistics and Sasayaki controls follow AppearanceView,
 // DictionaryBehaviorSettingsSections, StatisticsSettingsView and
-// SasayakiSettingsView; the Sasayaki form itself is SasayakiSettingsForm.qml.
-// The section rail itself is SettingsSectionRail.qml; its Anki entry reports
-// ankiRequested(), which MainWindow turns into the Anki settings page.
+// SasayakiSettingsView; the rail reports the Anki and Dictionaries requests.
 
 pragma ComponentBehavior: Bound
 
@@ -18,6 +16,7 @@ Page {
 
     signal backRequested
     signal ankiRequested
+    signal dictionariesRequested
 
     padding: 0
     palette.window: Theme.windowBackground
@@ -169,6 +168,7 @@ Page {
                     settings.section = index;
                 }
                 onAnkiRequested: page.ankiRequested()
+                onDictionariesRequested: page.dictionariesRequested()
             }
 
             ScrollView {

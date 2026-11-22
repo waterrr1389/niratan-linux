@@ -208,4 +208,17 @@ std::vector<std::filesystem::path> DictionaryStore::installed() const {
     return directories;
 }
 
+bool DictionaryStore::remove(DictionaryType type, std::string_view title) const {
+    if (root_.empty() || title.empty()) {
+        return false;
+    }
+    const std::filesystem::path name(title);
+    if (name.is_absolute() || name.has_parent_path() || name == "." || name == "..") {
+        return false;
+    }
+    std::error_code error;
+    std::filesystem::remove_all(root_ / std::string(dictionary_type_name(type)) / name, error);
+    return !error;
+}
+
 }  // namespace niratan::dictionary

@@ -6,7 +6,8 @@
 // one selectable row per section over the page background, with the selected
 // row carrying an accent bar. The repo keeps its Reader, Dictionary and
 // Statistics destinations, adds Sasayaki (Audiobooks) after Statistics as the
-// sidebar does, and appends Anki, which opens AnkiView's own page.
+// sidebar does, adds the Dictionaries management page after Dictionary, and
+// appends Anki, which opens AnkiView's own page.
 // SettingsHomeView.swift gives each settings link an SF Symbol; the rail is
 // text-only, so the `waveform` and `tray.full` icons are not reproduced.
 
@@ -24,6 +25,7 @@ Pane {
 
     signal sectionSelected(int index)
     signal ankiRequested()
+    signal dictionariesRequested()
 
     Layout.fillHeight: true
     padding: Theme.spacingSm
@@ -86,18 +88,36 @@ Pane {
     contentItem: ColumnLayout {
         spacing: Theme.spacingXs
 
-        Repeater {
-            model: [qsTr("Reader"), qsTr("Dictionary"), qsTr("Statistics"),
-                qsTr("Sasayaki (Audiobooks)")]
+        RailRow {
+            text: qsTr("Reader")
+            current: rail.selected === 0
+            onActivated: rail.sectionSelected(0)
+        }
 
-            delegate: RailRow {
-                required property int index
-                required property string modelData
+        RailRow {
+            text: qsTr("Dictionary")
+            current: rail.selected === 1
+            onActivated: rail.sectionSelected(1)
+        }
 
-                text: modelData
-                current: rail.selected === index
-                onActivated: rail.sectionSelected(index)
-            }
+        // The managed dictionary library is its own page, reached from the
+        // settings rail the way Anki is, and sits after the Dictionary
+        // behaviour settings.
+        RailRow {
+            text: qsTr("Dictionaries")
+            onActivated: rail.dictionariesRequested()
+        }
+
+        RailRow {
+            text: qsTr("Statistics")
+            current: rail.selected === 2
+            onActivated: rail.sectionSelected(2)
+        }
+
+        RailRow {
+            text: qsTr("Sasayaki (Audiobooks)")
+            current: rail.selected === 3
+            onActivated: rail.sectionSelected(3)
         }
 
         RailRow {

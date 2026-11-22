@@ -24,6 +24,7 @@ find_package(libzip REQUIRED)
 qt_add_library(niratan_core STATIC
     src/models/dictionary/audio_source.cpp
     src/models/dictionary/dictionary_config.cpp
+    src/models/dictionary/dictionary_recommendation.cpp
     src/services/anki/field_mapping.cpp
     src/services/anki/fetch_metadata.cpp
     src/services/anki/mapping_options.cpp
@@ -137,6 +138,8 @@ qt_add_library(niratan_app STATIC
     src/viewmodels/anki/anki_settings_view_model.h
     src/viewmodels/dictionary/dictionary_popup_model.cpp
     src/viewmodels/dictionary/dictionary_popup_model.h
+    src/viewmodels/dictionary/dictionary_settings_view_model.cpp
+    src/viewmodels/dictionary/dictionary_settings_view_model.h
     src/viewmodels/library/library_view_model.cpp
     src/viewmodels/library/library_view_model.h
     src/viewmodels/profiles/profiles_view_model.cpp
@@ -205,6 +208,7 @@ qt_add_qml_module(niratan_app
         src/views/pages/AnkiSettingsAlerts.qml
         src/views/pages/AnkiSettingsPage.qml
         src/views/pages/DictionaryPage.qml
+        src/views/pages/DictionarySettingsPage.qml
         src/views/pages/LibraryPage.qml
         src/views/pages/LibraryShelfSidebar.qml
         src/views/pages/PlayerPage.qml

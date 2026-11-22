@@ -30,6 +30,7 @@
 
 #include <filesystem>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include "models/dictionary/dictionary_config.h"
@@ -63,6 +64,9 @@ class DictionaryStore {
     std::vector<DictionaryInfo> installed(DictionaryType type) const;
     // Every dictionary under any of the four types, in type order.
     std::vector<std::filesystem::path> installed() const;
+    // Deletes <root>/<type>/<title>. The title must be a plain directory name;
+    // false when the root is unusable, the name is unsafe or deletion failed.
+    bool remove(DictionaryType type, std::string_view title) const;
 
    private:
     std::filesystem::path root_;

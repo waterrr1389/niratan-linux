@@ -93,6 +93,8 @@ class QmlLoadTest : public QObject {
     void video_lookup_surface_loads();
     void anki_settings_page_connection_rows();
     void settings_page_offers_anki_section();
+    void settings_page_offers_dictionaries_section();
+    void dictionary_settings_page_lists_the_management_controls();
 
    private:
     // Empty when the component loaded without a QML warning.
@@ -127,10 +129,15 @@ void QmlLoadTest::main_window_loads() {
 
 void QmlLoadTest::page_components_load() {
     const QStringList pages{
-        QStringLiteral("AnkiSettingsPage"), QStringLiteral("DictionaryPage"),
-        QStringLiteral("LibraryPage"),      QStringLiteral("PlayerPage"),
-        QStringLiteral("ProfilesPage"),     QStringLiteral("ReaderPage"),
-        QStringLiteral("SettingsPage"),     QStringLiteral("StatisticsPage"),
+        QStringLiteral("AnkiSettingsPage"),
+        QStringLiteral("DictionaryPage"),
+        QStringLiteral("DictionarySettingsPage"),
+        QStringLiteral("LibraryPage"),
+        QStringLiteral("PlayerPage"),
+        QStringLiteral("ProfilesPage"),
+        QStringLiteral("ReaderPage"),
+        QStringLiteral("SettingsPage"),
+        QStringLiteral("StatisticsPage"),
     };
 
     QQuickWindow window;
@@ -299,6 +306,68 @@ void QmlLoadTest::settings_page_offers_anki_section() {
     QVERIFY2(texts.contains(QStringLiteral("Anki")), qPrintable(texts.join(QStringLiteral(" | "))));
 
     const QString warnings = warnings_after(QStringLiteral("SettingsPage"));
+    QVERIFY2(warnings.isEmpty(), qPrintable(warnings));
+}
+
+// NativeMac/NativeReuseViews.swift settingsSidebar lists Dictionary and, after
+// it, the Dictionaries destination; MainWindow loads the page from its signal.
+void QmlLoadTest::settings_page_offers_dictionaries_section() {
+    QQuickWindow window;
+    window.resize(960, 640);
+    QString error;
+    std::unique_ptr<QObject> object = create_page(QStringLiteral("SettingsPage"), window, error);
+    QVERIFY2(object != nullptr, qPrintable(error));
+    auto* item = qobject_cast<QQuickItem*>(object.get());
+    QVERIFY2(item != nullptr, "SettingsPage is not an Item");
+
+    QVERIFY2(item->metaObject()->indexOfSignal("dictionariesRequested()") >= 0,
+             "SettingsPage has no dictionariesRequested signal");
+
+    const QStringList texts = page_texts(item);
+    QVERIFY2(texts.contains(QStringLiteral("Dictionary")),
+             qPrintable(texts.join(QStringLiteral(" | "))));
+    QVERIFY2(texts.contains(QStringLiteral("Dictionaries")),
+             qPrintable(texts.join(QStringLiteral(" | "))));
+
+    const QString warnings = warnings_after(QStringLiteral("SettingsPage"));
+    QVERIFY2(warnings.isEmpty(), qPrintable(warnings));
+}
+
+// Features/Settings/DictionaryView.swift body, dictionaryTypePicker and
+// DictionaryCategoryPicker: the import button, the formats note, the four
+// type segments and the recommended list. O3 keeps downloads out.
+void QmlLoadTest::dictionary_settings_page_lists_the_management_controls() {
+    QQuickWindow window;
+    window.resize(960, 640);
+    QString error;
+    std::unique_ptr<QObject> object =
+        create_page(QStringLiteral("DictionarySettingsPage"), window, error);
+    QVERIFY2(object != nullptr, qPrintable(error));
+    auto* item = qobject_cast<QQuickItem*>(object.get());
+    QVERIFY2(item != nullptr, "DictionarySettingsPage is not an Item");
+
+    QVERIFY2(item->metaObject()->indexOfSignal("backRequested()") >= 0,
+             "DictionarySettingsPage has no backRequested signal");
+
+    const QStringList texts = page_texts(item);
+    const QStringList shown{
+        QStringLiteral("Dictionaries"),
+        QStringLiteral("Import"),
+        QStringLiteral("Supported Formats"),
+        QStringLiteral("Term"),
+        QStringLiteral("Frequency"),
+        QStringLiteral("Pitch"),
+        QStringLiteral("Kanji"),
+        QStringLiteral("Recommended for this profile"),
+        QStringLiteral("JMdict"),
+    };
+    for (const QString& text : shown) {
+        QVERIFY2(
+            texts.contains(text),
+            qPrintable(text + QStringLiteral(" missing: ") + texts.join(QStringLiteral(" | "))));
+    }
+
+    const QString warnings = warnings_after(QStringLiteral("DictionarySettingsPage"));
     QVERIFY2(warnings.isEmpty(), qPrintable(warnings));
 }
 

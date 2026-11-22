@@ -86,12 +86,20 @@ ApplicationWindow {
         SettingsPage {
             onBackRequested: stack.pop()
             onAnkiRequested: stack.push(ankiPage)
+            onDictionariesRequested: stack.push(dictionarySettingsPage)
         }
     }
 
     Component {
         id: ankiPage
         AnkiSettingsPage {
+            onBackRequested: stack.pop()
+        }
+    }
+
+    Component {
+        id: dictionarySettingsPage
+        DictionarySettingsPage {
             onBackRequested: stack.pop()
         }
     }
