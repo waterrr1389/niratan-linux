@@ -216,8 +216,16 @@ qt_add_qml_module(niratan_app
     URI Niratan
     QML_FILES
         src/views/MainWindow.qml
+        src/views/components/Icon.qml
         src/views/components/PageHeader.qml
         src/views/dictionary/AnkiMiningToast.qml
+        src/views/icons/icon_map.js
+        src/views/icons/phosphor/fill/x-circle-fill.svg
+        src/views/icons/phosphor/regular/book-open-text.svg
+        src/views/icons/phosphor/regular/books.svg
+        src/views/icons/phosphor/regular/gear.svg
+        src/views/icons/phosphor/regular/magnifying-glass.svg
+        src/views/icons/phosphor/regular/video.svg
         src/views/pages/AnkiFieldRow.qml
         src/views/pages/AnkiSettingsAlerts.qml
         src/views/pages/AnkiSettingsPage.qml

@@ -133,6 +133,7 @@ class QmlLoadTest : public QObject {
     void dictionary_settings_page_lists_the_management_controls();
     void profiles_page_lists_the_management_controls();
     void dictionary_page_search_field_uses_the_profile_text_size();
+    void icon_table_resolves();
 
    private:
     // Empty when the component loaded without a QML warning.
@@ -509,6 +510,56 @@ void QmlLoadTest::dictionary_page_search_field_uses_the_profile_text_size() {
     QCOMPARE(default_field->property("font").value<QFont>().pixelSize(), 26);
     const QString default_warnings = warnings_after(QStringLiteral("DictionaryPage"));
     QVERIFY2(default_warnings.isEmpty(), qPrintable(default_warnings));
+}
+
+// B2-B7 of the views-icons module: every SF Symbol name the shared components
+// draw resolves through src/views/icons/icon_map.js to an existing Phosphor
+// SVG, and a name the table does not know reports itself as unknown with no
+// source. The mapping table itself is not duplicated here.
+void QmlLoadTest::icon_table_resolves() {
+    QQuickWindow window;
+    window.resize(960, 640);
+    QQmlComponent component(
+        &engine_, QUrl(QStringLiteral("qrc:/qt/qml/Niratan/src/views/components/Icon.qml")));
+    QVERIFY2(!component.isError(), qPrintable(error_text(component)));
+
+    const QStringList symbols{
+        QStringLiteral("books.vertical"),  QStringLiteral("character.book.closed"),
+        QStringLiteral("play.rectangle"),  QStringLiteral("gearshape"),
+        QStringLiteral("magnifyingglass"), QStringLiteral("xmark.circle.fill"),
+    };
+    for (const QString& symbol : symbols) {
+        std::unique_ptr<QObject> object(component.createWithInitialProperties(
+            {{QStringLiteral("name"), symbol}, {QStringLiteral("size"), 24.0}},
+            engine_.rootContext()));
+        QVERIFY2(object != nullptr,
+                 qPrintable(symbol + QStringLiteral(": ") + error_text(component)));
+        auto* icon = qobject_cast<QQuickItem*>(object.get());
+        QVERIFY2(icon != nullptr, qPrintable(symbol + QStringLiteral(" is not an Item")));
+        icon->setParentItem(window.contentItem());
+
+        QVERIFY2(icon->property("known").toBool(),
+                 qPrintable(symbol + QStringLiteral(" is not a known icon")));
+        const QUrl source = icon->property("source").toUrl();
+        QVERIFY2(!source.isEmpty(), qPrintable(symbol + QStringLiteral(" has no source")));
+        QVERIFY2(
+            QFile(QStringLiteral(":") + source.path()).exists(),
+            qPrintable(symbol + QStringLiteral(" names a missing resource: ") + source.toString()));
+        QCOMPARE(icon->implicitWidth(), 24.0);
+        QCOMPARE(icon->implicitHeight(), 24.0);
+    }
+
+    std::unique_ptr<QObject> unknown(component.createWithInitialProperties(
+        {{QStringLiteral("name"), QStringLiteral("not.a.symbol")}, {QStringLiteral("size"), 24.0}},
+        engine_.rootContext()));
+    QVERIFY2(unknown != nullptr, qPrintable(error_text(component)));
+    auto* unknown_icon = qobject_cast<QQuickItem*>(unknown.get());
+    QVERIFY2(unknown_icon != nullptr, "Icon is not an Item");
+    QVERIFY(!unknown_icon->property("known").toBool());
+    QVERIFY(unknown_icon->property("source").toUrl().isEmpty());
+
+    const QString warnings = warnings_after(QStringLiteral("Icon"));
+    QVERIFY2(warnings.isEmpty(), qPrintable(warnings));
 }
 
 int main(int argc, char* argv[]) {
