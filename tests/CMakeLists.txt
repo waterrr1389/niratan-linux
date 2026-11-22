@@ -405,6 +405,14 @@ target_link_libraries(tst_dictionary_settings PRIVATE niratan_core Qt6::Test)
 target_compile_options(tst_dictionary_settings PRIVATE -Wall -Wextra -Wpedantic -Werror)
 add_test(NAME dictionary_settings COMMAND tst_dictionary_settings)
 
+qt_add_executable(tst_audio_clip
+    player/tst_audio_clip.cpp
+)
+target_include_directories(tst_audio_clip PRIVATE ${CMAKE_SOURCE_DIR}/src)
+target_link_libraries(tst_audio_clip PRIVATE niratan_core Qt6::Test)
+target_compile_options(tst_audio_clip PRIVATE -Wall -Wextra -Wpedantic -Werror)
+add_test(NAME audio_clip COMMAND tst_audio_clip)
+
 qt_add_executable(tst_mining_history
     player/tst_mining_history.cpp
 )

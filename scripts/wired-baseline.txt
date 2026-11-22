@@ -3,5 +3,6 @@
 
 services/anki/media_naming.h
 services/dictionary/frequency_rank.h
+services/player/audio_clip.h
 services/player/video_mining.h
 services/player/video_mining_store.h
