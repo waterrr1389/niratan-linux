@@ -259,6 +259,15 @@ void LibraryViewModel::clearError() {
     emit errorChanged();
 }
 
+QVariantMap LibraryViewModel::smart_counts() const {
+    const auto count = [this](LibraryShelf shelf) {
+        return books::book_count(state_->library, LibraryShelfSelection{shelf, {}});
+    };
+    return {{QStringLiteral("all"), count(LibraryShelf::all)},
+            {QStringLiteral("reading"), count(LibraryShelf::reading)},
+            {QStringLiteral("unshelved"), count(LibraryShelf::unshelved)}};
+}
+
 int LibraryViewModel::book_count() const {
     return books::book_count(state_->library, state_->selection());
 }

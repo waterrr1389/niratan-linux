@@ -29,6 +29,7 @@
 #include <QString>
 #include <QUrl>
 #include <QVariantList>
+#include <QVariantMap>
 #include <QtQml/qqmlregistration.h>
 
 #include <memory>
@@ -47,6 +48,10 @@ class LibraryViewModel : public QObject {
     Q_PROPERTY(QString error READ error NOTIFY errorChanged)
     Q_PROPERTY(bool importError READ isImportError NOTIFY errorChanged)
     Q_PROPERTY(int bookCount READ book_count NOTIFY booksChanged)
+    // The badges of the shelf column's smart rows, LibraryShelfSidebar's
+    // LibraryShelfSmartRow.count: "all", "reading" and "unshelved", each the
+    // book count of that selection.
+    Q_PROPERTY(QVariantMap smartCounts READ smart_counts NOTIFY booksChanged)
 
    public:
     explicit LibraryViewModel(QObject* parent = nullptr);
@@ -54,6 +59,7 @@ class LibraryViewModel : public QObject {
 
     QVariantList books() const;
     QVariantList shelves() const;
+    QVariantMap smart_counts() const;
     QString selected_shelf() const;
     void setSelectedShelf(const QString& shelf);
     int sort_option() const;
