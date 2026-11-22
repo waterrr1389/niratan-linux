@@ -56,19 +56,9 @@ struct AnkiSettingsViewModel::State {
         return found == models.end() ? nullptr : &*found;
     }
 
-    bool autofill() {
-        const auto* model = selected_model();
-        if (!model) {
-            return false;
-        }
-        auto& mappings = config->settings().field_mappings;
-        auto updated = anki::autofill_mappings(model->name, model->fields, mappings);
-        if (mappings == updated) {
-            return false;
-        }
-        mappings = std::move(updated);
-        return true;
-    }
+    // AnkiManager.autofillFieldMappings, shared with profile activation
+    // through the store; the callers save only when it returns true.
+    bool autofill() { return config.has_value() && config->autofill_field_mappings(); }
 
     void set_error(QString message) {
         if (error != message) {

@@ -87,6 +87,7 @@ ApplicationWindow {
             onBackRequested: stack.pop()
             onAnkiRequested: stack.push(ankiPage)
             onDictionariesRequested: stack.push(dictionarySettingsPage)
+            onProfilesRequested: stack.push(profilesPage)
         }
     }
 

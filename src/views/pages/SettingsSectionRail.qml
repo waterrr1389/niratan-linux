@@ -4,7 +4,8 @@
 // settings sidebar of NativeMac/NativeReuseViews.swift
 // NativeSettingsReuseView.settingsSidebar and Features/Settings/SettingsHomeView.swift:
 // one selectable row per section over the page background, with the selected
-// row carrying an accent bar. The repo keeps its Reader, Dictionary and
+// row carrying an accent bar. Profiles opens its own page first, as the
+// sidebar's Library group orders it; the repo keeps its Reader, Dictionary and
 // Statistics destinations, adds Sasayaki (Audiobooks) after Statistics as the
 // sidebar does, adds the Dictionaries management page after Dictionary, and
 // appends Anki, which opens AnkiView's own page.
@@ -26,6 +27,7 @@ Pane {
     signal sectionSelected(int index)
     signal ankiRequested()
     signal dictionariesRequested()
+    signal profilesRequested()
 
     Layout.fillHeight: true
     padding: Theme.spacingSm
@@ -87,6 +89,13 @@ Pane {
 
     contentItem: ColumnLayout {
         spacing: Theme.spacingXs
+
+        // Profiles opens its own page first, as NativeReuseViews.swift puts the
+        // Profiles screen at the top of the sidebar's Library group (O1).
+        RailRow {
+            text: qsTr("Profiles")
+            onActivated: rail.profilesRequested()
+        }
 
         RailRow {
             text: qsTr("Reader")

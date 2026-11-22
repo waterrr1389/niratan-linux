@@ -70,6 +70,25 @@ QStringList page_texts(QQuickItem* page) {
     return texts;
 }
 
+// Every non-empty text in the visual tree. A Repeater's delegates are visual
+// siblings of the Repeater and are not QObject children of the page, so
+// QObject::findChildren misses them; childItems() reaches them.
+void collect_visual_texts(QQuickItem* item, QStringList& texts) {
+    const QVariant text = item->property("text");
+    if (text.isValid() && !text.toString().isEmpty()) {
+        texts.append(text.toString());
+    }
+    for (QQuickItem* child : item->childItems()) {
+        collect_visual_texts(child, texts);
+    }
+}
+
+QStringList visual_page_texts(QQuickItem* page) {
+    QStringList texts;
+    collect_visual_texts(page, texts);
+    return texts;
+}
+
 // The dictionary page's search field (DictionarySearchView's TextField).
 QQuickItem* search_field(QQuickItem* page) {
     for (QObject* child : page->findChildren<QObject*>()) {
@@ -110,7 +129,9 @@ class QmlLoadTest : public QObject {
     void anki_settings_page_connection_rows();
     void settings_page_offers_anki_section();
     void settings_page_offers_dictionaries_section();
+    void settings_page_offers_profiles_section();
     void dictionary_settings_page_lists_the_management_controls();
+    void profiles_page_lists_the_management_controls();
     void dictionary_page_search_field_uses_the_profile_text_size();
 
    private:
@@ -350,6 +371,28 @@ void QmlLoadTest::settings_page_offers_dictionaries_section() {
     QVERIFY2(warnings.isEmpty(), qPrintable(warnings));
 }
 
+// B5: NativeMac/NativeReuseViews.swift settingsSidebar puts Profiles first in
+// the Library group; the port's Settings rail requests the page (O1).
+void QmlLoadTest::settings_page_offers_profiles_section() {
+    QQuickWindow window;
+    window.resize(960, 640);
+    QString error;
+    std::unique_ptr<QObject> object = create_page(QStringLiteral("SettingsPage"), window, error);
+    QVERIFY2(object != nullptr, qPrintable(error));
+    auto* item = qobject_cast<QQuickItem*>(object.get());
+    QVERIFY2(item != nullptr, "SettingsPage is not an Item");
+
+    QVERIFY2(item->metaObject()->indexOfSignal("profilesRequested()") >= 0,
+             "SettingsPage has no profilesRequested signal");
+
+    const QStringList texts = page_texts(item);
+    QVERIFY2(texts.contains(QStringLiteral("Profiles")),
+             qPrintable(texts.join(QStringLiteral(" | "))));
+
+    const QString warnings = warnings_after(QStringLiteral("SettingsPage"));
+    QVERIFY2(warnings.isEmpty(), qPrintable(warnings));
+}
+
 // Features/Settings/DictionaryView.swift body, dictionaryTypePicker and
 // DictionaryCategoryPicker: the import button, the formats note, the four
 // type segments and the recommended list. O3 keeps downloads out.
@@ -385,6 +428,41 @@ void QmlLoadTest::dictionary_settings_page_lists_the_management_controls() {
     }
 
     const QString warnings = warnings_after(QStringLiteral("DictionarySettingsPage"));
+    QVERIFY2(warnings.isEmpty(), qPrintable(warnings));
+}
+
+// B5: Features/Settings/ProfilesView.swift body and profileRow: the back
+// signal, the Create row, the Built-in marker, the language caption and the
+// footer sentence about per-profile settings.
+void QmlLoadTest::profiles_page_lists_the_management_controls() {
+    QQuickWindow window;
+    window.resize(960, 640);
+    QString error;
+    std::unique_ptr<QObject> object = create_page(QStringLiteral("ProfilesPage"), window, error);
+    QVERIFY2(object != nullptr, qPrintable(error));
+    auto* item = qobject_cast<QQuickItem*>(object.get());
+    QVERIFY2(item != nullptr, "ProfilesPage is not an Item");
+
+    QVERIFY2(item->metaObject()->indexOfSignal("backRequested()") >= 0,
+             "ProfilesPage has no backRequested signal");
+
+    const QStringList texts = visual_page_texts(item);
+    const QStringList shown{
+        QStringLiteral("Profiles"),
+        QStringLiteral("Create Profile"),
+        QStringLiteral("Built-in"),
+        QStringLiteral("Japanese"),
+        QStringLiteral("Dictionary, reader appearance and Anki mining settings follow the active "
+                       "profile. Open pages keep the settings they already loaded until they load "
+                       "them again."),
+    };
+    for (const QString& text : shown) {
+        QVERIFY2(
+            texts.contains(text),
+            qPrintable(text + QStringLiteral(" missing: ") + texts.join(QStringLiteral(" | "))));
+    }
+
+    const QString warnings = warnings_after(QStringLiteral("ProfilesPage"));
     QVERIFY2(warnings.isEmpty(), qPrintable(warnings));
 }
 

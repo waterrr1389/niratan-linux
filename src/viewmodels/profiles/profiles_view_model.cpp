@@ -10,7 +10,9 @@
 #include "models/profiles/content_language.h"
 #include "models/profiles/profile_index.h"
 #include "models/profiles/profile_ops.h"
+#include "services/anki/anki_config.h"
 #include "services/profiles/profile_repository.h"
+#include "services/storage/app_paths.h"
 
 namespace niratan::viewmodels {
 namespace {
@@ -43,6 +45,18 @@ QString message_for(ProfileError error) {
             return ProfilesViewModel::tr("Could not write the profile index.");
     }
     return ProfilesViewModel::tr("Could not update the profile.");
+}
+
+// Core/AnkiManager.activateProfile for the profile that just became active:
+// load its Anki configuration, autofill the field mappings from its selected
+// note type, and write only when they changed. The outgoing profile is not
+// rewritten because every edit already saved (Decision 4).
+void autofill_active_profile(const ProfileRepository& repository) {
+    anki::AnkiConfigStore store{storage::data_root(), repository};
+    store.load();
+    if (store.autofill_field_mappings()) {
+        store.save();
+    }
 }
 
 }  // namespace
@@ -149,6 +163,8 @@ bool ProfilesViewModel::createProfile(const QString& name, const QString& langua
         return fail(message_for(*error));
     }
 
+    autofill_active_profile(*state_->repository);
+
     state_->rebuild();
     emit profilesChanged();
     return true;
@@ -176,9 +192,16 @@ bool ProfilesViewModel::deleteProfile(const QString& id) {
         return false;
     }
 
+    const std::string previous_active = state_->repository->index().global_active_profile_id;
     if (const std::optional<ProfileError> error =
             state_->repository->delete_profile(id.toStdString())) {
         return fail(message_for(*error));
+    }
+
+    // Only a delete that moved the active profile runs the Anki step, for the
+    // profile that took over.
+    if (state_->repository->index().global_active_profile_id != previous_active) {
+        autofill_active_profile(*state_->repository);
     }
 
     state_->rebuild();
@@ -192,9 +215,16 @@ bool ProfilesViewModel::activateProfile(const QString& id) {
         return false;
     }
 
+    const std::string previous_active = state_->repository->index().global_active_profile_id;
     if (const std::optional<ProfileError> error =
             state_->repository->set_active_profile(id.toStdString())) {
         return fail(message_for(*error));
+    }
+
+    // AnkiManager.activateProfile's guard: the already active profile does
+    // nothing, so no autofill and no write.
+    if (state_->repository->index().global_active_profile_id != previous_active) {
+        autofill_active_profile(*state_->repository);
     }
 
     state_->rebuild();

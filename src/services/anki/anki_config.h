@@ -3,7 +3,8 @@
 // The Anki configuration store, following Core/AnkiManager.swift
 // (AnkiManager stored state, init, loadTransport, loadProfile, apply(_:),
 // ensureAnkiConnectURL, save, makeLegacyConfig(from:), activateProfile,
-// setAnkiConnectURL, setAnkiConnectAPIKey, setFieldMapping, setTags),
+// autofillFieldMappings, setAnkiConnectURL, setAnkiConnectAPIKey,
+// setFieldMapping, setTags),
 // Models/Anki.swift (AnkiProfileConfig, AnkiConfig, AnkiConnectConfig,
 // AnkiNoteType, DuplicateScope, AnkiImageCompressionFormat,
 // AnkiAudioCompressionFormat, AnkiAnimatedAVIFConfiguration) and
@@ -156,6 +157,12 @@ class AnkiConfigStore {
     // Saves the outgoing profile when it still exists, then switches and loads
     // the new profile. Unknown and already active IDs are ignored.
     void activate_profile(std::string_view profile_id);
+
+    // AnkiManager.autofillFieldMappings: false when the selected note type is
+    // absent or not in available_note_types, otherwise runs
+    // anki::autofill_mappings and reports whether field_mappings changed. It
+    // changes nothing else and never saves.
+    bool autofill_field_mappings();
 
     // The setters store their value and save at once. set_field_mapping stores
     // "" for a whitespace-only value and the value verbatim otherwise.

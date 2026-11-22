@@ -3,9 +3,11 @@
 // State and commands for the profile page, following
 // Features/Settings/ProfilesView.swift (the active profile list, the row
 // checkmark, language caption and Built-in marker, the Create and Rename
-// editor, the delete confirmation and the error alert) and
+// editor, the delete confirmation and the error alert),
 // Core/ProfileRepository.swift (profile(id:), activeProfile, createProfile,
-// renameProfile, deleteProfile, setGlobalActiveProfile).
+// renameProfile, deleteProfile, setGlobalActiveProfile),
+// Core/ProfileActivationCoordinator.swift (activateGlobal) and
+// Core/AnkiManager.swift (activateProfile, autofillFieldMappings, save).
 //
 // The list keeps the repository's order, so the built-in default stays first.
 // "name" is HoshiProfile::display_name (the localized built-in name),
@@ -22,13 +24,25 @@
 // so a failed activation still leaves the new profile in the list and returns
 // false.
 //
-// Activation only changes the stored active profile ID. Reader and dictionary
-// settings are read per profile when those pages next load their settings;
-// this class does not swap them live, and it does not clear the Suwayomi
-// connection store because that store has no Linux port yet. Deletion has the
-// same boundary: the repository drops the profile's directory and its
-// primary-profile entries, while pages that already loaded their settings
-// keep them until they load again.
+// Activation writes the stored active profile ID and then repeats
+// Core/AnkiManager.swift (activateProfile, autofillFieldMappings): the newly
+// active profile's Anki configuration is loaded and its field mappings are
+// autofilled from its selected note type and the available note types
+// (AnkiFieldTemplate.autofilledMappings), and the configuration is saved only
+// when the mappings changed. An absent note type or a missing note-type list
+// leaves the file alone. Activating the already-active profile does nothing,
+// like activateProfile's guard, and so does activating an unknown id.
+// createProfile and a delete that changes the active profile run the same
+// step for the profile that becomes active.
+//
+// The outgoing profile is not rewritten: every edit already saved, so there is
+// no pending state to persist (Decision 4). Reader and dictionary settings are
+// read per profile when those pages next load their settings; this class does
+// not swap them live, and it does not clear the Suwayomi connection store
+// because that store has no Linux port yet. Deletion has the same boundary:
+// the repository drops the profile's directory and its primary-profile
+// entries, while pages that already loaded their settings keep them until they
+// load again.
 //
 // An empty storage::data_root() (no XDG_DATA_HOME and no HOME) leaves the
 // class without a repository: the list stays empty, error reports that no data

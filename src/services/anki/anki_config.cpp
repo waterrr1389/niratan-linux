@@ -4,6 +4,7 @@
 
 #include <QJsonDocument>
 
+#include <algorithm>
 #include <cmath>
 #include <optional>
 #include <string>
@@ -11,6 +12,7 @@
 #include <utility>
 
 #include "services/anki/anki_config_codec.h"
+#include "services/anki/field_mapping.h"
 #include "services/profiles/profile_repository.h"
 #include "services/storage/json_file.h"
 
@@ -266,6 +268,23 @@ void AnkiConfigStore::activate_profile(std::string_view profile_id) {
     } else {
         detail::reset_profile(settings_);
     }
+}
+
+bool AnkiConfigStore::autofill_field_mappings() {
+    if (!settings_.selected_note_type.has_value()) {
+        return false;
+    }
+    const auto& models = settings_.available_note_types;
+    const auto found = std::ranges::find(models, *settings_.selected_note_type, &NoteType::name);
+    if (found == models.end()) {
+        return false;
+    }
+    auto updated = autofill_mappings(found->name, found->fields, settings_.field_mappings);
+    if (updated == settings_.field_mappings) {
+        return false;
+    }
+    settings_.field_mappings = std::move(updated);
+    return true;
 }
 
 AnkiSaveResult AnkiConfigStore::set_anki_connect_url(std::string url) {

@@ -1,8 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-//
-// Reader, dictionary, statistics and Sasayaki controls follow AppearanceView,
-// DictionaryBehaviorSettingsSections, StatisticsSettingsView and
-// SasayakiSettingsView; the rail reports the Anki and Dictionaries requests.
+// Section forms follow AppearanceView, DictionaryBehaviorSettingsSections,
+// StatisticsSettingsView and SasayakiSettingsView; the rail reports requests.
 
 pragma ComponentBehavior: Bound
 
@@ -17,6 +15,7 @@ Page {
     signal backRequested
     signal ankiRequested
     signal dictionariesRequested
+    signal profilesRequested
 
     padding: 0
     palette.window: Theme.windowBackground
@@ -169,6 +168,7 @@ Page {
                 }
                 onAnkiRequested: page.ankiRequested()
                 onDictionariesRequested: page.dictionariesRequested()
+                onProfilesRequested: page.profilesRequested()
             }
 
             ScrollView {
