@@ -7,8 +7,12 @@
 // Swift serves the book cover and the Sasayaki audio from LocalFileServer
 // while it renders. The caller supplies the served URLs for rendering and
 // a separate local cover path for attachments. An empty string means absent.
+// The popup's mined cue audio travels as bytes with its format extension,
+// because models/ cannot name services/anki's compression enum.
 
 #pragma once
+
+#include <QByteArray>
 
 #include <optional>
 #include <string>
@@ -50,6 +54,12 @@ struct MiningContext {
     std::optional<VideoMiningContext> video;
     // Empty means no cover attachment source, even when cover_url is set.
     std::string cover_path;
+    // The popup's mined cue audio, when the mine waited for it. An empty
+    // optional keeps a {sasayaki-audio} mapping out of the note.
+    std::optional<QByteArray> sasayaki_audio_data;
+    // AnkiAudioCompressionFormat.fileExtension of sasayaki_audio_data, from
+    // the same settings snapshot as the export.
+    std::string sasayaki_audio_format = "m4a";
 };
 
 }  // namespace niratan::anki

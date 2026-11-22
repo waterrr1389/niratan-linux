@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
-// Follows Features/Popup/PopupView.swift (popupContent, sasayakiControls and
-// the wasPaused/onPause/onSasayakiJumpDismiss wiring),
-// PopupWebView.swift (Coordinator.userContentController, updateUIView) and
+// Follows Features/Popup/PopupView.swift (popupContent, sasayakiControls,
+// mineEntry's sasayakiCue and the wasPaused/onPause/onSasayakiJumpDismiss
+// wiring), Core/AnkiManager.swift (needsSasayakiAudio), PopupWebView.swift
+// (Coordinator.userContentController, updateUIView) and
 // NativeMac/NativeReaderView.swift (handleSelection's cue and auto-pause,
 // closePopup(resumePausedPlayback:)).
 
@@ -118,6 +119,16 @@ Item {
         function onAnkiNoteButtonRequested(entryIndex, noteId) {
             results.runJavaScript("window.hoshiShowAnkiNoteButton?.(" + entryIndex + ", '" + noteId + "');")
         }
+        function onSasayakiAudioRequested(cueId, sentence, format, bitrate) {
+            surface.player.requestCueAudio(cueId, sentence, format, bitrate)
+        }
+    }
+
+    Connections {
+        target: surface.player
+        function onCueAudioReady(data) {
+            surface.miningModel.sasayakiAudioReady(data)
+        }
     }
 
     QtObject {
@@ -131,6 +142,9 @@ Item {
 
         function mineEntry(requestId: int, content: var): void {
             results.lastMiningRequest = Math.max(results.lastMiningRequest, requestId)
+            // PopupView.mineEntry: the selection's cue goes with the mine, and
+            // an empty id means this lookup has no cue audio.
+            surface.miningModel.setSasayakiCue(surface.popupCue.id !== undefined ? surface.popupCue.id : "")
             surface.miningModel.mineEntry(requestId, content)
         }
 

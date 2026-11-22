@@ -37,6 +37,13 @@ bool needs_video_audio_clip(const FieldMappings& mappings) {
     });
 }
 
+// AnkiManager.swift needsSasayakiAudio: an exact match of the whole mapped
+// value. Field names and other fields do not matter.
+bool needs_sasayaki_audio(const FieldMappings& mappings) {
+    return std::ranges::any_of(
+        mappings, [](const auto& mapping) { return mapping.second == "{sasayaki-audio}"; });
+}
+
 std::optional<MiningResult> gate_anki_mining(const MiningSettings& settings, const Strings& content,
                                              const MiningContext& context,
                                              const DuplicateLookup& duplicate_lookup,

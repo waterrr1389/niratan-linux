@@ -42,6 +42,15 @@
 // reach the add as uploads. The card sees the same names, fields and failure
 // messages as Swift.
 //
+// Screenshot and clip failures fail the add with the capture's message.
+//
+// A reader mine with an exact {sasayaki-audio} mapping and a cue from the
+// popup requests the cue's clip after the preflight and adds only after the
+// answer, with the profile captured at the start. The request carries the cue
+// id, the selection's sentence and the settings' format and bitrate; an empty
+// answer adds without audio. Without a cue, with no exact mapping, or on a
+// video the add goes out as before, and a video keeps its video-audio bucket.
+//
 // Recorded differences: the frame and clip run one after the other rather
 // than concurrently, with no video thumbnails to suspend, so the card waits
 // for both the same way; imageCompressionQuality reaches the deterministic
@@ -59,15 +68,20 @@
 
 #pragma once
 
+#include <QByteArray>
 #include <QObject>
 #include <QString>
 #include <QVariant>
 #include <QtQml/qqmlregistration.h>
 
+#include <deque>
+#include <functional>
 #include <memory>
+#include <string>
 #include <vector>
 
 #include "models/anki/mining_context.h"
+#include "services/anki/mining.h"
 
 namespace niratan::viewmodels {
 
@@ -90,6 +104,15 @@ class MiningViewModel : public QObject {
     Q_INVOKABLE void setContext(const QString& sentence, const QString& documentTitle,
                                 const QString& coverUrl, const QString& coverPath);
     void set_term_dictionaries(std::vector<anki::TermDictionary> dictionaries);
+
+    // The lookup popup's cue for the next mine, set before every mineEntry.
+    // Empty means the popup has no cue, so a {sasayaki-audio} mapping stays
+    // out of the note.
+    Q_INVOKABLE void setSasayakiCue(const QString& cueId);
+    // The page's answer to sasayakiAudioRequested: the first pending mine adds
+    // with these bytes, or without audio when they are empty. Ignored when no
+    // mine waits.
+    Q_INVOKABLE void sasayakiAudioReady(const QByteArray& data);
 
     // The video screen's mining context. Keys: path, title, audioStreamIndex,
     // cueText, cueStart, cueEnd, optional previousCueText/nextCueText,
@@ -124,10 +147,31 @@ class MiningViewModel : public QObject {
     void ankiNoteButtonRequested(int entryIndex, const QString& noteId);
     // The page captures a still at path and then calls screenshotFinished.
     void screenshotRequested(const QString& path);
+    // The mine waits for the popup cue's clip: the cue id, the selection's
+    // sentence and the settings' format (0 aac, 1 mp3) and bitrate. The page
+    // answers through sasayakiAudioReady.
+    void sasayakiAudioRequested(const QString& cueId, const QString& sentence, int format,
+                                int bitrate);
 
    private:
     struct State;
+    // The popup cue and the mines waiting for its clip, in request order.
+    struct SasayakiState {
+        QString cue;
+        std::deque<std::function<void(QByteArray data, std::string extension)>> pending;
+    };
     std::unique_ptr<State> state_;
+    // Null until setSasayakiCue or the first request.
+    std::unique_ptr<SasayakiState> sasayaki_state_;
+
+    // Enqueues a cue-audio answer when the popup has a cue and returns true;
+    // otherwise the caller adds now and this returns false.
+    bool request_cue_audio(const QString& sentence, int format, int bitrate,
+                           std::function<void(QByteArray data, std::string extension)> add);
+    // Builds the video capture request from State and starts it; completion
+    // adds the note with the captured context.
+    void start_video_capture(anki::MiningAttempt attempt,
+                             std::function<void(anki::AnkiMiningResult)> finish);
 };
 
 }  // namespace niratan::viewmodels

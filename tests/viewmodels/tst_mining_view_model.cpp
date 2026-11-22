@@ -26,6 +26,7 @@
 #include "services/storage/app_paths.h"
 
 using niratan::anki::AnkiConfigStore;
+using niratan::anki::AudioCompressionFormat;
 using niratan::profiles::ProfileRepository;
 using niratan::test::added_id;
 using niratan::test::AnkiStub;
@@ -222,6 +223,13 @@ class MiningViewModelTest : public QObject {
     void video_direct_media_is_reused();
     void video_context_fields_use_the_title();
     void video_context_is_cleared_by_reader_context();
+    void sasayaki_audio_is_requested_after_preflight();
+    void sasayaki_audio_requests_the_settings_format();
+    void sasayaki_audio_requires_a_cue();
+    void sasayaki_audio_requires_the_mapping();
+    void sasayaki_empty_answer_adds_without_audio();
+    void sasayaki_requests_answer_in_order();
+    void sasayaki_profile_change_during_request_fails();
 };
 
 // B2, B3: PopupWebView.Coordinator.userContentController (async).
@@ -1203,6 +1211,202 @@ void MiningViewModelTest::video_context_is_cleared_by_reader_context() {
              mining_payload("added", "Added to Anki.", added_id_text));
     QCOMPARE(writer.calls, 0);
     QCOMPARE(f.anki.actions().count("getMediaDirPath"), 0);
+}
+
+// PopupView.mineEntry and AnkiManager.needsSasayakiAudio: the clip is asked
+// for only after the preflight, with a cue, an exact mapping and a reader
+// context, and the add waits for the answer.
+void MiningViewModelTest::sasayaki_audio_is_requested_after_preflight() {
+    Fixture f;
+    auto& settings = f.config.settings();
+    settings.field_mappings = {{"Word", "{expression}"}, {"Sound", "{sasayaki-audio}"}};
+    settings.audio_compression_format = AudioCompressionFormat::aac;
+    settings.audio_compression_bitrate_kbps = 64;
+    QVERIFY(f.save());
+
+    MiningViewModel model;
+    model.setContext(QString::fromUtf8("世界です。"), QStringLiteral("Book"), {}, {});
+    model.setSasayakiCue(QStringLiteral("cue-1"));
+    QSignalSpy requests(&model, &MiningViewModel::sasayakiAudioRequested);
+    QSignalSpy replies(&model, &MiningViewModel::replyReady);
+    model.mineEntry(1, content());
+
+    QTRY_COMPARE_WITH_TIMEOUT(requests.size(), 1, 1500);
+    QCOMPARE(requests.first().at(0).toString(), QStringLiteral("cue-1"));
+    QCOMPARE(requests.first().at(1).toString(), QString::fromUtf8("世界です。"));
+    QCOMPARE(requests.first().at(2).toInt(), 0);
+    QCOMPARE(requests.first().at(3).toInt(), 64);
+    QVERIFY(!f.anki.actions().contains("addNote"));
+
+    model.sasayakiAudioReady(QByteArray("abc"));
+    QTRY_COMPARE_WITH_TIMEOUT(replies.size(), 1, 1500);
+    QCOMPARE(replies.first().at(1).toMap(),
+             mining_payload("added", "Added to Anki.", added_id_text));
+    const auto note = f.anki.params("addNote").value("note").toObject();
+    QCOMPARE(note.value("audio").toArray(),
+             (QJsonArray{QJsonObject{{"data", "YWJj"},
+                                     {"filename",
+                                      QStringLiteral("hoshi_sasayaki_") +
+                                          sha1_hex(QByteArray("abc")) + QStringLiteral(".m4a")},
+                                     {"fields", QJsonArray{"Sound"}}}}));
+}
+
+void MiningViewModelTest::sasayaki_audio_requests_the_settings_format() {
+    Fixture f;
+    auto& settings = f.config.settings();
+    settings.field_mappings = {{"Word", "{expression}"}, {"Sound", "{sasayaki-audio}"}};
+    settings.audio_compression_format = AudioCompressionFormat::mp3;
+    settings.audio_compression_bitrate_kbps = 192;
+    QVERIFY(f.save());
+
+    MiningViewModel model;
+    model.setContext(QString::fromUtf8("世界です。"), QStringLiteral("Book"), {}, {});
+    model.setSasayakiCue(QStringLiteral("cue-1"));
+    QSignalSpy requests(&model, &MiningViewModel::sasayakiAudioRequested);
+    QSignalSpy replies(&model, &MiningViewModel::replyReady);
+    model.mineEntry(5, content());
+
+    QTRY_COMPARE_WITH_TIMEOUT(requests.size(), 1, 1500);
+    QCOMPARE(requests.first().at(2).toInt(), 1);
+    QCOMPARE(requests.first().at(3).toInt(), 192);
+
+    model.sasayakiAudioReady(QByteArray("abc"));
+    QTRY_COMPARE_WITH_TIMEOUT(replies.size(), 1, 1500);
+    const auto note = f.anki.params("addNote").value("note").toObject();
+    QCOMPARE(note.value("audio").toArray().at(0).toObject().value("filename").toString(),
+             QStringLiteral("hoshi_sasayaki_") + sha1_hex(QByteArray("abc")) +
+                 QStringLiteral(".mp3"));
+}
+
+void MiningViewModelTest::sasayaki_audio_requires_a_cue() {
+    Fixture f;
+    f.config.settings().field_mappings = {{"Word", "{expression}"}, {"Sound", "{sasayaki-audio}"}};
+    QVERIFY(f.save());
+
+    MiningViewModel model;
+    model.setContext(QString::fromUtf8("世界です。"), QStringLiteral("Book"), {}, {});
+    model.setSasayakiCue(QString());
+    QSignalSpy requests(&model, &MiningViewModel::sasayakiAudioRequested);
+    QSignalSpy replies(&model, &MiningViewModel::replyReady);
+    model.mineEntry(2, content());
+
+    QTRY_COMPARE_WITH_TIMEOUT(replies.size(), 1, 1500);
+    QCOMPARE(requests.size(), 0);
+    QCOMPARE(f.anki.actions().count("addNote"), 1);
+    const auto note = f.anki.params("addNote").value("note").toObject();
+    QVERIFY(!note.contains("audio"));
+    QVERIFY(!note.value("fields").toObject().contains("Sound"));
+}
+
+void MiningViewModelTest::sasayaki_audio_requires_the_mapping() {
+    Fixture f;
+    f.config.settings().field_mappings = {{"Word", "{expression}"}};
+    QVERIFY(f.save());
+
+    MiningViewModel model;
+    model.setContext(QString::fromUtf8("世界です。"), QStringLiteral("Book"), {}, {});
+    model.setSasayakiCue(QStringLiteral("cue-1"));
+    QSignalSpy requests(&model, &MiningViewModel::sasayakiAudioRequested);
+    QSignalSpy replies(&model, &MiningViewModel::replyReady);
+    model.mineEntry(3, content());
+
+    QTRY_COMPARE_WITH_TIMEOUT(replies.size(), 1, 1500);
+    QCOMPARE(requests.size(), 0);
+    QCOMPARE(f.anki.actions().count("addNote"), 1);
+    QVERIFY(!f.anki.params("addNote").value("note").toObject().contains("audio"));
+}
+
+void MiningViewModelTest::sasayaki_empty_answer_adds_without_audio() {
+    Fixture f;
+    f.config.settings().field_mappings = {{"Word", "{expression}"}, {"Sound", "{sasayaki-audio}"}};
+    QVERIFY(f.save());
+
+    MiningViewModel model;
+    model.setContext(QString::fromUtf8("世界です。"), QStringLiteral("Book"), {}, {});
+    model.setSasayakiCue(QStringLiteral("cue-1"));
+    QSignalSpy requests(&model, &MiningViewModel::sasayakiAudioRequested);
+    QSignalSpy replies(&model, &MiningViewModel::replyReady);
+    model.mineEntry(4, content());
+    QTRY_COMPARE_WITH_TIMEOUT(requests.size(), 1, 1500);
+    QVERIFY(!f.anki.actions().contains("addNote"));
+
+    model.sasayakiAudioReady(QByteArray());
+    QTRY_COMPARE_WITH_TIMEOUT(replies.size(), 1, 1500);
+    QCOMPARE(replies.first().at(1).toMap(),
+             mining_payload("added", "Added to Anki.", added_id_text));
+    const auto note = f.anki.params("addNote").value("note").toObject();
+    QVERIFY(!note.contains("audio"));
+    QVERIFY(!note.value("fields").toObject().contains("Sound"));
+}
+
+void MiningViewModelTest::sasayaki_requests_answer_in_order() {
+    Fixture f;
+    f.config.settings().field_mappings = {{"Word", "{expression}"}, {"Sound", "{sasayaki-audio}"}};
+    QVERIFY(f.save());
+
+    MiningViewModel model;
+    model.setSasayakiCue(QStringLiteral("cue-1"));
+    QSignalSpy requests(&model, &MiningViewModel::sasayakiAudioRequested);
+    QSignalSpy replies(&model, &MiningViewModel::replyReady);
+    model.setContext(QString::fromUtf8("一文。"), QStringLiteral("Book"), {}, {});
+    model.mineEntry(1, QVariantMap{{"expression", QStringLiteral("one")}});
+    QTRY_COMPARE_WITH_TIMEOUT(requests.size(), 1, 1500);
+    model.setContext(QString::fromUtf8("二文。"), QStringLiteral("Book"), {}, {});
+    model.mineEntry(2, QVariantMap{{"expression", QStringLiteral("two")}});
+    QTRY_COMPARE_WITH_TIMEOUT(requests.size(), 2, 1500);
+    QCOMPARE(requests.at(0).at(1).toString(), QString::fromUtf8("一文。"));
+    QCOMPARE(requests.at(1).at(1).toString(), QString::fromUtf8("二文。"));
+    QCOMPARE(f.anki.actions().count("addNote"), 0);
+
+    model.sasayakiAudioReady(QByteArray("abc"));
+    QTRY_COMPARE_WITH_TIMEOUT(replies.size(), 1, 1500);
+    QCOMPARE(replies.at(0).at(0).toInt(), 1);
+    QCOMPARE(f.anki.actions().count("addNote"), 1);
+
+    model.sasayakiAudioReady(QByteArray("def"));
+    QTRY_COMPARE_WITH_TIMEOUT(replies.size(), 2, 1500);
+    QCOMPARE(replies.at(1).at(0).toInt(), 2);
+    QCOMPARE(f.anki.actions().count("addNote"), 2);
+
+    QList<QJsonObject> notes;
+    for (const auto& request : f.anki.requests) {
+        if (request.value("action").toString() == "addNote") {
+            notes.append(request.value("params").toObject().value("note").toObject());
+        }
+    }
+    QCOMPARE(notes.size(), 2);
+    QCOMPARE(notes.at(0).value("fields").toObject().value("Word").toString(),
+             QStringLiteral("one"));
+    QCOMPARE(notes.at(1).value("fields").toObject().value("Word").toString(),
+             QStringLiteral("two"));
+    QCOMPARE(notes.at(0).value("audio").toArray().at(0).toObject().value("data").toString(),
+             QStringLiteral("YWJj"));
+    QCOMPARE(notes.at(1).value("audio").toArray().at(0).toObject().value("data").toString(),
+             QStringLiteral("ZGVm"));
+}
+
+void MiningViewModelTest::sasayaki_profile_change_during_request_fails() {
+    Fixture f;
+    f.config.settings().field_mappings = {{"Word", "{expression}"}, {"Sound", "{sasayaki-audio}"}};
+    QVERIFY(f.save());
+    const auto other = f.profiles.create_profile(
+        "Other", niratan::profiles::ContentLanguage::japanese, f.profiles.active_profile().id);
+    QVERIFY(other.profile.has_value());
+
+    MiningViewModel model;
+    model.setContext(QString::fromUtf8("世界です。"), QStringLiteral("Book"), {}, {});
+    model.setSasayakiCue(QStringLiteral("cue-1"));
+    QSignalSpy requests(&model, &MiningViewModel::sasayakiAudioRequested);
+    QSignalSpy replies(&model, &MiningViewModel::replyReady);
+    model.mineEntry(7, content());
+    QTRY_COMPARE_WITH_TIMEOUT(requests.size(), 1, 1500);
+
+    QVERIFY(!f.profiles.set_active_profile(other.profile->id).has_value());
+    model.sasayakiAudioReady(QByteArray("abc"));
+    QTRY_COMPARE_WITH_TIMEOUT(replies.size(), 1, 1500);
+    QCOMPARE(replies.first().at(1).toMap(),
+             mining_payload("failed", "The active Profile changed. Try adding the card again."));
+    QVERIFY(!f.anki.actions().contains("addNote"));
 }
 
 QTEST_GUILESS_MAIN(MiningViewModelTest)

@@ -46,8 +46,9 @@
 // SasayakiPlayer.currentAudiobookChapterID. The sasayakiAutoScroll and
 // sasayakiAutoPause preferences are read from the global settings document on
 // every book load and by reloadSasayakiSettings(); a cue change reveals only
-// when auto-scroll is on and playback has started. Sentence audio mining and
-// transcription are not part of this class.
+// when auto-scroll is on and playback has started. requestCueAudio exports the
+// popup cue's sentence for the card through services/sasayaki/cue_audio;
+// transcription is not part of this class.
 //
 // Playback keeps SasayakiPlayer's seek landing: a seek stores its target, the
 // start-playback, update-cue and stop-time options and persists the target
@@ -235,6 +236,12 @@ class SasayakiViewModel : public QObject {
     // the cue's reader progress for the bookmark sync.
     Q_INVOKABLE QVariantMap findPopupCue(int chapterIndex, int offset) const;
 
+    // Answers the popup's cue audio request once with the clip bytes, or with
+    // empty bytes when there is no audio, the cue is unknown or the export
+    // failed. The format is AudioCompressionFormat's order (0 aac, 1 mp3).
+    Q_INVOKABLE void requestCueAudio(const QString& cueId, const QString& sentence, int format,
+                                     int bitrate);
+
    signals:
     void hasAudioChanged();
     void hasMatchChanged();
@@ -260,6 +267,8 @@ class SasayakiViewModel : public QObject {
     // The cue to highlight, or an empty id to clear the highlight; `reveal`
     // scrolls to it only when auto-scroll is on and playback has started.
     void activeCueChanged(const QString& id, bool reveal);
+    // One answer per requestCueAudio, in request order.
+    void cueAudioReady(const QByteArray& data);
 
    private:
     struct State;

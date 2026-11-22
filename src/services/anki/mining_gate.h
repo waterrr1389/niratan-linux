@@ -81,6 +81,9 @@ std::string duplicate_expression(const Strings& content);
 // thing that raises a flag. Field names and unmapped fields do not matter.
 bool needs_video_screenshot(const FieldMappings& mappings);
 bool needs_video_audio_clip(const FieldMappings& mappings);
+// AnkiManager.swift needsSasayakiAudio: the Sasayaki handlebar is needed only
+// when some mapped value is exactly "{sasayaki-audio}".
+bool needs_sasayaki_audio(const FieldMappings& mappings);
 
 // The caller's duplicate lookup. It runs at most once and only when the gate
 // reaches the duplicate check.

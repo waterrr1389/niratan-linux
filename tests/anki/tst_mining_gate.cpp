@@ -7,18 +7,19 @@
 #include <string>
 #include <string_view>
 
+using niratan::anki::duplicate_expression;
 using niratan::anki::DuplicateLookupResult;
 using niratan::anki::FieldMappings;
+using niratan::anki::gate_anki_mining;
 using niratan::anki::MiningContext;
 using niratan::anki::MiningResult;
 using niratan::anki::MiningSettings;
 using niratan::anki::MiningStatus;
-using niratan::anki::Strings;
-using niratan::anki::VideoMiningContext;
-using niratan::anki::duplicate_expression;
-using niratan::anki::gate_anki_mining;
+using niratan::anki::needs_sasayaki_audio;
 using niratan::anki::needs_video_audio_clip;
 using niratan::anki::needs_video_screenshot;
+using niratan::anki::Strings;
+using niratan::anki::VideoMiningContext;
 
 namespace {
 
@@ -95,6 +96,7 @@ class MiningGateTest : public QObject {
     void the_audio_clip_runs_before_the_screenshot();
     void screenshot_needs_an_exact_handlebar_value();
     void audio_clip_needs_an_exact_handlebar_value();
+    void sasayaki_audio_needs_an_exact_handlebar_value();
 };
 
 void MiningGateTest::missing_deck_fails_before_the_lookup() {
@@ -369,6 +371,15 @@ void MiningGateTest::audio_clip_needs_an_exact_handlebar_value() {
     QVERIFY(!needs_video_audio_clip({{"Audio", "{audio}"}}));
     QVERIFY(!needs_video_audio_clip({{"Audio", "{sasayaki-audio-clip}"}}));
     QVERIFY(!needs_video_audio_clip({}));
+}
+
+void MiningGateTest::sasayaki_audio_needs_an_exact_handlebar_value() {
+    QVERIFY(needs_sasayaki_audio({{"Sound", "{sasayaki-audio}"}}));
+    QVERIFY(!needs_sasayaki_audio({{"Sound", "{sasayaki-audio-clip}"}}));
+    QVERIFY(!needs_sasayaki_audio({{"Sound", "{audio}"}}));
+    QVERIFY(!needs_sasayaki_audio({{"Sound", "prefix{sasayaki-audio}"}}));
+    QVERIFY(!needs_sasayaki_audio({}));
+    QVERIFY(needs_sasayaki_audio({{"Word", "{expression}"}, {"Sound", "{sasayaki-audio}"}}));
 }
 
 QTEST_APPLESS_MAIN(MiningGateTest)

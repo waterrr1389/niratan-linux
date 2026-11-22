@@ -26,9 +26,9 @@
 // awaits best-effort sync if currently configured.
 //
 // Decisions: failures do not inherit old error text; pending is popup-only.
-// Only cover_path supplies attachment bytes; cover_url is rendered as text.
-// Manga and Sasayaki audio bytes are out of scope (no attachment for a
-// non-video Sasayaki bucket). Audio downloads accept http, https and file.
+// Only cover_path supplies cover bytes; cover_url is rendered as text. A
+// non-video Sasayaki bucket attaches context.sasayaki_audio_data; a video
+// keeps its video-audio bucket. Audio downloads accept http, https and file.
 // Until AnkiMediaProcessor.image has a port, the app supplies an identity
 // image processor. Request parsing follows anki_requests, including its
 // NSNumber/Bool differences and first-element-only canAdd verdict.

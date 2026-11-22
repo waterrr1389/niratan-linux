@@ -41,6 +41,11 @@ bool write_file(const QString& path, const QByteArray& bytes) {
     return file.open(QIODevice::WriteOnly) && file.write(bytes) == bytes.size();
 }
 
+QByteArray read_file(const QString& path) {
+    QFile file(path);
+    return file.open(QIODevice::ReadOnly) ? file.readAll() : QByteArray{};
+}
+
 struct Fixture {
     QTemporaryDir data;
     DuplicateLookupService lookup{data.path().toStdString()};
@@ -174,6 +179,10 @@ class MiningTest : public QObject {
     void video_uploads();
     void missing_attachment_data();
     void missing_attachment();
+    void sasayaki_audio_upload_data();
+    void sasayaki_audio_upload();
+    void sasayaki_audio_direct_media();
+    void a_video_keeps_its_audio_bucket();
     void dictionary_upload_is_best_effort();
     void direct_media_and_cache();
     void unusable_media_directory_is_cached_data();
@@ -553,6 +562,89 @@ void MiningTest::missing_attachment() {
     QCOMPARE(f.note().value("fields").toObject(), QJsonObject{});
     QVERIFY(!f.note().contains("audio"));
     QVERIFY(!f.note().contains("picture"));
+}
+
+void MiningTest::sasayaki_audio_upload_data() {
+    QTest::addColumn<bool>("mp3");
+    QTest::addColumn<QString>("extension");
+    QTest::newRow("aac") << false << "m4a";
+    QTest::newRow("mp3") << true << "mp3";
+    QTest::newRow("the context extension wins over the setting") << false << "mp3";
+}
+
+void MiningTest::sasayaki_audio_upload() {
+    QFETCH(bool, mp3);
+    QFETCH(QString, extension);
+
+    Fixture f;
+    if (mp3) {
+        f.settings.audio_compression_format = AudioCompressionFormat::mp3;
+    }
+    f.settings.field_mappings = {{"Sound", "{sasayaki-audio}"}};
+    MiningAttempt attempt;
+    attempt.preflight_already_passed = true;
+    attempt.context.sasayaki_audio_data = QByteArray("abc");
+    attempt.context.sasayaki_audio_format = extension.toStdString();
+    f.mine(attempt);
+
+    QCOMPARE(f.events, (QStringList{"activate:reader", "getMediaDirPath", "addNote", "clear"}));
+    QCOMPARE(f.note().value("fields").toObject(), QJsonObject{});
+    QCOMPARE(f.note().value("audio").toArray(),
+             attachment(name("hoshi_sasayaki_", extension), {"Sound"}));
+    QVERIFY(!f.note().contains("picture"));
+}
+
+void MiningTest::sasayaki_audio_direct_media() {
+    Fixture f;
+    QTemporaryDir media;
+    QVERIFY(media.isValid());
+    f.replies["getMediaDirPath"] = {true, media.path(), {}};
+    f.settings.field_mappings = {{"Sound", "{sasayaki-audio}"}};
+    const QString filename = name("hoshi_sasayaki_", "m4a");
+    const QString destination = media.filePath(filename);
+    QVERIFY(write_file(destination, "existing"));
+
+    MiningAttempt attempt;
+    attempt.preflight_already_passed = true;
+    attempt.context.sasayaki_audio_data = QByteArray("abc");
+    attempt.context.sasayaki_audio_format = "m4a";
+    f.mine(attempt);
+
+    QCOMPARE(f.note().value("fields").toObject(),
+             (QJsonObject{{"Sound", "[sound:" + filename + "]"}}));
+    QVERIFY(!f.note().contains("audio"));
+    QVERIFY(!f.note().contains("picture"));
+    QCOMPARE(QDir(media.path()).entryList(QDir::Files), QStringList{filename});
+    QCOMPARE(read_file(destination), QByteArray("existing"));
+
+    QVERIFY(QFile::remove(destination));
+    f.events.clear();
+    f.params.clear();
+    f.mine(attempt);
+    QCOMPARE(f.note().value("fields").toObject(),
+             (QJsonObject{{"Sound", "[sound:" + filename + "]"}}));
+    QVERIFY(!f.note().contains("audio"));
+    QCOMPARE(read_file(destination), QByteArray("abc"));
+}
+
+void MiningTest::a_video_keeps_its_audio_bucket() {
+    Fixture f;
+    f.settings.field_mappings = {{"Sound", "{sasayaki-audio}"}};
+    const auto clip = f.data.filePath("clip.m4a");
+    QVERIFY(write_file(clip, "def"));
+    MiningAttempt attempt;
+    attempt.preflight_already_passed = true;
+    attempt.context.sasayaki_audio_data = QByteArray("abc");
+    attempt.context.sasayaki_audio_format = "m4a";
+    attempt.context.video.emplace().audio_clip_path = clip.toStdString();
+    f.mine(attempt);
+    QCOMPARE(f.note().value("audio").toArray(),
+             (QJsonArray{QJsonObject{
+                 {"data", "ZGVm"},
+                 {"filename",
+                  QStringLiteral("hoshi_video_audio_589c22335a381f122d129225f5c0ba3056ed5811.m4a")},
+                 {"fields", QJsonArray{"Sound"}}}}));
+    QCOMPARE(f.note().value("fields").toObject(), QJsonObject{});
 }
 
 void MiningTest::dictionary_upload_is_best_effort() {

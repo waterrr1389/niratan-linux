@@ -89,6 +89,7 @@ qt_add_library(niratan_core STATIC
     src/models/statistics/statistics.cpp
     src/services/sasayaki/srt_parser.cpp
     src/services/sasayaki/cue_timeline.cpp
+    src/services/sasayaki/cue_audio.cpp
     src/services/sasayaki/matcher.cpp
     src/services/sasayaki/match_chapters.cpp
     src/services/statistics/statistics_storage.cpp
@@ -133,6 +134,9 @@ target_compile_options(niratan_core PRIVATE -Wall -Wextra -Wpedantic -Werror)
 qt_add_library(niratan_app STATIC
     src/viewmodels/anki/mining_view_model.cpp
     src/viewmodels/anki/mining_view_model.h
+    src/viewmodels/anki/mining_view_model_capture.cpp
+    src/viewmodels/anki/mining_view_model_internal.h
+    src/viewmodels/anki/mining_view_model_sasayaki.cpp
     src/viewmodels/anki/video_mining_capture.cpp
     src/viewmodels/anki/anki_settings_view_model.cpp
     src/viewmodels/anki/anki_settings_view_model.h
@@ -150,6 +154,7 @@ qt_add_library(niratan_app STATIC
     src/viewmodels/sasayaki/sasayaki_settings_view_model.h
     src/viewmodels/sasayaki/sasayaki_view_model.cpp
     src/viewmodels/sasayaki/sasayaki_view_model_match.cpp
+    src/viewmodels/sasayaki/sasayaki_view_model_mining.cpp
     src/viewmodels/sasayaki/sasayaki_view_model_playback.cpp
     src/viewmodels/sasayaki/sasayaki_view_model_popup.cpp
     src/viewmodels/sasayaki/sasayaki_view_model_audiobook.cpp

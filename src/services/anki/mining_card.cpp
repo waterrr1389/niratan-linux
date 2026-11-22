@@ -243,7 +243,28 @@ class NoteBuilder : public std::enable_shared_from_this<NoteBuilder> {
         }
     }
 
+    // AnkiManager.addNoteAnkiConnect: a non-video context's Sasayaki clip is
+    // named from its bytes and the context's extension, written directly when
+    // a media directory is usable and uploaded otherwise. Video keeps its
+    // video-audio bucket, so its sasayaki fields are never here.
+    void append_sasayaki_audio() {
+        if (sasayaki_audio_.isEmpty() || !attempt_.context.sasayaki_audio_data.has_value()) {
+            return;
+        }
+        const QByteArray& data = *attempt_.context.sasayaki_audio_data;
+        const std::string_view extension = attempt_.context.sasayaki_audio_format.empty()
+            ? std::string_view("m4a")
+            : std::string_view(attempt_.context.sasayaki_audio_format);
+        const auto name = media_filename("hoshi_sasayaki_", data, extension);
+        if (const auto direct = write_direct_media(directory_, name, data)) {
+            set_media_fields(sasayaki_audio_, direct_audio_markup(*direct));
+        } else {
+            audio_.append(attachment(name, data, sasayaki_audio_));
+        }
+    }
+
     void append_local_media() {
+        append_sasayaki_audio();
         const auto& video = attempt_.context.video;
         if (video) {
             append_video_media(video_audio_, video->audio_clip_filename, video->audio_clip_path,

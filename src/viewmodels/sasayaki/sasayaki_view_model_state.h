@@ -12,7 +12,9 @@
 // after it, following SasayakiPlayer's properties of the same names. The
 // pending cue's start is the reader progress the chapter loads at.
 // find_match_by_id is SasayakiPlayer's match lookup by id, shared by the
-// playback and popup splits.
+// playback and popup splits. cue_audio_exporter owns the cue-audio cache of
+// SasayakiPlayer.miningAudioCache; sasayaki_view_model_mining.cpp creates it
+// with this model as its parent.
 
 #pragma once
 
@@ -32,6 +34,10 @@
 class QAudioOutput;
 class QMediaPlayer;
 class QTimer;
+
+namespace niratan::sasayaki {
+class CueAudioExporter;
+}
 
 namespace niratan::viewmodels {
 
@@ -84,6 +90,9 @@ struct SasayakiViewModel::State {
     bool reveal_pending_cue_on_restore = false;
     bool chapter_transition = false;
     bool should_resume = false;
+
+    // Created on the first requestCueAudio.
+    sasayaki::CueAudioExporter* cue_audio_exporter = nullptr;
 
     double position = 0.0;
     double duration = 0.0;

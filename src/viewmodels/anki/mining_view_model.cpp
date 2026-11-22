@@ -2,6 +2,8 @@
 
 #include "viewmodels/anki/mining_view_model.h"
 
+#include "viewmodels/anki/mining_view_model_internal.h"
+
 #include <QJSValue>
 #include <QPointer>
 #include <QStringList>
@@ -28,8 +30,6 @@
 
 namespace niratan::viewmodels {
 namespace {
-
-constexpr int toast_lifetime_ms = 2200;
 
 QVariant message_body(const QVariant& value) {
     if (value.metaType() == QMetaType::fromType<QJSValue>()) {
@@ -81,130 +81,9 @@ std::optional<QStringList> string_array(const QVariant& body) {
     return strings;
 }
 
-// New requests can move to a different transport without losing callbacks
-// already pending on the previous client.
-class MiningConnection : public anki::AnkiConnectClient {
-   public:
-    using AnkiConnectClient::AnkiConnectClient;
+}  // namespace
 
-    void send(std::string action, std::optional<QJsonObject> params, Callback callback) {
-        ++pending_;
-        request(std::move(action), std::move(params),
-                [this, callback = std::move(callback)](anki::AnkiConnectResult result) {
-                    --pending_;
-                    if (retired_ && pending_ == 0) {
-                        deleteLater();
-                    }
-                    if (callback) {
-                        callback(std::move(result));
-                    }
-                });
-    }
-
-    void retire() {
-        retired_ = true;
-        if (pending_ == 0) {
-            deleteLater();
-        }
-    }
-
-   private:
-    std::size_t pending_ = 0;
-    bool retired_ = false;
-};
-
-// The two hosts share the saved words, active Anki settings and media cache,
-// like AnkiManager.shared. Toasts and document context belong to each host.
-class MiningBackend {
-   public:
-    explicit MiningBackend(profiles::ProfileRepository profile_repository)
-        : repository(std::move(profile_repository)) {
-        load_settings();
-    }
-
-    void load_settings() {
-        // The settings page persists every edit, so read the current profile
-        // without saving a stale outgoing snapshot.
-        config = anki::AnkiConfigStore(storage::data_root(), repository);
-        config.load();
-        const auto& transport = config.settings().transport;
-        const auto url = transport && transport->url ? *transport->url : std::string{};
-        const auto api_key = transport ? transport->api_key : std::nullopt;
-        if (!client || connection.url != url || connection.api_key != api_key) {
-            if (client) {
-                client->retire();
-            }
-            connection.url = url;
-            connection.api_key = api_key;
-            client = new MiningConnection(connection, &clients);
-        }
-    }
-
-    std::string repository_profile_id() {
-        if (auto current = profiles::ProfileRepository::at_data_root()) {
-            repository = std::move(*current);
-        }
-        return repository.active_profile().id;
-    }
-
-    void refresh_settings() {
-        repository_profile_id();
-        load_settings();
-    }
-
-    // The active profile's ordered term list, reloaded from disk on each call.
-    std::vector<anki::TermDictionary> load_term_dictionaries() {
-        return dictionary::active_term_dictionaries(repository);
-    }
-
-    profiles::ProfileRepository repository;
-    anki::AnkiConfigStore config{storage::data_root(), repository};
-    anki::DuplicateLookupService duplicates{storage::data_root()};
-    dictionary::DictionaryMediaService dictionary_media{storage::dictionaries_root()};
-    anki::AnkiRequestFunction request = [this](auto action, auto params, auto callback) {
-        client->send(std::move(action), std::move(params), std::move(callback));
-    };
-    anki::MiningService mining{
-        duplicates,
-        {.request = request,
-         .download_audio =
-             [this](QUrl url, anki::MiningDependencies::DownloadCallback callback) {
-                 audio_download.get(url, std::move(callback));
-             },
-         .process_image = [](anki::MiningImage image, bool, anki::ImageCompressionFormat,
-                             double) { return image; },
-         .dictionary_media =
-             [this](std::string_view dictionary, std::string_view path) {
-                 QUrl url;
-                 url.setScheme("dict");
-                 QUrlQuery query;
-                 const auto encoded = [](std::string_view text) {
-                     return QString::fromLatin1(QUrl::toPercentEncoding(
-                         QString::fromUtf8(text.data(), static_cast<qsizetype>(text.size()))));
-                 };
-                 query.addQueryItem("dictionary", encoded(dictionary));
-                 query.addQueryItem("path", encoded(path));
-                 url.setQuery(query);
-                 return dictionary_media.get(url).bytes;
-             },
-         // No cover or Sasayaki audio is installed on a mining media server.
-         .clear_media = [] {},
-         .repository_profile_id = [this] { return repository_profile_id(); },
-         .anki_profile_id = [this] { return std::string(config.active_profile_id()); },
-         .activate_profile =
-             [this](std::string_view id) {
-                 if (config.active_profile_id() != id) {
-                     load_settings();
-                 }
-             },
-         .settings = [this]() -> const anki::AnkiSettings& { return config.settings(); }}};
-
-    // Dropping the last host cancels pending callbacks before their seams die.
-    audio::WebAudioDownload audio_download;
-    QObject clients;
-    anki::AnkiConnectConfig connection;
-    MiningConnection* client = nullptr;
-};
+namespace detail {
 
 std::shared_ptr<MiningBackend> shared_backend() {
     static std::weak_ptr<MiningBackend> shared;
@@ -219,42 +98,7 @@ std::shared_ptr<MiningBackend> shared_backend() {
     return {};
 }
 
-}  // namespace
-
-struct MiningViewModel::State {
-    struct VideoContext {
-        QString path;
-        QString title;
-        int audio_stream_index = -1;
-        player::MiningSelection selection;
-        double subtitle_delay = 0;
-        double duration = 0;
-    };
-
-    explicit State(MiningViewModel& owner) {
-        toast_timer.setSingleShot(true);
-        toast_timer.setTimerType(Qt::PreciseTimer);
-        QObject::connect(&toast_timer, &QTimer::timeout, &owner, [this, &owner] {
-            toast.clear();
-            emit owner.toastChanged();
-        });
-    }
-
-    void show_toast(MiningViewModel& owner, QVariantMap payload) {
-        toast = std::move(payload);
-        toast_timer.start(toast_lifetime_ms);
-        emit owner.toastChanged();
-    }
-
-    const std::shared_ptr<MiningBackend> backend = shared_backend();
-    anki::MiningContext context;
-    std::vector<anki::TermDictionary> dictionaries;
-    QVariantMap toast;
-    QTimer toast_timer;
-    std::optional<VideoContext> video;
-    std::unique_ptr<VideoMiningCapture> capture;
-    QString ffmpeg;
-};
+}  // namespace detail
 
 MiningViewModel::MiningViewModel(QObject* parent)
     : QObject(parent), state_(std::make_unique<State>(*this)) {}
@@ -386,50 +230,29 @@ void MiningViewModel::mineEntry(int requestId, const QVariant& content) {
                 finish(std::move(*verdict));
                 return;
             }
-            if (!host || !host->state_->video) {
-                backend->mining.mine(std::move(attempt), finish);
+            if (!host) {
                 return;
             }
-            const auto& video = *host->state_->video;
+            if (host->state_->video) {
+                host->start_video_capture(std::move(attempt), finish);
+                return;
+            }
             const auto& settings = backend->config.settings();
-            VideoMiningCaptureRequest request;
-            request.video_path = video.path;
-            request.title = video.title;
-            request.audio_stream_index = video.audio_stream_index;
-            request.selection = video.selection;
-            request.subtitle_delay = video.subtitle_delay;
-            request.duration = video.duration;
-            request.capture_screenshot = anki::needs_video_screenshot(settings.field_mappings);
-            request.capture_audio_clip = anki::needs_video_audio_clip(settings.field_mappings);
-            request.compress_screenshot = settings.compress_images;
-            request.image_format = settings.image_compression_format;
-            request.screenshot_quality = settings.image_compression_quality;
-            request.audio_format = settings.audio_compression_format;
-            request.audio_bitrate_kbps = settings.audio_compression_bitrate_kbps;
-            request.animated_avif_maximum_height = settings.animated_avif_maximum_height;
-            request.animated_avif_frames_per_second = settings.animated_avif_frames_per_second;
-            request.ffmpeg_path = host->state_->ffmpeg;
-            auto capture = make_video_capture(
-                [backend](std::function<void(std::optional<std::string>)> complete) {
-                    backend->mining.media_directory(
-                        [complete = std::move(complete)](auto directory) {
-                            complete(directory ? std::optional<std::string>(directory->string())
-                                               : std::optional<std::string>{});
-                        });
-                },
-                [host](const QString& path) {
-                    if (host) {
-                        emit host->screenshotRequested(path);
-                    }
-                });
-            auto* active = capture.get();
-            host->state_->capture = std::move(capture);
-            active->start(request,
-                          [backend, attempt = std::move(attempt),
-                           finish](anki::MiningContext context) mutable {
-                              attempt.context = std::move(context);
-                              backend->mining.mine(std::move(attempt), finish);
-                          });
+            auto pending = std::make_shared<anki::MiningAttempt>(std::move(attempt));
+            auto add = [backend, pending, finish](QByteArray data, std::string extension) mutable {
+                if (!data.isEmpty()) {
+                    pending->context.sasayaki_audio_data = std::move(data);
+                    pending->context.sasayaki_audio_format = std::move(extension);
+                }
+                backend->mining.mine(std::move(*pending), finish);
+            };
+            if (anki::needs_sasayaki_audio(settings.field_mappings) &&
+                host->request_cue_audio(QString::fromStdString(pending->context.sentence),
+                                        static_cast<int>(settings.audio_compression_format),
+                                        settings.audio_compression_bitrate_kbps, std::move(add))) {
+                return;
+            }
+            backend->mining.mine(std::move(*pending), finish);
         });
 }
 

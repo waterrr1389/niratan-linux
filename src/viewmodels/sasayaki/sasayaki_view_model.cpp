@@ -19,6 +19,7 @@
 #include "sasayaki_player_policy.h"
 #include "sasayaki_view_model_state.h"
 #include "services/books/book_storage.h"
+#include "services/sasayaki/cue_audio.h"
 #include "services/settings/global_settings.h"
 #include "services/sasayaki/cue_timeline.h"
 #include "services/sasayaki/srt_parser.h"
@@ -201,6 +202,9 @@ bool SasayakiViewModel::openAudio(const QUrl& file) {
     state_->audio_name = info.fileName();
     state_->playback.audio_bookmark = state_->audio_path.toUtf8();
     state_->has_audio = true;
+    if (state_->cue_audio_exporter) {
+        state_->cue_audio_exporter->clear_cache();
+    }
     state_->duration = 0.0;
     state_->last_second = static_cast<int>(std::floor(state_->position));
     open_audio_source();
@@ -242,6 +246,9 @@ bool SasayakiViewModel::openSubtitles(const QUrl& file) {
 
 void SasayakiViewModel::reload_book() {
     cancelSubtitleMatch();
+    if (state_->cue_audio_exporter) {
+        state_->cue_audio_exporter->clear_cache();
+    }
     reloadSasayakiSettings();
     state_->reloading = true;
     if (state_->has_root) {
@@ -360,6 +367,9 @@ void SasayakiViewModel::restore_audio() {
     state_->audio_path = info.absoluteFilePath();
     state_->audio_name = info.fileName();
     state_->has_audio = true;
+    if (state_->cue_audio_exporter) {
+        state_->cue_audio_exporter->clear_cache();
+    }
     open_audio_source();
     emit hasAudioChanged();
     emit audioNameChanged();
