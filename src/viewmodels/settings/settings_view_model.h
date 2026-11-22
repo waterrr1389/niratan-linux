@@ -48,6 +48,17 @@
 // that file: an edit reaches an open book without reopening it, and the
 // document's wheel script flag follows the wheel setting (false in continuous
 // mode).
+//
+// The Dictionary section's Lookup card writes Frequency Sorting as one of the
+// LookupFrequencySortOrder raw strings Auto, Ascending and Descending, and
+// Frequency Dictionary as the selected title, where the empty string clears
+// the choice. The Search Text card writes Text Size 12...48. All three stay in
+// the active profile's dictionary_settings.json under frequencySortOrder,
+// frequencySortDictionary and searchTextSize. The getters apply Swift's
+// UserConfig.init fallbacks: Auto for a missing or unknown order, the empty
+// string for a missing dictionary and 26 for a missing size. A stored value is
+// returned unchanged, including a dictionary title no installed dictionary
+// carries; only the setter validates the order and clamps the size.
 
 #pragma once
 
@@ -130,6 +141,12 @@ class SettingsViewModel : public QObject {
     Q_PROPERTY(QString collapseMode READ collapseMode WRITE setCollapseMode NOTIFY dictionaryChanged)
     Q_PROPERTY(bool twoColumnLayout READ twoColumnLayout WRITE setTwoColumnLayout NOTIFY dictionaryChanged)
     Q_PROPERTY(bool compactGlossaries READ compactGlossaries WRITE setCompactGlossaries NOTIFY dictionaryChanged)
+    Q_PROPERTY(QString frequencySortOrder READ frequencySortOrder WRITE setFrequencySortOrder NOTIFY
+                   dictionaryChanged)
+    Q_PROPERTY(QString frequencySortDictionary READ frequencySortDictionary WRITE
+                   setFrequencySortDictionary NOTIFY dictionaryChanged)
+    Q_PROPERTY(
+        int searchTextSize READ searchTextSize WRITE setSearchTextSize NOTIFY dictionaryChanged)
     Q_PROPERTY(QString customCSS READ customCSS WRITE setCustomCSS NOTIFY dictionaryChanged)
 
     Q_PROPERTY(bool enableStatistics READ enableStatistics WRITE setEnableStatistics NOTIFY statisticsChanged)
@@ -246,6 +263,12 @@ class SettingsViewModel : public QObject {
     void setTwoColumnLayout(bool value);
     bool compactGlossaries() const;
     void setCompactGlossaries(bool value);
+    QString frequencySortOrder() const;
+    void setFrequencySortOrder(const QString& value);
+    QString frequencySortDictionary() const;
+    void setFrequencySortDictionary(const QString& value);
+    int searchTextSize() const;
+    void setSearchTextSize(int value);
     QString customCSS() const;
     void setCustomCSS(const QString& value);
 

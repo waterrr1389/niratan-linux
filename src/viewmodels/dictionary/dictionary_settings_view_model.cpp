@@ -179,6 +179,16 @@ QVariantList rows_for(const std::vector<DictionaryInfo>& dictionaries) {
     return rows;
 }
 
+QStringList frequency_titles_for(const std::vector<DictionaryInfo>& dictionaries) {
+    QStringList titles;
+    for (const DictionaryInfo& dictionary : dictionaries) {
+        if (dictionary.is_enabled) {
+            titles.append(QString::fromStdString(dictionary.title));
+        }
+    }
+    return titles;
+}
+
 QVariantList recommended_for(ContentLanguage language) {
     QVariantList recommended;
     for (const dictionary::DictionaryRecommendation& entry :
@@ -232,9 +242,11 @@ void renumber(std::vector<DictionaryInfo>& dictionaries) {
     }
 }
 
-void reload_rows(QVariantList& rows, QVariantList& recommended, const QString& type) {
+void reload_rows(QVariantList& rows, QVariantList& recommended, QStringList& frequency_titles,
+                 const QString& type) {
     rows.clear();
     recommended.clear();
+    frequency_titles.clear();
     const std::optional<Context> context = load_context();
     if (!context.has_value()) {
         return;
@@ -242,6 +254,7 @@ void reload_rows(QVariantList& rows, QVariantList& recommended, const QString& t
     const std::optional<DictionaryType> selected = type_from(type);
     rows = rows_for(list_for(context->lists, selected.value_or(DictionaryType::term)));
     recommended = recommended_for(context->profile.language());
+    frequency_titles = frequency_titles_for(context->lists.frequency_dictionaries);
 }
 
 }  // namespace
@@ -250,6 +263,7 @@ struct DictionarySettingsViewModel::State {
     QString dictionary_type = QStringLiteral("Term");
     QVariantList rows;
     QVariantList recommended;
+    QStringList frequency_titles;
     QString error;
 };
 
@@ -270,6 +284,10 @@ QVariantList DictionarySettingsViewModel::recommended() const {
     return state_->recommended;
 }
 
+QStringList DictionarySettingsViewModel::frequencyDictionaryTitles() const {
+    return state_->frequency_titles;
+}
+
 QString DictionarySettingsViewModel::error() const {
     return state_->error;
 }
@@ -279,7 +297,8 @@ void DictionarySettingsViewModel::refresh() {
         state_->error.clear();
         emit errorChanged();
     }
-    reload_rows(state_->rows, state_->recommended, state_->dictionary_type);
+    reload_rows(state_->rows, state_->recommended, state_->frequency_titles,
+                state_->dictionary_type);
     emit rowsChanged();
 }
 
@@ -289,7 +308,8 @@ void DictionarySettingsViewModel::selectType(const QString& type) {
         return;
     }
     state_->dictionary_type = type_text(*parsed);
-    reload_rows(state_->rows, state_->recommended, state_->dictionary_type);
+    reload_rows(state_->rows, state_->recommended, state_->frequency_titles,
+                state_->dictionary_type);
     emit rowsChanged();
 }
 
@@ -308,7 +328,8 @@ void DictionarySettingsViewModel::setEnabled(const QString& title, bool enabled)
     }
     found->is_enabled = enabled;
     save_lists(*context, context->lists);
-    reload_rows(state_->rows, state_->recommended, state_->dictionary_type);
+    reload_rows(state_->rows, state_->recommended, state_->frequency_titles,
+                state_->dictionary_type);
     emit rowsChanged();
 }
 
@@ -330,7 +351,8 @@ void DictionarySettingsViewModel::setCategory(const QString& title, const QStrin
     }
     found->category = *parsed;
     save_lists(*context, context->lists);
-    reload_rows(state_->rows, state_->recommended, state_->dictionary_type);
+    reload_rows(state_->rows, state_->recommended, state_->frequency_titles,
+                state_->dictionary_type);
     emit rowsChanged();
 }
 
@@ -363,7 +385,8 @@ void DictionarySettingsViewModel::move(const QString& title, const QString& targ
     dictionaries.insert(dictionaries.begin() + insert_at, std::move(moved));
     renumber(dictionaries);
     save_lists(*context, context->lists);
-    reload_rows(state_->rows, state_->recommended, state_->dictionary_type);
+    reload_rows(state_->rows, state_->recommended, state_->frequency_titles,
+                state_->dictionary_type);
     emit rowsChanged();
 }
 
@@ -386,7 +409,8 @@ void DictionarySettingsViewModel::remove(const QString& title) {
     dictionaries.erase(found);
     renumber(dictionaries);
     save_lists(*context, context->lists);
-    reload_rows(state_->rows, state_->recommended, state_->dictionary_type);
+    reload_rows(state_->rows, state_->recommended, state_->frequency_titles,
+                state_->dictionary_type);
     emit rowsChanged();
 }
 
@@ -436,7 +460,8 @@ void DictionarySettingsViewModel::importFiles(const QVariantList& urls) {
             }
             save_lists(*context, context->lists);
         }
-        reload_rows(state_->rows, state_->recommended, state_->dictionary_type);
+        reload_rows(state_->rows, state_->recommended, state_->frequency_titles,
+                    state_->dictionary_type);
         emit rowsChanged();
     }
 

@@ -74,6 +74,13 @@ std::filesystem::path reader_settings_file() {
     return directory.has_value() ? *directory / "reader_settings.json" : std::filesystem::path{};
 }
 
+std::filesystem::path dictionary_settings_file() {
+    const ProfileRepository repository(niratan::storage::data_root());
+    const auto directory = repository.profile_directory(repository.active_profile().id);
+    return directory.has_value() ? *directory / "dictionary_settings.json"
+                                 : std::filesystem::path{};
+}
+
 std::optional<QJsonObject> read_object(const std::filesystem::path& path) {
     QFile file(QString::fromStdString(path.string()));
     if (!file.open(QIODevice::ReadOnly)) {
@@ -122,6 +129,9 @@ class SettingsViewModelTest : public QObject {
     void reader_display_defaults();
     void reader_display_round_trip();
     void reader_display_edits_keep_the_other_reader_settings();
+    void frequency_sort_order_defaults_and_rejects_unknown();
+    void frequency_sort_dictionary_round_trips_and_clears();
+    void search_text_size_clamps_and_keeps_the_other_dictionary_settings();
 };
 
 // B1: the Font Size Stepper is 16...40 with no off-step values.
@@ -546,6 +556,119 @@ void SettingsViewModelTest::reader_display_edits_keep_the_other_reader_settings(
     QCOMPARE(second.showStatisticsToggle(), true);
     QCOMPARE(second.showReadingSpeed(), true);
     QCOMPARE(second.showReadingTime(), true);
+}
+
+// B1: UserConfig.init and LookupFrequencySortOrder: a missing or unknown stored
+// order reads Auto; the setter accepts only the three raw strings, stores the
+// accepted one under frequencySortOrder and leaves an unknown string unchanged.
+void SettingsViewModelTest::frequency_sort_order_defaults_and_rejects_unknown() {
+    TempDataRoot data;
+    QVERIFY(data.isValid());
+    SettingsViewModel model;
+    QCOMPARE(model.frequencySortOrder(), QStringLiteral("Auto"));
+    model.setMaxResults(20);
+    model.setFrequencySortOrder(QStringLiteral("Descending"));
+    QCOMPARE(model.frequencySortOrder(), QStringLiteral("Descending"));
+    auto object = read_object(dictionary_settings_file());
+    QVERIFY(object.has_value());
+    QCOMPARE(object->value("frequencySortOrder").toString(), QStringLiteral("Descending"));
+    QCOMPARE(object->value("maxResults").toInt(), 20);
+    model.setFrequencySortOrder(QStringLiteral("Ascending"));
+    QCOMPARE(model.frequencySortOrder(), QStringLiteral("Ascending"));
+    object = read_object(dictionary_settings_file());
+    QVERIFY(object.has_value());
+    QCOMPARE(object->value("frequencySortOrder").toString(), QStringLiteral("Ascending"));
+    QCOMPARE(object->value("maxResults").toInt(), 20);
+    model.setFrequencySortOrder(QStringLiteral("Auto"));
+    QCOMPARE(model.frequencySortOrder(), QStringLiteral("Auto"));
+    object = read_object(dictionary_settings_file());
+    QVERIFY(object.has_value());
+    QCOMPARE(object->value("frequencySortOrder").toString(), QStringLiteral("Auto"));
+    QCOMPARE(object->value("maxResults").toInt(), 20);
+    SettingsViewModel second;
+    QCOMPARE(second.frequencySortOrder(), QStringLiteral("Auto"));
+    second.setFrequencySortOrder(QStringLiteral("sideways"));
+    QCOMPARE(second.frequencySortOrder(), QStringLiteral("Auto"));
+    object = read_object(dictionary_settings_file());
+    QVERIFY(object.has_value());
+    QCOMPARE(object->value("frequencySortOrder").toString(), QStringLiteral("Auto"));
+    const auto path = dictionary_settings_file();
+    object->insert(QStringLiteral("frequencySortOrder"), QStringLiteral("sideways"));
+    QVERIFY(write_object(path, *object));
+    SettingsViewModel unknown;
+    QCOMPARE(unknown.frequencySortOrder(), QStringLiteral("Auto"));
+    object = read_object(path);
+    QVERIFY(object.has_value());
+    object->remove(QStringLiteral("frequencySortOrder"));
+    QVERIFY(write_object(path, *object));
+    SettingsViewModel absent;
+    QCOMPARE(absent.frequencySortOrder(), QStringLiteral("Auto"));
+}
+
+// B2: UserConfig.frequencySortDictionary: absent reads empty, any received
+// string is stored unchanged under frequencySortDictionary, and the empty
+// string clears the choice.
+void SettingsViewModelTest::frequency_sort_dictionary_round_trips_and_clears() {
+    TempDataRoot data;
+    QVERIFY(data.isValid());
+    SettingsViewModel first;
+    first.setMaxResults(20);
+    first.setFrequencySortDictionary(QStringLiteral("Jiten"));
+    QCOMPARE(first.frequencySortDictionary(), QStringLiteral("Jiten"));
+    auto object = read_object(dictionary_settings_file());
+    QVERIFY(object.has_value());
+    QCOMPARE(object->value(QStringLiteral("frequencySortDictionary")).toString(),
+             QStringLiteral("Jiten"));
+    QCOMPARE(object->value("maxResults").toInt(), 20);
+
+    SettingsViewModel second;
+    QCOMPARE(second.frequencySortDictionary(), QStringLiteral("Jiten"));
+    second.setFrequencySortDictionary(QString());
+    QCOMPARE(second.frequencySortDictionary(), QString());
+    object = read_object(dictionary_settings_file());
+    QVERIFY(object.has_value());
+    QCOMPARE(object->value(QStringLiteral("frequencySortDictionary")).toString(), QString());
+    QCOMPARE(object->value("maxResults").toInt(), 20);
+
+    SettingsViewModel cleared;
+    QCOMPARE(cleared.frequencySortDictionary(), QString());
+
+    cleared.setFrequencySortDictionary(QStringLiteral("No Such Dictionary"));
+    SettingsViewModel unknown;
+    QCOMPARE(unknown.frequencySortDictionary(), QStringLiteral("No Such Dictionary"));
+}
+
+// B3: the Search Text Stepper is 12...48 with no off-step values; the getter
+// returns a stored value unchanged (UserConfig.init) and the setter keeps the
+// other dictionary key.
+void SettingsViewModelTest::search_text_size_clamps_and_keeps_the_other_dictionary_settings() {
+    TempDataRoot data;
+    QVERIFY(data.isValid());
+    SettingsViewModel defaults;
+    QCOMPARE(defaults.searchTextSize(), 26);
+    const auto set = [](SettingsViewModel& model, int value) { model.setSearchTextSize(value); };
+    const auto get = [](const SettingsViewModel& model) { return model.searchTextSize(); };
+
+    expect_round_trip(set, get, 12, 12);
+    expect_round_trip(set, get, 48, 48);
+    expect_round_trip(set, get, 11, 12);
+    expect_round_trip(set, get, 49, 48);
+
+    const auto path = dictionary_settings_file();
+    auto object = read_object(path);
+    QVERIFY(object.has_value());
+    object->insert(QStringLiteral("searchTextSize"), 100);
+    QVERIFY(write_object(path, *object));
+    SettingsViewModel hand_edited;
+    QCOMPARE(hand_edited.searchTextSize(), 100);
+
+    hand_edited.setMaxResults(20);
+    SettingsViewModel edited;
+    edited.setSearchTextSize(30);
+    object = read_object(path);
+    QVERIFY(object.has_value());
+    QCOMPARE(object->value(QStringLiteral("searchTextSize")).toInt(), 30);
+    QCOMPARE(object->value(QStringLiteral("maxResults")).toInt(), 20);
 }
 
 QTEST_APPLESS_MAIN(SettingsViewModelTest)

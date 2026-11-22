@@ -42,11 +42,18 @@
 // only: the M1 list carries no revision caption. Reordering is exposed as Up
 // and Down buttons instead of Swift's drag gesture. There is no live watcher;
 // refresh() reloads after external edits.
+//
+// frequencyDictionaryTitles follows DictionaryView.frequencyDictionaryTitles:
+// the active profile's resolved Frequency list filtered to enabled entries, in
+// list order, as titles only. The Settings page's frequency sort picker offers
+// them. Every command and refresh() recompute it from the same context, so
+// enabling, disabling, importing and removing update it with rows.
 
 #pragma once
 
 #include <QObject>
 #include <QString>
+#include <QStringList>
 #include <QVariantList>
 #include <QtQml/qqmlregistration.h>
 
@@ -60,6 +67,8 @@ class DictionarySettingsViewModel : public QObject {
     Q_PROPERTY(QString dictionaryType READ dictionary_type NOTIFY rowsChanged)
     Q_PROPERTY(QVariantList rows READ rows NOTIFY rowsChanged)
     Q_PROPERTY(QVariantList recommended READ recommended NOTIFY rowsChanged)
+    Q_PROPERTY(
+        QStringList frequencyDictionaryTitles READ frequencyDictionaryTitles NOTIFY rowsChanged)
     Q_PROPERTY(QString error READ error NOTIFY errorChanged)
 
    public:
@@ -69,6 +78,7 @@ class DictionarySettingsViewModel : public QObject {
     QString dictionary_type() const;
     QVariantList rows() const;
     QVariantList recommended() const;
+    QStringList frequencyDictionaryTitles() const;
     QString error() const;
 
     Q_INVOKABLE void refresh();

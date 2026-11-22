@@ -19,6 +19,7 @@
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QStringList>
 #include <QUrl>
 #include <QtTest>
 
@@ -33,8 +34,10 @@
 #include "services/storage/app_paths.h"
 
 using niratan::dictionary::DictionaryConfig;
+using niratan::dictionary::DictionaryEntry;
 using niratan::dictionary::DictionaryStore;
 using niratan::dictionary::load_dictionary_config;
+using niratan::dictionary::save_dictionary_config;
 using niratan::profiles::ContentLanguage;
 using niratan::profiles::ProfileRepository;
 using niratan::test::minimal_index;
@@ -127,6 +130,7 @@ class DictionarySettingsViewModelTest : public QObject {
     void removing_deletes_only_the_selected_type();
     void importing_into_a_non_default_profile_enables_and_saves();
     void import_failures_are_reported();
+    void frequency_dictionary_titles_are_the_enabled_titles();
 };
 
 // B2: rows are the active profile's resolved list for the selected type.
@@ -380,6 +384,47 @@ void DictionarySettingsViewModelTest::import_failures_are_reported() {
     }
     QVERIFY(found_second);
     QCOMPARE(model.rows().size(), qsizetype(2));
+}
+
+// B4: DictionaryView.frequencyDictionaryTitles is the resolved Frequency list
+// filtered to enabled entries, in list order, as titles.
+void DictionarySettingsViewModelTest::frequency_dictionary_titles_are_the_enabled_titles() {
+    Fixture fixture;
+    QVERIFY(fixture.imported);
+    const auto alpha_zip = path_in(fixture.data, "alpha.zip");
+    write_stored_zip(alpha_zip,
+                     {{"index.json", minimal_index(QStringLiteral("Alpha"))},
+                      {"term_bank_1.json", kSecondTermBank},
+                      {"term_meta_bank_1.json", QByteArrayLiteral(R"([["second","freq",50]])")}});
+    QVERIFY(install_zip(alpha_zip));
+    DictionaryConfig config;
+    config.frequency_dictionaries = {DictionaryEntry{"Alpha", true, 0},
+                                     DictionaryEntry{"Probe", true, 1}};
+    QVERIFY(
+        save_dictionary_config(profile_directory("default-ja") / "dictionary_config.json", config));
+    DictionarySettingsViewModel model;
+    model.refresh();
+    QCOMPARE(model.frequencyDictionaryTitles(),
+             (QStringList{QStringLiteral("Alpha"), QStringLiteral("Probe")}));
+    model.selectType(QStringLiteral("Frequency"));
+    model.setEnabled(QStringLiteral("Probe"), false);
+    QCOMPARE(model.frequencyDictionaryTitles(), QStringList{QStringLiteral("Alpha")});
+    const auto disabled = saved_config("default-ja");
+    QVERIFY(disabled.has_value());
+    QCOMPARE(disabled->frequency_dictionaries.size(), std::size_t(2));
+    QCOMPARE(disabled->frequency_dictionaries.at(1).file_name, std::string("Probe"));
+    QCOMPARE(disabled->frequency_dictionaries.at(1).is_enabled, false);
+    model.setEnabled(QStringLiteral("Probe"), true);
+    QCOMPARE(model.frequencyDictionaryTitles(),
+             (QStringList{QStringLiteral("Alpha"), QStringLiteral("Probe")}));
+    model.refresh();
+    QCOMPARE(model.frequencyDictionaryTitles(),
+             (QStringList{QStringLiteral("Alpha"), QStringLiteral("Probe")}));
+    model.remove(QStringLiteral("Alpha"));
+    QCOMPARE(model.frequencyDictionaryTitles(), QStringList{QStringLiteral("Probe")});
+    model.importFiles({QUrl::fromLocalFile(QString::fromStdString(alpha_zip.string()))});
+    QCOMPARE(model.frequencyDictionaryTitles(),
+             (QStringList{QStringLiteral("Probe"), QStringLiteral("Alpha")}));
 }
 
 QTEST_APPLESS_MAIN(DictionarySettingsViewModelTest)
