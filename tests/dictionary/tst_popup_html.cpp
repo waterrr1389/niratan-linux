@@ -2,20 +2,24 @@
 
 #include "services/dictionary/popup_html.h"
 
+#include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QRegularExpression>
+#include <QStringList>
 #include <QtTest>
 
+#include <algorithm>
 #include <string>
 
+using niratan::dictionary::popup_shell_html;
 using niratan::dictionary::PopupConfig;
 using niratan::dictionary::PopupDisplaySettings;
 using niratan::dictionary::PopupTheme;
-using niratan::dictionary::popup_shell_html;
 
-// Features/Popup/PopupView.swift (buildContent), PopupWebView.swift and
-// PopupHtmlGenerator.cs define the shell; popup.js consumes the globals.
+// Features/Popup/PopupView.swift (buildContent), PopupWebView.swift
+// (constructHtml) and PopupHtmlGenerator.cs define the shell; popup.js
+// consumes the globals and selection.js supplies window.hoshiSelection.
 namespace {
 
 std::string globals_section(const std::string& html) {
@@ -30,6 +34,31 @@ std::string globals_section(const std::string& html) {
         return {};
     }
     return html.substr(value_start, end - value_start);
+}
+
+// The JSON value of a `window.<name> = <value>;` assignment.
+std::string array_section(const std::string& html, const std::string& name) {
+    const std::string marker = "window." + name + " = ";
+    const std::size_t start = html.find(marker);
+    if (start == std::string::npos) {
+        return {};
+    }
+    const std::size_t value_start = start + marker.size();
+    const std::size_t end = html.find(";\n", value_start);
+    if (end == std::string::npos) {
+        return {};
+    }
+    return html.substr(value_start, end - value_start);
+}
+
+QStringList string_array(const std::string& json) {
+    const QJsonArray array = QJsonDocument::fromJson(QByteArray::fromStdString(json)).array();
+    QStringList values;
+    for (const QJsonValue& value : array) {
+        values.append(value.toString());
+    }
+    std::sort(values.begin(), values.end());
+    return values;
 }
 
 QJsonArray entries_fixture() {
@@ -64,10 +93,14 @@ class PopupHtmlTest : public QObject {
     void stylesheet_and_script_are_inserted();
     void only_shell_scripts_can_use_the_web_channel();
     void empty_entries_are_an_empty_array();
+    void profile_dictionary_sets_are_embedded();
+    void empty_dictionary_sets_are_empty_arrays();
+    void dictionary_titles_keep_their_json_escaping();
+    void selection_script_runs_before_the_popup_script();
 };
 
 void PopupHtmlTest::the_shell_has_the_popup_markup_and_theme() {
-    const std::string html = popup_shell_html({}, {}, dark_config(), "/*css*/", "//js");
+    const std::string html = popup_shell_html({}, {}, dark_config(), "/*css*/", "", "//js");
 
     QVERIFY(html.starts_with("<!doctype html>"));
     QVERIFY(html.find("data-niratan-color-scheme=\"dark\"") != std::string::npos);
@@ -81,16 +114,17 @@ void PopupHtmlTest::the_shell_has_the_popup_markup_and_theme() {
 
 void PopupHtmlTest::entries_are_embedded_and_counted() {
     const QJsonArray entries = entries_fixture();
-    const std::string html = popup_shell_html(entries, {}, PopupConfig{}, "", "");
+    const std::string html = popup_shell_html(entries, {}, PopupConfig{}, "", "", "");
 
-    const QJsonDocument embedded = QJsonDocument::fromJson(QByteArray::fromStdString(globals_section(html)));
+    const QJsonDocument embedded =
+        QJsonDocument::fromJson(QByteArray::fromStdString(globals_section(html)));
     QCOMPARE(embedded.array(), entries);
     QVERIFY(html.find("window.entryCount = 1;") != std::string::npos);
 }
 
 void PopupHtmlTest::dictionary_styles_are_embedded() {
     const QJsonObject styles{{"Probe", "b { color: red; }"}};
-    const std::string html = popup_shell_html({}, styles, PopupConfig{}, "", "");
+    const std::string html = popup_shell_html({}, styles, PopupConfig{}, "", "", "");
 
     QVERIFY(html.find("window.dictionaryStyles = {\"Probe\":\"b { color: red; }\"};") !=
             std::string::npos);
@@ -100,6 +134,8 @@ void PopupHtmlTest::display_settings_are_embedded() {
     PopupConfig config;
     config.display.max_results = 7;
     config.display.scan_length = 9;
+    config.display.scan_non_japanese_text = false;
+    config.display.kanji_lookup_enabled = false;
     config.display.collapse_mode = "Collapse All";
     config.display.expand_first_dictionary = true;
     config.display.two_column_layout = true;
@@ -110,10 +146,12 @@ void PopupHtmlTest::display_settings_are_embedded() {
     config.display.compact_pitch_accents = false;
     config.display.swipe_threshold = 40;
 
-    const std::string html = popup_shell_html({}, {}, config, "", "");
+    const std::string html = popup_shell_html({}, {}, config, "", "", "");
 
     QVERIFY(html.find("window.maxResults = 7;") != std::string::npos);
     QVERIFY(html.find("window.scanLength = 9;") != std::string::npos);
+    QVERIFY(html.find("window.scanNonJapaneseText = false;") != std::string::npos);
+    QVERIFY(html.find("window.kanjiLookupEnabled = false;") != std::string::npos);
     QVERIFY(html.find("window.collapseMode = \"Collapse All\";") != std::string::npos);
     QVERIFY(html.find("window.expandFirstDictionary = true;") != std::string::npos);
     QVERIFY(html.find("window.twoColumnLayout = true;") != std::string::npos);
@@ -134,10 +172,9 @@ void PopupHtmlTest::audio_settings_are_embedded() {
     config.mining.needs_audio = true;
     config.mining.allow_dupes = true;
 
-    const std::string html = popup_shell_html({}, {}, config, "", "");
+    const std::string html = popup_shell_html({}, {}, config, "", "", "");
 
-    QVERIFY(html.find(
-                "window.audioSources = [\"http://localhost/audio?term={term}\"];") !=
+    QVERIFY(html.find("window.audioSources = [\"http://localhost/audio?term={term}\"];") !=
             std::string::npos);
     QVERIFY(html.find("window.audioSourceNames = [\"Local\"];") != std::string::npos);
     QVERIFY(html.find("window.audioEnableAutoplay = true;") != std::string::npos);
@@ -152,7 +189,7 @@ void PopupHtmlTest::closing_tags_in_data_are_escaped() {
     entry.insert("expression", text);
     const QJsonArray entries{entry};
 
-    const std::string html = popup_shell_html(entries, {}, PopupConfig{}, "", "");
+    const std::string html = popup_shell_html(entries, {}, PopupConfig{}, "", "", "");
     const std::string section = globals_section(html);
 
     QVERIFY(!section.empty());
@@ -165,33 +202,101 @@ void PopupHtmlTest::custom_css_is_embedded_as_a_json_string() {
     PopupConfig config;
     config.display.custom_css = "body { color: red; }";
 
-    const std::string html = popup_shell_html({}, {}, config, "", "");
+    const std::string html = popup_shell_html({}, {}, config, "", "", "");
 
     QVERIFY(html.find("window.customCSS = \"body { color: red; }\";") != std::string::npos);
 }
 
 void PopupHtmlTest::stylesheet_and_script_are_inserted() {
-    const std::string html = popup_shell_html({}, {}, PopupConfig{}, "/*CSS*/", "//JS");
+    const std::string html = popup_shell_html({}, {}, PopupConfig{}, "/*CSS*/", "", "//JS");
 
     QVERIFY(html.find("<style>/*CSS*/</style>") != std::string::npos);
     QVERIFY(html.find("//JS") != std::string::npos);
     QVERIFY(html.find("//JS") > html.find("window.lookupEntries"));
 }
 
+// PopupWebView.constructHtml puts the globals, selection.js, the language
+// assignment and popup.js in one nonced script sequence.
 void PopupHtmlTest::only_shell_scripts_can_use_the_web_channel() {
-    const auto html = QString::fromStdString(popup_shell_html({}, {}, PopupConfig{}, "", "//JS"));
+    const auto html =
+        QString::fromStdString(popup_shell_html({}, {}, PopupConfig{}, "", "//selection", "//JS"));
     const auto policy = QRegularExpression("script-src 'nonce-([a-f0-9-]+)'").match(html);
     QVERIFY(policy.hasMatch());
-    QCOMPARE(html.count("<script nonce=\"" + policy.captured(1) + "\">"), 2);
+    QCOMPARE(html.count("<script nonce=\"" + policy.captured(1) + "\">"), 4);
     QVERIFY(!html.contains("<script>"));
-    QVERIFY(!html.contains("onclick="));
 }
 
 void PopupHtmlTest::empty_entries_are_an_empty_array() {
-    const std::string html = popup_shell_html({}, {}, PopupConfig{}, "", "");
+    const std::string html = popup_shell_html({}, {}, PopupConfig{}, "", "", "");
 
     QVERIFY(html.find("window.lookupEntries = [];") != std::string::npos);
     QVERIFY(html.find("window.entryCount = 0;") != std::string::npos);
+}
+
+// B1: PopupView.buildContent and DictionaryManager.collapsedDictionaries /
+// excludedDictionaries; PopupWebView.constructHtml's scan globals.
+void PopupHtmlTest::profile_dictionary_sets_are_embedded() {
+    PopupConfig config;
+    config.display.scan_non_japanese_text = false;
+    config.display.kanji_lookup_enabled = false;
+    config.display.collapsed_dictionaries = {"B", "A"};
+    config.display.excluded_dictionaries = {"Jitendex"};
+    config.display.content_language_id = "en";
+
+    const std::string html =
+        popup_shell_html({}, {}, config, "", "window.hoshiSelection = {language: 'ja'};", "//JS");
+
+    QVERIFY(html.find("window.scanNonJapaneseText = false;") != std::string::npos);
+    QVERIFY(html.find("window.kanjiLookupEnabled = false;") != std::string::npos);
+    QCOMPARE(string_array(array_section(html, "collapsedDictionaries")), (QStringList{"A", "B"}));
+    QCOMPARE(string_array(array_section(html, "excludedDictionaries")), (QStringList{"Jitendex"}));
+}
+
+void PopupHtmlTest::empty_dictionary_sets_are_empty_arrays() {
+    const std::string html = popup_shell_html({}, {}, PopupConfig{}, "", "", "");
+
+    QVERIFY(html.find("window.collapsedDictionaries = [];\n") != std::string::npos);
+    QVERIFY(html.find("window.excludedDictionaries = [];\n") != std::string::npos);
+}
+
+void PopupHtmlTest::dictionary_titles_keep_their_json_escaping() {
+    PopupConfig config;
+    const QString apostrophe = QStringLiteral("O'Brien");
+    const QString backslash = QStringLiteral("a\\b");
+    config.display.collapsed_dictionaries = {apostrophe.toStdString(), backslash.toStdString()};
+    config.display.excluded_dictionaries = {apostrophe.toStdString()};
+
+    const std::string html = popup_shell_html({}, {}, config, "", "", "");
+
+    QStringList collapsed = string_array(array_section(html, "collapsedDictionaries"));
+    collapsed.sort();
+    QStringList expected{apostrophe, backslash};
+    expected.sort();
+    QCOMPARE(collapsed, expected);
+    QCOMPARE(string_array(array_section(html, "excludedDictionaries")), QStringList{apostrophe});
+    // The backslash survives as JSON escaping, so the quote stays a value.
+    QVERIFY(html.find("\"a\\\\b\"") != std::string::npos);
+}
+
+// B2: the selection script runs before the language assignment, which runs
+// before popup.js.
+void PopupHtmlTest::selection_script_runs_before_the_popup_script() {
+    PopupConfig config;
+    config.display.content_language_id = "en";
+    const std::string selection = "window.hoshiSelection = {language: 'ja'};";
+    const std::string popup_script = "//POPUP";
+
+    const std::string html = popup_shell_html({}, {}, config, "", selection, popup_script);
+
+    const std::size_t selection_at = html.find(selection);
+    const std::size_t language_at = html.find("window.hoshiSelection.language = 'en';");
+    const std::size_t popup_at = html.find(popup_script);
+    QVERIFY(selection_at != std::string::npos);
+    QVERIFY(language_at != std::string::npos);
+    QVERIFY(popup_at != std::string::npos);
+    QVERIFY(selection_at < language_at);
+    QVERIFY(language_at < popup_at);
+    QVERIFY(html.find("window.scanNonJapaneseText") < selection_at);
 }
 
 QTEST_APPLESS_MAIN(PopupHtmlTest)

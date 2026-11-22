@@ -117,6 +117,26 @@ Item {
         function miningFeedback(result: var): void {
             surface.miningModel.miningFeedback(result)
         }
+
+        // PopupWebView.Coordinator's inline lookup handlers; textSelected
+        // replaces the document through popupModel.htmlChanged.
+        function getEntries(requestId: int, data: var): void {
+            dictionaryBridge.replyReady(requestId,
+                                        surface.popupModel.getEntries(data.start, data.count))
+        }
+
+        function lookupRedirect(requestId: int, query: var): void {
+            dictionaryBridge.replyReady(requestId, surface.popupModel.lookupRedirect(String(query)))
+        }
+
+        function queryTextSelected(requestId: int, data: var): void {
+            dictionaryBridge.replyReady(requestId,
+                                        surface.popupModel.queryTextSelected(String(data.text)))
+        }
+
+        function textSelected(data: var): void {
+            surface.popupModel.textSelected(String(data.text))
+        }
     }
 
     // PopupView.swift places the action bar outside the scaled results.

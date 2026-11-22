@@ -1,7 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
 // Features/Popup/PopupWebView.swift (Coordinator.userContentController):
-// request/reply handlers settle the page's promises; feedback is one-way.
+// request/reply handlers settle the page's promises; feedback and selection
+// are one-way. The inline lookup handlers (getEntries, lookupRedirect,
+// queryTextSelected) work the same way the mining handlers do.
 
 (() => {
     if (!window.renderPopup || !window.qt?.webChannelTransport) return;
@@ -53,6 +55,17 @@
             }
         };
         messageHandlers.miningFeedback = { postMessage: data => bridge.miningFeedback?.(data) };
+        messageHandlers.getEntries = {
+            postMessage: data => request('getEntries', data, [])
+        };
+        messageHandlers.lookupRedirect = {
+            postMessage: query => request('lookupRedirect', query, 0)
+        };
+        messageHandlers.queryTextSelected = {
+            postMessage: data => request('queryTextSelected', data,
+                { entryCount: 0, matchedCharacterCount: 0 })
+        };
+        messageHandlers.textSelected = { postMessage: data => bridge.textSelected?.(data) };
         if (window.hoshiMiningOptions) Object.assign(window, window.hoshiMiningOptions);
         window.hoshiUseInlineActionButtons = true;
         window.renderPopup();

@@ -6,6 +6,8 @@
 #include <QString>
 #include <QStringList>
 
+#include <fstream>
+#include <iterator>
 #include <utility>
 
 #include "models/profiles/content_language.h"
@@ -33,6 +35,23 @@ QString existing_directory(std::filesystem::path directory) {
         directory = parent;
     }
     return {};
+}
+
+// The file bytes; empty for a missing or unreadable file, which is how the
+// popup behaves without either file.
+std::string read_bytes(const std::filesystem::path& path) {
+    if (path.empty()) {
+        return {};
+    }
+    std::error_code error;
+    if (!std::filesystem::exists(path, error)) {
+        return {};
+    }
+    std::ifstream stream(path, std::ios::binary);
+    if (!stream) {
+        return {};
+    }
+    return std::string(std::istreambuf_iterator<char>(stream), std::istreambuf_iterator<char>());
 }
 
 }  // namespace
@@ -70,17 +89,25 @@ bool DictionarySettingsWatch::reload() {
     watch(QString::fromStdString(index_path.string()));
     const auto index_file = storage::read_json_file(index_path);
     const auto index = profiles::profile_index_from_json(index_file.document);
-    const auto profile = profiles::resolve_profile(
-        index ? profiles::normalize_profile_index(*index) : profiles::ProfileIndex::initial());
+    const auto profile = profiles::resolve_profile(index ? profiles::normalize_profile_index(*index)
+                                                         : profiles::ProfileIndex::initial());
     const auto language = profiles::language_id(profile.language());
 
     std::filesystem::path settings_file;
+    std::filesystem::path config_file;
+    std::filesystem::path collapsed_file;
+    std::string config_bytes;
+    std::string collapsed_bytes;
     auto settings = profiles::default_dictionary_settings();
     if (profiles::is_safe_profile_id(profile.id)) {
         const auto profile_dir = profiles_dir / profile.id;
         settings_file = profile_dir / "dictionary_settings.json";
+        config_file = profile_dir / "dictionary_config.json";
+        collapsed_file = profile_dir / "collapsed.json";
         watch(existing_directory(profile_dir));
         watch(QString::fromStdString(settings_file.string()));
+        watch(QString::fromStdString(config_file.string()));
+        watch(QString::fromStdString(collapsed_file.string()));
         const auto read = storage::read_json_file(settings_file);
         if (const auto decoded = profiles::dictionary_settings_from_json(read.document)) {
             settings = profiles::resolved_dictionary_settings(*decoded);
@@ -88,6 +115,8 @@ bool DictionarySettingsWatch::reload() {
                    settings_file == settings_file_) {
             settings = settings_;
         }
+        config_bytes = read_bytes(config_file);
+        collapsed_bytes = read_bytes(collapsed_file);
     }
     for (const auto& path : previous) {
         if (!watched.contains(path)) {
@@ -95,9 +124,15 @@ bool DictionarySettingsWatch::reload() {
         }
     }
 
-    const bool changed =
-        settings_file != settings_file_ || settings != settings_ || language != language_id_;
+    const bool changed = settings_file != settings_file_ || settings != settings_ ||
+        language != language_id_ || config_file != config_file_ ||
+        collapsed_file != collapsed_file_ || config_bytes != config_bytes_ ||
+        collapsed_bytes != collapsed_bytes_;
     settings_file_ = std::move(settings_file);
+    config_file_ = std::move(config_file);
+    collapsed_file_ = std::move(collapsed_file);
+    config_bytes_ = std::move(config_bytes);
+    collapsed_bytes_ = std::move(collapsed_bytes);
     settings_ = std::move(settings);
     language_id_ = language;
     return changed;

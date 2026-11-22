@@ -12,12 +12,18 @@
 #include <cmath>
 #include <memory>
 #include <optional>
+#include <set>
 #include <string>
 #include <string_view>
+#include <utility>
+#include <vector>
 
+#include "models/anki/mining_context.h"
 #include "models/dictionary/audio_source.h"
+#include "models/dictionary/dictionary_config.h"
 #include "services/anki/anki_config.h"
 #include "services/anki/popup_options.h"
+#include "services/dictionary/dictionary_config_store.h"
 #include "services/dictionary/dictionary_query.h"
 #include "services/dictionary/dictionary_store.h"
 #include "services/dictionary/lookup_configuration.h"
@@ -31,9 +37,12 @@
 namespace niratan::viewmodels {
 
 using niratan::dictionary::active_lookup_configuration;
+using niratan::dictionary::DictionaryInfo;
 using niratan::dictionary::DictionaryQueryService;
 using niratan::dictionary::DictionaryStore;
 using niratan::dictionary::DictionaryType;
+using niratan::dictionary::load_collapsed_dictionaries;
+using niratan::dictionary::load_dictionary_config;
 using niratan::dictionary::load_popup_assets;
 using niratan::dictionary::lookup_entries_json;
 using niratan::dictionary::LookupConfiguration;
@@ -41,6 +50,7 @@ using niratan::dictionary::LookupOutcome;
 using niratan::dictionary::popup_shell_html;
 using niratan::dictionary::PopupAssets;
 using niratan::dictionary::PopupConfig;
+using niratan::dictionary::resolved_dictionary_list;
 
 struct DictionaryPopupModel::State {
     DictionaryStore store{storage::dictionaries_root()};
@@ -53,12 +63,83 @@ struct DictionaryPopupModel::State {
     QString matched_text;
     QString error;
     QString audio_error;
+    // The entry maps the popup script fetches with getEntries.
+    QJsonArray entries;
+    int search_text_size = 26;
     QAudioOutput audio_output;
     QMediaPlayer audio_player;
     bool dark = false;
     QColor background = QColor(QStringLiteral("#FFFFFF"));
     QColor text_color = QColor(QStringLiteral("#000000"));
 };
+
+namespace {
+
+// The Unicode scalar count of a match, which popup.js uses to highlight the
+// selected characters (Swift's matchedText.count counts grapheme clusters).
+int matched_character_count(const std::string& matched) {
+    return static_cast<int>(QString::fromStdString(matched).toUcs4().size());
+}
+
+// Rebuilds the profile query when its configuration changed and runs the
+// lookup. lookup, lookupRedirect and queryTextSelected share it.
+template <typename State> LookupOutcome perform_lookup(State& state, const QString& text) {
+    const auto& settings = state.settings_watch.settings();
+    LookupConfiguration configuration;
+    if (const auto repository = profiles::ProfileRepository::at_data_root()) {
+        configuration = active_lookup_configuration(*repository, settings);
+    } else {
+        for (const auto& dictionary : state.store.installed(DictionaryType::term)) {
+            configuration.term_dictionaries.push_back(dictionary.path);
+        }
+        configuration.language_id = std::string(state.settings_watch.language_id());
+    }
+    if (!state.query || !state.query_configuration.has_value() ||
+        *state.query_configuration != configuration) {
+        state.query = std::make_unique<DictionaryQueryService>(configuration);
+        state.query_configuration = std::move(configuration);
+    }
+    return state.query->lookup(text.toStdString(), settings.max_results, settings.scan_length);
+}
+
+struct DictionarySets {
+    std::vector<std::string> collapsed;
+    std::vector<std::string> excluded;
+};
+
+// DictionaryManager.loadCollapsedDictionaries and excludedDictionaries for the
+// active profile: the collapse set only in Custom mode, and the resolved term
+// dictionaries whose category is exclude in list order, disabled ones included.
+DictionarySets dictionary_sets(const DictionaryStore& store,
+                               const profiles::DictionaryProfileSettings& settings) {
+    DictionarySets sets;
+    const auto repository = profiles::ProfileRepository::at_data_root();
+    if (!repository) {
+        return sets;
+    }
+    const auto profile = repository->active_profile();
+    const auto directory = repository->profile_directory(profile.id);
+    if (!directory.has_value()) {
+        return sets;
+    }
+    const bool default_profile = profile.id == repository->index().default_profile_id;
+    const auto config = load_dictionary_config(*directory / "dictionary_config.json");
+    for (const DictionaryInfo& dictionary :
+         resolved_dictionary_list(store.installed(DictionaryType::term), config,
+                                  DictionaryType::term, default_profile)) {
+        if (dictionary.category == anki::DictionaryCategory::exclude) {
+            sets.excluded.push_back(dictionary.title);
+        }
+    }
+    if (settings.collapse_mode == "Custom") {
+        const std::set<std::string> titles =
+            load_collapsed_dictionaries(*directory / "collapsed.json");
+        sets.collapsed.assign(titles.begin(), titles.end());
+    }
+    return sets;
+}
+
+}  // namespace
 
 DictionaryPopupModel::DictionaryPopupModel(QObject* parent)
     : QObject(parent), state_(std::make_unique<State>()) {
@@ -67,11 +148,17 @@ DictionaryPopupModel::DictionaryPopupModel(QObject* parent)
     connect(&state_->audio_player, &QMediaPlayer::errorOccurred, this,
             [this] { set_audio_error(tr("Could not play word audio")); });
     connect(&state_->settings_watch, &settings::DictionarySettingsWatch::changed, this, [this] {
+        const int text_size = state_->settings_watch.settings().search_text_size.value_or(26);
+        if (text_size != state_->search_text_size) {
+            state_->search_text_size = text_size;
+            emit searchTextSizeChanged();
+        }
         if (!state_->last_query.isEmpty()) {
             run_lookup();
         }
     });
     state_->settings_watch.reload();
+    state_->search_text_size = state_->settings_watch.settings().search_text_size.value_or(26);
 }
 
 DictionaryPopupModel::~DictionaryPopupModel() = default;
@@ -94,6 +181,10 @@ QString DictionaryPopupModel::audio_error() const {
 
 QString DictionaryPopupModel::matched_text() const {
     return state_->matched_text;
+}
+
+int DictionaryPopupModel::search_text_size() const {
+    return state_->search_text_size;
 }
 
 void DictionaryPopupModel::set_audio_error(const QString& error) {
@@ -140,6 +231,58 @@ void DictionaryPopupModel::selectAudioSource(int entryIndex, int sourceIndex) {
     if (has_results() && entryIndex >= 0 && sourceIndex >= 0) {
         emit audioSourceSelected(entryIndex, sourceIndex);
     }
+}
+
+int DictionaryPopupModel::lookupRedirect(const QString& query) {
+    const QString text = query.trimmed();
+    if (text.isEmpty()) {
+        state_->entries = {};
+        return 0;
+    }
+    state_->settings_watch.reload();
+    const LookupOutcome outcome = perform_lookup(*state_, text);
+    if (!outcome.ok || outcome.entries.empty()) {
+        state_->entries = {};
+        return 0;
+    }
+    state_->entries = lookup_entries_json(outcome.entries);
+    return static_cast<int>(state_->entries.size());
+}
+
+QVariantMap DictionaryPopupModel::queryTextSelected(const QString& text) {
+    QVariantMap result{{QStringLiteral("entryCount"), 0},
+                       {QStringLiteral("matchedCharacterCount"), 0}};
+    const QString query = text.trimmed();
+    if (query.isEmpty()) {
+        return result;
+    }
+    state_->settings_watch.reload();
+    const LookupOutcome outcome = perform_lookup(*state_, query);
+    if (!outcome.ok || outcome.entries.empty()) {
+        return result;
+    }
+    state_->entries = lookup_entries_json(outcome.entries);
+    result.insert(QStringLiteral("entryCount"), state_->entries.size());
+    result.insert(QStringLiteral("matchedCharacterCount"),
+                  matched_character_count(outcome.entries.front().matched));
+    return result;
+}
+
+QVariantList DictionaryPopupModel::getEntries(int start, int count) {
+    if (start < 0 || count < 0 || start + count > state_->entries.size()) {
+        return {};
+    }
+    QVariantList entries;
+    entries.reserve(count);
+    for (int index = start; index < start + count; ++index) {
+        entries.append(state_->entries.at(index).toVariant());
+    }
+    return entries;
+}
+
+int DictionaryPopupModel::textSelected(const QString& text) {
+    lookup(text);
+    return matched_character_count(state_->matched_text.toStdString());
 }
 
 bool DictionaryPopupModel::has_results() const {
@@ -194,25 +337,9 @@ void DictionaryPopupModel::lookup(const QString& text) {
 
 void DictionaryPopupModel::run_lookup() {
     set_audio_error({});
-    LookupConfiguration configuration;
-    if (const auto repository = profiles::ProfileRepository::at_data_root()) {
-        configuration = active_lookup_configuration(*repository, state_->settings_watch.settings());
-    } else {
-        for (const auto& dictionary : state_->store.installed(DictionaryType::term)) {
-            configuration.term_dictionaries.push_back(dictionary.path);
-        }
-        configuration.language_id = std::string(state_->settings_watch.language_id());
-    }
-    if (!state_->query || !state_->query_configuration.has_value() ||
-        *state_->query_configuration != configuration) {
-        state_->query = std::make_unique<DictionaryQueryService>(configuration);
-        state_->query_configuration = std::move(configuration);
-    }
-
-    const auto& settings = state_->settings_watch.settings();
-    const LookupOutcome outcome = state_->query->lookup(state_->last_query.toStdString(),
-                                                        settings.max_results, settings.scan_length);
+    const LookupOutcome outcome = perform_lookup(*state_, state_->last_query);
     if (!outcome.ok) {
+        state_->entries = {};
         state_->html.clear();
         state_->matched_text.clear();
         state_->error = QString::fromStdString(outcome.error);
@@ -240,14 +367,20 @@ void DictionaryPopupModel::run_lookup() {
         mining = anki::popup_options(anki_store.settings());
     }
 
+    const auto& settings = state_->settings_watch.settings();
+    DictionarySets sets = dictionary_sets(state_->store, settings);
     PopupConfig config;
     config.display = {
         .content_language_id = state_->query_configuration->language_id,
         .max_results = settings.max_results,
         .scan_length = settings.scan_length,
+        .scan_non_japanese_text = settings.scan_non_japanese_text,
+        .kanji_lookup_enabled = false,
         .collapse_mode = settings.collapse_mode,
         .expand_first_dictionary = settings.expand_first_dictionary,
         .two_column_layout = *settings.two_column_layout,
+        .collapsed_dictionaries = std::move(sets.collapsed),
+        .excluded_dictionaries = std::move(sets.excluded),
         .compact_glossaries = settings.compact_glossaries,
         .show_expression_tags = settings.show_expression_tags,
         .harmonic_frequency = settings.harmonic_frequency,
@@ -270,9 +403,10 @@ void DictionaryPopupModel::run_lookup() {
     // PopupPresentationCoordinator.present passes the first result's matched
     // input span to SelectionData.applyLookupMatch, so it is kept beside the
     // HTML and cleared with the results.
+    state_->entries = entries;
     state_->matched_text = QString::fromStdString(outcome.entries.front().matched);
-    state_->html = QString::fromStdString(
-        popup_shell_html(entries, styles, config, state_->assets.css, state_->assets.js));
+    state_->html = QString::fromStdString(popup_shell_html(
+        entries, styles, config, state_->assets.css, state_->assets.selection, state_->assets.js));
     state_->error.clear();
     emit errorChanged();
     emit htmlChanged();
@@ -285,6 +419,7 @@ void DictionaryPopupModel::clear() {
 
 void DictionaryPopupModel::clear_results() {
     set_audio_error({});
+    state_->entries = {};
     state_->html.clear();
     state_->matched_text.clear();
     state_->error.clear();

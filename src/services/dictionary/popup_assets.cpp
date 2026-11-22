@@ -21,6 +21,7 @@ namespace niratan::dictionary {
 PopupAssets load_popup_assets() {
     return {read_resource(":/niratan/dictionary_popup/popup.css"),
             read_resource(":/niratan/dictionary_popup/popup.js"),
+            read_resource(":/niratan/dictionary_popup/selection.js"),
             read_resource(":/qtwebchannel/qwebchannel.js"),
             read_resource(":/niratan/dictionary_popup/bridge.js")};
 }

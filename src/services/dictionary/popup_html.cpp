@@ -1,13 +1,19 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
-// Follows Features/Popup/PopupView.swift (buildContent), PopupWebView.swift and
-// Niratan-win's Services/Dictionary/PopupHtmlGenerator.cs (GenerateHtml).
+// Follows Features/Popup/PopupView.swift (buildContent), PopupWebView.swift
+// (constructHtml) and Niratan-win's Services/Dictionary/PopupHtmlGenerator.cs
+// (GenerateHtml).
 //
 // Markup and the global assignments before the popup script are fixed by
 // popup.js. Serialized data goes through escaped_json because a literal "</"
 // inside a script element ends that element early; "<\/" is the same JSON
-// string value. The stylesheet and script texts are trusted assets and are
+// string value. The stylesheet and the two scripts are trusted assets and are
 // inserted unchanged.
+//
+// Script order follows constructHtml: the globals script (scanNonJapaneseText,
+// scanLength, kanjiLookupEnabled and twoColumnLayout among them), selection.js,
+// the language assignment, then popup.js. Every inline script carries the same
+// nonce.
 
 #include "popup_html.h"
 
@@ -59,9 +65,9 @@ const char* js_bool(bool value) {
 
 std::string popup_shell_html(const QJsonArray& entries, const QJsonObject& dictionary_styles,
                              const PopupConfig& config, std::string_view css,
-                             std::string_view js) {
+                             std::string_view selection_js, std::string_view js) {
     std::string html;
-    html.reserve(css.size() + js.size() + 2048);
+    html.reserve(css.size() + selection_js.size() + js.size() + 2048);
 
     html += "<!doctype html>\n<html lang=\"ja\" data-niratan-color-scheme=\"";
     html += config.theme.dark ? "dark" : "light";
@@ -71,8 +77,10 @@ std::string popup_shell_html(const QJsonArray& entries, const QJsonObject& dicti
     // scripts may run in the document that owns the native web channel.
     const auto nonce = QUuid::createUuid().toString(QUuid::WithoutBraces).toStdString();
     html += "<meta http-equiv=\"Content-Security-Policy\" content=\"default-src 'none'; "
-            "script-src 'nonce-" + nonce + "'; style-src 'unsafe-inline'; img-src dict: data:; "
-            "media-src dict:; connect-src audio:; base-uri 'none'; form-action 'none'\">\n";
+            "script-src 'nonce-" +
+        nonce +
+        "'; style-src 'unsafe-inline'; img-src dict: data:; "
+        "media-src dict:; connect-src audio:; base-uri 'none'; form-action 'none'\">\n";
     html += "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0, "
             "maximum-scale=1.0, user-scalable=no\" />\n";
     html += "<title>Dictionary Lookup</title>\n";
@@ -103,11 +111,15 @@ std::string popup_shell_html(const QJsonArray& entries, const QJsonObject& dicti
     html += escaped_json(QJsonDocument(dictionary_styles));
     html += ";\n";
 
-    // Dictionary visibility starts empty; the script restores saved state.
-    html += "window.collapsedDictionaries = [];\n";
-    html += "window.excludedDictionaries = [];\n";
-
     const PopupDisplaySettings& display = config.display;
+    // DictionaryManager.collapsedDictionaries only reaches Custom mode;
+    // excludedDictionaries is every mode.
+    html += "window.collapsedDictionaries = ";
+    html += escaped_json(QJsonDocument(json_string_array(display.collapsed_dictionaries)));
+    html += ";\nwindow.excludedDictionaries = ";
+    html += escaped_json(QJsonDocument(json_string_array(display.excluded_dictionaries)));
+    html += ";\n";
+
     html += "window.compactGlossaries = ";
     html += js_bool(display.compact_glossaries);
     html += ";\nwindow.compactPitchAccents = ";
@@ -130,6 +142,10 @@ std::string popup_shell_html(const QJsonArray& entries, const QJsonObject& dicti
     html += std::to_string(display.max_results);
     html += ";\nwindow.scanLength = ";
     html += std::to_string(display.scan_length);
+    html += ";\nwindow.scanNonJapaneseText = ";
+    html += js_bool(display.scan_non_japanese_text);
+    html += ";\nwindow.kanjiLookupEnabled = ";
+    html += js_bool(display.kanji_lookup_enabled);
     html += ";\n";
 
     html += "window.audioSources = ";
@@ -159,7 +175,13 @@ std::string popup_shell_html(const QJsonArray& entries, const QJsonObject& dicti
     html += js_bool(mining.compact_glossaries);
     html += ";\n";
 
+    // selection.js defines window.hoshiSelection; the assignment that follows
+    // gives the document the active profile's language before popup.js runs.
     html += "</script>\n<script nonce=\"" + nonce + "\">";
+    html += selection_js;
+    html += "</script>\n<script nonce=\"" + nonce + "\">window.hoshiSelection.language = '";
+    html += display.content_language_id;
+    html += "';</script>\n<script nonce=\"" + nonce + "\">";
     html += js;
     html += "</script>\n</body>\n</html>";
 

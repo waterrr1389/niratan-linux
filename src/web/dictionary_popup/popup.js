@@ -1527,7 +1527,7 @@ async function playEntryAudio(entryIndex, sourceIndex = null) {
     if (sourceIndex !== null) {
         audioUrls[entryIndex] = (await fetchAudioList(entryIndex))[sourceIndex]?.url || null;
     } else if (!audioUrls[entryIndex]) {
-        audioUrls[entryIndex] = await fetchAudioUrl(entry.expression, entry.reading || entry.expression);
+        audioUrls[entryIndex] = await fetchAudioUrl(entry.expression, entry.reading);
     }
     if (!audioUrls[entryIndex] || !playWordAudio(audioUrls[entryIndex])) {
         updateButtonSlot(audioSlot, { state: 'error' });

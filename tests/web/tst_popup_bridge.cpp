@@ -78,12 +78,20 @@ class MiningBridgeProbe : public QObject {
     void duplicateCheck(int id, const QVariant& word) { emit duplicateReceived(id, word); }
     void openAnkiNote(const QVariant& ids) { emit openReceived(ids); }
     void miningFeedback(const QVariant& data) { emit feedbackReceived(data); }
+    void getEntries(int id, const QVariant& data) { emit entriesReceived(id, data); }
+    void lookupRedirect(int id, const QVariant& query) { emit redirectReceived(id, query); }
+    void queryTextSelected(int id, const QVariant& data) { emit querySelectedReceived(id, data); }
+    void textSelected(const QVariant& data) { emit textSelectedReceived(data); }
 
    signals:
     void mineReceived(int id, const QVariant& data);
     void duplicateReceived(int id, const QVariant& word);
     void openReceived(const QVariant& ids);
     void feedbackReceived(const QVariant& data);
+    void entriesReceived(int id, const QVariant& data);
+    void redirectReceived(int id, const QVariant& query);
+    void querySelectedReceived(int id, const QVariant& data);
+    void textSelectedReceived(const QVariant& data);
     void replyReady(int id, const QVariant& payload);
 };
 
@@ -96,11 +104,13 @@ struct MiningPopup {
 
     bool load(QObject* bridge = nullptr) {
         const auto assets = niratan::dictionary::load_popup_assets();
-        if (assets.js.empty() || assets.web_channel.empty() || assets.bridge.empty()) {
+        if (assets.js.empty() || assets.web_channel.empty() || assets.bridge.empty() ||
+            assets.selection.empty()) {
             return false;
         }
         const auto shell = niratan::dictionary::popup_shell_html(
-            entries_fixture(), {}, niratan::dictionary::PopupConfig{}, assets.css, assets.js);
+            entries_fixture(), {}, niratan::dictionary::PopupConfig{}, assets.css, assets.selection,
+            assets.js);
         channel.registerObject(QStringLiteral("dictionaryBridge"), bridge ? bridge : &probe);
         page.setWebChannel(&channel);
         QSignalSpy loaded(&page, &QWebEnginePage::loadFinished);
@@ -123,11 +133,14 @@ class PopupBridgeTest : public QObject {
 
    private slots:
     void play_word_audio_reaches_the_bridge();
+    void play_entry_audio_uses_the_entry_reading();
     void mine_entry_posts_a_string_map_and_awaits_its_payload();
     void duplicate_check_awaits_its_payload_and_reveals_note_button();
     void open_anki_note_posts_the_button_ids();
     void mining_feedback_posts_pending_before_mining();
     void missing_mine_callback_resolves_with_failure();
+    void the_shell_defines_the_selection_object();
+    void inline_lookup_requests_reach_the_bridge();
 };
 
 void PopupBridgeTest::play_word_audio_reaches_the_bridge() {
@@ -137,7 +150,8 @@ void PopupBridgeTest::play_word_audio_reaches_the_bridge() {
     QVERIFY(!assets.bridge.empty());
 
     const std::string shell = niratan::dictionary::popup_shell_html(
-        entries_fixture(), {}, niratan::dictionary::PopupConfig{}, assets.css, assets.js);
+        entries_fixture(), {}, niratan::dictionary::PopupConfig{}, assets.css, assets.selection,
+        assets.js);
 
     QWebEnginePage page;
     QWebChannel channel(&page);
@@ -176,6 +190,75 @@ void PopupBridgeTest::play_word_audio_reaches_the_bridge() {
     QTRY_COMPARE_WITH_TIMEOUT(audio_spy.count(), 1, 10000);
     QCOMPARE(audio_spy.first().first().toString(),
              QStringLiteral("https://example.test/audio.mp3"));
+}
+
+// B4: Features/Popup/popup.js playEntryAudio passes entry.reading only, while
+// fetchAudioList keeps the reading || expression fallback.
+void PopupBridgeTest::play_entry_audio_uses_the_entry_reading() {
+    const auto assets = niratan::dictionary::load_popup_assets();
+    QVERIFY(!assets.js.empty());
+    QVERIFY(!assets.web_channel.empty());
+    QVERIFY(!assets.bridge.empty());
+    QVERIFY(!assets.selection.empty());
+
+    QJsonArray entries = entries_fixture();
+    QJsonObject entry = entries.first().toObject();
+    entry.insert(QStringLiteral("reading"), QString());
+    entries = QJsonArray{entry};
+
+    niratan::dictionary::PopupConfig config;
+    config.audio.sources = {"http://localhost/audio?reading={reading}"};
+    config.audio.source_names = {"Local"};
+
+    const std::string shell = niratan::dictionary::popup_shell_html(entries, {}, config, assets.css,
+                                                                    assets.selection, assets.js);
+
+    QWebEnginePage page;
+    QWebChannel channel(&page);
+    page.setWebChannel(&channel);
+    DictionaryBridgeProbe probe;
+    channel.registerObject(QStringLiteral("dictionaryBridge"), &probe);
+    QSignalSpy audio_spy(&probe, &DictionaryBridgeProbe::audioReceived);
+
+    QSignalSpy load_spy(&page, &QWebEnginePage::loadFinished);
+    page.setHtml(QString::fromStdString(shell));
+    QVERIFY(load_spy.wait(15000));
+    QVERIFY(load_spy.last().at(0).toBool());
+
+    evaluate(page,
+             QString::fromStdString(assets.web_channel) + QStringLiteral("\n") +
+                 QString::fromStdString(assets.bridge));
+
+    QElapsedTimer timer;
+    timer.start();
+    QString handler_type;
+    while (timer.elapsed() < 10000) {
+        handler_type =
+            evaluate(page, QStringLiteral("typeof window.webkit?.messageHandlers?.playWordAudio"));
+        if (handler_type == QStringLiteral("object")) {
+            break;
+        }
+        QTest::qWait(50);
+    }
+    QCOMPARE(handler_type, QStringLiteral("object"));
+
+    evaluate(page, QStringLiteral(R"JS(
+        window.audioProbe = [];
+        window.fetchAudioSources = async (template, expression, reading) => {
+            window.audioProbe.push(reading);
+            return [{url: 'http://localhost/audio.mp3'}];
+        };
+        window.fetchAudioList(0);
+        window.playEntryAudio(0);
+    )JS"));
+
+    QTRY_COMPARE_WITH_TIMEOUT(audio_spy.count(), 1, 10000);
+    QCOMPARE(audio_spy.first().first().toString(), QStringLiteral("http://localhost/audio.mp3"));
+    // fetchAudioList falls back to the expression; playEntryAudio passes the
+    // empty reading unchanged.
+    QCOMPARE(evaluate(page, QStringLiteral("String(window.audioProbe[0])")),
+             QStringLiteral("decide"));
+    QCOMPARE(evaluate(page, QStringLiteral("String(window.audioProbe[1])")), QString());
 }
 
 // B1, B2, B6, B23: PopupWebView.Coordinator.userContentController (async),
@@ -344,6 +427,99 @@ void PopupBridgeTest::missing_mine_callback_resolves_with_failure() {
     QTRY_VERIFY_WITH_TIMEOUT(popup.js("window.mineReply") != "waiting", 2000);
     const QJsonObject expected{{"status", "failed"}, {"message", "Unable to add card."}};
     QCOMPARE(QJsonDocument::fromJson(popup.js("window.mineReply").toUtf8()).object(), expected);
+}
+
+// B2: PopupWebView.constructHtml loads selection.js before the language
+// assignment, so the popup document owns window.hoshiSelection.
+void PopupBridgeTest::the_shell_defines_the_selection_object() {
+    const auto assets = niratan::dictionary::load_popup_assets();
+    QVERIFY(!assets.selection.empty());
+    niratan::dictionary::PopupConfig config;
+    config.display.content_language_id = "en";
+    const std::string shell = niratan::dictionary::popup_shell_html(
+        entries_fixture(), {}, config, assets.css, assets.selection, assets.js);
+
+    QWebEnginePage page;
+    QSignalSpy load_spy(&page, &QWebEnginePage::loadFinished);
+    page.setHtml(QString::fromStdString(shell));
+    QVERIFY(load_spy.wait(15000));
+    QVERIFY(load_spy.last().at(0).toBool());
+
+    QCOMPARE(evaluate(page, QStringLiteral("typeof window.hoshiSelection")),
+             QStringLiteral("object"));
+    QCOMPARE(evaluate(page, QStringLiteral("window.hoshiSelection.language")),
+             QStringLiteral("en"));
+    QCOMPARE(evaluate(page, QStringLiteral("typeof window.hoshiSelection.selectText")),
+             QStringLiteral("function"));
+}
+
+// B6: PopupWebView.Coordinator.getEntries, lookupRedirect and
+// queryTextSelected settle the page's promises; textSelected is one-way.
+void PopupBridgeTest::inline_lookup_requests_reach_the_bridge() {
+    MiningPopup popup;
+    QSignalSpy entries(&popup.probe, &MiningBridgeProbe::entriesReceived);
+    QSignalSpy redirect(&popup.probe, &MiningBridgeProbe::redirectReceived);
+    QSignalSpy selected(&popup.probe, &MiningBridgeProbe::querySelectedReceived);
+    QSignalSpy one_way(&popup.probe, &MiningBridgeProbe::textSelectedReceived);
+    QVERIFY(popup.load());
+    QTRY_COMPARE_WITH_TIMEOUT(popup.js("typeof window.webkit?.messageHandlers?.getEntries"),
+                              QStringLiteral("object"), 2000);
+    QTRY_COMPARE_WITH_TIMEOUT(popup.js("typeof window.webkit?.messageHandlers?.lookupRedirect"),
+                              QStringLiteral("object"), 2000);
+    QTRY_COMPARE_WITH_TIMEOUT(popup.js("typeof window.webkit?.messageHandlers?.queryTextSelected"),
+                              QStringLiteral("object"), 2000);
+    QTRY_COMPARE_WITH_TIMEOUT(popup.js("typeof window.webkit?.messageHandlers?.textSelected"),
+                              QStringLiteral("object"), 2000);
+
+    popup.js(QStringLiteral(R"JS(
+        window.entriesReply = 'waiting';
+        window.webkit.messageHandlers.getEntries.postMessage({start: 0, count: 1})
+            .then(reply => { window.entriesReply = JSON.stringify(reply) ?? 'missing'; });
+        'sent';
+    )JS"));
+    QTRY_COMPARE_WITH_TIMEOUT(entries.size(), 1, 2000);
+    const auto request = entries.first().at(1).toMap();
+    QCOMPARE(request.value(QStringLiteral("start")).toInt(), 0);
+    QCOMPARE(request.value(QStringLiteral("count")).toInt(), 1);
+    QCOMPARE(popup.js("window.entriesReply"), QStringLiteral("waiting"));
+    const QVariantList slice{QVariantMap{{QStringLiteral("expression"), QStringLiteral("decide")}}};
+    emit popup.probe.replyReady(entries.first().at(0).toInt(), slice);
+    QTRY_VERIFY_WITH_TIMEOUT(popup.js("window.entriesReply") != "waiting", 2000);
+    QCOMPARE(QJsonDocument::fromJson(popup.js("window.entriesReply").toUtf8()).array(),
+             (QJsonArray{QJsonObject{{"expression", "decide"}}}));
+
+    popup.js(QStringLiteral(R"JS(
+        window.redirectReply = 'waiting';
+        window.webkit.messageHandlers.lookupRedirect.postMessage('decide')
+            .then(reply => { window.redirectReply = String(reply); });
+        'sent';
+    )JS"));
+    QTRY_COMPARE_WITH_TIMEOUT(redirect.size(), 1, 2000);
+    QCOMPARE(redirect.first().at(1).toString(), QStringLiteral("decide"));
+    emit popup.probe.replyReady(redirect.first().at(0).toInt(), 1);
+    QTRY_COMPARE_WITH_TIMEOUT(popup.js("window.redirectReply"), QStringLiteral("1"), 2000);
+
+    popup.js(QStringLiteral(R"JS(
+        window.queryReply = 'waiting';
+        window.webkit.messageHandlers.queryTextSelected.postMessage({text: 'decide'})
+            .then(reply => { window.queryReply = JSON.stringify(reply) ?? 'missing'; });
+        'sent';
+    )JS"));
+    QTRY_COMPARE_WITH_TIMEOUT(selected.size(), 1, 2000);
+    QCOMPARE(selected.first().at(1).toMap().value(QStringLiteral("text")).toString(),
+             QStringLiteral("decide"));
+    const QVariantMap result{{QStringLiteral("entryCount"), 1},
+                             {QStringLiteral("matchedCharacterCount"), 6}};
+    emit popup.probe.replyReady(selected.first().at(0).toInt(), result);
+    QTRY_VERIFY_WITH_TIMEOUT(popup.js("window.queryReply") != "waiting", 2000);
+    QCOMPARE(QJsonDocument::fromJson(popup.js("window.queryReply").toUtf8()).object(),
+             QJsonObject::fromVariantMap(result));
+
+    popup.js(QStringLiteral(
+        "window.webkit.messageHandlers.textSelected.postMessage({text: 'decide'}); 'sent';"));
+    QTRY_COMPARE_WITH_TIMEOUT(one_way.size(), 1, 2000);
+    QCOMPARE(one_way.first().at(0).toMap().value(QStringLiteral("text")).toString(),
+             QStringLiteral("decide"));
 }
 
 int main(int argc, char* argv[]) {

@@ -14,10 +14,16 @@
 // profile ID or an invalid file seen first gives the defaults; an invalid
 // live edit keeps the last good settings of the same profile.
 //
-// The Profiles directory, the index, the profile directory and its settings
-// file are watched. Watching directories survives atomic replacement and
-// notices a file that does not exist yet. An empty data root reads nothing
-// and watches nothing.
+// The profile's dictionary_config.json and collapsed.json are watched as raw
+// bytes because the popup's collapse and exclude sets come from them
+// (Core/DictionaryManager.swift loadDictionaries, loadCollapsedDictionaries).
+// They are compared byte for byte with the previous read, a missing file
+// counting as empty, so an identical rewrite reports nothing.
+//
+// The Profiles directory, the index, the profile directory, its settings file
+// and those two dictionary files are watched. Watching directories survives
+// atomic replacement and notices a file that does not exist yet. An empty data
+// root reads nothing and watches nothing.
 
 #pragma once
 
@@ -25,6 +31,7 @@
 #include <QObject>
 
 #include <filesystem>
+#include <string>
 #include <string_view>
 
 #include "models/profiles/dictionary_settings.h"
@@ -39,8 +46,9 @@ class DictionarySettingsWatch : public QObject {
     explicit DictionarySettingsWatch(QObject* parent = nullptr);
     explicit DictionarySettingsWatch(std::filesystem::path data_root, QObject* parent = nullptr);
 
-    // Rereads the index and the settings. Returns whether the language, the
-    // settings or the settings file changed.
+    // Rereads the index, the settings and the two dictionary files. Returns
+    // whether the language, the settings, the settings file or the bytes of
+    // either dictionary file changed.
     bool reload();
 
     std::string_view language_id() const { return language_id_; }
@@ -56,6 +64,10 @@ class DictionarySettingsWatch : public QObject {
     std::filesystem::path data_root_;
     QFileSystemWatcher watcher_;
     std::filesystem::path settings_file_;
+    std::filesystem::path config_file_;
+    std::filesystem::path collapsed_file_;
+    std::string config_bytes_;
+    std::string collapsed_bytes_;
     profiles::DictionaryProfileSettings settings_ = profiles::default_dictionary_settings();
     std::string_view language_id_ = "ja";
 };

@@ -7,6 +7,7 @@
 
 #include "data_root.h"
 
+#include "models/profiles/dictionary_settings.h"
 #include "services/anki/anki_config.h"
 #include "services/dictionary/dictionary_store.h"
 #include "services/profiles/profile_repository.h"
@@ -15,11 +16,13 @@
 #include "yomitan_fixture.h"
 
 #include <QFile>
+#include <QJsonDocument>
 #include <QSignalSpy>
 #include <QtTest>
 
 #include <filesystem>
 #include <memory>
+#include <optional>
 
 using niratan::anki::AnkiConfigStore;
 using niratan::dictionary::DictionaryStore;
@@ -43,6 +46,60 @@ bool write_probe_config(const std::filesystem::path& directory) {
     return file.write(bytes) == bytes.size();
 }
 
+bool write_text(const std::filesystem::path& path, const QByteArray& bytes) {
+    QFile file(QString::fromStdString(path.string()));
+    if (!file.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
+        return false;
+    }
+    return file.write(bytes) == bytes.size();
+}
+
+// The Probe entry enabled at order 0; category omit means DictionaryCategory.none.
+QByteArray probe_config(const char* category = nullptr) {
+    QByteArray json = R"({"termDictionaries":[{"fileName":"Probe","isEnabled":true,"order":0)";
+    if (category != nullptr) {
+        json += R"(,"category":")" + QByteArray(category) + "\"";
+    }
+    json += R"(}],"frequencyDictionaries":[],"pitchDictionaries":[]})";
+    return json;
+}
+
+bool write_profile_settings(const std::filesystem::path& directory,
+                            const std::string& collapse_mode,
+                            std::optional<int> search_text_size = std::nullopt,
+                            bool scan_non_japanese_text = true) {
+    niratan::profiles::DictionaryProfileSettings settings =
+        niratan::profiles::default_dictionary_settings();
+    settings.collapse_mode = collapse_mode;
+    if (search_text_size.has_value()) {
+        settings.search_text_size = *search_text_size;
+    }
+    settings.scan_non_japanese_text = scan_non_japanese_text;
+    return write_text(
+        directory / "dictionary_settings.json",
+        niratan::profiles::dictionary_settings_to_json(settings).toJson(QJsonDocument::Compact));
+}
+
+// The JSON value of a `window.<name> = <value>;` assignment in the shell.
+QString array_section(const QString& html, const QString& name) {
+    const QString marker = QStringLiteral("window.") + name + QStringLiteral(" = ");
+    const qsizetype start = html.indexOf(marker);
+    if (start < 0) {
+        return {};
+    }
+    const qsizetype value_start = start + marker.size();
+    const qsizetype end = html.indexOf(QStringLiteral(";\n"), value_start);
+    return end < 0 ? QString() : html.mid(value_start, end - value_start);
+}
+
+QStringList string_array(const QString& json) {
+    QStringList values;
+    for (const QJsonValue& value : QJsonDocument::fromJson(json.toUtf8()).array()) {
+        values.append(value.toString());
+    }
+    return values;
+}
+
 }  // namespace
 
 class DictionaryPopupModelTest : public QObject {
@@ -57,6 +114,10 @@ class DictionaryPopupModelTest : public QObject {
     void shell_globals_come_from_the_anki_configuration();
     void shell_globals_follow_the_active_profile();
     void the_query_follows_the_active_profile_configuration();
+    void collapsed_and_excluded_dictionaries_reach_the_shell();
+    void search_text_size_comes_from_the_profile();
+    void dictionary_file_edits_render_the_open_popup();
+    void inline_lookup_requests_answer_from_the_current_entries();
 
    private:
     std::unique_ptr<TempDataRoot> root_;
@@ -209,10 +270,166 @@ void DictionaryPopupModelTest::the_query_follows_the_active_profile_configuratio
     QVERIFY(write_probe_config(*directory));
     model.lookup(QStringLiteral("decide"));
     QVERIFY(model.has_results());
+    QVERIFY(model.html().contains(QStringLiteral("window.hoshiSelection.language = 'en';")));
 
     QVERIFY(!profiles.set_active_profile("default-ja").has_value());
     model.lookup(QStringLiteral("decide"));
     QVERIFY(model.has_results());
+}
+
+// B1: PopupView.buildContent carries DictionaryManager.collapsedDictionaries
+// only in Custom mode and DictionaryManager.excludedDictionaries always.
+void DictionaryPopupModelTest::collapsed_and_excluded_dictionaries_reach_the_shell() {
+    ProfileRepository profiles{niratan::storage::data_root()};
+    QVERIFY(!profiles.set_active_profile("default-ja").has_value());
+    const auto directory = profiles.profile_directory("default-ja");
+    QVERIFY(directory.has_value());
+    const auto twin_zip = std::filesystem::path(root_->path().toStdString()) / "twin.zip";
+    write_stored_zip(
+        twin_zip,
+        {{"index.json", minimal_index("Twin")}, {"term_bank_1.json", minimal_term_bank()}});
+    QVERIFY(DictionaryStore(niratan::storage::dictionaries_root()).import_zip(twin_zip).ok);
+    QVERIFY(write_text(
+        *directory / "dictionary_config.json",
+        R"({"termDictionaries":[{"fileName":"Twin","isEnabled":true,"order":0,"category":"exclude"},{"fileName":"Probe","isEnabled":false,"order":1,"category":"exclude"}],"frequencyDictionaries":[],"pitchDictionaries":[]})"));
+    QVERIFY(write_profile_settings(*directory, "Custom", std::nullopt, false));
+    QVERIFY(write_text(*directory / "collapsed.json", R"(["Probe"])"));
+
+    DictionaryPopupModel custom;
+    custom.lookup(QStringLiteral("decide"));
+    QVERIFY(custom.has_results());
+    QVERIFY(custom.html().contains(QStringLiteral("window.scanNonJapaneseText = false;")));
+    QCOMPARE(string_array(array_section(custom.html(), QStringLiteral("excludedDictionaries"))),
+             (QStringList{QStringLiteral("Twin"), QStringLiteral("Probe")}));
+    QCOMPARE(string_array(array_section(custom.html(), QStringLiteral("collapsedDictionaries"))),
+             QStringList{QStringLiteral("Probe")});
+
+    QVERIFY(write_profile_settings(*directory, "Expand All", std::nullopt, false));
+    DictionaryPopupModel expanded;
+    expanded.lookup(QStringLiteral("decide"));
+    QVERIFY(expanded.has_results());
+    QVERIFY(string_array(array_section(expanded.html(), QStringLiteral("collapsedDictionaries")))
+                .isEmpty());
+    QCOMPARE(string_array(array_section(expanded.html(), QStringLiteral("excludedDictionaries"))),
+             (QStringList{QStringLiteral("Twin"), QStringLiteral("Probe")}));
+
+    // A profile without a config keeps the default profile's fallback list,
+    // whose entries carry no category, and has no collapse set.
+    std::filesystem::remove(*directory / "dictionary_config.json");
+    std::filesystem::remove(*directory / "dictionary_settings.json");
+    std::filesystem::remove(*directory / "collapsed.json");
+    DictionaryPopupModel bare;
+    bare.lookup(QStringLiteral("decide"));
+    QVERIFY(bare.has_results());
+    QVERIFY(string_array(array_section(bare.html(), QStringLiteral("collapsedDictionaries")))
+                .isEmpty());
+    QVERIFY(
+        string_array(array_section(bare.html(), QStringLiteral("excludedDictionaries"))).isEmpty());
+}
+
+// B3, Decision 7: UserConfig.searchTextSize sizes the page's search field.
+void DictionaryPopupModelTest::search_text_size_comes_from_the_profile() {
+    ProfileRepository profiles{niratan::storage::data_root()};
+    QVERIFY(!profiles.set_active_profile("default-ja").has_value());
+    const auto directory = profiles.profile_directory("default-ja");
+    QVERIFY(directory.has_value());
+    std::filesystem::remove(*directory / "dictionary_settings.json");
+
+    DictionaryPopupModel defaults;
+    QCOMPARE(defaults.search_text_size(), 26);
+
+    QVERIFY(write_profile_settings(*directory, "Expand All", 30));
+    DictionaryPopupModel sized;
+    sized.lookup(QStringLiteral("decide"));
+    QCOMPARE(sized.search_text_size(), 30);
+
+    QSignalSpy size_spy(&sized, &DictionaryPopupModel::searchTextSizeChanged);
+    QVERIFY(write_profile_settings(*directory, "Expand All", 31));
+    QTRY_COMPARE_WITH_TIMEOUT(size_spy.count(), 1, 5000);
+    QCOMPARE(sized.search_text_size(), 31);
+}
+
+// B5: DictionaryManager.reloadActiveProfileDictionaryState; an open popup
+// picks up dictionary_config.json and collapsed.json edits from another window.
+void DictionaryPopupModelTest::dictionary_file_edits_render_the_open_popup() {
+    ProfileRepository profiles{niratan::storage::data_root()};
+    QVERIFY(!profiles.set_active_profile("default-ja").has_value());
+    const auto directory = profiles.profile_directory("default-ja");
+    QVERIFY(directory.has_value());
+    QVERIFY(write_text(*directory / "dictionary_config.json", probe_config()));
+    QVERIFY(write_profile_settings(*directory, "Expand All"));
+    std::filesystem::remove(*directory / "collapsed.json");
+
+    DictionaryPopupModel model;
+    model.lookup(QStringLiteral("decide"));
+    QVERIFY(model.has_results());
+    QVERIFY(!array_section(model.html(), QStringLiteral("excludedDictionaries"))
+                 .contains(QStringLiteral("Probe")));
+
+    QVERIFY(write_text(*directory / "dictionary_config.json", probe_config("exclude")));
+    QTRY_VERIFY_WITH_TIMEOUT(array_section(model.html(), QStringLiteral("excludedDictionaries"))
+                                 .contains(QStringLiteral("Probe")),
+                             5000);
+
+    QVERIFY(write_profile_settings(*directory, "Custom"));
+    QVERIFY(write_text(*directory / "collapsed.json", R"(["Probe"])"));
+    QTRY_VERIFY_WITH_TIMEOUT(array_section(model.html(), QStringLiteral("collapsedDictionaries"))
+                                 .contains(QStringLiteral("Probe")),
+                             5000);
+
+    // The rerun also rebuilds the query: a disabled dictionary contributes no
+    // entries and the document clears.
+    QVERIFY(write_text(
+        *directory / "dictionary_config.json",
+        R"({"termDictionaries":[{"fileName":"Probe","isEnabled":false,"order":0}],"frequencyDictionaries":[],"pitchDictionaries":[]})"));
+    QTRY_VERIFY_WITH_TIMEOUT(!model.has_results(), 5000);
+}
+
+// B6: PopupWebView.Coordinator (getEntries, lookupRedirect, queryTextSelected)
+// and DictionarySearchView.onRedirect/onQueryTextSelected; PopupModels.applyLookupMatch
+// counts the matched text.
+void DictionaryPopupModelTest::inline_lookup_requests_answer_from_the_current_entries() {
+    ProfileRepository profiles{niratan::storage::data_root()};
+    QVERIFY(!profiles.set_active_profile("default-ja").has_value());
+    const auto directory = profiles.profile_directory("default-ja");
+    QVERIFY(directory.has_value());
+    QVERIFY(write_text(*directory / "dictionary_config.json", probe_config()));
+    QVERIFY(write_profile_settings(*directory, "Expand All"));
+
+    DictionaryPopupModel model;
+    model.lookup(QStringLiteral("decide"));
+    QVERIFY(model.has_results());
+
+    const QVariantList slice = model.getEntries(0, 1);
+    QCOMPARE(slice.size(), 1);
+    QCOMPARE(slice.first().toMap().value(QStringLiteral("expression")).toString(),
+             QStringLiteral("decide"));
+    QVERIFY(model.getEntries(1, 1).isEmpty());
+    QVERIFY(model.getEntries(-1, 1).isEmpty());
+    QVERIFY(model.getEntries(0, 2).isEmpty());
+
+    QCOMPARE(model.lookupRedirect(QStringLiteral("decide")), 1);
+
+    const QVariantMap selected = model.queryTextSelected(QStringLiteral("decide"));
+    QCOMPARE(selected.value(QStringLiteral("entryCount")).toInt(), 1);
+    QCOMPARE(selected.value(QStringLiteral("matchedCharacterCount")).toInt(), 6);
+
+    QCOMPARE(model.textSelected(QStringLiteral("decide")), 6);
+    QVERIFY(model.html().contains(QStringLiteral("decide")));
+
+    QCOMPARE(model.lookupRedirect(QStringLiteral("zzzz")), 0);
+    QVERIFY(model.getEntries(0, 1).isEmpty());
+    const QVariantMap empty = model.queryTextSelected(QStringLiteral("zzzz"));
+    QCOMPARE(empty.value(QStringLiteral("entryCount")).toInt(), 0);
+    QCOMPARE(empty.value(QStringLiteral("matchedCharacterCount")).toInt(), 0);
+    const QVariantMap again = model.queryTextSelected(QStringLiteral("decide"));
+    QCOMPARE(again.value(QStringLiteral("entryCount")).toInt(), 1);
+    QCOMPARE(model.getEntries(0, 1).size(), 1);
+    QCOMPARE(model.getEntries(0, 1).first().toMap().value(QStringLiteral("expression")).toString(),
+             QStringLiteral("decide"));
+    QCOMPARE(model.textSelected(QStringLiteral("zzzz")), 0);
+    QVERIFY(!model.has_results());
+    QVERIFY(model.html().isEmpty());
 }
 
 QTEST_MAIN(DictionaryPopupModelTest)

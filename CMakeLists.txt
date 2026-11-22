@@ -125,6 +125,15 @@ qt_add_resources(niratan_core "dictionary_popup_assets"
         src/web/dictionary_popup/popup.js
         src/web/dictionary_popup/bridge.js
 )
+# The reader's selection.js also serves the popup document
+# (PopupWebView.constructHtml loads the same script), compiled under the popup
+# prefix so services/dictionary can read it without the reader's resources.
+qt_add_resources(niratan_core "dictionary_popup_selection"
+    PREFIX "/niratan/dictionary_popup"
+    BASE "src/web/reader"
+    FILES
+        src/web/reader/selection.js
+)
 target_include_directories(niratan_core PUBLIC src)
 target_link_libraries(niratan_core PUBLIC hoshidicts Qt6::Core Qt6::Network SQLite3::SQLite3 libzip::zip)
 target_compile_options(niratan_core PRIVATE -Wall -Wextra -Wpedantic -Werror)

@@ -4,12 +4,20 @@
 // Features/Popup/PopupView.swift (buildContent), Features/Popup/PopupWebView.swift
 // and Niratan-win's Services/Dictionary/PopupHtmlGenerator.cs.
 //
-// The shell inlines the popup stylesheet and script and assigns the globals
+// The shell inlines the popup stylesheet and scripts and assigns the globals
 // the script reads before it runs: lookup entries, dictionary styles, the
 // display settings, audio sources and the theme colors. The markup uses the
 // same ids and classes as the Yomitan-derived popup (popup-viewport,
 // popup-error, entries-container, overlay) and the theme variables
 // --background-color and --text-color from Features/Popup/popup.css.
+//
+// Script order follows PopupWebView.constructHtml: the globals (including
+// scanNonJapaneseText, scanLength, kanjiLookupEnabled and twoColumnLayout),
+// then selection.js, then the window.hoshiSelection.language assignment with
+// the profile's language id, then popup.js. Every inline script carries the
+// same per-document nonce. The collapse and exclude sets travel in the
+// globals script: PopupView.buildContent writes window.collapsedDictionaries
+// only for Custom mode and window.excludedDictionaries in every mode.
 //
 // Values are embedded as JSON in a script context. "</" inside serialized
 // data is written as "<\/" so a glossary cannot close the script element;
@@ -18,10 +26,11 @@
 // Only scripts carrying the shell's per-document nonce can run.
 //
 // Defaults come from Core/UserConfig.swift: maxResults and scanLength 16,
-// Expand All, compact glossaries on, expression tags off, harmonic frequency
-// off, pitch deduplication off, compact pitch accents on, two column and
-// expand-first off, autoplay off, playback mode interrupt and swipe threshold
-// 0 when swipe-to-dismiss is off.
+// scanNonJapaneseText on, Expand All, compact glossaries on, expression tags
+// off, harmonic frequency off, pitch deduplication off, compact pitch accents
+// on, two column and expand-first off, autoplay off, playback mode interrupt
+// and swipe threshold 0 when swipe-to-dismiss is off. kanji_lookup_enabled is
+// false because the port has no kanji lookup.
 
 #pragma once
 
@@ -38,10 +47,20 @@ struct PopupDisplaySettings {
     std::string content_language_id = "ja";
     int max_results = 16;
     int scan_length = 16;
+    // UserConfig.scanNonJapaneseText, read by selection.js.
+    bool scan_non_japanese_text = true;
+    // PopupWebView.kanjiLookupEnabled; the port has no kanji lookup.
+    bool kanji_lookup_enabled = false;
     // CollapseMode raw value: "Expand All", "Collapse All" or "Custom".
     std::string collapse_mode = "Expand All";
     bool expand_first_dictionary = false;
     bool two_column_layout = false;
+    // Titles the popup starts collapsed. Only Custom mode carries them, as
+    // PopupView.buildContent writes [] for the other modes.
+    std::vector<std::string> collapsed_dictionaries;
+    // Titles of the resolved term dictionaries whose category is exclude, in
+    // list order, in every collapse mode (DictionaryManager.excludedDictionaries).
+    std::vector<std::string> excluded_dictionaries;
     bool compact_glossaries = true;
     bool show_expression_tags = false;
     bool harmonic_frequency = false;
@@ -83,9 +102,10 @@ struct PopupConfig {
     PopupTheme theme;
 };
 
-// css and js are the contents of popup.css and popup.js.
+// css, selection_js and js are the contents of popup.css, selection.js and
+// popup.js. selection_js runs before the language assignment; js runs last.
 std::string popup_shell_html(const QJsonArray& entries, const QJsonObject& dictionary_styles,
                              const PopupConfig& config, std::string_view css,
-                             std::string_view js);
+                             std::string_view selection_js, std::string_view js);
 
 }  // namespace niratan::dictionary

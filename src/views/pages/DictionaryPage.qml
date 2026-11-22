@@ -2,9 +2,11 @@
 //
 // The dictionary page: a search field and the popup rendered by the
 // Yomitan-derived popup script, following Features/Dictionary/
-// DictionarySearchView.swift (performLookup and constructHtml). The model
-// builds the shell. Features/Popup/PopupWebView.swift and PopupView.swift
-// supply the mining bridge and the toast displayed above the search results.
+// DictionarySearchView.swift (performLookup, constructHtml and the search
+// field's searchTextSize font). The model builds the shell.
+// Features/Popup/PopupWebView.swift and PopupView.swift supply the mining
+// bridge, the inline lookup handlers and the toast displayed above the search
+// results.
 
 pragma ComponentBehavior: Bound
 
@@ -65,6 +67,24 @@ Item {
         function miningFeedback(result: var): void {
             mining.miningFeedback(result)
         }
+
+        // PopupWebView.Coordinator's inline lookup handlers: the page's own
+        // links, selections and entry fetches answer from the popup model.
+        function getEntries(requestId: int, data: var): void {
+            dictionaryBridge.replyReady(requestId, model.getEntries(data.start, data.count))
+        }
+
+        function lookupRedirect(requestId: int, query: var): void {
+            dictionaryBridge.replyReady(requestId, model.lookupRedirect(String(query)))
+        }
+
+        function queryTextSelected(requestId: int, data: var): void {
+            dictionaryBridge.replyReady(requestId, model.queryTextSelected(String(data.text)))
+        }
+
+        function textSelected(data: var): void {
+            model.textSelected(String(data.text))
+        }
     }
 
     TextMetrics {
@@ -93,6 +113,7 @@ Item {
                     - 40 - Math.ceil(titleMetrics.advanceWidth)
                     - 2 * (Theme.spacingMd + Theme.spacingSm))
                 placeholderText: qsTr("Look up a word")
+                font.pixelSize: model.searchTextSize
                 selectByMouse: true
                 onAccepted: model.lookup(search.text)
 
