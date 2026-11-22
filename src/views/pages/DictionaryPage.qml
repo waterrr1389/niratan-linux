@@ -40,6 +40,7 @@ Item {
     DictionaryPopupModel {
         id: model
         objectName: "popupModel"
+        page: true
         dark: Theme.dark
         background: Theme.popupBackground
         textColor: Theme.popupText

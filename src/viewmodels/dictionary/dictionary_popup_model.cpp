@@ -66,6 +66,7 @@ struct DictionaryPopupModel::State {
     // The entry maps the popup script fetches with getEntries.
     QJsonArray entries;
     int search_text_size = 26;
+    bool page = false;
     QAudioOutput audio_output;
     QMediaPlayer audio_player;
     bool dark = false;
@@ -185,6 +186,21 @@ QString DictionaryPopupModel::matched_text() const {
 
 int DictionaryPopupModel::search_text_size() const {
     return state_->search_text_size;
+}
+
+bool DictionaryPopupModel::page() const {
+    return state_->page;
+}
+
+void DictionaryPopupModel::setPage(bool page) {
+    if (state_->page == page) {
+        return;
+    }
+    state_->page = page;
+    emit pageChanged();
+    if (!state_->last_query.isEmpty()) {
+        run_lookup();
+    }
 }
 
 void DictionaryPopupModel::set_audio_error(const QString& error) {
@@ -387,6 +403,9 @@ void DictionaryPopupModel::run_lookup() {
         .deduplicate_pitch_accents = settings.deduplicate_pitch_accents,
         .compact_pitch_accents = settings.compact_pitch_accents,
         .custom_css = settings.custom_css,
+        .query_source = state_->page ? std::optional<std::string>(state_->last_query.toStdString())
+                                     : std::nullopt,
+        .search_text_size = state_->search_text_size,
     };
     const dictionary::AudioSource source = dictionary::default_audio_source();
     config.audio.sources = {source.url};

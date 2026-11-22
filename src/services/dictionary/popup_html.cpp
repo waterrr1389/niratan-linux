@@ -96,7 +96,19 @@ std::string popup_shell_html(const QJsonArray& entries, const QJsonObject& dicti
     html += "</head>\n<body>\n";
     html += "<div id=\"popup-viewport\">\n";
     html += "<div id=\"popup-error\" style=\"display:none;\"></div>\n";
-    html += "<div id=\"entries-container\"></div>\n";
+    html += "<div id=\"entries-container\">";
+    // DictionarySearchView.buildPopupPayload: the query heading and its
+    // divider are the first children of the entries container, and the size
+    // comes from searchTextSize. The heading text is filled by popup.js from
+    // window.dictionaryQuerySource.
+    if (config.display.query_source) {
+        const std::string size = std::to_string(config.display.search_text_size);
+        html += "<div id=\"dictionary-query-source\" class=\"dictionary-query-source\" "
+                "style=\"font-size: " +
+            size + "px; min-height: calc(" + size + "px * 1.4);\"></div>";
+        html += "<hr class=\"dictionary-query-source-divider\">";
+    }
+    html += "</div>\n";
     html += "<div class=\"overlay\">";
     html += "<div class=\"overlay-close\">x</div>";
     html += "<div class=\"overlay-content\"></div></div>\n";
@@ -147,6 +159,13 @@ std::string popup_shell_html(const QJsonArray& entries, const QJsonObject& dicti
     html += ";\nwindow.kanjiLookupEnabled = ";
     html += js_bool(display.kanji_lookup_enabled);
     html += ";\n";
+    // Only the dictionary page passes a query source, so the reader and video
+    // documents (PopupView.buildContent) keep no assignment.
+    if (display.query_source) {
+        html += "window.dictionaryQuerySource = ";
+        html += json_string(*display.query_source);
+        html += ";\n";
+    }
 
     html += "window.audioSources = ";
     html += escaped_json(QJsonDocument(json_string_array(config.audio.sources)));

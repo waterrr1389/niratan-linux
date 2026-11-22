@@ -14,6 +14,14 @@
 // compactPitchAccents and customCSS affect only the popup HTML. Audio and
 // mining retain their existing defaults.
 //
+// The page property switches the query heading of DictionarySearchView: while
+// off, the default, a render carries no heading and no
+// window.dictionaryQuerySource, so the reader and video popup documents of
+// PopupView.buildContent stay unchanged. While on, a successful render carries
+// the trimmed last query as the heading text and the profile's resolved
+// searchTextSize as its size; toggling it with a query displayed rerenders the
+// current document. DictionaryPage.qml turns it on.
+//
 // Core/DictionaryManager.swift supplies the two dictionary sets the shell
 // carries: collapsedDictionaries (only while collapseMode is Custom, read
 // through services/dictionary load_collapsed_dictionaries) and
@@ -80,6 +88,7 @@ class DictionaryPopupModel : public QObject {
     Q_PROPERTY(QString matchedText READ matched_text NOTIFY htmlChanged)
     Q_PROPERTY(bool hasResults READ has_results NOTIFY htmlChanged)
     Q_PROPERTY(int searchTextSize READ search_text_size NOTIFY searchTextSizeChanged)
+    Q_PROPERTY(bool page READ page WRITE setPage NOTIFY pageChanged)
     Q_PROPERTY(bool dark READ dark WRITE setDark NOTIFY themeChanged)
     Q_PROPERTY(QColor background READ background WRITE setBackground NOTIFY themeChanged)
     Q_PROPERTY(QColor textColor READ textColor WRITE setTextColor NOTIFY themeChanged)
@@ -96,6 +105,9 @@ class DictionaryPopupModel : public QObject {
     bool has_results() const;
     // The profile's resolved searchTextSize, 26 when absent.
     int search_text_size() const;
+    // Whether this is the dictionary page's host, which shows the query heading.
+    bool page() const;
+    void setPage(bool page);
 
     bool dark() const;
     void setDark(bool dark);
@@ -122,6 +134,7 @@ class DictionaryPopupModel : public QObject {
     void errorChanged();
     void audioErrorChanged();
     void searchTextSizeChanged();
+    void pageChanged();
     void audioSourceMenuRequested(const QStringList& names, int selected, double x, double y,
                                   int entryIndex);
     void audioSourceSelected(int entryIndex, int sourceIndex);

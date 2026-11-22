@@ -147,6 +147,7 @@ class DictionaryViewTest : public QObject {
     void search_bar_sits_at_the_page_top();
     void clear_control_clears_and_refocuses();
     void submit_looks_up_the_query();
+    void dictionary_page_shows_the_query_heading();
     void bridge_answers_its_inline_lookups();
     void profile_switch_reloads_the_searched_page();
     void page_opens_without_focusing_the_field();
@@ -376,6 +377,37 @@ void DictionaryViewTest::submit_looks_up_the_query() {
     QTRY_VERIFY2(!model->property("hasResults").toBool(),
                  "a whitespace-only query kept the results");
     QVERIFY2(!results->isVisible(), "the results surface stays visible without results");
+
+    const QString warnings = warnings_after(QStringLiteral("DictionaryPage"));
+    QVERIFY2(warnings.isEmpty(), qPrintable(warnings));
+}
+
+// B4: DictionarySearchView.body's PopupWebView passes the query heading; the
+// page's model is the only host that enables it.
+void DictionaryViewTest::dictionary_page_shows_the_query_heading() {
+    QQuickWindow window;
+    QString error;
+    std::unique_ptr<QObject> object = create_page(window, QSize(960, 640), error);
+    QVERIFY2(object != nullptr, qPrintable(error));
+    auto* page = qobject_cast<QQuickItem*>(object.get());
+    QVERIFY2(page != nullptr, "DictionaryPage is not an Item");
+
+    auto* field = page->findChild<QQuickItem*>(QStringLiteral("field"));
+    QVERIFY2(field != nullptr, "DictionaryPage has no search field");
+    auto* model = page->findChild<QObject*>(QStringLiteral("popupModel"));
+    QVERIFY2(model != nullptr, "DictionaryPage has no popup model");
+    QVERIFY2(model->property("page").toBool(), "the dictionary page host is not enabled");
+
+    field->forceActiveFocus();
+    field->setProperty("text", QStringLiteral("decide"));
+    QTest::keyClick(&window, Qt::Key_Return);
+    QTRY_VERIFY2(model->property("hasResults").toBool(), "Return did not run the lookup");
+
+    const QString html = model->property("html").toString();
+    QVERIFY2(html.contains(QStringLiteral("id=\"dictionary-query-source\"")),
+             "the document has no query heading");
+    QVERIFY2(html.contains(QStringLiteral("window.dictionaryQuerySource = \"decide\";")),
+             "the document does not carry the query");
 
     const QString warnings = warnings_after(QStringLiteral("DictionaryPage"));
     QVERIFY2(warnings.isEmpty(), qPrintable(warnings));

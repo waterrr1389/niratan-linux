@@ -10,6 +10,7 @@
 #include <QtTest>
 
 #include <algorithm>
+#include <cctype>
 #include <string>
 
 using niratan::dictionary::popup_shell_html;
@@ -97,6 +98,9 @@ class PopupHtmlTest : public QObject {
     void empty_dictionary_sets_are_empty_arrays();
     void dictionary_titles_keep_their_json_escaping();
     void selection_script_runs_before_the_popup_script();
+    void query_source_heading_is_sized_and_precedes_the_entries_script();
+    void query_source_global_is_json_escaped();
+    void no_query_source_writes_no_heading_or_global();
 };
 
 void PopupHtmlTest::the_shell_has_the_popup_markup_and_theme() {
@@ -297,6 +301,71 @@ void PopupHtmlTest::selection_script_runs_before_the_popup_script() {
     QVERIFY(selection_at < language_at);
     QVERIFY(language_at < popup_at);
     QVERIFY(html.find("window.scanNonJapaneseText") < selection_at);
+}
+
+// B1: DictionarySearchView.buildPopupPayload writes the query heading and its
+// divider as the first children of #entries-container, sized by searchTextSize.
+void PopupHtmlTest::query_source_heading_is_sized_and_precedes_the_entries_script() {
+    PopupConfig config = dark_config();
+    config.display.query_source = "猫";
+    config.display.search_text_size = 30;
+
+    const std::string html = popup_shell_html({}, {}, config, "", "", "");
+
+    const std::string heading =
+        "<div id=\"dictionary-query-source\" class=\"dictionary-query-source\" "
+        "style=\"font-size: 30px; min-height: calc(30px * 1.4);\"></div>";
+    const std::string divider = "<hr class=\"dictionary-query-source-divider\">";
+    const std::size_t heading_at = html.find(heading);
+    const std::size_t divider_at = html.find(divider);
+    const std::size_t container_at = html.find("id=\"entries-container\">");
+    std::size_t first_child = container_at + std::string("id=\"entries-container\">").size();
+    while (first_child < html.size() &&
+           std::isspace(static_cast<unsigned char>(html[first_child]))) {
+        ++first_child;
+    }
+    QCOMPARE(first_child, heading_at);
+    std::size_t after_heading = heading_at + heading.size();
+    while (after_heading < html.size() &&
+           std::isspace(static_cast<unsigned char>(html[after_heading]))) {
+        ++after_heading;
+    }
+    QCOMPARE(after_heading, divider_at);
+    const std::size_t entries_script_at = html.find("window.lookupEntries = ");
+    QVERIFY(container_at != std::string::npos);
+    QVERIFY(heading_at != std::string::npos);
+    QVERIFY(divider_at != std::string::npos);
+    QVERIFY(entries_script_at != std::string::npos);
+    QVERIFY(container_at < heading_at);
+    QVERIFY(heading_at < divider_at);
+    QVERIFY(divider_at < entries_script_at);
+    QVERIFY(html.find("window.dictionaryQuerySource = \"猫\";") != std::string::npos);
+}
+
+// B2: the query reaches popup.js as a JSON string and cannot close the script.
+void PopupHtmlTest::query_source_global_is_json_escaped() {
+    PopupConfig config;
+    config.display.query_source = "a\"b</script>";
+
+    const std::string html = popup_shell_html({}, {}, config, "", "", "");
+
+    const std::string section = array_section(html, "dictionaryQuerySource");
+    QVERIFY(!section.empty());
+    QVERIFY(section.find("</") == std::string::npos);
+    const QJsonArray decoded =
+        QJsonDocument::fromJson(QByteArray::fromStdString("[" + section + "]")).array();
+    QCOMPARE(decoded.size(), 1);
+    QCOMPARE(decoded.at(0).toString(), QStringLiteral("a\"b</script>"));
+}
+
+// B2: PopupView.buildContent has no query source, so reader and video
+// documents keep neither the heading nor the global.
+void PopupHtmlTest::no_query_source_writes_no_heading_or_global() {
+    const std::string html = popup_shell_html({}, {}, PopupConfig{}, "", "", "");
+
+    QVERIFY(html.find("<div id=\"dictionary-query-source\"") == std::string::npos);
+    QVERIFY(html.find("class=\"dictionary-query-source-divider\"") == std::string::npos);
+    QVERIFY(html.find("window.dictionaryQuerySource") == std::string::npos);
 }
 
 QTEST_APPLESS_MAIN(PopupHtmlTest)

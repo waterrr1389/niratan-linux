@@ -116,6 +116,7 @@ class DictionaryPopupModelTest : public QObject {
     void the_query_follows_the_active_profile_configuration();
     void collapsed_and_excluded_dictionaries_reach_the_shell();
     void search_text_size_comes_from_the_profile();
+    void page_query_heading_shows_the_query_and_size();
     void dictionary_file_edits_render_the_open_popup();
     void inline_lookup_requests_answer_from_the_current_entries();
 
@@ -347,6 +348,44 @@ void DictionaryPopupModelTest::search_text_size_comes_from_the_profile() {
     QVERIFY(write_profile_settings(*directory, "Expand All", 31));
     QTRY_COMPARE_WITH_TIMEOUT(size_spy.count(), 1, 5000);
     QCOMPARE(sized.search_text_size(), 31);
+}
+
+// B3: the dictionary page host carries the trimmed query as the heading text
+// and the resolved searchTextSize as its size; toggling the page property with
+// a query displayed rerenders, and a saved size edit rerenders the open page.
+void DictionaryPopupModelTest::page_query_heading_shows_the_query_and_size() {
+    ProfileRepository profiles{niratan::storage::data_root()};
+    QVERIFY(!profiles.set_active_profile("default-ja").has_value());
+    const auto directory = profiles.profile_directory("default-ja");
+    QVERIFY(directory.has_value());
+    QVERIFY(write_probe_config(*directory));
+    QVERIFY(write_profile_settings(*directory, "Expand All", 26));
+
+    DictionaryPopupModel model;
+    QVERIFY(!model.page());
+    model.lookup(QStringLiteral("  decide  "));
+    QVERIFY(model.has_results());
+    QVERIFY(!model.html().contains(QStringLiteral("id=\"dictionary-query-source\"")));
+    QVERIFY(array_section(model.html(), QStringLiteral("dictionaryQuerySource")).isEmpty());
+
+    model.setPage(true);
+    QVERIFY(model.page());
+    QTRY_VERIFY_WITH_TIMEOUT(
+        model.html().contains(QStringLiteral("id=\"dictionary-query-source\"")), 2000);
+
+    model.lookup(QStringLiteral("  decide  "));
+    QVERIFY(model.html().contains(QStringLiteral("id=\"dictionary-query-source\"")));
+    QVERIFY(model.html().contains(QStringLiteral("font-size: 26px")));
+    QVERIFY(model.html().contains(QStringLiteral("min-height: calc(26px * 1.4)")));
+    QVERIFY(model.html().contains(QStringLiteral("window.dictionaryQuerySource = \"decide\";")));
+    QVERIFY(
+        !model.html().contains(QStringLiteral("window.dictionaryQuerySource = \"  decide  \";")));
+
+    QSignalSpy size_spy(&model, &DictionaryPopupModel::searchTextSizeChanged);
+    QVERIFY(write_profile_settings(*directory, "Expand All", 31));
+    QTRY_COMPARE_WITH_TIMEOUT(size_spy.count(), 1, 5000);
+    QTRY_VERIFY_WITH_TIMEOUT(model.html().contains(QStringLiteral("font-size: 31px")), 5000);
+    QVERIFY(model.html().contains(QStringLiteral("min-height: calc(31px * 1.4)")));
 }
 
 // B5: DictionaryManager.reloadActiveProfileDictionaryState; an open popup

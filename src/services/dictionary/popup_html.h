@@ -31,12 +31,22 @@
 // on, two column and expand-first off, autoplay off, playback mode interrupt
 // and swipe threshold 0 when swipe-to-dismiss is off. kanji_lookup_enabled is
 // false because the port has no kanji lookup.
+//
+// DictionarySearchView.buildPopupPayload gives the dictionary page one extra
+// pair: an optional query source and its text size. When the query source is
+// set, #entries-container starts with a dictionary-query-source div sized by
+// search_text_size and its divider, and the globals script assigns the query to
+// window.dictionaryQuerySource; the script fills the heading text. When it is
+// absent, neither the markup nor the assignment is written, which keeps the
+// reader and video documents of PopupView.buildContent unchanged. The size
+// defaults to UserConfig.searchTextSize, 26.
 
 #pragma once
 
 #include <QJsonArray>
 #include <QJsonObject>
 
+#include <optional>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -69,6 +79,11 @@ struct PopupDisplaySettings {
     std::string custom_css;
     // Zero when swipe-to-dismiss is off.
     int swipe_threshold = 0;
+    // DictionarySearchView.buildPopupPayload querySource; absent for the
+    // reader and video popup documents.
+    std::optional<std::string> query_source;
+    // UserConfig.searchTextSize, the query heading's pixel size.
+    int search_text_size = 26;
 };
 
 struct PopupAudioSettings {
