@@ -96,10 +96,16 @@ QtObject {
     readonly property color hoverTint: dark ? "#14FFFFFF" : "#0F000000"
     readonly property color pressTint: dark ? "#24FFFFFF" : "#1F000000"
     readonly property color inactiveSelection: dark ? "#1FFFFFFF" : "#14000000"
+    // The bookshelf progress strip, ShelfProgressStrip's secondary style at
+    // 18% for the track and 42% for the fill.
+    readonly property color shelfProgressTrack: dark ? "#1AFFFFFF" : "#17000000"
+    readonly property color shelfProgressFill: dark ? "#3BFFFFFF" : "#36000000"
     // The checked segment of a segmented control, raised above its track.
     readonly property color segmentSelected: dark ? "#636366" : "#FFFFFF"
     readonly property color trackBackground: dark ? "#33FFFFFF" : "#1F000000"
     readonly property color knob: "#FFFFFF"
+    // macOS systemGray, the opaque grey of filled status glyphs.
+    readonly property color systemGray: "#8E8E93"
     readonly property color shadow: dark ? "#66000000" : "#26000000"
 
     // The metrics below are a platform-neutral scale, not macOS values. They

@@ -22,6 +22,17 @@ var icons = {
     "chart.xyaxis.line": { weight: "regular", name: "chart-line" },
     "plus": { weight: "regular", name: "plus" },
     "chevron.up.chevron.down": { weight: "regular", name: "caret-up-down" },
+    "arrow.up.arrow.down": { weight: "regular", name: "arrows-down-up" },
+    "square.resize": { weight: "regular", name: "arrows-out-simple" },
+    "photo": { weight: "regular", name: "image" },
+    "clock": { weight: "regular", name: "clock" },
+    "textformat.size.larger.ja": { weight: "regular", name: "text-aa" },
+    "line.3.horizontal": { weight: "regular", name: "list" },
+    "folder": { weight: "regular", name: "folder" },
+    "tray": { weight: "regular", name: "tray" },
+    "pencil": { weight: "regular", name: "pencil-simple" },
+    "character.cursor.ibeam.ja": { weight: "regular", name: "cursor-text" },
+    "checkmark.circle.fill": { weight: "fill", name: "check-circle" },
     "chevron.down": { weight: "regular", name: "caret-down" },
     "chevron.up": { weight: "regular", name: "caret-up" },
     "checkmark": { weight: "bold", name: "check" },
@@ -49,4 +60,14 @@ var icons = {
     "book": { weight: "regular", name: "book" },
     "bookmark": { weight: "regular", name: "bookmark-simple" },
     "eye.slash.fill": { weight: "fill", name: "eye-slash" },
+}
+
+// The bundled asset for an SF Symbol name, or "" when the table has no row.
+function source(name) {
+    var entry = icons[name]
+    if (entry === undefined)
+        return ""
+    var suffix = entry.weight === "regular" ? "" : "-" + entry.weight
+    return "qrc:/qt/qml/Niratan/src/views/icons/phosphor/" + entry.weight + "/"
+        + entry.name + suffix + ".svg"
 }

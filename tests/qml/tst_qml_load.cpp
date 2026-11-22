@@ -28,6 +28,7 @@
 #include <QQuickItem>
 #include <QQuickStyle>
 #include <QQuickWindow>
+#include <QRegularExpression>
 #include <QScopedPointer>
 #include <QTemporaryDir>
 #include <QUrl>
@@ -124,6 +125,7 @@ class QmlLoadTest : public QObject {
     void dictionary_settings_page_lists_the_management_controls();
     void profiles_page_lists_the_management_controls();
     void icon_table_resolves();
+    void icon_table_entries_have_files();
     void shared_components_load();
     void main_window_controls_fit();
 
@@ -457,6 +459,28 @@ void QmlLoadTest::profiles_page_lists_the_management_controls() {
 
     const QString warnings = warnings_after(QStringLiteral("ProfilesPage"));
     QVERIFY2(warnings.isEmpty(), qPrintable(warnings));
+}
+
+// Every row of src/views/icons/icon_map.js names a bundled SVG, so a symbol a
+// view adds never draws nothing for want of its asset.
+void QmlLoadTest::icon_table_entries_have_files() {
+    QFile table(QStringLiteral(":/qt/qml/Niratan/src/views/icons/icon_map.js"));
+    QVERIFY2(table.open(QIODevice::ReadOnly), "icon_map.js is not bundled");
+    const QString text = QString::fromUtf8(table.readAll());
+    static const QRegularExpression row(
+        QStringLiteral(R"re("([^"]+)": \{ weight: "(\w+)", name: "([^"]+)" \})re"));
+    int rows = 0;
+    for (const QRegularExpressionMatch& match : row.globalMatch(text)) {
+        ++rows;
+        const QString weight = match.captured(2);
+        const QString suffix =
+            weight == QStringLiteral("regular") ? QString() : QStringLiteral("-") + weight;
+        const QString path = QStringLiteral(":/qt/qml/Niratan/src/views/icons/phosphor/%1/%2%3.svg")
+                                 .arg(weight, match.captured(3), suffix);
+        QVERIFY2(QFile::exists(path),
+                 qPrintable(match.captured(1) + QStringLiteral(" names a missing file: ") + path));
+    }
+    QVERIFY2(rows > 20, "the icon table was not parsed");
 }
 
 // B2-B7 of the views-icons module: every SF Symbol name the shared components

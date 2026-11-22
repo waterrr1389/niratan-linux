@@ -6,11 +6,13 @@
 // WindowGroup frame in NativeMac/HoshiNativeMacApp.swift (900x620 minimum).
 // The window opens at 960x640 and its title is the selected section's title.
 //
-// Decision: every window keeps the native Linux title bar. Below it, a 48 px
-// shell toolbar carries only the sidebar toggle at its 12 px leading inset
-// (34 px IconButton, SF Symbol `sidebar.leading`); the toggle collapses the
-// app sidebar to width 0 and restores it to 240. The detail keeps the freed
-// width either way.
+// Decision: every window keeps the native Linux title bar. Below it the
+// sidebar runs the full height with the sidebar toggle in its top row, where
+// the macOS window toolbar puts it; the toggle collapses the sidebar to width
+// 0 and restores it to 240. While it is collapsed the toggle floats at the
+// detail's leading edge, and a page that draws its own toolbar row is told to
+// leave room for it (`toolbarInset`). Pages that do not draw a toolbar row yet
+// sit below a plain 52 px band.
 //
 // Sections follow NativeMacSection: Bookshelf, Dictionary, Video and Settings;
 // manga is out of scope. Bookshelf shows LibraryPage and keeps its toolbar
@@ -44,6 +46,16 @@ ApplicationWindow {
 
     property int sectionIndex: 0
     property bool sidebarVisible: true
+    property int bookshelfDepth: 1
+    // Counts reader window closes, so the bookshelf reloads its progress the
+    // way Swift's readerWindowProgressDidChange makes it call loadBooks().
+    property int readerCloses: 0
+
+    readonly property int toolbarHeight: 52
+    // The bookshelf's shelf page draws its own toolbar row; the statistics
+    // page pushed over it and the other sections still sit below the band.
+    readonly property bool pageOwnsToolbar: window.sectionIndex === 0
+                                            && window.bookshelfDepth === 1
 
     readonly property var sectionTitles: [
         qsTr("Bookshelf"),
@@ -67,61 +79,55 @@ ApplicationWindow {
         readerWindow.requestActivate()
     }
 
-    ColumnLayout {
+    RowLayout {
         anchors.fill: parent
         spacing: 0
 
-        Item {
-            id: shellToolbar
+        Sidebar {
+            id: sidebar
 
-            Layout.fillWidth: true
-            Layout.preferredHeight: 48
-
-            IconButton {
-                x: 12
-                anchors.verticalCenter: parent.verticalCenter
-                diameter: 34
-                icon: "sidebar.leading"
-                accessibleName: qsTr("Toggle Sidebar")
-                ToolTip.visible: hovered
-                ToolTip.text: qsTr("Toggle Sidebar")
-                ToolTip.delay: 700
-                onClicked: window.sidebarVisible = !window.sidebarVisible
+            Layout.preferredWidth: window.sidebarVisible ? 240 : 0
+            Layout.fillHeight: true
+            visible: window.sidebarVisible
+            selected: window.sectionIndex
+            Component.onCompleted: sidebar.forceActiveFocus()
+            onSectionSelected: function (index) {
+                window.sectionIndex = index
             }
+            onToggleRequested: window.sidebarVisible = false
         }
 
-        RowLayout {
+        Item {
             Layout.fillWidth: true
             Layout.fillHeight: true
-            spacing: 0
 
-            Sidebar {
-                Layout.preferredWidth: window.sidebarVisible ? 240 : 0
-                Layout.fillHeight: true
-                visible: window.sidebarVisible
-                selected: window.sectionIndex
-                onSectionSelected: function (index) {
-                    window.sectionIndex = index
-                }
+            Loader {
+                anchors.fill: parent
+                anchors.topMargin: window.pageOwnsToolbar ? 0 : window.toolbarHeight
+                sourceComponent: window.sectionIndex === 0 ? bookshelfDetail
+                    : window.sectionIndex === 1 ? dictionaryDetail
+                    : window.sectionIndex === 2 ? videoDetail
+                    : settingsDetail
             }
 
-            Item {
-                Layout.fillWidth: true
-                Layout.fillHeight: true
-
-                Loader {
-                    anchors.fill: parent
-                    sourceComponent: window.sectionIndex === 0 ? bookshelfDetail
-                        : window.sectionIndex === 1 ? dictionaryDetail
-                        : window.sectionIndex === 2 ? videoDetail
-                        : settingsDetail
-                }
+            ToolbarButton {
+                x: 12
+                y: (window.toolbarHeight - height) / 2
+                visible: !window.sidebarVisible
+                symbol: "sidebar.leading"
+                help: qsTr("Toggle Sidebar")
+                onClicked: window.sidebarVisible = true
             }
         }
     }
 
     ReaderWindow {
         id: readerWindow
+
+        onVisibleChanged: {
+            if (!readerWindow.visible)
+                ++window.readerCloses
+        }
     }
 
     Component {
@@ -130,14 +136,16 @@ ApplicationWindow {
         StackView {
             id: bookshelfStack
 
+            onDepthChanged: window.bookshelfDepth = bookshelfStack.depth
+            Component.onDestruction: window.bookshelfDepth = 1
+
             initialItem: LibraryPage {
+                toolbarInset: window.sidebarVisible ? 0 : 44
+                readerCloses: window.readerCloses
                 onBookOpened: function (folder) {
                     window.openReader(folder)
                 }
                 onStatisticsRequested: bookshelfStack.push(statisticsDetail)
-                onDictionaryRequested: window.sectionIndex = 1
-                onVideoRequested: window.sectionIndex = 2
-                onSettingsRequested: window.sectionIndex = 3
             }
 
             Component {

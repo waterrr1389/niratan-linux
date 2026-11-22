@@ -1,488 +1,478 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-
+//
+// The bookshelf section, following NativeMac/NativeReuseViews.swift
+// `NativeBookshelfReuseView` (`bookshelfContent`, `shelfDetail`,
+// `toolbarContent`, `shelfTitle`), Features/Bookshelf/LibraryShelfSidebar.swift
+// (`LibraryShelfLayout`, `LibraryShelfDetailHeader`, `LibraryShelfEmptyView`,
+// `LibraryCoverSizeButton`), Features/Bookshelf/ShelfView.swift (the adaptive
+// grid) and Features/Bookshelf/BookCell.swift (the context menu, rename sheet
+// and confirmations).
+//
+// The shelf column takes 24% of the width, clamped to 176..230, and the
+// detail the rest. The detail's top row is the window toolbar: its primary
+// group holds Sort (a menu of Recent, Title and Manual), Select Books, Cover
+// Size (a popover slider from 110 to 240 in steps of 10), Statistics (while
+// statistics are enabled) and Import EPUB. While selecting, Done leads the row and the group holds Move
+// to Shelf and Delete. Below, the selection's title in title2 semibold with
+// its count, then the grid: columns exactly `coverWidth` wide, 20 apart, with
+// 20 between rows and 16 of side padding, aligned to the leading edge. An
+// empty library shows "No Books"; an empty selection shows the empty-shelf
+// copy for its kind.
+//
+// Out of scope: the search field (the view model does not filter by title
+// yet), Google Drive rows and refresh, Z-Library, sync actions and Export.
 pragma ComponentBehavior: Bound
 
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Dialogs
-import QtQuick.Layouts
 import Niratan
+import "../icons/icon_map.js" as IconMap
 
-// Cover geometry and badges follow BookView.swift (BookshelfLayout, ShelfCoverFrame).
-// The toolbar actions follow NativeMac/NativeReuseViews.swift
-// NativeBookshelfReuseView.toolbarContent: the Dictionary, Video, Profiles and
-// Settings buttons are gone (they are sidebar sections or inside Settings), and
-// Select, Statistics and Import are 38 px IconButtons. The shelf column width
-// follows Features/Bookshelf/LibraryShelfSidebar.swift LibraryShelfLayout.sidebarWidth.
 Item {
     id: page
+
     signal bookOpened(string folder)
-    signal dictionaryRequested()
-    signal videoRequested()
-    signal profilesRequested()
     signal statisticsRequested()
-    signal settingsRequested()
+
+    // Room the window asks for at the toolbar row's leading edge, where its
+    // sidebar toggle floats while the sidebar is collapsed.
+    property real toolbarInset: 0
+    readonly property int toolbarHeight: 52
+    // Raised by the window each time the reader closes; the shelf then
+    // reloads the progress the reader saved.
+    property int readerCloses: 0
+
+    onReaderClosesChanged: library.refresh()
+
     property bool selecting: false
     property var selectedFolders: ({})
+    readonly property int selectedCount: Object.keys(page.selectedFolders).length
+
+    readonly property string selectionTitle: {
+        const shelf = library.selectedShelf
+        if (shelf === "all")
+            return qsTr("All Books")
+        if (shelf === "reading")
+            return qsTr("Currently Reading")
+        if (shelf === "unshelved")
+            return qsTr("Unshelved")
+        return shelf.replace("shelf:", "")
+    }
 
     function clearSelection() {
-        selecting = false
-        selectedFolders = ({})
+        page.selecting = false
+        page.selectedFolders = ({})
     }
 
     function toggleSelection(folder) {
-        var next = Object.assign({}, selectedFolders)
+        const next = Object.assign({}, page.selectedFolders)
         if (next[folder])
             delete next[folder]
         else
             next[folder] = true
-        selectedFolders = next
-    }
-
-    function selectedList() {
-        return Object.keys(selectedFolders)
+        page.selectedFolders = next
     }
 
     LibraryViewModel {
         id: library
+
         onBookOpened: folder => page.bookOpened(folder)
     }
+
+    // The global Enable Statistics setting, read when the page is created;
+    // the window recreates the page each time the section is shown.
+    SettingsViewModel {
+        id: settings
+    }
+
     Connections {
         target: library
+
         function onErrorChanged() {
-            if (library.error.length > 0) {
-                importErrorDialog.message = library.error
-                importErrorDialog.open()
-            }
+            if (library.error.length > 0)
+                errorDialog.open()
         }
     }
+
     Connections {
         target: ReaderViewModel
-        function onBookChanged() { library.recordBookAccess(ReaderViewModel.bookFolder) }
+
+        function onBookChanged() {
+            library.recordBookAccess(ReaderViewModel.bookFolder)
+        }
     }
 
     FileDialog {
         id: importDialog
+
         title: qsTr("Import EPUB")
         nameFilters: [qsTr("EPUB books (*.epub)")]
         fileMode: FileDialog.OpenFiles
         onAccepted: library.importBooks(selectedFiles)
     }
 
+    LibraryDialogs {
+        id: dialogs
+
+        model: library
+        onBulkDeleted: page.clearSelection()
+    }
+
     Dialog {
-        id: importErrorDialog
-        property string message
+        id: errorDialog
+
+        parent: Overlay.overlay
+        anchors.centerIn: parent
+        width: Math.min(400, page.width - 32)
         title: library.importError ? qsTr("Import Failed") : qsTr("Error")
         modal: true
-        anchors.centerIn: parent
-        width: Math.min(420, page.width - 32)
         standardButtons: Dialog.Ok
+
         contentItem: Label {
-            text: importErrorDialog.message
+            text: library.error
             textFormat: Text.PlainText
             wrapMode: Text.Wrap
-            color: Theme.textPrimary
+            color: Theme.textSecondary
         }
+
         onClosed: library.clearError()
     }
 
-    Dialog {
-        id: renameDialog
-        title: qsTr("Rename Book")
-        modal: true
-        anchors.centerIn: parent
-        standardButtons: Dialog.Save | Dialog.Cancel
-        property string folder
-        property string currentTitle
-        TextField {
-            id: renameField
-            width: 280
-            onAccepted: renameDialog.accept()
-        }
-        onAboutToShow: renameField.text = renameDialog.currentTitle
-        onOpened: renameField.forceActiveFocus()
-        onAccepted: library.renameBook(renameDialog.folder, renameField.text)
+    LibraryShelfSidebar {
+        id: shelfColumn
+
+        width: Math.min(230, Math.max(176, page.width * 0.24))
+        height: parent.height
+        model: library
+        title: qsTr("Bookshelf")
+        toolbarInset: page.toolbarInset
     }
 
-    Dialog {
-        id: markReadDialog
-        property string folder
-        title: qsTr("Mark as Read")
-        modal: true
-        anchors.centerIn: parent
-        standardButtons: Dialog.Yes | Dialog.No
-        Label {
-            text: qsTr("This will update your reading progress to the end of the book.")
-            color: Theme.textPrimary
-        }
-        onAccepted: library.markRead(markReadDialog.folder)
+    Rectangle {
+        x: shelfColumn.width
+        width: 1
+        height: parent.height
+        color: Theme.separator
     }
 
-    Dialog {
-        id: deleteDialog
-        title: qsTr("Delete Book")
-        modal: true
-        anchors.centerIn: parent
-        standardButtons: Dialog.Yes | Dialog.No
-        property string folder
-        property string bookTitle
-        Label {
-            text: qsTr("Delete \"%1\"? This cannot be undone.").arg(deleteDialog.bookTitle)
-            color: Theme.textPrimary
-        }
-        onAccepted: library.deleteBook(deleteDialog.folder)
-    }
+    Item {
+        id: detail
 
-    Dialog {
-        id: bulkDeleteDialog
-        property var folders: []
-        title: qsTr("Delete Books")
-        modal: true
-        anchors.centerIn: parent
-        standardButtons: Dialog.Yes | Dialog.No
-        Label {
-            text: qsTr("Delete %n book(s)? This cannot be undone.", "", bulkDeleteDialog.folders.length)
-            color: Theme.textPrimary
-        }
-        onAccepted: {
-            for (const folder of bulkDeleteDialog.folders)
-                library.deleteBook(folder)
-            page.clearSelection()
-        }
-    }
+        x: shelfColumn.width + 1
+        width: page.width - x
+        height: page.height
 
-    Dialog {
-        id: moveDialog
-        title: qsTr("Move to Shelf")
-        modal: true
-        anchors.centerIn: parent
-        standardButtons: Dialog.Cancel
-        property var folders: []
-        ColumnLayout {
-            spacing: 4
+        // The toolbar row.
+        Item {
+            id: toolbar
+
+            width: parent.width
+            height: page.toolbarHeight
+
+            Button {
+                x: 16
+                anchors.verticalCenter: parent.verticalCenter
+                visible: page.selecting
+                text: qsTr("Done")
+                font.weight: Font.DemiBold
+                onClicked: page.clearSelection()
+            }
+
+            ToolbarGroup {
+                anchors.right: parent.right
+                anchors.rightMargin: 12
+                anchors.verticalCenter: parent.verticalCenter
+                visible: !page.selecting
+
+                ToolbarButton {
+                    id: sortButton
+
+                    symbol: "arrow.up.arrow.down"
+                    help: qsTr("Sort Books")
+                    onClicked: sortMenu.popup(sortButton, 0, sortButton.height + 4)
+                }
+                ToolbarButton {
+                    symbol: "checklist"
+                    help: qsTr("Select Books")
+                    onClicked: page.selecting = true
+                }
+                ToolbarButton {
+                    id: coverSizeButton
+
+                    symbol: "square.resize"
+                    help: qsTr("Cover Size")
+                    onClicked: coverSizePopup.open()
+                }
+                ToolbarButton {
+                    visible: settings.enableStatistics
+                    symbol: "chart.xyaxis.line"
+                    help: qsTr("Statistics")
+                    onClicked: page.statisticsRequested()
+                }
+                ToolbarButton {
+                    symbol: "plus"
+                    help: qsTr("Import EPUB")
+                    onClicked: importDialog.open()
+                }
+            }
+
+            ToolbarGroup {
+                anchors.right: parent.right
+                anchors.rightMargin: 12
+                anchors.verticalCenter: parent.verticalCenter
+                visible: page.selecting
+
+                ToolbarButton {
+                    id: moveButton
+
+                    symbol: "folder"
+                    help: qsTr("Move to Shelf")
+                    enabled: page.selectedCount > 0
+                    onClicked: moveMenu.popup(moveButton, 0, moveButton.height + 4)
+                }
+                ToolbarButton {
+                    symbol: "trash"
+                    help: qsTr("Delete")
+                    enabled: page.selectedCount > 0
+                    onClicked: dialogs.confirmBulkDelete(Object.keys(page.selectedFolders))
+                }
+            }
+        }
+
+        Menu {
+            id: sortMenu
+
             Repeater {
-                model: [qsTr("None")].concat(library.shelves.map(function (s) { return s.name }))
-                delegate: Button {
-                    id: shelfButton
+                model: [
+                    { title: qsTr("Recent"), symbol: "clock" },
+                    { title: qsTr("Title"), symbol: "textformat.size.larger.ja" },
+                    { title: qsTr("Manual"), symbol: "line.3.horizontal" }
+                ]
+
+                delegate: MenuItem {
                     required property int index
                     required property var modelData
-                    Layout.fillWidth: true
-                    text: modelData
-                    onClicked: {
-                        var target = index === 0 ? "" : modelData
-                        library.moveBooksToShelf(moveDialog.folders, target)
-                        moveDialog.close()
+
+                    text: modelData.title
+                    icon.source: IconMap.source(modelData.symbol)
+                    checkable: true
+                    checked: library.sortOption === index
+                    onTriggered: library.sortOption = index
+                }
+            }
+        }
+
+        Menu {
+            id: moveMenu
+
+            MenuItem {
+                text: qsTr("None")
+                icon.source: IconMap.source("tray")
+                onTriggered: {
+                    library.moveBooksToShelf(Object.keys(page.selectedFolders), "")
+                    page.clearSelection()
+                }
+            }
+
+            Repeater {
+                model: library.shelves
+
+                delegate: MenuItem {
+                    required property var modelData
+
+                    text: modelData.name
+                    icon.source: IconMap.source("folder")
+                    onTriggered: {
+                        library.moveBooksToShelf(Object.keys(page.selectedFolders),
+                                                 modelData.name)
                         page.clearSelection()
                     }
                 }
             }
         }
-    }
 
-    RowLayout {
-        anchors.fill: parent
-        spacing: 0
-        LibraryShelfSidebar {
-            Layout.fillHeight: true
-            Layout.preferredWidth: Math.min(230, Math.max(176, page.width * 0.24))
-            model: library
-        }
+        // LibraryCoverSizeButton's popover: a small and a large photo glyph
+        // around a 180 px slider.
+        Popup {
+            id: coverSizePopup
 
-        ColumnLayout {
-            Layout.fillWidth: true
-            Layout.fillHeight: true
-            spacing: 0
-            Rectangle {
-                Layout.fillWidth: true
-                Layout.preferredHeight: 48
-                color: Theme.cardBackground
-                border.width: 1
-                border.color: Theme.cardStroke
-                RowLayout {
-                    anchors.fill: parent
-                    anchors.leftMargin: 12
-                    anchors.rightMargin: 12
-                    spacing: 8
-                    Label {
-                        Layout.minimumWidth: 0
-                        Layout.maximumWidth: implicitWidth
-                        Layout.fillWidth: true
-                        text: library.selectedShelf === "all" ? qsTr("All Books")
-                            : library.selectedShelf === "reading" ? qsTr("Currently Reading")
-                            : library.selectedShelf === "unshelved" ? qsTr("Unshelved")
-                            : library.selectedShelf.replace("shelf:", "")
-                        color: Theme.textPrimary
-                        font.pixelSize: 16
-                        font.bold: true
-                        elide: Text.ElideRight
-                    }
-                    Label {
-                        text: qsTr("(%1)").arg(library.bookCount)
-                        color: Theme.textSecondary
-                        font.pixelSize: Theme.fontCaption
-                    }
-                    Item { Layout.fillWidth: true }
-                    ComboBox {
-                        model: [qsTr("Recent"), qsTr("Title"), qsTr("Manual")]
-                        currentIndex: library.sortOption
-                        ToolTip.visible: hovered
-                        ToolTip.text: qsTr("Sort Books")
-                        ToolTip.delay: 700
-                        onActivated: library.sortOption = currentIndex
-                    }
-                    Slider {
-                        Layout.preferredWidth: 120
-                        from: 110
-                        to: 240
-                        stepSize: 10
-                        value: library.coverWidth
-                        onMoved: library.coverWidth = Math.round(value)
-                    }
-                    IconButton {
-                        icon: "checklist"
-                        accessibleName: page.selecting ? qsTr("Done") : qsTr("Select Books")
-                        ToolTip.visible: hovered
-                        ToolTip.text: qsTr("Select Books")
-                        ToolTip.delay: 700
-                        onClicked: {
-                            if (page.selecting)
-                                page.clearSelection()
-                            else
-                                page.selecting = true
-                        }
-                    }
-                    Button {
-                        text: qsTr("Move")
-                        visible: page.selecting
-                        enabled: page.selectedList().length > 0
-                        onClicked: {
-                            moveDialog.folders = page.selectedList()
-                            moveDialog.open()
-                        }
-                    }
-                    Button {
-                        text: qsTr("Delete")
-                        visible: page.selecting
-                        enabled: page.selectedList().length > 0
-                        onClicked: {
-                            bulkDeleteDialog.folders = page.selectedList()
-                            bulkDeleteDialog.open()
-                        }
-                    }
-                    IconButton {
-                        icon: "chart.xyaxis.line"
-                        accessibleName: qsTr("Statistics")
-                        ToolTip.visible: hovered
-                        ToolTip.text: qsTr("Statistics")
-                        ToolTip.delay: 700
-                        onClicked: page.statisticsRequested()
-                    }
-                    IconButton {
-                        icon: "plus"
-                        accessibleName: qsTr("Import EPUB")
-                        ToolTip.visible: hovered
-                        ToolTip.text: qsTr("Import EPUB")
-                        ToolTip.delay: 700
-                        onClicked: importDialog.open()
-                    }
+            parent: coverSizeButton
+            x: (coverSizeButton.width - width) / 2
+            y: coverSizeButton.height + 6
+            // Kept inside the window, as a popover shifts away from the edge.
+            margins: 8
+            padding: 16
+
+            contentItem: Row {
+                spacing: 10
+
+                Icon {
+                    anchors.verticalCenter: parent.verticalCenter
+                    name: "photo"
+                    size: 11
+                    color: Theme.textSecondary
                 }
-            }
-
-            ScrollView {
-                Layout.fillWidth: true
-                Layout.fillHeight: true
-                clip: true
-                GridView {
-                    id: grid
-                    cellWidth: library.coverWidth + 40
-                    cellHeight: Math.round((library.coverWidth - 6) / 0.709) + 70
-                    leftMargin: 16
-                    topMargin: 16
-                    model: library.books
-                    boundsBehavior: Flickable.StopAtBounds
-                    delegate: Item {
-                        id: cell
-                        required property var modelData
-                        width: grid.cellWidth
-                        height: grid.cellHeight
-                        readonly property bool chosen: page.selectedFolders[cell.modelData.folder] === true
-
-                        Rectangle {
-                            id: coverFrame
-                            x: 10
-                            y: 0
-                            width: library.coverWidth
-                            height: Math.round((library.coverWidth - 6) / 0.709)
-                            radius: 7
-                            color: Theme.cardBackground
-                            border.width: 1
-                            border.color: cell.chosen ? Theme.accent : Theme.cardStroke
-                            Image {
-                                anchors.fill: parent
-                                anchors.margins: 3
-                                source: cell.modelData.cover
-                                fillMode: Image.PreserveAspectFit
-                                asynchronous: true
-                                visible: source.toString().length > 0
-                            }
-                            Label {
-                                anchors.centerIn: parent
-                                visible: cell.modelData.cover.length === 0
-                                text: cell.modelData.title
-                                color: Theme.textSecondary
-                                width: parent.width - 16
-                                horizontalAlignment: Text.AlignHCenter
-                                wrapMode: Text.WordWrap
-                            }
-                            Label {
-                                anchors.right: parent.right
-                                anchors.rightMargin: 6
-                                y: cell.chosen ? 6 : parent.height - height - 6
-                                visible: cell.chosen || cell.modelData.finished
-                                text: "\u2713"
-                                color: cell.chosen ? Theme.popupBackground : Theme.textSecondary
-                                width: 22
-                                height: width
-                                horizontalAlignment: Text.AlignHCenter
-                                verticalAlignment: Text.AlignVCenter
-                                font.pixelSize: cell.chosen ? Theme.fontBody : Theme.fontLargeTitle
-                                background: Rectangle {
-                                    visible: cell.chosen
-                                    radius: width / 2
-                                    color: Theme.accent
-                                }
-                            }
-                        }
-
-                        Label {
-                            x: 10
-                            y: coverFrame.height + 6
-                            width: library.coverWidth
-                            text: cell.modelData.title
-                            color: Theme.textPrimary
-                            font.pixelSize: library.coverWidth < 140 ? 13 : 16
-                            maximumLineCount: 2
-                            elide: Text.ElideRight
-                            wrapMode: Text.Wrap
-                        }
-
-                        RowLayout {
-                            x: 10
-                            y: coverFrame.height + 46
-                            width: library.coverWidth
-                            spacing: 4
-                            Item {
-                                Layout.fillWidth: true
-                                height: 3
-                                Rectangle {
-                                    anchors.fill: parent
-                                    radius: 1.5
-                                    color: Theme.cardStroke
-                                }
-                                Rectangle {
-                                    width: parent.width * Math.min(cell.modelData.progress, 1)
-                                    height: parent.height
-                                    radius: 1.5
-                                    color: Theme.accent
-                                }
-                            }
-                            Label {
-                                text: cell.modelData.percent + "%"
-                                color: Theme.textSecondary
-                                font.pixelSize: 9
-                            }
-                        }
-
-                        MouseArea {
-                            anchors.fill: parent
-                            acceptedButtons: Qt.LeftButton | Qt.RightButton
-                            onClicked: function (mouse) {
-                                if (mouse.button === Qt.LeftButton) {
-                                    if (page.selecting)
-                                        page.toggleSelection(cell.modelData.folder)
-                                    else
-                                        library.openBook(cell.modelData.folder)
-                                } else if (!page.selecting) {
-                                    bookMenu.folder = cell.modelData.folder
-                                    bookMenu.bookTitle = cell.modelData.title
-                                    bookMenu.popup()
-                                }
-                            }
-                        }
-
-                        Menu {
-                            id: bookMenu
-                            property string folder
-                            property string bookTitle
-                            MenuItem {
-                                text: qsTr("Open")
-                                onClicked: library.openBook(bookMenu.folder)
-                            }
-                            MenuItem {
-                                text: qsTr("Rename")
-                                onClicked: {
-                                    renameDialog.folder = bookMenu.folder
-                                    renameDialog.currentTitle = bookMenu.bookTitle
-                                    renameDialog.open()
-                                }
-                            }
-                            Menu {
-                                title: qsTr("Move to Shelf")
-                                MenuItem {
-                                    text: qsTr("None")
-                                    onClicked: library.moveBookToShelf(bookMenu.folder, "")
-                                }
-                                Repeater {
-                                    model: library.shelves
-                                    delegate: MenuItem {
-                                        id: moveItem
-                                        required property var modelData
-                                        text: moveItem.modelData.name
-                                        onClicked: library.moveBookToShelf(bookMenu.folder,
-                                                                           moveItem.modelData.name)
-                                    }
-                                }
-                            }
-                            MenuItem {
-                                text: qsTr("Mark Read")
-                                enabled: library.isLocalBook(bookMenu.folder)
-                                onClicked: {
-                                    markReadDialog.folder = bookMenu.folder
-                                    markReadDialog.open()
-                                }
-                            }
-                            MenuSeparator {}
-                            MenuItem {
-                                text: qsTr("Delete")
-                                onClicked: {
-                                    deleteDialog.folder = bookMenu.folder
-                                    deleteDialog.bookTitle = bookMenu.bookTitle
-                                    deleteDialog.open()
-                                }
-                            }
-                        }
-                    }
+                Slider {
+                    width: 180
+                    anchors.verticalCenter: parent.verticalCenter
+                    from: 110
+                    to: 240
+                    stepSize: 10
+                    value: library.coverWidth
+                    onMoved: library.coverWidth = Math.round(value)
                 }
-            }
-            ColumnLayout {
-                id: emptyShelf
-                readonly property bool named: library.selectedShelf.startsWith("shelf:")
-                Layout.alignment: Qt.AlignHCenter
-                Layout.margins: 8
-                visible: library.bookCount === 0
-                Label {
-                    Layout.alignment: Qt.AlignHCenter
-                    text: emptyShelf.named ? qsTr("This Shelf Is Empty")
-                        : qsTr("No Books. Import an EPUB using the button above to start reading.")
-                    color: emptyShelf.named ? Theme.textPrimary : Theme.textSecondary
-                }
-                Label {
-                    Layout.alignment: Qt.AlignHCenter
-                    visible: emptyShelf.named
-                    text: qsTr("Right-click a book and choose Move to Shelf, or use Select.")
+                Icon {
+                    anchors.verticalCenter: parent.verticalCenter
+                    name: "photo"
+                    size: 17
                     color: Theme.textSecondary
                 }
             }
+        }
+
+        GridView {
+            id: grid
+
+            readonly property int columnSpacing: 20
+            readonly property int rowSpacing: 20
+
+            anchors.top: toolbar.bottom
+            anchors.bottom: parent.bottom
+            width: parent.width
+            visible: (library.smartCounts["all"] ?? 0) > 0
+            clip: true
+            leftMargin: 16
+            rightMargin: 16
+            topMargin: 14
+            bottomMargin: 14
+            cellWidth: library.coverWidth + grid.columnSpacing
+            cellHeight: Math.round((library.coverWidth - 6) / 0.709) + 19 + 46 + grid.rowSpacing
+            boundsBehavior: Flickable.StopAtBounds
+            model: library.books
+
+            ScrollBar.vertical: ScrollBar {}
+
+            // LibraryShelfDetailHeader, 14 above the grid, and under it
+            // LibraryShelfEmptyView, at least 280 tall, when the selection
+            // has no books.
+            header: Column {
+                width: grid.width - 32
+
+                Row {
+                    width: parent.width
+                    height: 22 + 14
+                    spacing: 8
+
+                    Text {
+                        anchors.baseline: countText.baseline
+                        width: Math.min(implicitWidth, parent.width - countText.width - 8)
+                        text: page.selectionTitle
+                        color: Theme.textPrimary
+                        font.pixelSize: Theme.fontTitle2
+                        font.weight: Font.DemiBold
+                        elide: Text.ElideRight
+                    }
+                    Text {
+                        id: countText
+
+                        y: 4
+                        text: library.bookCount
+                        color: Theme.textSecondary
+                        font.pixelSize: Theme.fontTitle
+                        font.features: { "tnum": 1 }
+                    }
+                }
+
+                Item {
+                    width: parent.width
+                    height: 280
+                    visible: library.bookCount === 0
+
+                    EmptyMessage {
+                        anchors.centerIn: parent
+                        width: Math.min(360, parent.width - 16)
+                        symbol: library.selectedShelf === "reading" ? "book"
+                            : library.selectedShelf === "unshelved" ? "tray" : "folder"
+                        title: qsTr("This Shelf Is Empty")
+                        message: library.selectedShelf === "reading"
+                            ? qsTr("Titles you've started but not finished appear here.")
+                            : library.selectedShelf === "unshelved"
+                            ? qsTr("Everything in the library is on a shelf.")
+                            : qsTr("Right-click a cover and choose Move, or use Select to move several at once.")
+                    }
+                }
+            }
+
+            delegate: Item {
+                id: cell
+
+                required property var modelData
+
+                width: grid.cellWidth
+                height: grid.cellHeight
+
+                LibraryBookCard {
+                    coverWidth: library.coverWidth
+                    title: cell.modelData.title
+                    cover: cell.modelData.cover
+                    progress: cell.modelData.progress
+                    percent: cell.modelData.percent
+                    finished: cell.modelData.finished
+                    chosen: page.selecting && page.selectedFolders[cell.modelData.folder] === true
+                    onClicked: {
+                        if (page.selecting)
+                            page.toggleSelection(cell.modelData.folder)
+                        else
+                            library.openBook(cell.modelData.folder)
+                    }
+                    onContextMenuRequested: {
+                        if (!page.selecting)
+                            dialogs.showBookMenu(cell.modelData.folder, cell.modelData.title)
+                    }
+                }
+            }
+        }
+
+        EmptyMessage {
+            anchors.centerIn: grid
+            width: Math.min(360, detail.width - 48)
+            visible: !grid.visible
+            symbol: "books.vertical"
+            title: qsTr("No Books")
+            message: qsTr("Import an EPUB using the toolbar button to start reading.")
+        }
+    }
+
+    // ContentUnavailableView: a large secondary glyph, a bold title and the
+    // description, centred.
+    component EmptyMessage: Column {
+        property string symbol
+        property string title
+        property string message
+
+        spacing: 8
+
+        Icon {
+            anchors.horizontalCenter: parent.horizontalCenter
+            size: 40
+            name: parent.symbol
+            color: Theme.textSecondary
+        }
+        Text {
+            width: parent.width
+            horizontalAlignment: Text.AlignHCenter
+            text: parent.title
+            color: Theme.textPrimary
+            font.pixelSize: Theme.fontTitle2
+            font.weight: Font.Bold
+        }
+        Text {
+            width: parent.width
+            horizontalAlignment: Text.AlignHCenter
+            wrapMode: Text.Wrap
+            text: parent.message
+            color: Theme.textSecondary
         }
     }
 }

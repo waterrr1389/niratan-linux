@@ -242,6 +242,10 @@ qt_add_qml_module(niratan_app
         src/views/components/IconButton.qml
         src/views/components/PageHeader.qml
         src/views/components/SearchBar.qml
+        src/views/components/RoundedImage.qml
+        src/views/components/SourceListRow.qml
+        src/views/components/ToolbarButton.qml
+        src/views/components/ToolbarGroup.qml
         src/views/dictionary/AnkiMiningToast.qml
         src/views/icons/icon_map.js
         src/views/icons/phosphor/fill/eye-slash-fill.svg
@@ -261,6 +265,17 @@ qt_add_qml_module(niratan_app
         src/views/icons/phosphor/regular/magnifying-glass.svg
         src/views/icons/phosphor/regular/plus.svg
         src/views/icons/phosphor/regular/caret-up-down.svg
+        src/views/icons/phosphor/regular/arrows-down-up.svg
+        src/views/icons/phosphor/regular/arrows-out-simple.svg
+        src/views/icons/phosphor/regular/image.svg
+        src/views/icons/phosphor/regular/clock.svg
+        src/views/icons/phosphor/regular/text-aa.svg
+        src/views/icons/phosphor/regular/list.svg
+        src/views/icons/phosphor/regular/folder.svg
+        src/views/icons/phosphor/regular/tray.svg
+        src/views/icons/phosphor/regular/pencil-simple.svg
+        src/views/icons/phosphor/regular/cursor-text.svg
+        src/views/icons/phosphor/fill/check-circle-fill.svg
         src/views/icons/phosphor/regular/caret-down.svg
         src/views/icons/phosphor/regular/caret-up.svg
         src/views/icons/phosphor/bold/check-bold.svg
@@ -289,6 +304,8 @@ qt_add_qml_module(niratan_app
         src/views/pages/AnkiSettingsPage.qml
         src/views/pages/DictionaryPage.qml
         src/views/pages/DictionarySettingsPage.qml
+        src/views/pages/LibraryBookCard.qml
+        src/views/pages/LibraryDialogs.qml
         src/views/pages/LibraryPage.qml
         src/views/pages/LibraryShelfSidebar.qml
         src/views/pages/PlayerPage.qml

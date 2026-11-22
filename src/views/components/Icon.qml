@@ -32,16 +32,8 @@ Item {
     property real size: 16
     property color color: Theme.textPrimary
 
-    readonly property var entry: IconMap.icons[name]
-    readonly property bool known: entry !== undefined
-    readonly property url source: {
-        if (!known)
-            return ""
-        const weight = entry.weight
-        const suffix = weight === "regular" ? "" : "-" + weight
-        return "qrc:/qt/qml/Niratan/src/views/icons/phosphor/" + weight + "/"
-            + entry.name + suffix + ".svg"
-    }
+    readonly property bool known: IconMap.icons[name] !== undefined
+    readonly property url source: IconMap.source(name)
 
     implicitWidth: size
     implicitHeight: size
