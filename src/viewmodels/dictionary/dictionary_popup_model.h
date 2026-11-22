@@ -13,8 +13,14 @@
 // harmonicFrequency, deduplicatePitchAccents, compactPitchAccents and customCSS
 // affect only the popup HTML. Audio and mining retain their existing defaults.
 // scanNonJapaneseText has no selection bridge on this page and is not a
-// typed-lookup parameter. dictionaryTabDefault, frequencySortOrder,
-// frequencySortDictionary and searchTextSize have no runtime consumer here.
+// typed-lookup parameter. dictionaryTabDefault and searchTextSize have no
+// runtime consumer here.
+//
+// The query is the active profile's LookupConfiguration
+// (services/dictionary active_lookup_configuration), rebuilt whenever the
+// resolved configuration differs from the one the current query was built
+// with. A profile switch, a dictionary_config.json edit and a frequency sort
+// setting therefore reach the next lookup on the same model.
 //
 // settings::DictionarySettingsWatch supplies the active profile's language
 // and settings and reports edits from other windows, which rerun the last

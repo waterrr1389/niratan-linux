@@ -9,8 +9,9 @@
 // notes/specs/viewmodels-player-lookup.md.
 //
 // A temporary data root holds one imported dictionary with the terms the
-// clips need (decide, 星, 😀, don't) and one English profile; the Japanese
-// profile's scan length is 8 for the emoji/leading-space candidate case.
+// clips need (decide, 星, 😀, don't) and one English profile whose config
+// enables the dictionary; the Japanese profile's scan length is 8 for the
+// emoji/leading-space candidate case.
 
 #include "viewmodels/player/player_lookup_view_model.h"
 
@@ -128,6 +129,15 @@ void PlayerLookupViewModelTest::initTestCase() {
                                                  ContentLanguage::english, std::nullopt);
     QVERIFY(created.profile);
     english_profile_ = created.profile->id;
+
+    const auto english_directory = profiles.profile_directory(english_profile_);
+    QVERIFY(english_directory);
+    QFile english_config(
+        QString::fromStdString((*english_directory / "dictionary_config.json").string()));
+    QVERIFY(english_config.open(QIODevice::WriteOnly | QIODevice::Truncate));
+    english_config.write(
+        R"({"termDictionaries":[{"fileName":"Probe","isEnabled":true,"order":0}],"frequencyDictionaries":[],"pitchDictionaries":[]})");
+    english_config.close();
 
     // The emoji/leading-space candidate case expects scan length 8.
     const auto japanese_directory = profiles.profile_directory(kJapaneseProfile);

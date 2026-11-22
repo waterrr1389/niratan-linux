@@ -3,6 +3,7 @@
 #pragma once
 
 #include "models/dictionary/lookup_result.h"
+#include "services/dictionary/lookup_configuration.h"
 
 #include <filesystem>
 #include <memory>
@@ -15,8 +16,15 @@ namespace niratan::dictionary {
 
 // Owns one DictionaryQuery and one Lookup for a language, matching
 // LookupEngine.QueryBundle. The hoshidicts objects stay behind this type.
+//
+// The configuration constructor registers every list with its own
+// dictionary type, in QueryBundle.init order, and ranks the returned results
+// by the configuration's frequency order and dictionary after the library's
+// truncation. The language-only constructor is the term-only, automatic-order
+// form used by media and by callers that do not build a profile query.
 class DictionaryQueryService {
    public:
+    explicit DictionaryQueryService(const LookupConfiguration& configuration);
     DictionaryQueryService(std::string_view language_id,
                            const std::vector<std::filesystem::path>& term_dictionaries);
     ~DictionaryQueryService();

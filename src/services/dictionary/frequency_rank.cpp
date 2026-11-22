@@ -6,6 +6,7 @@
 #include <limits>
 #include <optional>
 #include <tuple>
+#include <vector>
 
 namespace niratan::dictionary {
 namespace {
@@ -60,10 +61,15 @@ std::optional<int> frequency_value(const RankedLookup& lookup, std::string_view 
 
 }  // namespace
 
-std::vector<RankedLookup> rank_by_frequency(const std::vector<RankedLookup>& results,
-                                            FrequencySortOrder order, std::string_view dictionary) {
+std::vector<std::size_t> frequency_rank_order(const std::vector<RankedLookup>& results,
+                                              FrequencySortOrder order,
+                                              std::string_view dictionary) {
+    std::vector<std::size_t> indices(results.size());
+    for (std::size_t index = 0; index < indices.size(); ++index) {
+        indices[index] = index;
+    }
     if (order == FrequencySortOrder::automatic || dictionary.empty() || results.size() < 2) {
-        return results;
+        return indices;
     }
 
     const bool descending = order == FrequencySortOrder::descending;
@@ -79,11 +85,6 @@ std::vector<RankedLookup> rank_by_frequency(const std::vector<RankedLookup>& res
     for (const RankedLookup& lookup : results) {
         ranked.push_back(Ranked{scalar_count(lookup.matched), trace_key(lookup),
                                 frequency_value(lookup, dictionary, descending)});
-    }
-
-    std::vector<std::size_t> indices(ranked.size());
-    for (std::size_t i = 0; i < indices.size(); ++i) {
-        indices[i] = i;
     }
 
     std::stable_sort(indices.begin(), indices.end(), [&](std::size_t left, std::size_t right) {
@@ -106,13 +107,18 @@ std::vector<RankedLookup> rank_by_frequency(const std::vector<RankedLookup>& res
         }
         return false;
     });
+    return indices;
+}
 
-    std::vector<RankedLookup> ordered;
-    ordered.reserve(results.size());
-    for (std::size_t index : indices) {
-        ordered.push_back(results[index]);
+std::vector<RankedLookup> rank_by_frequency(const std::vector<RankedLookup>& results,
+                                            FrequencySortOrder order, std::string_view dictionary) {
+    const std::vector<std::size_t> order_indices = frequency_rank_order(results, order, dictionary);
+    std::vector<RankedLookup> ranked;
+    ranked.reserve(results.size());
+    for (const std::size_t index : order_indices) {
+        ranked.push_back(results[index]);
     }
-    return ordered;
+    return ranked;
 }
 
 }  // namespace niratan::dictionary

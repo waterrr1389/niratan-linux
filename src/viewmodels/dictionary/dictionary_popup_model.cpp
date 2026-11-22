@@ -11,6 +11,7 @@
 
 #include <cmath>
 #include <memory>
+#include <optional>
 #include <string>
 #include <string_view>
 
@@ -19,6 +20,7 @@
 #include "services/anki/popup_options.h"
 #include "services/dictionary/dictionary_query.h"
 #include "services/dictionary/dictionary_store.h"
+#include "services/dictionary/lookup_configuration.h"
 #include "services/dictionary/popup_assets.h"
 #include "services/dictionary/popup_entries.h"
 #include "services/dictionary/popup_html.h"
@@ -28,10 +30,13 @@
 
 namespace niratan::viewmodels {
 
+using niratan::dictionary::active_lookup_configuration;
 using niratan::dictionary::DictionaryQueryService;
 using niratan::dictionary::DictionaryStore;
+using niratan::dictionary::DictionaryType;
 using niratan::dictionary::load_popup_assets;
 using niratan::dictionary::lookup_entries_json;
+using niratan::dictionary::LookupConfiguration;
 using niratan::dictionary::LookupOutcome;
 using niratan::dictionary::popup_shell_html;
 using niratan::dictionary::PopupAssets;
@@ -41,8 +46,8 @@ struct DictionaryPopupModel::State {
     DictionaryStore store{storage::dictionaries_root()};
     PopupAssets assets;
     std::unique_ptr<DictionaryQueryService> query;
+    std::optional<LookupConfiguration> query_configuration;
     settings::DictionarySettingsWatch settings_watch;
-    std::string language_id;
     QString last_query;
     QString html;
     QString matched_text;
@@ -189,11 +194,19 @@ void DictionaryPopupModel::lookup(const QString& text) {
 
 void DictionaryPopupModel::run_lookup() {
     set_audio_error({});
-    const std::string_view language = state_->settings_watch.language_id();
-    if (!state_->query || state_->language_id != language) {
-        state_->language_id = std::string(language);
-        state_->query =
-            std::make_unique<DictionaryQueryService>(language, state_->store.installed());
+    LookupConfiguration configuration;
+    if (const auto repository = profiles::ProfileRepository::at_data_root()) {
+        configuration = active_lookup_configuration(*repository, state_->settings_watch.settings());
+    } else {
+        for (const auto& dictionary : state_->store.installed(DictionaryType::term)) {
+            configuration.term_dictionaries.push_back(dictionary.path);
+        }
+        configuration.language_id = std::string(state_->settings_watch.language_id());
+    }
+    if (!state_->query || !state_->query_configuration.has_value() ||
+        *state_->query_configuration != configuration) {
+        state_->query = std::make_unique<DictionaryQueryService>(configuration);
+        state_->query_configuration = std::move(configuration);
     }
 
     const auto& settings = state_->settings_watch.settings();
@@ -229,7 +242,7 @@ void DictionaryPopupModel::run_lookup() {
 
     PopupConfig config;
     config.display = {
-        .content_language_id = std::string(state_->language_id),
+        .content_language_id = state_->query_configuration->language_id,
         .max_results = settings.max_results,
         .scan_length = settings.scan_length,
         .collapse_mode = settings.collapse_mode,

@@ -14,6 +14,7 @@
 #include "viewmodels/dictionary/dictionary_popup_model.h"
 #include "yomitan_fixture.h"
 
+#include <QFile>
 #include <QSignalSpy>
 #include <QtTest>
 
@@ -29,6 +30,21 @@ using niratan::test::TempDataRoot;
 using niratan::test::write_stored_zip;
 using niratan::viewmodels::DictionaryPopupModel;
 
+namespace {
+
+// A profile config that enables the imported Probe term dictionary.
+bool write_probe_config(const std::filesystem::path& directory) {
+    QFile file(QString::fromStdString((directory / "dictionary_config.json").string()));
+    if (!file.open(QIODevice::WriteOnly)) {
+        return false;
+    }
+    const QByteArray bytes =
+        R"({"termDictionaries":[{"fileName":"Probe","isEnabled":true,"order":0}],"frequencyDictionaries":[],"pitchDictionaries":[]})";
+    return file.write(bytes) == bytes.size();
+}
+
+}  // namespace
+
 class DictionaryPopupModelTest : public QObject {
     Q_OBJECT
 
@@ -40,6 +56,7 @@ class DictionaryPopupModelTest : public QObject {
     void invalid_audio_url_is_reported();
     void shell_globals_come_from_the_anki_configuration();
     void shell_globals_follow_the_active_profile();
+    void the_query_follows_the_active_profile_configuration();
 
    private:
     std::unique_ptr<TempDataRoot> root_;
@@ -148,6 +165,9 @@ void DictionaryPopupModelTest::shell_globals_follow_the_active_profile() {
     const auto other = profiles.create_profile(
         "Other", niratan::profiles::ContentLanguage::japanese, profiles.active_profile().id);
     QVERIFY(other.profile.has_value());
+    const auto other_directory = profiles.profile_directory(other.profile->id);
+    QVERIFY(other_directory.has_value());
+    QVERIFY(write_probe_config(*other_directory));
     config.activate_profile(other.profile->id);
     auto& settings = config.settings();
     settings.field_mappings = {{"Word", "{expression}"}};
@@ -164,6 +184,35 @@ void DictionaryPopupModelTest::shell_globals_follow_the_active_profile() {
     QVERIFY(model.html().contains(QStringLiteral("window.useAnkiConnect = true;")));
     QVERIFY(model.html().contains(QStringLiteral("window.embedMedia = false;")));
     QVERIFY(model.html().contains(QStringLiteral("window.compactGlossariesAnki = false;")));
+}
+
+// B7: the popup query follows the active profile's configuration, so a
+// profile switch and a dictionary_config.json edit reach the next lookup on
+// the same model.
+void DictionaryPopupModelTest::the_query_follows_the_active_profile_configuration() {
+    ProfileRepository profiles{niratan::storage::data_root()};
+    QVERIFY(!profiles.set_active_profile("default-ja").has_value());
+
+    DictionaryPopupModel model;
+    model.lookup(QStringLiteral("decide"));
+    QVERIFY(model.has_results());
+
+    const auto english = profiles.create_profile(
+        "English", niratan::profiles::ContentLanguage::english, std::string("default-ja"));
+    QVERIFY(english.profile.has_value());
+    QVERIFY(!profiles.set_active_profile(english.profile->id).has_value());
+    model.lookup(QStringLiteral("decide"));
+    QVERIFY(!model.has_results());
+
+    const auto directory = profiles.profile_directory(english.profile->id);
+    QVERIFY(directory.has_value());
+    QVERIFY(write_probe_config(*directory));
+    model.lookup(QStringLiteral("decide"));
+    QVERIFY(model.has_results());
+
+    QVERIFY(!profiles.set_active_profile("default-ja").has_value());
+    model.lookup(QStringLiteral("decide"));
+    QVERIFY(model.has_results());
 }
 
 QTEST_MAIN(DictionaryPopupModelTest)

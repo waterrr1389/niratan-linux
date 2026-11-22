@@ -2,4 +2,3 @@
 # only shrink. Format: <src-relative header path>
 
 services/anki/media_naming.h
-services/dictionary/frequency_rank.h

@@ -19,9 +19,14 @@
 //
 // The order "auto" and an empty dictionary name both leave the input order
 // untouched, as does a single result.
+//
+// frequency_rank_order returns the permutation of result indices that
+// rank_by_frequency uses; callers apply it to the mapped entries after the
+// library's truncation. With fewer than two results it returns the identity.
 
 #pragma once
 
+#include <cstddef>
 #include <cstdint>
 #include <string>
 #include <string_view>
@@ -66,5 +71,10 @@ struct RankedLookup {
 std::vector<RankedLookup> rank_by_frequency(const std::vector<RankedLookup>& results,
                                             FrequencySortOrder order,
                                             std::string_view dictionary);
+
+// The permutation rank_by_frequency applies, as indices into results.
+std::vector<std::size_t> frequency_rank_order(const std::vector<RankedLookup>& results,
+                                              FrequencySortOrder order,
+                                              std::string_view dictionary);
 
 }  // namespace niratan::dictionary

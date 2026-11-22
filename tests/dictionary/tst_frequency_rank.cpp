@@ -4,12 +4,13 @@
 
 #include <QtTest>
 
+using niratan::dictionary::frequency_rank_order;
 using niratan::dictionary::FrequencyReading;
 using niratan::dictionary::FrequencySample;
 using niratan::dictionary::FrequencySortOrder;
+using niratan::dictionary::rank_by_frequency;
 using niratan::dictionary::RankedLookup;
 using niratan::dictionary::TraceCandidate;
-using niratan::dictionary::rank_by_frequency;
 
 // Cases follow LookupEngine.sortedByFrequencyDictionary, traceSortKey and
 // frequencyValue.
@@ -27,6 +28,7 @@ class FrequencyRankTest : public QObject {
     void a_value_ranks_ahead_of_none();
     void equal_values_keep_input_order();
     void ignores_other_dictionaries_and_negative_values();
+    void the_permutation_follows_the_ranking();
 };
 
 RankedLookup result(std::string matched, std::string expression, int value) {
@@ -132,6 +134,23 @@ void FrequencyRankTest::ignores_other_dictionaries_and_negative_values() {
         rank_by_frequency({lookup, other}, FrequencySortOrder::ascending, "freq");
     QVERIFY(!ranked.empty());
     QCOMPARE(ranked.front().expression, std::string("other"));
+}
+
+// B5: frequency_rank_order returns the same permutation rank_by_frequency
+// applies to the results.
+void FrequencyRankTest::the_permutation_follows_the_ranking() {
+    const std::vector<RankedLookup> different_lengths = {result("a", "a", 1),
+                                                         result("abc", "abc", 100)};
+    QCOMPARE(frequency_rank_order(different_lengths, FrequencySortOrder::ascending, "freq"),
+             (std::vector<std::size_t>{1, 0}));
+
+    const std::vector<RankedLookup> equal = {result("ab", "first", 3), result("ab", "second", 3)};
+    QCOMPARE(frequency_rank_order(equal, FrequencySortOrder::ascending, "freq"),
+             (std::vector<std::size_t>{0, 1}));
+    QCOMPARE(frequency_rank_order(equal, FrequencySortOrder::automatic, "freq"),
+             (std::vector<std::size_t>{0, 1}));
+    QCOMPARE(frequency_rank_order(equal, FrequencySortOrder::ascending, ""),
+             (std::vector<std::size_t>{0, 1}));
 }
 
 QTEST_APPLESS_MAIN(FrequencyRankTest)

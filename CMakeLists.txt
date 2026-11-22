@@ -48,6 +48,7 @@ qt_add_library(niratan_core STATIC
     src/services/audiobook/audiobook_metadata.cpp
     src/services/dictionary/dictionary_store.cpp
     src/services/dictionary/dictionary_config_store.cpp
+    src/services/dictionary/lookup_configuration.cpp
     src/services/dictionary/dictionary_media.cpp
     src/services/dictionary/media_type.cpp
     src/services/dictionary/dictionary_query.cpp

@@ -4,6 +4,8 @@
 #include "services/dictionary/dictionary_query.h"
 #include "services/dictionary/dictionary_store.h"
 #include "services/dictionary/language_id.h"
+#include "services/dictionary/lookup_configuration.h"
+#include "services/storage/app_paths.h"
 #include "yomitan_fixture.h"
 
 #include <QFile>
@@ -17,6 +19,8 @@ using niratan::dictionary::DictionaryMediaService;
 using niratan::dictionary::DictionaryQueryService;
 using niratan::dictionary::DictionaryStore;
 using niratan::dictionary::DictionaryType;
+using niratan::dictionary::FrequencySortOrder;
+using niratan::dictionary::LookupConfiguration;
 using niratan::dictionary::MediaStatus;
 using niratan::test::minimal_index;
 using niratan::test::minimal_term_bank;
@@ -56,6 +60,9 @@ class DictionaryTest : public QObject {
     void a_type_scan_creates_and_cleans_its_directory();
     void import_writes_each_type_directory();
     void installed_scan_covers_every_type_for_media();
+    void query_registers_each_dictionary_type();
+    void an_empty_configuration_returns_no_entries();
+    void frequency_order_reranks_equal_traces();
 };
 
 void DictionaryTest::language_falls_back_to_japanese() {
@@ -314,6 +321,122 @@ void DictionaryTest::installed_scan_covers_every_type_for_media() {
     QCOMPARE(image.status, MediaStatus::Found);
     QCOMPARE(image.mime_type, QByteArray("image/png"));
     QCOMPARE(image.bytes, QByteArray("PNG"));
+}
+
+// B2, B3: each type is registered with its own hoshidicts call under the
+// profile's language, so frequency and pitch dictionaries contribute.
+void DictionaryTest::query_registers_each_dictionary_type() {
+    QTemporaryDir root;
+    QVERIFY(root.isValid());
+    const auto base = path_in(root, "installed");
+    const auto zip = path_in(root, "dict.zip");
+    write_stored_zip(
+        zip,
+        {{"index.json", minimal_index(QStringLiteral("Probe"))},
+         {"term_bank_1.json", minimal_term_bank()},
+         {"term_meta_bank_1.json",
+          QByteArrayLiteral(
+              R"([["decide","freq",12345],["decide","pitch",{"reading":"","pitches":[{"position":1}]}]])")}});
+
+    DictionaryStore store(base);
+    const auto imported = store.import_zip(zip);
+    QVERIFY2(imported.ok, imported.error.c_str());
+
+    LookupConfiguration configuration;
+    configuration.term_dictionaries = {base / "Term" / "Probe"};
+    configuration.frequency_dictionaries = {base / "Frequency" / "Probe"};
+    configuration.pitch_dictionaries = {base / "Pitch" / "Probe"};
+    configuration.language_id = "en";
+
+    const auto found = DictionaryQueryService(configuration).lookup("decide", 8, 16);
+    QVERIFY2(found.ok, found.error.c_str());
+    QCOMPARE(found.entries.size(), std::size_t(1));
+    const auto& entry = found.entries.front();
+    QCOMPARE(entry.expression, std::string("decide"));
+    QCOMPARE(entry.frequencies.size(), std::size_t(1));
+    QCOMPARE(entry.frequencies.front().dictionary, std::string("Probe"));
+    QCOMPARE(entry.frequencies.front().values.size(), std::size_t(1));
+    QCOMPARE(entry.frequencies.front().values.front().value, 12345);
+    QCOMPARE(entry.frequencies.front().values.front().display_value, std::string("12345"));
+    QCOMPARE(entry.pitches.size(), std::size_t(1));
+    QCOMPARE(entry.pitches.front().dictionary, std::string("Probe"));
+    QCOMPARE(entry.pitches.front().positions, (std::vector<int>{1}));
+    QVERIFY(entry.pitches.front().transcriptions.empty());
+
+    LookupConfiguration term_only;
+    term_only.term_dictionaries = {base / "Term" / "Probe"};
+    term_only.language_id = "en";
+    const auto without_metadata = DictionaryQueryService(term_only).lookup("decide", 8, 16);
+    QVERIFY2(without_metadata.ok, without_metadata.error.c_str());
+    QCOMPARE(without_metadata.entries.size(), std::size_t(1));
+    QVERIFY(without_metadata.entries.front().frequencies.empty());
+    QVERIFY(without_metadata.entries.front().pitches.empty());
+
+    LookupConfiguration english;
+    english.term_dictionaries = {base / "Term" / "Probe"};
+    english.language_id = "en";
+    const auto deinflected = DictionaryQueryService(english).lookup("decided", 8, 16);
+    QVERIFY2(deinflected.ok, deinflected.error.c_str());
+    QCOMPARE(deinflected.entries.size(), std::size_t(1));
+    const auto& past_entry = deinflected.entries.front();
+    QCOMPARE(past_entry.expression, std::string("decide"));
+    bool has_past_step = false;
+    for (const auto& trace : past_entry.traces) {
+        for (const auto& step : trace) {
+            if (step.name == "past" && step.description == "Simple past tense of a verb") {
+                has_past_step = true;
+            }
+        }
+    }
+    QVERIFY(has_past_step);
+}
+
+// B4: an empty configuration is not an error and returns no entries.
+void DictionaryTest::an_empty_configuration_returns_no_entries() {
+    LookupConfiguration configuration;
+    configuration.language_id = "ja";
+
+    const auto found = DictionaryQueryService(configuration).lookup("decide", 16, 16);
+    QVERIFY2(found.ok, found.error.c_str());
+    QVERIFY(found.entries.empty());
+}
+
+// B5: equal matched text and trace keys leave only the frequency value, with
+// Descending preferring the larger value and Ascending the smaller one.
+void DictionaryTest::frequency_order_reranks_equal_traces() {
+    QTemporaryDir root;
+    QVERIFY(root.isValid());
+    const auto base = path_in(root, "installed");
+    const auto zip = path_in(root, "dict.zip");
+    write_stored_zip(
+        zip,
+        {{"index.json", minimal_index(QStringLiteral("Probe"))},
+         {"term_bank_1.json",
+          QByteArrayLiteral(
+              R"([["田","た","","",0,["field"],1,""],["他","た","","",0,["other"],1,""]])")},
+         {"term_meta_bank_1.json", QByteArrayLiteral(R"([["田","freq",100],["他","freq",5]])")}});
+
+    DictionaryStore store(base);
+    const auto imported = store.import_zip(zip);
+    QVERIFY2(imported.ok, imported.error.c_str());
+
+    LookupConfiguration configuration;
+    configuration.term_dictionaries = {base / "Term" / "Probe"};
+    configuration.frequency_dictionaries = {base / "Frequency" / "Probe"};
+    configuration.language_id = "ja";
+    configuration.frequency_sort_dictionary = "Probe";
+
+    configuration.frequency_sort_order = FrequencySortOrder::descending;
+    const auto descending = DictionaryQueryService(configuration).lookup("た", 16, 16);
+    QVERIFY2(descending.ok, descending.error.c_str());
+    QVERIFY(descending.entries.size() >= 2);
+    QCOMPARE(descending.entries.front().expression, std::string("田"));
+
+    configuration.frequency_sort_order = FrequencySortOrder::ascending;
+    const auto ascending = DictionaryQueryService(configuration).lookup("た", 16, 16);
+    QVERIFY2(ascending.ok, ascending.error.c_str());
+    QVERIFY(ascending.entries.size() >= 2);
+    QCOMPARE(ascending.entries.front().expression, std::string("他"));
 }
 
 QTEST_APPLESS_MAIN(DictionaryTest)
