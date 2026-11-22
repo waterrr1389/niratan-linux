@@ -83,6 +83,42 @@ SettingsForm {
                 onEdited: index => settings.uiTheme = form.themes[index]
             }
         }
+
+        SettingsSeparator {
+            objectName: "customBackgroundColorSeparator"
+            visible: settings.theme === "Custom"
+        }
+        SettingsColorRow {
+            objectName: "customBackgroundColorRow"
+            visible: settings.theme === "Custom"
+            label: qsTr("Background Color")
+            value: settings.customBackgroundColor
+            onEdited: value => settings.customBackgroundColor = value
+        }
+
+        SettingsSeparator {
+            objectName: "customTextColorSeparator"
+            visible: settings.theme === "Custom"
+        }
+        SettingsColorRow {
+            objectName: "customTextColorRow"
+            visible: settings.theme === "Custom"
+            label: qsTr("Text Color")
+            value: settings.customTextColor
+            onEdited: value => settings.customTextColor = value
+        }
+
+        SettingsSeparator {
+            objectName: "customInfoColorSeparator"
+            visible: settings.theme === "Custom"
+        }
+        SettingsColorRow {
+            objectName: "customInfoColorRow"
+            visible: settings.theme === "Custom"
+            label: qsTr("Info Color")
+            value: settings.customInfoColor
+            onEdited: value => settings.customInfoColor = value
+        }
     }
 
     SettingsCard {

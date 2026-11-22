@@ -9,15 +9,23 @@
 //
 // Runs offscreen like tests/qml/tst_qml_load.cpp: URL schemes are registered
 // and QtWebEngineQuick initialized before the application object, and the
-// Niratan style is selected before any component is created. The popup tests
-// write settings, so each of those builds a fresh data root through
-// TempDataRoot.
+// Niratan style is selected before any component is created. The popup and
+// colour tests write settings, so each of those builds a fresh data root
+// through TempDataRoot.
+//
+// The colour tests follow the Theme card colour rows of
+// AppearanceView.nativeAppearanceContent: Background Color, Text Color and
+// Info Color appear after the Interface picker, each behind its separator,
+// only while the reader theme is Custom. Each row is a ColorPicker whose
+// swatch shows the UserConfig colour; the rows persist the three
+// Core/UserConfig.swift properties.
 
 #include "../viewmodels/data_root.h"
 #include "viewmodels/settings/settings_view_model.h"
 #include "views/dictionary/audio_scheme_handler.h"
 #include "views/reader/reader_scheme_handler.h"
 
+#include <QColor>
 #include <QGuiApplication>
 #include <QQmlApplicationEngine>
 #include <QQmlComponent>
@@ -117,6 +125,23 @@ QQuickItem* appearance_detail(QQuickWindow* window) {
     return window->findChild<QQuickItem*>(QStringLiteral("settings-appearance"));
 }
 
+// The Theme card's reader-theme picker, found by its Swift labels because the
+// segmented control carries its name only as an accessibility property.
+QQuickItem* theme_picker(QQuickItem* root) {
+    for (QQuickItem* item : visual_items(root)) {
+        const QVariant labels = item->property("labels");
+        if (labels.isValid() && labels.toStringList().contains(QStringLiteral("Custom"))) {
+            return item;
+        }
+    }
+    return nullptr;
+}
+
+QColor swatch_color(QQuickItem* root, const QString& row) {
+    QQuickItem* swatch = find_item(root, row + QStringLiteral("Swatch"));
+    return swatch != nullptr ? swatch->property("color").value<QColor>() : QColor();
+}
+
 }  // namespace
 
 class SettingsAppearanceTest : public QObject {
@@ -128,6 +153,8 @@ class SettingsAppearanceTest : public QObject {
     void popup_rows_write_their_setting();
     void popup_threshold_row_follows_swipe_toggle();
     void popup_card_fits_the_default_window();
+    void theme_custom_color_rows_follow_theme();
+    void theme_custom_color_rows_write_their_setting();
 
    private:
     QQmlApplicationEngine engine_;
@@ -362,6 +389,118 @@ void SettingsAppearanceTest::popup_card_fits_the_default_window() {
         QVERIFY2(bounds.right() <= 960.0,
                  qPrintable(item->objectName() + QStringLiteral(" ends right of the window")));
     }
+
+    const QString warnings = take_warnings();
+    QVERIFY2(warnings.isEmpty(), qPrintable(warnings));
+}
+
+// C6, C8: the three colour rows and their separators appear only while the
+// theme is Custom, after the Interface row, in Swift's order, and a fresh
+// data root reads the UserConfig.init colours.
+void SettingsAppearanceTest::theme_custom_color_rows_follow_theme() {
+    niratan::test::TempDataRoot data;
+    QVERIFY(data.isValid());
+    QQuickWindow* window = nullptr;
+    std::unique_ptr<QObject> object = create_settings_window(engine_, 640, window);
+    QVERIFY2(object != nullptr, "MainWindow was not created");
+    QQuickItem* appearance = appearance_detail(window);
+    QVERIFY(appearance);
+    QTest::qWait(50);
+
+    const QStringList rows{QStringLiteral("customBackgroundColorRow"),
+                           QStringLiteral("customTextColorRow"),
+                           QStringLiteral("customInfoColorRow")};
+    const QStringList separatorObjects{
+        QStringLiteral("customBackgroundColorSeparator"),
+        QStringLiteral("customTextColorSeparator"),
+        QStringLiteral("customInfoColorSeparator"),
+    };
+    for (const QString& row : rows) {
+        QVERIFY2(!visible_item(appearance, row),
+                 qPrintable(row + QStringLiteral(" is shown outside the Custom theme")));
+    }
+    for (const QString& separator : separatorObjects) {
+        QVERIFY2(!visible_item(appearance, separator),
+                 qPrintable(separator + QStringLiteral(" is shown outside the Custom theme")));
+    }
+
+    QQuickItem* picker = theme_picker(appearance);
+    QVERIFY(picker);
+    QVERIFY(QMetaObject::invokeMethod(picker, "edited", Q_ARG(int, 4)));
+    QTRY_VERIFY(visible_item(appearance, QStringLiteral("customBackgroundColorRow")));
+
+    const QStringList rowObjects{
+        QStringLiteral("customBackgroundColorRow"),
+        QStringLiteral("customTextColorRow"),
+        QStringLiteral("customInfoColorRow"),
+    };
+    const QStringList rowLabels{
+        QStringLiteral("Background Color"),
+        QStringLiteral("Text Color"),
+        QStringLiteral("Info Color"),
+    };
+
+    QString previousLabel = QStringLiteral("Interface");
+    for (qsizetype index = 0; index < rowObjects.size(); ++index) {
+        QVERIFY2(visible_item(appearance, rowObjects.at(index)),
+                 qPrintable(rowObjects.at(index) + QStringLiteral(" is not visible")));
+        QVERIFY2(visible_item(appearance, separatorObjects.at(index)),
+                 qPrintable(separatorObjects.at(index) + QStringLiteral(" is not visible")));
+        const QString& label = rowLabels.at(index);
+        QTRY_VERIFY2(text_top(appearance, previousLabel) >= 0 &&
+                         text_top(appearance, label) > text_top(appearance, previousLabel),
+                     qPrintable(label + QStringLiteral(" is missing or out of order")));
+        previousLabel = label;
+    }
+
+    QCOMPARE(swatch_color(appearance, QStringLiteral("customBackgroundColorRow")),
+             QColor(255, 255, 255));
+    QCOMPARE(swatch_color(appearance, QStringLiteral("customTextColorRow")), QColor(0, 0, 0));
+    QCOMPARE(swatch_color(appearance, QStringLiteral("customInfoColorRow")), QColor(153, 153, 153));
+
+    const QString warnings = take_warnings();
+    QVERIFY2(warnings.isEmpty(), qPrintable(warnings));
+}
+
+// C7, C8: each colour row writes its own setting and its swatch follows the
+// model colour.
+void SettingsAppearanceTest::theme_custom_color_rows_write_their_setting() {
+    niratan::test::TempDataRoot data;
+    QVERIFY(data.isValid());
+    QQuickWindow* window = nullptr;
+    std::unique_ptr<QObject> object = create_settings_window(engine_, 640, window);
+    QVERIFY2(object != nullptr, "MainWindow was not created");
+    QQuickItem* appearance = appearance_detail(window);
+    QVERIFY(appearance);
+    QTest::qWait(50);
+
+    QQuickItem* picker = theme_picker(appearance);
+    QVERIFY(picker);
+    QVERIFY(QMetaObject::invokeMethod(picker, "edited", Q_ARG(int, 4)));
+    QTRY_VERIFY(visible_item(appearance, QStringLiteral("customBackgroundColorRow")));
+
+    auto* background = find_item(appearance, QStringLiteral("customBackgroundColorRow"));
+    auto* text = find_item(appearance, QStringLiteral("customTextColorRow"));
+    auto* info = find_item(appearance, QStringLiteral("customInfoColorRow"));
+    QVERIFY(background);
+    QVERIFY(text);
+    QVERIFY(info);
+
+    const QColor red(255, 0, 0);
+    const QColor blue(0, 128, 255, 102);
+    const QColor transparent(0, 0, 0, 0);
+    QVERIFY(QMetaObject::invokeMethod(background, "edited", Q_ARG(QColor, red)));
+    QVERIFY(QMetaObject::invokeMethod(text, "edited", Q_ARG(QColor, blue)));
+    QVERIFY(QMetaObject::invokeMethod(info, "edited", Q_ARG(QColor, transparent)));
+
+    QTRY_COMPARE(swatch_color(appearance, QStringLiteral("customBackgroundColorRow")), red);
+    QTRY_COMPARE(swatch_color(appearance, QStringLiteral("customTextColorRow")), blue);
+    QTRY_COMPARE(swatch_color(appearance, QStringLiteral("customInfoColorRow")), transparent);
+
+    niratan::viewmodels::SettingsViewModel fresh;
+    QCOMPARE(fresh.customBackgroundColor(), red);
+    QCOMPARE(fresh.customTextColor(), blue);
+    QCOMPARE(fresh.customInfoColor(), transparent);
 
     const QString warnings = take_warnings();
     QVERIFY2(warnings.isEmpty(), qPrintable(warnings));

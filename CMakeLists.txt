@@ -81,6 +81,7 @@ qt_add_library(niratan_core STATIC
     src/services/books/library_watch.cpp
     src/services/books/library_watch.h
     src/models/books/book.h
+    src/models/color/color_hex.cpp
     src/models/profiles/content_language.cpp
     src/models/profiles/dictionary_settings.cpp
     src/models/profiles/profile_index.cpp
@@ -194,6 +195,7 @@ qt_add_library(niratan_app STATIC
     src/viewmodels/player/player_study_view_model.cpp
     src/viewmodels/player/player_study_view_model.h
     src/viewmodels/settings/settings_popup_settings.cpp
+    src/viewmodels/settings/settings_reader_colors.cpp
     src/viewmodels/settings/settings_view_model.cpp
     src/viewmodels/settings/settings_view_model.h
     src/viewmodels/settings/settings_view_model_state.h
@@ -328,6 +330,7 @@ qt_add_qml_module(niratan_app
         src/views/settings/AppearanceSettings.qml
         src/views/settings/SettingsActions.qml
         src/views/settings/SettingsCard.qml
+        src/views/settings/SettingsColorRow.qml
         src/views/settings/SettingsForm.qml
         src/views/settings/SettingsInteger.qml
         src/views/settings/SettingsSegments.qml

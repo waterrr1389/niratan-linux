@@ -18,13 +18,31 @@
 // visible only while Swipe to Dismiss is on, and the four toggles) and the
 // defaults and keys of UserConfig.swift. Each edit saves the whole active
 // reader document, so the other reader fields survive a popup edit.
+//
+// The colour cases follow the Theme card colour rows of
+// AppearanceView.nativeAppearanceContent (Background Color, Text Color, Info
+// Color while the theme is Custom), the three colour properties of
+// Core/UserConfig.swift with the UserConfig.init defaults (opaque white,
+// opaque black, opaque #999999), and Core/ColorHexCodec.swift as the stored
+// form: uppercase #RRGGBB, or #RRGGBBAA when alpha is not 255.
 
 #include "viewmodels/settings/settings_view_model.h"
 
 #include "data_root.h"
 
+#include <QFile>
+#include <QJsonDocument>
+#include <QJsonObject>
 #include <QtTest>
 
+#include <filesystem>
+#include <optional>
+
+#include "models/profiles/reader_settings.h"
+#include "services/profiles/profile_repository.h"
+#include "services/storage/app_paths.h"
+
+using niratan::profiles::ProfileRepository;
 using niratan::test::TempDataRoot;
 using niratan::viewmodels::SettingsViewModel;
 
@@ -40,6 +58,32 @@ void expect_round_trip(const Setter& set, const Getter& get, Value input, Value 
 
     SettingsViewModel second;
     QCOMPARE(get(second), expected);
+}
+
+std::filesystem::path reader_settings_file() {
+    const ProfileRepository repository(niratan::storage::data_root());
+    const auto directory = repository.profile_directory(repository.active_profile().id);
+    return directory.has_value() ? *directory / "reader_settings.json" : std::filesystem::path{};
+}
+
+std::optional<QJsonObject> read_object(const std::filesystem::path& path) {
+    QFile file(QString::fromStdString(path.string()));
+    if (!file.open(QIODevice::ReadOnly)) {
+        return std::nullopt;
+    }
+    const QJsonDocument document = QJsonDocument::fromJson(file.readAll());
+    if (!document.isObject()) {
+        return std::nullopt;
+    }
+    return document.object();
+}
+
+bool write_object(const std::filesystem::path& path, const QJsonObject& object) {
+    QFile file(QString::fromStdString(path.string()));
+    if (!file.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
+        return false;
+    }
+    return file.write(QJsonDocument(object).toJson()) > 0;
 }
 
 }  // namespace
@@ -62,6 +106,11 @@ class SettingsViewModelTest : public QObject {
     void popup_toggles_round_trip();
     void popupSwipeThreshold_rounds_to_the_step_and_clamps();
     void popup_edits_keep_the_other_reader_settings();
+    void custom_colors_default();
+    void custom_colors_store_color_hex();
+    void custom_colors_keys_and_reader_read();
+    void custom_colors_invalid_value_uses_default();
+    void custom_colors_edit_keeps_other_reader_settings();
 };
 
 // B1: the Font Size Stepper is 16...40 with no off-step values.
@@ -305,6 +354,126 @@ void SettingsViewModelTest::popup_edits_keep_the_other_reader_settings() {
     QCOMPARE(second.popupDisableTransparency(), true);
     QCOMPARE(second.popupFullWidth(), true);
     QCOMPARE(second.popupSwipeToDismiss(), true);
+}
+
+// C1: UserConfig.init returns opaque white, black and #999999 from a fresh
+// data root.
+void SettingsViewModelTest::custom_colors_default() {
+    TempDataRoot data;
+    QVERIFY(data.isValid());
+    SettingsViewModel model;
+
+    QCOMPARE(model.customBackgroundColor(), QColor(255, 255, 255));
+    QCOMPARE(model.customTextColor(), QColor(0, 0, 0));
+    QCOMPARE(model.customInfoColor(), QColor(153, 153, 153));
+}
+
+// C2: a set colour is stored as ColorHexCodec writes it and a fresh model
+// returns it unchanged.
+void SettingsViewModelTest::custom_colors_store_color_hex() {
+    TempDataRoot data;
+    QVERIFY(data.isValid());
+
+    const auto set_background = [](SettingsViewModel& model, QColor value) {
+        model.setCustomBackgroundColor(value);
+    };
+    const auto background = [](const SettingsViewModel& model) {
+        return model.customBackgroundColor();
+    };
+    expect_round_trip(set_background, background, QColor(255, 0, 0), QColor(255, 0, 0));
+    auto object = read_object(reader_settings_file());
+    QVERIFY(object.has_value());
+    QCOMPARE(object->value(QStringLiteral("customBackgroundColor")).toString(),
+             QStringLiteral("#FF0000"));
+
+    const auto set_text = [](SettingsViewModel& model, QColor value) {
+        model.setCustomTextColor(value);
+    };
+    const auto text = [](const SettingsViewModel& model) { return model.customTextColor(); };
+    expect_round_trip(set_text, text, QColor(0, 128, 255, 102), QColor(0, 128, 255, 102));
+    object = read_object(reader_settings_file());
+    QVERIFY(object.has_value());
+    QCOMPARE(object->value(QStringLiteral("customTextColor")).toString(),
+             QStringLiteral("#0080FF66"));
+
+    const auto set_info = [](SettingsViewModel& model, QColor value) {
+        model.setCustomInfoColor(value);
+    };
+    const auto info = [](const SettingsViewModel& model) { return model.customInfoColor(); };
+    expect_round_trip(set_info, info, QColor(0, 0, 0, 0), QColor(0, 0, 0, 0));
+    object = read_object(reader_settings_file());
+    QVERIFY(object.has_value());
+    QCOMPARE(object->value(QStringLiteral("customInfoColor")).toString(),
+             QStringLiteral("#00000000"));
+}
+
+// C3: the three values are written under the Swift keys of the active
+// profile's reader_settings.json, the document the reader loads.
+void SettingsViewModelTest::custom_colors_keys_and_reader_read() {
+    TempDataRoot data;
+    QVERIFY(data.isValid());
+    SettingsViewModel model;
+    model.setCustomBackgroundColor(QColor(255, 0, 0));
+    model.setCustomTextColor(QColor(0, 128, 255, 102));
+    model.setCustomInfoColor(QColor(0, 0, 0, 0));
+
+    const auto object = read_object(reader_settings_file());
+    QVERIFY(object.has_value());
+    QCOMPARE(object->value(QStringLiteral("customBackgroundColor")).toString(),
+             QStringLiteral("#FF0000"));
+    QCOMPARE(object->value(QStringLiteral("customTextColor")).toString(),
+             QStringLiteral("#0080FF66"));
+    QCOMPARE(object->value(QStringLiteral("customInfoColor")).toString(),
+             QStringLiteral("#00000000"));
+
+    const auto decoded = niratan::profiles::reader_settings_from_json(QJsonDocument(*object));
+    QVERIFY(decoded.has_value());
+    QCOMPARE(QString::fromStdString(decoded->custom_background_color), QStringLiteral("#FF0000"));
+    QCOMPARE(QString::fromStdString(decoded->custom_text_color), QStringLiteral("#0080FF66"));
+    QCOMPARE(QString::fromStdString(decoded->custom_info_color), QStringLiteral("#00000000"));
+}
+
+// C4: a value ColorHexCodec cannot parse reads as that key's UserConfig.init
+// default, and the other keys keep their stored values.
+void SettingsViewModelTest::custom_colors_invalid_value_uses_default() {
+    TempDataRoot data;
+    QVERIFY(data.isValid());
+    SettingsViewModel first;
+    first.setCustomBackgroundColor(QColor(255, 0, 0));
+    first.setCustomTextColor(QColor(0, 128, 255));
+    first.setCustomInfoColor(QColor(0, 0, 0, 0));
+
+    const auto path = reader_settings_file();
+    auto object = read_object(path);
+    QVERIFY(object.has_value());
+    object->insert(QStringLiteral("customTextColor"), QStringLiteral("oops"));
+    QVERIFY(write_object(path, *object));
+
+    SettingsViewModel second;
+    QCOMPARE(second.customTextColor(), QColor(0, 0, 0));
+    QCOMPARE(second.customBackgroundColor(), QColor(255, 0, 0));
+    QCOMPARE(second.customInfoColor(), QColor(0, 0, 0, 0));
+}
+
+// C5: an edit saves the whole reader document, so a stored theme and font
+// size survive a colour edit.
+void SettingsViewModelTest::custom_colors_edit_keeps_other_reader_settings() {
+    TempDataRoot data;
+    QVERIFY(data.isValid());
+
+    SettingsViewModel first;
+    first.setTheme(QStringLiteral("Dark"));
+    first.setFontSize(30);
+    first.setCustomBackgroundColor(QColor(255, 0, 0));
+    first.setCustomTextColor(QColor(0, 128, 255, 102));
+    first.setCustomInfoColor(QColor(0, 0, 0, 0));
+
+    SettingsViewModel second;
+    QCOMPARE(second.theme(), QStringLiteral("Dark"));
+    QCOMPARE(second.fontSize(), 30);
+    QCOMPARE(second.customBackgroundColor(), QColor(255, 0, 0));
+    QCOMPARE(second.customTextColor(), QColor(0, 128, 255, 102));
+    QCOMPARE(second.customInfoColor(), QColor(0, 0, 0, 0));
 }
 
 QTEST_APPLESS_MAIN(SettingsViewModelTest)

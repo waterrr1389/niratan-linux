@@ -25,9 +25,22 @@
 // keeps its value while Swipe to Dismiss is off. All eight stay in
 // the active profile's reader_settings.json under the Swift keys. Full-width
 // reaches the reader popup only; the video popup passes false in Swift.
+//
+// The Theme card of AppearanceView.nativeAppearanceContent shows three colour
+// rows while the reader theme is Custom, after the Interface picker: Background
+// Color, Text Color and Info Color, in that order. The setters take a QColor,
+// which is what ColorDialog yields, and store the ColorHexCodec form
+// (uppercase #RRGGBB, or #RRGGBBAA when alpha is below 255) under
+// customBackgroundColor, customTextColor and customInfoColor of the active
+// profile's reader_settings.json, the keys the reader already reads. The
+// getters parse the stored string; a value that does not parse reads as that
+// key's UserConfig.init default (opaque white, opaque black, opaque #999999).
+// Loading does not normalise a hand-edited string: it stays in the file until
+// the next setter writes it.
 
 #pragma once
 
+#include <QColor>
 #include <QObject>
 #include <QString>
 #include <QtQmlIntegration/qqmlintegration.h>
@@ -73,6 +86,12 @@ class SettingsViewModel : public QObject {
     Q_PROPERTY(QString progressCount READ progressCount WRITE setProgressCount NOTIFY readerChanged)
     Q_PROPERTY(bool showPercentage READ showPercentage WRITE setShowPercentage NOTIFY readerChanged)
     Q_PROPERTY(bool showProgressTop READ showProgressTop WRITE setShowProgressTop NOTIFY readerChanged)
+    Q_PROPERTY(QColor customBackgroundColor READ customBackgroundColor WRITE
+                   setCustomBackgroundColor NOTIFY readerChanged)
+    Q_PROPERTY(
+        QColor customTextColor READ customTextColor WRITE setCustomTextColor NOTIFY readerChanged)
+    Q_PROPERTY(
+        QColor customInfoColor READ customInfoColor WRITE setCustomInfoColor NOTIFY readerChanged)
     Q_PROPERTY(int popupWidth READ popupWidth WRITE setPopupWidth NOTIFY readerChanged)
     Q_PROPERTY(int popupHeight READ popupHeight WRITE setPopupHeight NOTIFY readerChanged)
     Q_PROPERTY(double popupScale READ popupScale WRITE setPopupScale NOTIFY readerChanged)
@@ -162,6 +181,12 @@ class SettingsViewModel : public QObject {
     void setShowPercentage(bool value);
     bool showProgressTop() const;
     void setShowProgressTop(bool value);
+    QColor customBackgroundColor() const;
+    void setCustomBackgroundColor(const QColor& value);
+    QColor customTextColor() const;
+    void setCustomTextColor(const QColor& value);
+    QColor customInfoColor() const;
+    void setCustomInfoColor(const QColor& value);
 
     int popupWidth() const;
     void setPopupWidth(int value);
