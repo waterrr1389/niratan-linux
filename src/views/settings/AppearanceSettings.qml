@@ -357,4 +357,92 @@ SettingsForm {
             onEdited: value => sasayaki.showSasayakiToggle = value
         }
     }
+
+    SettingsCard {
+        objectName: "settings-popupCard"
+        title: qsTr("Popup")
+
+        SettingsSliderRow {
+            objectName: "popupWidthRow"
+            label: qsTr("Width")
+            from: 100
+            to: 1400
+            stepSize: 10
+            decimals: 0
+            value: settings.popupWidth
+            onEdited: value => settings.popupWidth = value
+        }
+
+        SettingsSeparator { objectName: "popupSeparator" }
+        SettingsSliderRow {
+            objectName: "popupHeightRow"
+            label: qsTr("Height")
+            from: 100
+            to: 800
+            stepSize: 10
+            decimals: 0
+            value: settings.popupHeight
+            onEdited: value => settings.popupHeight = value
+        }
+
+        SettingsSeparator { objectName: "popupSeparator" }
+        SettingsSliderRow {
+            objectName: "popupScaleRow"
+            label: qsTr("Scale")
+            from: 0.8
+            to: 1.5
+            stepSize: 0.05
+            decimals: 2
+            value: settings.popupScale
+            onEdited: value => settings.popupScale = value
+        }
+
+        SettingsSeparator { objectName: "popupSeparator" }
+        SettingsToggle {
+            objectName: "popupActionBarRow"
+            label: qsTr("Show Action Bar")
+            checked: settings.popupActionBar
+            onEdited: value => settings.popupActionBar = value
+        }
+
+        SettingsSeparator { objectName: "popupSeparator" }
+        SettingsToggle {
+            objectName: "popupDisableTransparencyRow"
+            label: qsTr("Disable Transparency")
+            checked: settings.popupDisableTransparency
+            onEdited: value => settings.popupDisableTransparency = value
+        }
+
+        SettingsSeparator { objectName: "popupSeparator" }
+        SettingsToggle {
+            objectName: "popupFullWidthRow"
+            label: qsTr("Full-width")
+            checked: settings.popupFullWidth
+            onEdited: value => settings.popupFullWidth = value
+        }
+
+        SettingsSeparator { objectName: "popupSeparator" }
+        SettingsToggle {
+            objectName: "popupSwipeToDismissRow"
+            label: qsTr("Swipe to Dismiss")
+            checked: settings.popupSwipeToDismiss
+            onEdited: value => settings.popupSwipeToDismiss = value
+        }
+
+        SettingsSeparator {
+            objectName: "popupSwipeThresholdSeparator"
+            visible: settings.popupSwipeToDismiss
+        }
+        SettingsSliderRow {
+            objectName: "popupSwipeThresholdRow"
+            visible: settings.popupSwipeToDismiss
+            label: qsTr("Swipe Threshold")
+            from: 20
+            to: 80
+            stepSize: 5
+            decimals: 0
+            value: settings.popupSwipeThreshold
+            onEdited: value => settings.popupSwipeThreshold = value
+        }
+    }
 }

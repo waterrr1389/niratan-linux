@@ -777,6 +777,18 @@ add_test(NAME qml_load COMMAND tst_qml_load)
 set_tests_properties(qml_load PROPERTIES
     ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QTWEBENGINE_CHROMIUM_FLAGS=--disable-gpu")
 
+qt_add_executable(tst_settings_appearance
+    qml/tst_settings_appearance.cpp
+)
+target_include_directories(tst_settings_appearance PRIVATE ${CMAKE_SOURCE_DIR}/src)
+target_link_libraries(tst_settings_appearance PRIVATE niratan_app niratan_appplugin niratan_style
+    niratan_styleplugin Qt6::Test
+    Qt6::Quick Qt6::QuickControls2 Qt6::WebEngineQuick)
+target_compile_options(tst_settings_appearance PRIVATE -Wall -Wextra -Wpedantic -Werror)
+add_test(NAME settings_appearance COMMAND tst_settings_appearance)
+set_tests_properties(settings_appearance PROPERTIES
+    ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QTWEBENGINE_CHROMIUM_FLAGS=--disable-gpu")
+
 qt_add_executable(tst_control_style
     qml/tst_control_style.cpp
 )

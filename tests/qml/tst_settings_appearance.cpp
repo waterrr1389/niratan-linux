@@ -1,0 +1,393 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+//
+// The Popup card of Features/Settings/AppearanceView.swift
+// (nativeAppearanceContent): it is the last card, after Display, with Width,
+// Height, Scale, the four toggles and the conditional Swipe Threshold row
+// with its separator. Rows follow NativeSettingsSliderRow and
+// NativeSettingsToggle, and the values are the popup fields of
+// Core/UserConfig.swift.
+//
+// Runs offscreen like tests/qml/tst_qml_load.cpp: URL schemes are registered
+// and QtWebEngineQuick initialized before the application object, and the
+// Niratan style is selected before any component is created. The popup tests
+// write settings, so each of those builds a fresh data root through
+// TempDataRoot.
+
+#include "../viewmodels/data_root.h"
+#include "viewmodels/settings/settings_view_model.h"
+#include "views/dictionary/audio_scheme_handler.h"
+#include "views/reader/reader_scheme_handler.h"
+
+#include <QGuiApplication>
+#include <QQmlApplicationEngine>
+#include <QQmlComponent>
+#include <QQuickItem>
+#include <QQuickStyle>
+#include <QQuickWindow>
+#include <QTemporaryDir>
+#include <QtQml/qqmlextensionplugin.h>
+#include <QtTest>
+#include <QtWebEngineQuick/QtWebEngineQuick>
+
+#include <clocale>
+#include <memory>
+
+Q_IMPORT_QML_PLUGIN(NiratanPlugin)
+Q_IMPORT_QML_PLUGIN(NiratanStylePlugin)
+
+namespace {
+
+QStringList g_warnings;
+QtMessageHandler g_previous_handler = nullptr;
+
+void collect_qml_messages(QtMsgType type, const QMessageLogContext& context,
+                          const QString& message) {
+    if (type == QtWarningMsg || type == QtCriticalMsg) {
+        const QString category = QString::fromUtf8(context.category ? context.category : "");
+        if (category.startsWith(QStringLiteral("qml")) ||
+            message.startsWith(QStringLiteral("QML")) || message.contains(QStringLiteral(".qml"))) {
+            g_warnings.append(message);
+        }
+    }
+    if (g_previous_handler != nullptr) {
+        g_previous_handler(type, context, message);
+    }
+}
+
+QString take_warnings() {
+    QTest::qWait(50);
+    const QString report = g_warnings.join('\n');
+    g_warnings.clear();
+    return report;
+}
+
+QList<QQuickItem*> visual_items(QQuickItem* item) {
+    QList<QQuickItem*> items{item};
+    for (QQuickItem* child : item->childItems()) {
+        items.append(visual_items(child));
+    }
+    return items;
+}
+
+QQuickItem* find_item(QQuickItem* root, const QString& name) {
+    for (QQuickItem* item : visual_items(root)) {
+        if (item->objectName() == name) {
+            return item;
+        }
+    }
+    return nullptr;
+}
+
+QQuickItem* visible_item(QQuickItem* root, const QString& name) {
+    QQuickItem* item = find_item(root, name);
+    return item != nullptr && item->isVisible() ? item : nullptr;
+}
+
+// Scene top of the first visible item carrying text, or -1 when absent.
+double text_top(QQuickItem* root, const QString& text) {
+    for (QQuickItem* item : visual_items(root)) {
+        if (item->isVisible() && item->property("text").toString() == text) {
+            return item->mapRectToScene(item->boundingRect()).top();
+        }
+    }
+    return -1;
+}
+
+std::unique_ptr<QObject> create_settings_window(QQmlApplicationEngine& engine, int height,
+                                                QQuickWindow*& window) {
+    QQmlComponent component(&engine);
+    component.loadFromModule(QStringLiteral("Niratan"), QStringLiteral("MainWindow"));
+    if (component.isError()) {
+        return {};
+    }
+    std::unique_ptr<QObject> object(
+        component.createWithInitialProperties({{QStringLiteral("sectionIndex"), 3}}));
+    window = qobject_cast<QQuickWindow*>(object.get());
+    if (window == nullptr) {
+        return {};
+    }
+    window->resize(960, height);
+    if (!QTest::qWaitForWindowExposed(window)) {
+        return {};
+    }
+    return object;
+}
+
+QQuickItem* appearance_detail(QQuickWindow* window) {
+    return window->findChild<QQuickItem*>(QStringLiteral("settings-appearance"));
+}
+
+}  // namespace
+
+class SettingsAppearanceTest : public QObject {
+    Q_OBJECT
+
+   private slots:
+    void initTestCase();
+    void popup_card_follows_swift_order();
+    void popup_rows_write_their_setting();
+    void popup_threshold_row_follows_swipe_toggle();
+    void popup_card_fits_the_default_window();
+
+   private:
+    QQmlApplicationEngine engine_;
+};
+
+void SettingsAppearanceTest::initTestCase() {
+    g_previous_handler = qInstallMessageHandler(collect_qml_messages);
+}
+
+// V1, V2, V11: the card is last, its rows follow the Swift order, and a fresh
+// data root shows the UserConfig.init defaults.
+void SettingsAppearanceTest::popup_card_follows_swift_order() {
+    niratan::test::TempDataRoot data;
+    QVERIFY(data.isValid());
+    QQuickWindow* window = nullptr;
+    std::unique_ptr<QObject> object = create_settings_window(engine_, 1400, window);
+    QVERIFY2(object != nullptr, "MainWindow was not created");
+    QQuickItem* appearance = appearance_detail(window);
+    QVERIFY(appearance);
+    QTest::qWait(50);
+
+    const QStringList cards{QStringLiteral("Theme"), QStringLiteral("Text"),
+                            QStringLiteral("Layout"), QStringLiteral("Display"),
+                            QStringLiteral("Popup")};
+    double previous = -1;
+    for (const QString& card : cards) {
+        const double top = text_top(appearance, card);
+        QVERIFY2(top >= 0, qPrintable(card + QStringLiteral(" card title missing")));
+        QVERIFY2(top > previous, qPrintable(card + QStringLiteral(" card is out of order")));
+        previous = top;
+    }
+
+    const QStringList rows{QStringLiteral("Width"),
+                           QStringLiteral("Height"),
+                           QStringLiteral("Scale"),
+                           QStringLiteral("Show Action Bar"),
+                           QStringLiteral("Disable Transparency"),
+                           QStringLiteral("Full-width"),
+                           QStringLiteral("Swipe to Dismiss")};
+    previous = -1;
+    for (const QString& row : rows) {
+        const double top = text_top(appearance, row);
+        QVERIFY2(top >= 0, qPrintable(row + QStringLiteral(" row missing")));
+        QVERIFY2(top > previous, qPrintable(row + QStringLiteral(" row is out of order")));
+        previous = top;
+    }
+    QVERIFY2(text_top(appearance, QStringLiteral("Popup")) <
+                 text_top(appearance, QStringLiteral("Width")),
+             "Popup is not above its first row");
+    QVERIFY2(text_top(appearance, QStringLiteral("Swipe Threshold")) < 0,
+             "Swipe Threshold is shown while Swipe to Dismiss is off");
+
+    auto* width = find_item(appearance, QStringLiteral("popupWidthRow"));
+    auto* height = find_item(appearance, QStringLiteral("popupHeightRow"));
+    auto* scale = find_item(appearance, QStringLiteral("popupScaleRow"));
+    auto* actionBar = find_item(appearance, QStringLiteral("popupActionBarRow"));
+    auto* transparency = find_item(appearance, QStringLiteral("popupDisableTransparencyRow"));
+    auto* fullWidth = find_item(appearance, QStringLiteral("popupFullWidthRow"));
+    auto* swipe = find_item(appearance, QStringLiteral("popupSwipeToDismissRow"));
+    QVERIFY(width);
+    QVERIFY(height);
+    QVERIFY(scale);
+    QVERIFY(actionBar);
+    QVERIFY(transparency);
+    QVERIFY(fullWidth);
+    QVERIFY(swipe);
+    auto* card = find_item(appearance, QStringLiteral("settings-popupCard"));
+    QVERIFY(card);
+    QVERIFY2(card->property("footer").toString().isEmpty(),
+             "The Popup card shows a footer Swift does not");
+    QCOMPARE(width->property("value").toReal(), 320.0);
+    QCOMPARE(height->property("value").toReal(), 250.0);
+    QCOMPARE(scale->property("value").toReal(), 1.0);
+    QCOMPARE(actionBar->property("checked").toBool(), false);
+    QCOMPARE(transparency->property("checked").toBool(), false);
+    QCOMPARE(fullWidth->property("checked").toBool(), false);
+    QCOMPARE(swipe->property("checked").toBool(), false);
+
+    int separators = 0;
+    for (QQuickItem* item : visual_items(appearance)) {
+        if (item->objectName() == QStringLiteral("popupSeparator") && item->isVisible()) {
+            ++separators;
+        }
+    }
+    QCOMPARE(separators, 6);
+
+    const QString warnings = take_warnings();
+    QVERIFY2(warnings.isEmpty(), qPrintable(warnings));
+}
+
+// V3-V9: each row edits the setting it names and the value reaches a fresh
+// model; the slider ranges, steps and decimals are Swift's.
+void SettingsAppearanceTest::popup_rows_write_their_setting() {
+    niratan::test::TempDataRoot data;
+    QVERIFY(data.isValid());
+    QQuickWindow* window = nullptr;
+    std::unique_ptr<QObject> object = create_settings_window(engine_, 1400, window);
+    QVERIFY2(object != nullptr, "MainWindow was not created");
+    QQuickItem* appearance = appearance_detail(window);
+    QVERIFY(appearance);
+    QTest::qWait(50);
+
+    auto* width = find_item(appearance, QStringLiteral("popupWidthRow"));
+    auto* height = find_item(appearance, QStringLiteral("popupHeightRow"));
+    auto* scale = find_item(appearance, QStringLiteral("popupScaleRow"));
+    auto* actionBar = find_item(appearance, QStringLiteral("popupActionBarRow"));
+    auto* transparency = find_item(appearance, QStringLiteral("popupDisableTransparencyRow"));
+    auto* fullWidth = find_item(appearance, QStringLiteral("popupFullWidthRow"));
+    auto* swipe = find_item(appearance, QStringLiteral("popupSwipeToDismissRow"));
+    QVERIFY(width);
+    QVERIFY(height);
+    QVERIFY(scale);
+    QVERIFY(actionBar);
+    QVERIFY(transparency);
+    QVERIFY(fullWidth);
+    QVERIFY(swipe);
+
+    QCOMPARE(width->property("from").toReal(), 100.0);
+    QCOMPARE(width->property("to").toReal(), 1400.0);
+    QCOMPARE(width->property("stepSize").toReal(), 10.0);
+    QCOMPARE(width->property("decimals").toInt(), 0);
+    QCOMPARE(height->property("from").toReal(), 100.0);
+    QCOMPARE(height->property("to").toReal(), 800.0);
+    QCOMPARE(height->property("stepSize").toReal(), 10.0);
+    QCOMPARE(height->property("decimals").toInt(), 0);
+    QCOMPARE(scale->property("from").toReal(), 0.8);
+    QCOMPARE(scale->property("to").toReal(), 1.5);
+    QCOMPARE(scale->property("stepSize").toReal(), 0.05);
+    QCOMPARE(scale->property("decimals").toInt(), 2);
+
+    QVERIFY(QMetaObject::invokeMethod(width, "edited", Q_ARG(double, 1390.0)));
+    QVERIFY(QMetaObject::invokeMethod(height, "edited", Q_ARG(double, 790.0)));
+    QVERIFY(QMetaObject::invokeMethod(scale, "edited", Q_ARG(double, 1.45)));
+    QVERIFY(QMetaObject::invokeMethod(actionBar, "edited", Q_ARG(bool, true)));
+    QVERIFY(QMetaObject::invokeMethod(transparency, "edited", Q_ARG(bool, true)));
+    QVERIFY(QMetaObject::invokeMethod(fullWidth, "edited", Q_ARG(bool, true)));
+    QVERIFY(QMetaObject::invokeMethod(swipe, "edited", Q_ARG(bool, true)));
+
+    QCOMPARE(width->property("value").toReal(), 1390.0);
+    QCOMPARE(height->property("value").toReal(), 790.0);
+    QCOMPARE(scale->property("value").toReal(), 1.45);
+    QCOMPARE(actionBar->property("checked").toBool(), true);
+    QCOMPARE(transparency->property("checked").toBool(), true);
+    QCOMPARE(fullWidth->property("checked").toBool(), true);
+    QCOMPARE(swipe->property("checked").toBool(), true);
+
+    niratan::viewmodels::SettingsViewModel fresh;
+    QCOMPARE(fresh.popupWidth(), 1390);
+    QCOMPARE(fresh.popupHeight(), 790);
+    QCOMPARE(fresh.popupScale(), 1.45);
+    QCOMPARE(fresh.popupActionBar(), true);
+    QCOMPARE(fresh.popupDisableTransparency(), true);
+    QCOMPARE(fresh.popupFullWidth(), true);
+    QCOMPARE(fresh.popupSwipeToDismiss(), true);
+
+    const QString warnings = take_warnings();
+    QVERIFY2(warnings.isEmpty(), qPrintable(warnings));
+}
+
+// V10, V11: the threshold row and its separator appear only while Swipe to
+// Dismiss is on, and turning it off keeps the stored threshold.
+void SettingsAppearanceTest::popup_threshold_row_follows_swipe_toggle() {
+    niratan::test::TempDataRoot data;
+    QVERIFY(data.isValid());
+    QQuickWindow* window = nullptr;
+    std::unique_ptr<QObject> object = create_settings_window(engine_, 1400, window);
+    QVERIFY2(object != nullptr, "MainWindow was not created");
+    QQuickItem* appearance = appearance_detail(window);
+    QVERIFY(appearance);
+    QTest::qWait(50);
+
+    auto* swipe = find_item(appearance, QStringLiteral("popupSwipeToDismissRow"));
+    QVERIFY(swipe);
+    QVERIFY(!visible_item(appearance, QStringLiteral("popupSwipeThresholdRow")));
+    QVERIFY(!visible_item(appearance, QStringLiteral("popupSwipeThresholdSeparator")));
+
+    QVERIFY(QMetaObject::invokeMethod(swipe, "edited", Q_ARG(bool, true)));
+    QTRY_VERIFY(visible_item(appearance, QStringLiteral("popupSwipeThresholdRow")));
+    QTRY_VERIFY(visible_item(appearance, QStringLiteral("popupSwipeThresholdSeparator")));
+    auto* threshold = visible_item(appearance, QStringLiteral("popupSwipeThresholdRow"));
+    auto* separator = visible_item(appearance, QStringLiteral("popupSwipeThresholdSeparator"));
+    QVERIFY(threshold);
+    QVERIFY(separator);
+    QCOMPARE(threshold->property("label").toString(), QStringLiteral("Swipe Threshold"));
+    QCOMPARE(threshold->property("from").toReal(), 20.0);
+    QCOMPARE(threshold->property("to").toReal(), 80.0);
+    QCOMPARE(threshold->property("stepSize").toReal(), 5.0);
+    QCOMPARE(threshold->property("decimals").toInt(), 0);
+    QCOMPARE(threshold->property("value").toReal(), 40.0);
+
+    QVERIFY(QMetaObject::invokeMethod(threshold, "edited", Q_ARG(double, 75.0)));
+    QTRY_COMPARE(threshold->property("value").toReal(), 75.0);
+
+    QVERIFY(QMetaObject::invokeMethod(swipe, "edited", Q_ARG(bool, false)));
+    QTRY_VERIFY(!visible_item(appearance, QStringLiteral("popupSwipeThresholdRow")));
+    QTRY_VERIFY(!visible_item(appearance, QStringLiteral("popupSwipeThresholdSeparator")));
+    niratan::viewmodels::SettingsViewModel fresh;
+    QCOMPARE(fresh.popupSwipeToDismiss(), false);
+    QCOMPARE(fresh.popupSwipeThreshold(), 75);
+
+    const QString warnings = take_warnings();
+    QVERIFY2(warnings.isEmpty(), qPrintable(warnings));
+}
+
+// V12: at 960x640 the form scrolls vertically and the card stays inside the
+// window horizontally.
+void SettingsAppearanceTest::popup_card_fits_the_default_window() {
+    QQuickWindow* window = nullptr;
+    std::unique_ptr<QObject> object = create_settings_window(engine_, 640, window);
+    QVERIFY2(object != nullptr, "MainWindow was not created");
+    QQuickItem* appearance = appearance_detail(window);
+    QVERIFY(appearance);
+    auto* card = find_item(appearance, QStringLiteral("settings-popupCard"));
+    QVERIFY(card);
+    QTest::qWait(50);
+
+    QQuickItem* flickable = nullptr;
+    for (QQuickItem* item : visual_items(appearance)) {
+        if (item->inherits("QQuickFlickable") && item->property("contentHeight").isValid()) {
+            flickable = item;
+            break;
+        }
+    }
+    QVERIFY(flickable);
+    QVERIFY2(flickable->property("contentHeight").toReal() > flickable->height(),
+             "The Appearance form does not scroll to the last card");
+
+    for (QQuickItem* item : visual_items(card)) {
+        const QRectF bounds = item->mapRectToScene(item->boundingRect());
+        QVERIFY2(bounds.left() >= 0.0,
+                 qPrintable(item->objectName() + QStringLiteral(" starts left of the window")));
+        QVERIFY2(bounds.right() <= 960.0,
+                 qPrintable(item->objectName() + QStringLiteral(" ends right of the window")));
+    }
+
+    const QString warnings = take_warnings();
+    QVERIFY2(warnings.isEmpty(), qPrintable(warnings));
+}
+
+int main(int argc, char* argv[]) {
+    niratan::ui::register_popup_url_schemes();
+    niratan::ui::register_reader_url_schemes();
+    QtWebEngineQuick::initialize();
+
+    QTemporaryDir data_root;
+    if (data_root.isValid()) {
+        const QByteArray base = data_root.path().toUtf8();
+        qputenv("HOME", base);
+        qputenv("XDG_DATA_HOME", base + "/data");
+        qputenv("XDG_CACHE_HOME", base + "/cache");
+    }
+
+    QGuiApplication app(argc, argv);
+    std::setlocale(LC_NUMERIC, "C");
+    QGuiApplication::setApplicationName(QStringLiteral("NiratanTest"));
+    QGuiApplication::setOrganizationName(QStringLiteral("niratan"));
+    QQuickStyle::setStyle(QStringLiteral("NiratanStyle"));
+
+    SettingsAppearanceTest test;
+    return QTest::qExec(&test, argc, argv);
+}
+
+#include "tst_settings_appearance.moc"
