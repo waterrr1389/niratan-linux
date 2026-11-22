@@ -397,7 +397,7 @@ void ReaderViewModel::setFontSize(int size) {
 int ReaderViewModel::horizontal_padding() const { return state_->settings.horizontal_padding; }
 
 void ReaderViewModel::setHorizontalPadding(int padding) {
-    const int clamped = std::min(std::max(padding, 0), 40);
+    const int clamped = std::clamp(padding, 0, 80);
     if (state_->settings.horizontal_padding == clamped) {
         return;
     }
@@ -409,7 +409,7 @@ void ReaderViewModel::setHorizontalPadding(int padding) {
 int ReaderViewModel::vertical_padding() const { return state_->settings.vertical_padding; }
 
 void ReaderViewModel::setVerticalPadding(int padding) {
-    const int clamped = std::min(std::max(padding, 0), 40);
+    const int clamped = std::clamp(padding, 0, 50);
     if (state_->settings.vertical_padding == clamped) {
         return;
     }

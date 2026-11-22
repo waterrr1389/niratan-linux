@@ -11,8 +11,11 @@
 // Features/Reader/StatisticsView.swift (ReaderStatisticsContentView.body,
 // sessionHero, bookProgress, historyTable), Features/Reader/Search/ReaderGoToView.swift
 // (body, bookSummary, ReaderGoToTab, chaptersTab, searchTab, the Jump to and
-// Invalid input alerts), Features/Reader/Gallery/GalleryView.swift and
-// Features/Sasayaki/SasayakiSheet.swift.
+// Invalid input alerts), Features/Reader/Gallery/GalleryView.swift,
+// Features/Sasayaki/SasayakiSheet.swift, and the Appearance inspector
+// (NativeReaderView.body `.appearance` branch -> NativeReaderInspectorHeader +
+// NativeSettingsDetailView(.appearance) -> Features/Settings/AppearanceView
+// nativeAppearanceContent).
 //
 // The registered ReaderPage is created inside a window around a book imported
 // into a temporary data root (two chapters of ten and eight characters, the
@@ -39,8 +42,9 @@
 //   (TextField), goToSearchRow and goToHighlightRow (signal `clicked`; a
 //   highlight row's right click opens a menu with a Delete item); the
 //   dialogs goToJumpDialog with goToJumpField, and goToInvalidDialog.
-// - Appearance: appearanceFontSize (SpinBox), appearanceVerticalWriting
-//   (Switch). Statistics: statTile (Rectangle). Sasayaki: sasayakiInspector,
+// - Appearance: the full settings form (objectName "settings-appearance")
+//   below inspectorTitle, with the Theme, Text, Layout, Display and Popup
+//   cards and their rows. Statistics: statTile (Rectangle). Sasayaki: sasayakiInspector,
 //   sasayakiPlaybackHeader, sasayakiSettingsContent.
 // - readerGallery: the gallery overlay, with galleryThumbnail items and
 //   galleryPreview holding galleryPrevious and galleryNext.
@@ -350,6 +354,18 @@ QStringList shown_texts(QQuickItem* item) {
     return texts;
 }
 
+void collect_shown_controls(QQuickItem* item, QList<QQuickItem*>& controls) {
+    if (!shown(item)) {
+        return;
+    }
+    if (item->inherits("QQuickControl") || item->inherits("QQuickTextInput")) {
+        controls.append(item);
+    }
+    for (QQuickItem* child : item->childItems()) {
+        collect_shown_controls(child, controls);
+    }
+}
+
 }  // namespace
 
 class ReaderPresentationTest : public QObject {
@@ -378,7 +394,9 @@ class ReaderPresentationTest : public QObject {
     void go_to_search_result_jumps_and_closes();
     void go_to_highlight_jumps_and_deletes();
     void go_to_jump_dialog();
-    void appearance_hosts_reader_settings();
+    void appearance_panel_hosts_the_settings_form();
+    void stored_padding_reaches_the_reader_document();
+    void padding_setters_use_swift_ranges();
     void statistics_panel_keeps_the_tracking_context();
     void gallery_covers_the_reader();
     void gallery_without_images();
@@ -1032,37 +1050,130 @@ void ReaderPresentationTest::go_to_jump_dialog() {
     QCOMPARE(reader_->character_offset(), 12);
 }
 
-// The Appearance inspector edits the active profile's reader settings, which
-// the reader applies.
-void ReaderPresentationTest::appearance_hosts_reader_settings() {
+// NativeReaderView.body `.appearance` branch: NativeReaderInspectorHeader
+// ("Appearance", Close) above NativeSettingsDetailView(.appearance), which is
+// AppearanceView.nativeAppearanceContent: the same Theme, Text, Layout,
+// Display and Popup cards as the Settings page, scrolling inside the panel.
+void ReaderPresentationTest::appearance_panel_hosts_the_settings_form() {
     QVERIFY(open_tool("readerAppearanceButton", "appearance"));
     QQuickItem* panel = open_panel("readerTrailingPanel");
     QVERIFY(panel != nullptr);
     QQuickItem* title = item_named(panel, QStringLiteral("inspectorTitle"));
     QVERIFY(shown(title));
     QCOMPARE(title->property("text").toString(), QStringLiteral("Appearance"));
+    QVERIFY(shown(item_named(panel, QStringLiteral("inspectorCloseButton"))));
 
-    QQuickItem* size = item_named(panel, QStringLiteral("appearanceFontSize"));
-    QVERIFY(shown(size));
-    QVERIFY(size->inherits("QQuickSpinBox"));
-    const int before = reader_->font_size();
-    size->forceActiveFocus();
-    QTest::keyClick(window_.get(), Qt::Key_Up);
-    QTRY_COMPARE(niratan::settings::SettingsStore::create()->active_reader().settings.font_size,
-                 before + 1);
-    QTRY_COMPARE(reader_->font_size(), before + 1);
+    QQuickItem* form = item_named(panel, QStringLiteral("settings-appearance"));
+    QVERIFY2(shown(form), "the Appearance panel does not host the settings form");
 
-    QQuickItem* vertical = item_named(panel, QStringLiteral("appearanceVerticalWriting"));
-    QVERIFY(shown(vertical));
-    QVERIFY(vertical->inherits("QQuickSwitch"));
-    const bool was_vertical = reader_->vertical_writing();
-    vertical->forceActiveFocus();
-    QTest::keyClick(window_.get(), Qt::Key_Space);
+    const QStringList texts = shown_texts(panel);
+    const QStringList cards{QStringLiteral("Theme"), QStringLiteral("Text"),
+                            QStringLiteral("Layout"), QStringLiteral("Display"),
+                            QStringLiteral("Popup")};
+    for (const QString& card : cards) {
+        QVERIFY2(texts.contains(card), qPrintable(card + QStringLiteral(" card title missing")));
+    }
+    const QStringList rows{
+        QStringLiteral("Text Orientation"),   QStringLiteral("Font Size"),
+        QStringLiteral("Furigana"),           QStringLiteral("Mode"),
+        QStringLiteral("Horizontal Padding"), QStringLiteral("Vertical Padding")};
+    for (const QString& row : rows) {
+        QVERIFY2(texts.contains(row), qPrintable(row + QStringLiteral(" row missing")));
+    }
+
+    const QStringList themeSegments{QStringLiteral("System"), QStringLiteral("Light"),
+                                    QStringLiteral("Dark"), QStringLiteral("Sepia"),
+                                    QStringLiteral("Custom")};
+    for (const QString& segment : themeSegments) {
+        QVERIFY2(shown_control(panel, "QQuickTabButton", segment),
+                 qPrintable(segment + QStringLiteral(" theme segment missing")));
+    }
+    const QStringList furiganaSegments{QStringLiteral("Show"), QStringLiteral("Dimmed"),
+                                       QStringLiteral("Tap to Reveal"), QStringLiteral("Hidden")};
+    for (const QString& segment : furiganaSegments) {
+        QVERIFY2(shown_control(panel, "QQuickTabButton", segment),
+                 qPrintable(segment + QStringLiteral(" furigana segment missing")));
+    }
+
+    // ScrollView clips vertically, so only horizontal clipping fails.
+    QList<QQuickItem*> controls;
+    collect_shown_controls(form, controls);
+    QVERIFY(!controls.isEmpty());
+    for (QQuickItem* control : controls) {
+        const QRectF rect =
+            control->mapRectToItem(panel, QRectF(0, 0, control->width(), control->height()));
+        QVERIFY2(rect.left() >= -0.5 && rect.right() <= panel->width() + 0.5,
+                 qPrintable(QString::fromLatin1(control->metaObject()->className())));
+    }
+
+    QQuickItem* horizontal = shown_control(panel, "QQuickTabButton", "Horizontal");
+    QVERIFY(horizontal != nullptr);
+    click(horizontal);
+    QTRY_COMPARE(reader_->vertical_writing(), false);
     QTRY_COMPARE(
         niratan::settings::SettingsStore::create()->active_reader().settings.vertical_writing,
-        !was_vertical);
-    QTRY_COMPARE(reader_->vertical_writing(), !was_vertical);
+        false);
+
     saved_.reset();
+    QVERIFY(apply_settings(base_settings()));
+}
+
+// AppearanceView's Horizontal/Vertical Padding Steppers reach
+// NativeReaderView.injectReader unchanged: PagePaddingCss, columnGap and
+// bottomPaddingCss follow the saved values.
+void ReaderPresentationTest::stored_padding_reaches_the_reader_document() {
+    auto settings = base_settings();
+    settings.horizontal_padding = 80;
+    settings.vertical_padding = 50;
+    settings.vertical_writing = true;
+    settings.font_size = 22;
+    QVERIFY(apply_settings(settings));
+    complete_restore(*reader_);
+
+    const std::string document = reader_->document_for("first.xhtml");
+    QVERIFY2(document.find("padding: 25vh 40vw !important;") != std::string::npos,
+             document.c_str());
+    QVERIFY2(document.find("column-gap: calc(50vh + 22px) !important;") != std::string::npos,
+             document.c_str());
+    QVERIFY2(document.find("padding-bottom: calc(25vh + 22px) !important;") != std::string::npos,
+             document.c_str());
+    QVERIFY2(document.find("max-width: 20vw !important;") != std::string::npos, document.c_str());
+    QVERIFY2(document.find("max-height: calc(50vh - 11px) !important;") != std::string::npos,
+             document.c_str());
+
+    reader_->closeBook();
+    QVERIFY(reader_->openBook(folder_));
+    complete_restore(*reader_);
+    const std::string reopened = reader_->document_for("first.xhtml");
+    QVERIFY2(reopened.find("padding: 25vh 40vw !important;") != std::string::npos,
+             reopened.c_str());
+    QVERIFY2(reopened.find("column-gap: calc(50vh + 22px) !important;") != std::string::npos,
+             reopened.c_str());
+}
+
+// AppearanceView's Stepper ranges: Horizontal Padding 0...80 and Vertical
+// Padding 0...50, clamped at both ends.
+void ReaderPresentationTest::padding_setters_use_swift_ranges() {
+    const int originalHorizontal = reader_->horizontal_padding();
+    const int originalVertical = reader_->vertical_padding();
+
+    reader_->setHorizontalPadding(80);
+    QCOMPARE(reader_->horizontal_padding(), 80);
+    reader_->setHorizontalPadding(81);
+    QCOMPARE(reader_->horizontal_padding(), 80);
+    reader_->setHorizontalPadding(-1);
+    QCOMPARE(reader_->horizontal_padding(), 0);
+
+    reader_->setVerticalPadding(50);
+    QCOMPARE(reader_->vertical_padding(), 50);
+    reader_->setVerticalPadding(51);
+    QCOMPARE(reader_->vertical_padding(), 50);
+    reader_->setVerticalPadding(-1);
+    QCOMPARE(reader_->vertical_padding(), 0);
+
+    // Direct edits are transient and do not invalidate the watched file.
+    reader_->setHorizontalPadding(originalHorizontal);
+    reader_->setVerticalPadding(originalVertical);
 }
 
 // updateReaderContentCoverage: the statistics inspector keeps the reader a
