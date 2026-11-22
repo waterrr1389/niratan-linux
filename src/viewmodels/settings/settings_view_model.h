@@ -37,6 +37,17 @@
 // key's UserConfig.init default (opaque white, opaque black, opaque #999999).
 // Loading does not normalise a hand-edited string: it stays in the file until
 // the next setter writes it.
+//
+// The Layout card shows Mouse Wheel Page Turn between the Two-Column
+// Horizontal Pages row and Horizontal Padding, in paginated and continuous
+// modes, and writes wheelPageTurnEnabled. The Display card shows Show
+// Statistics Toggle, Show Reading Speed and Show Reading Time after Progress
+// Position while the global statistics switch is on, each writing
+// showStatisticsToggle, showReadingSpeed and showReadingTime. All four live in
+// the active profile's reader_settings.json, and the running reader watches
+// that file: an edit reaches an open book without reopening it, and the
+// document's wheel script flag follows the wheel setting (false in continuous
+// mode).
 
 #pragma once
 
@@ -86,6 +97,14 @@ class SettingsViewModel : public QObject {
     Q_PROPERTY(QString progressCount READ progressCount WRITE setProgressCount NOTIFY readerChanged)
     Q_PROPERTY(bool showPercentage READ showPercentage WRITE setShowPercentage NOTIFY readerChanged)
     Q_PROPERTY(bool showProgressTop READ showProgressTop WRITE setShowProgressTop NOTIFY readerChanged)
+    Q_PROPERTY(bool wheelPageTurnEnabled READ wheelPageTurnEnabled WRITE setWheelPageTurnEnabled
+                   NOTIFY readerChanged)
+    Q_PROPERTY(bool showStatisticsToggle READ showStatisticsToggle WRITE setShowStatisticsToggle
+                   NOTIFY readerChanged)
+    Q_PROPERTY(
+        bool showReadingSpeed READ showReadingSpeed WRITE setShowReadingSpeed NOTIFY readerChanged)
+    Q_PROPERTY(
+        bool showReadingTime READ showReadingTime WRITE setShowReadingTime NOTIFY readerChanged)
     Q_PROPERTY(QColor customBackgroundColor READ customBackgroundColor WRITE
                    setCustomBackgroundColor NOTIFY readerChanged)
     Q_PROPERTY(
@@ -181,6 +200,14 @@ class SettingsViewModel : public QObject {
     void setShowPercentage(bool value);
     bool showProgressTop() const;
     void setShowProgressTop(bool value);
+    bool wheelPageTurnEnabled() const;
+    void setWheelPageTurnEnabled(bool value);
+    bool showStatisticsToggle() const;
+    void setShowStatisticsToggle(bool value);
+    bool showReadingSpeed() const;
+    void setShowReadingSpeed(bool value);
+    bool showReadingTime() const;
+    void setShowReadingTime(bool value);
     QColor customBackgroundColor() const;
     void setCustomBackgroundColor(const QColor& value);
     QColor customTextColor() const;

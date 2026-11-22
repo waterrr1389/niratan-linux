@@ -25,6 +25,14 @@
 // Core/UserConfig.swift with the UserConfig.init defaults (opaque white,
 // opaque black, opaque #999999), and Core/ColorHexCodec.swift as the stored
 // form: uppercase #RRGGBB, or #RRGGBBAA when alpha is not 255.
+//
+// The display cases follow the Layout card's Mouse Wheel Page Turn toggle
+// (AppearanceView 247, UserConfig.readerWheelPageTurnEnabled default true) and
+// the Display card's Show Statistics Toggle, Show Reading Speed and Show
+// Reading Time toggles (AppearanceView 355-362, defaults false in
+// UserConfig.init and ReaderProfileSettings.defaults), stored under
+// wheelPageTurnEnabled, showStatisticsToggle, showReadingSpeed and
+// showReadingTime in the active profile's reader_settings.json.
 
 #include "viewmodels/settings/settings_view_model.h"
 
@@ -111,6 +119,9 @@ class SettingsViewModelTest : public QObject {
     void custom_colors_keys_and_reader_read();
     void custom_colors_invalid_value_uses_default();
     void custom_colors_edit_keeps_other_reader_settings();
+    void reader_display_defaults();
+    void reader_display_round_trip();
+    void reader_display_edits_keep_the_other_reader_settings();
 };
 
 // B1: the Font Size Stepper is 16...40 with no off-step values.
@@ -474,6 +485,67 @@ void SettingsViewModelTest::custom_colors_edit_keeps_other_reader_settings() {
     QCOMPARE(second.customBackgroundColor(), QColor(255, 0, 0));
     QCOMPARE(second.customTextColor(), QColor(0, 128, 255, 102));
     QCOMPARE(second.customInfoColor(), QColor(0, 0, 0, 0));
+}
+
+// R1: UserConfig.init and ReaderProfileSettings.defaults: the wheel flag is on,
+// the three statistics rows are off.
+void SettingsViewModelTest::reader_display_defaults() {
+    TempDataRoot data;
+    QVERIFY(data.isValid());
+    SettingsViewModel model;
+
+    QCOMPARE(model.wheelPageTurnEnabled(), true);
+    QCOMPARE(model.showStatisticsToggle(), false);
+    QCOMPARE(model.showReadingSpeed(), false);
+    QCOMPARE(model.showReadingTime(), false);
+}
+
+// R2: each value round-trips through a fresh model and is stored under its
+// Swift key.
+void SettingsViewModelTest::reader_display_round_trip() {
+    TempDataRoot data;
+    QVERIFY(data.isValid());
+
+    SettingsViewModel first;
+    first.setWheelPageTurnEnabled(false);
+    first.setShowStatisticsToggle(true);
+    first.setShowReadingSpeed(true);
+    first.setShowReadingTime(true);
+
+    SettingsViewModel second;
+    QCOMPARE(second.wheelPageTurnEnabled(), false);
+    QCOMPARE(second.showStatisticsToggle(), true);
+    QCOMPARE(second.showReadingSpeed(), true);
+    QCOMPARE(second.showReadingTime(), true);
+
+    const auto object = read_object(reader_settings_file());
+    QVERIFY(object.has_value());
+    QCOMPARE(object->value(QStringLiteral("wheelPageTurnEnabled")).toBool(), false);
+    QCOMPARE(object->value(QStringLiteral("showStatisticsToggle")).toBool(), true);
+    QCOMPARE(object->value(QStringLiteral("showReadingSpeed")).toBool(), true);
+    QCOMPARE(object->value(QStringLiteral("showReadingTime")).toBool(), true);
+}
+
+// R2: an edit saves the whole reader document, so other reader fields survive.
+void SettingsViewModelTest::reader_display_edits_keep_the_other_reader_settings() {
+    TempDataRoot data;
+    QVERIFY(data.isValid());
+
+    SettingsViewModel first;
+    first.setTheme(QStringLiteral("Dark"));
+    first.setFontSize(30);
+    first.setWheelPageTurnEnabled(false);
+    first.setShowStatisticsToggle(true);
+    first.setShowReadingSpeed(true);
+    first.setShowReadingTime(true);
+
+    SettingsViewModel second;
+    QCOMPARE(second.theme(), QStringLiteral("Dark"));
+    QCOMPARE(second.fontSize(), 30);
+    QCOMPARE(second.wheelPageTurnEnabled(), false);
+    QCOMPARE(second.showStatisticsToggle(), true);
+    QCOMPARE(second.showReadingSpeed(), true);
+    QCOMPARE(second.showReadingTime(), true);
 }
 
 QTEST_APPLESS_MAIN(SettingsViewModelTest)

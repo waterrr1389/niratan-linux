@@ -17,24 +17,22 @@ SettingsForm {
     readonly property list<string> themes: ["System", "Light", "Dark", "Sepia", "Custom"]
     readonly property list<string> themeLabels: [qsTr("System"), qsTr("Light"), qsTr("Dark"), qsTr("Sepia"), qsTr("Custom")]
     readonly property list<string> furiganaModes: ["Off", "Dimmed", "Toggle", "Hidden"]
-    readonly property list<string> counts: ["Off", "Characters", "Pages"]
     readonly property list<string> fonts: Qt.fontFamilies()
-    readonly property bool paginated: !settings.continuousMode
-    readonly property bool paragraph: paginated && settings.paragraphMode
-    readonly property bool spreadsAvailable: paginated && !settings.verticalWriting && !settings.paragraphMode
-    readonly property bool showsProgress: settings.showProgress || settings.showChapterProgress
+    readonly property bool paginated: !settingsModel.continuousMode
+    readonly property bool paragraph: paginated && settingsModel.paragraphMode
+    readonly property bool spreadsAvailable: paginated && !settingsModel.verticalWriting && !settingsModel.paragraphMode
 
     SettingsViewModel {
-        id: settings
+        id: settingsModel
     }
 
     SasayakiSettingsViewModel {
-        id: sasayaki
+        id: sasayakiModel
     }
 
     SettingsNote {
-        visible: settings.error.length > 0
-        text: settings.error
+        visible: settingsModel.error.length > 0
+        text: settingsModel.error
         color: Theme.popupDanger
     }
 
@@ -47,77 +45,77 @@ SettingsForm {
             Accessible.name: qsTr("Reader Theme")
             labels: form.themeLabels
             minimumSegmentWidth: 44
-            selectedIndex: form.themes.indexOf(settings.theme)
-            onEdited: index => settings.theme = form.themes[index]
+            selectedIndex: form.themes.indexOf(settingsModel.theme)
+            onEdited: index => settingsModel.theme = form.themes[index]
         }
 
         SettingsSeparator { visible: lightSepia.visible }
         SettingsToggle {
             id: lightSepia
-            visible: settings.theme === "System"
+            visible: settingsModel.theme === "System"
             label: qsTr("Use Sepia as Light Theme")
-            checked: settings.systemLightSepia
-            onEdited: value => settings.systemLightSepia = value
+            checked: settingsModel.systemLightSepia
+            onEdited: value => settingsModel.systemLightSepia = value
         }
 
         SettingsSeparator { visible: sepiaInvert.visible }
         SettingsToggle {
             id: sepiaInvert
-            visible: settings.theme === "Sepia"
+            visible: settingsModel.theme === "Sepia"
             label: qsTr("Invert Sepia in Dark Mode")
-            checked: settings.sepiaInvertInDark
-            onEdited: value => settings.sepiaInvertInDark = value
+            checked: settingsModel.sepiaInvertInDark
+            onEdited: value => settingsModel.sepiaInvertInDark = value
         }
 
         SettingsSeparator { visible: interfaceRow.visible }
         SettingRow {
             id: interfaceRow
-            visible: settings.theme === "Custom"
+            visible: settingsModel.theme === "Custom"
             label: qsTr("Interface")
 
             SettingsSegments {
                 Accessible.name: interfaceRow.label
                 labels: form.themeLabels.slice(0, 3)
                 minimumSegmentWidth: 58
-                selectedIndex: form.themes.indexOf(settings.uiTheme)
-                onEdited: index => settings.uiTheme = form.themes[index]
+                selectedIndex: form.themes.indexOf(settingsModel.uiTheme)
+                onEdited: index => settingsModel.uiTheme = form.themes[index]
             }
         }
 
         SettingsSeparator {
             objectName: "customBackgroundColorSeparator"
-            visible: settings.theme === "Custom"
+            visible: settingsModel.theme === "Custom"
         }
         SettingsColorRow {
             objectName: "customBackgroundColorRow"
-            visible: settings.theme === "Custom"
+            visible: settingsModel.theme === "Custom"
             label: qsTr("Background Color")
-            value: settings.customBackgroundColor
-            onEdited: value => settings.customBackgroundColor = value
+            value: settingsModel.customBackgroundColor
+            onEdited: value => settingsModel.customBackgroundColor = value
         }
 
         SettingsSeparator {
             objectName: "customTextColorSeparator"
-            visible: settings.theme === "Custom"
+            visible: settingsModel.theme === "Custom"
         }
         SettingsColorRow {
             objectName: "customTextColorRow"
-            visible: settings.theme === "Custom"
+            visible: settingsModel.theme === "Custom"
             label: qsTr("Text Color")
-            value: settings.customTextColor
-            onEdited: value => settings.customTextColor = value
+            value: settingsModel.customTextColor
+            onEdited: value => settingsModel.customTextColor = value
         }
 
         SettingsSeparator {
             objectName: "customInfoColorSeparator"
-            visible: settings.theme === "Custom"
+            visible: settingsModel.theme === "Custom"
         }
         SettingsColorRow {
             objectName: "customInfoColorRow"
-            visible: settings.theme === "Custom"
+            visible: settingsModel.theme === "Custom"
             label: qsTr("Info Color")
-            value: settings.customInfoColor
-            onEdited: value => settings.customInfoColor = value
+            value: settingsModel.customInfoColor
+            onEdited: value => settingsModel.customInfoColor = value
         }
     }
 
@@ -132,8 +130,8 @@ SettingsForm {
                 Accessible.name: orientationRow.label
                 labels: [qsTr("Vertical"), qsTr("Horizontal")]
                 minimumSegmentWidth: 74
-                selectedIndex: settings.verticalWriting ? 0 : 1
-                onEdited: index => settings.verticalWriting = index === 0
+                selectedIndex: settingsModel.verticalWriting ? 0 : 1
+                onEdited: index => settingsModel.verticalWriting = index === 0
             }
         }
 
@@ -145,10 +143,10 @@ SettingsForm {
             ComboBox {
                 Accessible.name: fontRow.label
                 Layout.preferredWidth: 200
-                model: form.fonts.includes(settings.selectedFont) ? form.fonts : [settings.selectedFont].concat(form.fonts)
-                displayText: settings.selectedFont
-                currentIndex: Math.max(0, form.fonts.indexOf(settings.selectedFont))
-                onActivated: index => settings.selectedFont = textAt(index)
+                model: form.fonts.includes(settingsModel.selectedFont) ? form.fonts : [settingsModel.selectedFont].concat(form.fonts)
+                displayText: settingsModel.selectedFont
+                currentIndex: Math.max(0, form.fonts.indexOf(settingsModel.selectedFont))
+                onActivated: index => settingsModel.selectedFont = textAt(index)
             }
         }
 
@@ -157,8 +155,8 @@ SettingsForm {
             label: qsTr("Font Size")
             from: 16
             to: 40
-            value: settings.fontSize
-            onEdited: value => settings.fontSize = value
+            value: settingsModel.fontSize
+            onEdited: value => settingsModel.fontSize = value
         }
 
         SettingsSeparator {}
@@ -174,8 +172,8 @@ SettingsForm {
                 Layout.fillWidth: furiganaRow.stacked
                 labels: [qsTr("Show"), qsTr("Dimmed"), qsTr("Tap to Reveal"), qsTr("Hidden")]
                 minimumSegmentWidth: 64
-                selectedIndex: form.furiganaModes.indexOf(settings.furiganaMode)
-                onEdited: index => settings.furiganaMode = form.furiganaModes[index]
+                selectedIndex: form.furiganaModes.indexOf(settingsModel.furiganaMode)
+                onEdited: index => settingsModel.furiganaMode = form.furiganaModes[index]
             }
         }
     }
@@ -191,8 +189,8 @@ SettingsForm {
                 Accessible.name: modeRow.label
                 labels: [qsTr("Paginated"), qsTr("Continuous")]
                 minimumSegmentWidth: 78
-                selectedIndex: settings.continuousMode ? 1 : 0
-                onEdited: index => settings.continuousMode = index === 1
+                selectedIndex: settingsModel.continuousMode ? 1 : 0
+                onEdited: index => settingsModel.continuousMode = index === 1
             }
         }
 
@@ -200,38 +198,46 @@ SettingsForm {
         SettingsToggle {
             visible: form.paginated
             label: qsTr("Paragraph Mode")
-            checked: settings.paragraphMode
-            onEdited: value => settings.paragraphMode = value
+            checked: settingsModel.paragraphMode
+            onEdited: value => settingsModel.paragraphMode = value
         }
 
         SettingsSeparator { visible: form.paragraph }
         SettingsToggle {
             visible: form.paragraph
             label: qsTr("Text Animation")
-            checked: settings.textAnimation
-            onEdited: value => settings.textAnimation = value
+            checked: settingsModel.textAnimation
+            onEdited: value => settingsModel.textAnimation = value
         }
 
         SettingsSeparator { visible: speed.visible }
         SettingsSliderRow {
             id: speed
-            visible: form.paragraph && settings.textAnimation
+            visible: form.paragraph && settingsModel.textAnimation
             label: qsTr("Text Speed")
             from: 25
             to: 100
             stepSize: 5
             decimals: 0
             suffix: qsTr("/s")
-            value: settings.textSpeed
-            onEdited: value => settings.textSpeed = value
+            value: settingsModel.textSpeed
+            onEdited: value => settingsModel.textSpeed = value
         }
 
         SettingsSeparator { visible: form.spreadsAvailable }
         SettingsToggle {
             visible: form.spreadsAvailable
             label: qsTr("Two-Column Horizontal Pages")
-            checked: settings.twoColumnHorizontalPages
-            onEdited: value => settings.twoColumnHorizontalPages = value
+            checked: settingsModel.twoColumnHorizontalPages
+            onEdited: value => settingsModel.twoColumnHorizontalPages = value
+        }
+
+        SettingsSeparator {}
+        SettingsToggle {
+            objectName: "wheelPageTurnRow"
+            label: qsTr("Mouse Wheel Page Turn")
+            checked: settingsModel.wheelPageTurnEnabled
+            onEdited: value => settingsModel.wheelPageTurnEnabled = value
         }
 
         SettingsSeparator {}
@@ -240,8 +246,8 @@ SettingsForm {
             from: 0
             to: 80
             suffix: "%"
-            value: settings.horizontalPadding
-            onEdited: value => settings.horizontalPadding = value
+            value: settingsModel.horizontalPadding
+            onEdited: value => settingsModel.horizontalPadding = value
         }
 
         SettingsSeparator {}
@@ -250,148 +256,80 @@ SettingsForm {
             from: 0
             to: 50
             suffix: "%"
-            value: settings.verticalPadding
-            onEdited: value => settings.verticalPadding = value
+            value: settingsModel.verticalPadding
+            onEdited: value => settingsModel.verticalPadding = value
         }
 
         SettingsSeparator {}
         SettingsToggle {
             label: qsTr("Avoid Page Break")
-            checked: settings.avoidPageBreak
-            onEdited: value => settings.avoidPageBreak = value
+            checked: settingsModel.avoidPageBreak
+            onEdited: value => settingsModel.avoidPageBreak = value
         }
 
         SettingsSeparator {}
         SettingsToggle {
             label: qsTr("Justify Text")
-            checked: settings.justifyText
-            onEdited: value => settings.justifyText = value
+            checked: settingsModel.justifyText
+            onEdited: value => settingsModel.justifyText = value
         }
 
         SettingsSeparator {}
         SettingsToggle {
             label: qsTr("Blur Images")
-            checked: settings.blurImages
-            onEdited: value => settings.blurImages = value
+            checked: settingsModel.blurImages
+            onEdited: value => settingsModel.blurImages = value
         }
 
         SettingsSeparator {}
         SettingsToggle {
             label: qsTr("Advanced")
-            checked: settings.layoutAdvanced
-            onEdited: value => settings.layoutAdvanced = value
+            checked: settingsModel.layoutAdvanced
+            onEdited: value => settingsModel.layoutAdvanced = value
         }
 
-        SettingsSeparator { visible: settings.layoutAdvanced }
+        SettingsSeparator { visible: settingsModel.layoutAdvanced }
         SettingsSliderRow {
-            visible: settings.layoutAdvanced
+            visible: settingsModel.layoutAdvanced
             label: qsTr("Line Height")
             from: 1
             to: 2.5
             stepSize: 0.05
             decimals: 2
-            value: settings.lineHeight
-            onEdited: value => settings.lineHeight = value
+            value: settingsModel.lineHeight
+            onEdited: value => settingsModel.lineHeight = value
         }
 
-        SettingsSeparator { visible: settings.layoutAdvanced }
+        SettingsSeparator { visible: settingsModel.layoutAdvanced }
         SettingsSliderRow {
-            visible: settings.layoutAdvanced
+            visible: settingsModel.layoutAdvanced
             label: qsTr("Character Spacing")
             from: -10
             to: 10
             stepSize: 1
             decimals: 0
             suffix: "%"
-            value: settings.characterSpacing
-            onEdited: value => settings.characterSpacing = value
+            value: settingsModel.characterSpacing
+            onEdited: value => settingsModel.characterSpacing = value
         }
 
-        SettingsSeparator { visible: settings.layoutAdvanced }
+        SettingsSeparator { visible: settingsModel.layoutAdvanced }
         SettingsSliderRow {
-            visible: settings.layoutAdvanced
+            visible: settingsModel.layoutAdvanced
             label: qsTr("Paragraph Spacing")
             from: 0
             to: 3
             stepSize: 0.1
             decimals: 1
             suffix: qsTr("em")
-            value: settings.paragraphSpacing
-            onEdited: value => settings.paragraphSpacing = value
+            value: settingsModel.paragraphSpacing
+            onEdited: value => settingsModel.paragraphSpacing = value
         }
     }
 
-    SettingsCard {
-        title: qsTr("Display")
-        footer: qsTr("Reader changes take effect the next time you open a book.")
-
-        SettingsToggle {
-            label: qsTr("Show Title")
-            checked: settings.showTitle
-            onEdited: value => settings.showTitle = value
-        }
-
-        SettingsSeparator {}
-        SettingsToggle {
-            label: qsTr("Show Progress")
-            checked: settings.showProgress
-            onEdited: value => settings.showProgress = value
-        }
-
-        SettingsSeparator {}
-        SettingsToggle {
-            label: qsTr("Show Chapter Progress")
-            checked: settings.showChapterProgress
-            onEdited: value => settings.showChapterProgress = value
-        }
-
-        SettingsSeparator { visible: form.showsProgress }
-        SettingRow {
-            id: countRow
-            visible: form.showsProgress
-            label: qsTr("Count")
-            subtitle: settings.progressCount === "Pages"
-                      ? qsTr("Pages are counted for the current layout and window size, and are unavailable in continuous mode.") : ""
-
-            SettingsSegments {
-                Accessible.name: countRow.label
-                labels: [qsTr("Off"), qsTr("Characters"), qsTr("Pages")]
-                minimumSegmentWidth: 64
-                selectedIndex: form.counts.indexOf(settings.progressCount)
-                onEdited: index => settings.progressCount = form.counts[index]
-            }
-        }
-
-        SettingsSeparator { visible: form.showsProgress }
-        SettingsToggle {
-            visible: form.showsProgress
-            label: qsTr("Show Percentage")
-            checked: settings.showPercentage
-            onEdited: value => settings.showPercentage = value
-        }
-
-        SettingsSeparator { visible: form.showsProgress }
-        SettingRow {
-            id: positionRow
-            visible: form.showsProgress
-            label: qsTr("Progress Position")
-
-            SettingsSegments {
-                Accessible.name: positionRow.label
-                labels: [qsTr("Top"), qsTr("Bottom")]
-                minimumSegmentWidth: 54
-                selectedIndex: settings.showProgressTop ? 0 : 1
-                onEdited: index => settings.showProgressTop = index === 0
-            }
-        }
-
-        SettingsSeparator { visible: sasayaki.enable }
-        SettingsToggle {
-            visible: sasayaki.enable
-            label: qsTr("Show Sasayaki Toggle")
-            checked: sasayaki.showSasayakiToggle
-            onEdited: value => sasayaki.showSasayakiToggle = value
-        }
+    ReaderDisplayCard {
+        settings: settingsModel
+        sasayaki: sasayakiModel
     }
 
     SettingsCard {
@@ -405,8 +343,8 @@ SettingsForm {
             to: 1400
             stepSize: 10
             decimals: 0
-            value: settings.popupWidth
-            onEdited: value => settings.popupWidth = value
+            value: settingsModel.popupWidth
+            onEdited: value => settingsModel.popupWidth = value
         }
 
         SettingsSeparator { objectName: "popupSeparator" }
@@ -417,8 +355,8 @@ SettingsForm {
             to: 800
             stepSize: 10
             decimals: 0
-            value: settings.popupHeight
-            onEdited: value => settings.popupHeight = value
+            value: settingsModel.popupHeight
+            onEdited: value => settingsModel.popupHeight = value
         }
 
         SettingsSeparator { objectName: "popupSeparator" }
@@ -429,56 +367,56 @@ SettingsForm {
             to: 1.5
             stepSize: 0.05
             decimals: 2
-            value: settings.popupScale
-            onEdited: value => settings.popupScale = value
+            value: settingsModel.popupScale
+            onEdited: value => settingsModel.popupScale = value
         }
 
         SettingsSeparator { objectName: "popupSeparator" }
         SettingsToggle {
             objectName: "popupActionBarRow"
             label: qsTr("Show Action Bar")
-            checked: settings.popupActionBar
-            onEdited: value => settings.popupActionBar = value
+            checked: settingsModel.popupActionBar
+            onEdited: value => settingsModel.popupActionBar = value
         }
 
         SettingsSeparator { objectName: "popupSeparator" }
         SettingsToggle {
             objectName: "popupDisableTransparencyRow"
             label: qsTr("Disable Transparency")
-            checked: settings.popupDisableTransparency
-            onEdited: value => settings.popupDisableTransparency = value
+            checked: settingsModel.popupDisableTransparency
+            onEdited: value => settingsModel.popupDisableTransparency = value
         }
 
         SettingsSeparator { objectName: "popupSeparator" }
         SettingsToggle {
             objectName: "popupFullWidthRow"
             label: qsTr("Full-width")
-            checked: settings.popupFullWidth
-            onEdited: value => settings.popupFullWidth = value
+            checked: settingsModel.popupFullWidth
+            onEdited: value => settingsModel.popupFullWidth = value
         }
 
         SettingsSeparator { objectName: "popupSeparator" }
         SettingsToggle {
             objectName: "popupSwipeToDismissRow"
             label: qsTr("Swipe to Dismiss")
-            checked: settings.popupSwipeToDismiss
-            onEdited: value => settings.popupSwipeToDismiss = value
+            checked: settingsModel.popupSwipeToDismiss
+            onEdited: value => settingsModel.popupSwipeToDismiss = value
         }
 
         SettingsSeparator {
             objectName: "popupSwipeThresholdSeparator"
-            visible: settings.popupSwipeToDismiss
+            visible: settingsModel.popupSwipeToDismiss
         }
         SettingsSliderRow {
             objectName: "popupSwipeThresholdRow"
-            visible: settings.popupSwipeToDismiss
+            visible: settingsModel.popupSwipeToDismiss
             label: qsTr("Swipe Threshold")
             from: 20
             to: 80
             stepSize: 5
             decimals: 0
-            value: settings.popupSwipeThreshold
-            onEdited: value => settings.popupSwipeThreshold = value
+            value: settingsModel.popupSwipeThreshold
+            onEdited: value => settingsModel.popupSwipeThreshold = value
         }
     }
 }

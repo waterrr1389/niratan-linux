@@ -19,8 +19,16 @@
 // only while the reader theme is Custom. Each row is a ColorPicker whose
 // swatch shows the UserConfig colour; the rows persist the three
 // Core/UserConfig.swift properties.
+//
+// The layout and display cases follow AppearanceView.nativeAppearanceContent:
+// Mouse Wheel Page Turn (247) sits between Two-Column Horizontal Pages and
+// Horizontal Padding in both modes, and the Display card shows Show Statistics
+// Toggle, Show Reading Speed and Show Reading Time after Progress Position
+// only while enableStatistics is on, before Show Sasayaki Toggle. All four
+// values persist in the profile's reader settings.
 
 #include "../viewmodels/data_root.h"
+#include "viewmodels/sasayaki/sasayaki_settings_view_model.h"
 #include "viewmodels/settings/settings_view_model.h"
 #include "views/dictionary/audio_scheme_handler.h"
 #include "views/reader/reader_scheme_handler.h"
@@ -142,6 +150,16 @@ QColor swatch_color(QQuickItem* root, const QString& row) {
     return swatch != nullptr ? swatch->property("color").value<QColor>() : QColor();
 }
 
+// A segmented control found by its exact Swift labels.
+QQuickItem* segments_with_labels(QQuickItem* root, const QStringList& labels) {
+    for (QQuickItem* item : visual_items(root)) {
+        if (item->property("labels").toStringList() == labels) {
+            return item;
+        }
+    }
+    return nullptr;
+}
+
 }  // namespace
 
 class SettingsAppearanceTest : public QObject {
@@ -155,6 +173,8 @@ class SettingsAppearanceTest : public QObject {
     void popup_card_fits_the_default_window();
     void theme_custom_color_rows_follow_theme();
     void theme_custom_color_rows_write_their_setting();
+    void layout_wheel_page_turn_follows_swift_order();
+    void display_statistics_rows_follow_statistics();
 
    private:
     QQmlApplicationEngine engine_;
@@ -501,6 +521,138 @@ void SettingsAppearanceTest::theme_custom_color_rows_write_their_setting() {
     QCOMPARE(fresh.customBackgroundColor(), red);
     QCOMPARE(fresh.customTextColor(), blue);
     QCOMPARE(fresh.customInfoColor(), transparent);
+
+    const QString warnings = take_warnings();
+    QVERIFY2(warnings.isEmpty(), qPrintable(warnings));
+}
+
+// R3, R7: the wheel toggle sits between the Two-Column row and Horizontal
+// Padding in both modes and writes wheelPageTurnEnabled.
+void SettingsAppearanceTest::layout_wheel_page_turn_follows_swift_order() {
+    niratan::test::TempDataRoot data;
+    QVERIFY(data.isValid());
+    {
+        // The Two-Column row needs horizontal pages; vertical writing is the
+        // default.
+        niratan::viewmodels::SettingsViewModel prep;
+        prep.setVerticalWriting(false);
+    }
+    QQuickWindow* window = nullptr;
+    std::unique_ptr<QObject> object = create_settings_window(engine_, 640, window);
+    QVERIFY2(object != nullptr, "MainWindow was not created");
+    QQuickItem* appearance = appearance_detail(window);
+    QVERIFY(appearance);
+    QTest::qWait(50);
+
+    QQuickItem* wheel = find_item(appearance, QStringLiteral("wheelPageTurnRow"));
+    QVERIFY(wheel);
+    QCOMPARE(wheel->property("label").toString(), QStringLiteral("Mouse Wheel Page Turn"));
+    QCOMPARE(wheel->property("checked").toBool(), true);
+
+    const QString wheelLabel = QStringLiteral("Mouse Wheel Page Turn");
+    const QString spreadsLabel = QStringLiteral("Two-Column Horizontal Pages");
+    const QString paddingLabel = QStringLiteral("Horizontal Padding");
+    QTRY_VERIFY2(text_top(appearance, spreadsLabel) >= 0 &&
+                     text_top(appearance, wheelLabel) > text_top(appearance, spreadsLabel) &&
+                     text_top(appearance, paddingLabel) > text_top(appearance, wheelLabel),
+                 "Mouse Wheel Page Turn is not between Two-Column and Horizontal Padding");
+
+    QVERIFY(QMetaObject::invokeMethod(wheel, "edited", Q_ARG(bool, false)));
+    QTRY_COMPARE(wheel->property("checked").toBool(), false);
+    {
+        niratan::viewmodels::SettingsViewModel fresh;
+        QCOMPARE(fresh.wheelPageTurnEnabled(), false);
+    }
+
+    QQuickItem* mode = segments_with_labels(
+        appearance, {QStringLiteral("Paginated"), QStringLiteral("Continuous")});
+    QVERIFY(mode);
+    QVERIFY(QMetaObject::invokeMethod(mode, "edited", Q_ARG(int, 1)));
+    QTRY_VERIFY(visible_item(appearance, QStringLiteral("wheelPageTurnRow")));
+    QCOMPARE(wheel->property("checked").toBool(), false);
+
+    const QString warnings = take_warnings();
+    QVERIFY2(warnings.isEmpty(), qPrintable(warnings));
+}
+
+// R5, R7: the three statistics rows follow Progress Position while statistics
+// is on, before Show Sasayaki Toggle, and each writes its property.
+void SettingsAppearanceTest::display_statistics_rows_follow_statistics() {
+    niratan::test::TempDataRoot data;
+    QVERIFY(data.isValid());
+    {
+        niratan::viewmodels::SettingsViewModel prep;
+        prep.setEnableStatistics(true);
+        niratan::viewmodels::SasayakiSettingsViewModel sasayaki;
+        sasayaki.setEnable(true);
+    }
+    QQuickWindow* window = nullptr;
+    std::unique_ptr<QObject> object = create_settings_window(engine_, 640, window);
+    QVERIFY2(object != nullptr, "MainWindow was not created");
+    QQuickItem* appearance = appearance_detail(window);
+    QVERIFY(appearance);
+    QTest::qWait(50);
+
+    const QStringList rows{QStringLiteral("showStatisticsToggleRow"),
+                           QStringLiteral("showReadingSpeedRow"),
+                           QStringLiteral("showReadingTimeRow")};
+    const QStringList labels{QStringLiteral("Show Statistics Toggle"),
+                             QStringLiteral("Show Reading Speed"),
+                             QStringLiteral("Show Reading Time")};
+    const QStringList separators{
+        QStringLiteral("showStatisticsToggleSeparator"),
+        QStringLiteral("showReadingSpeedSeparator"),
+        QStringLiteral("showReadingTimeSeparator"),
+    };
+    for (qsizetype index = 0; index < rows.size(); ++index) {
+        QVERIFY2(visible_item(appearance, rows.at(index)),
+                 qPrintable(rows.at(index) + QStringLiteral(" is not visible")));
+        QVERIFY2(visible_item(appearance, separators.at(index)),
+                 qPrintable(separators.at(index) + QStringLiteral(" is not visible")));
+    }
+
+    const QString positionLabel = QStringLiteral("Progress Position");
+    const QString sasayakiLabel = QStringLiteral("Show Sasayaki Toggle");
+    QTRY_VERIFY2(text_top(appearance, positionLabel) >= 0 &&
+                     text_top(appearance, labels.at(0)) > text_top(appearance, positionLabel) &&
+                     text_top(appearance, labels.at(1)) > text_top(appearance, labels.at(0)) &&
+                     text_top(appearance, labels.at(2)) > text_top(appearance, labels.at(1)) &&
+                     text_top(appearance, sasayakiLabel) > text_top(appearance, labels.at(2)),
+                 "The statistics rows are not between Progress Position and Sasayaki");
+
+    for (qsizetype index = 0; index < rows.size(); ++index) {
+        QQuickItem* row = find_item(appearance, rows.at(index));
+        QVERIFY(row);
+        QCOMPARE(row->property("label").toString(), labels.at(index));
+        QVERIFY(QMetaObject::invokeMethod(row, "edited", Q_ARG(bool, true)));
+        QTRY_COMPARE(row->property("checked").toBool(), true);
+    }
+    {
+        niratan::viewmodels::SettingsViewModel fresh;
+        QCOMPARE(fresh.showStatisticsToggle(), true);
+        QCOMPARE(fresh.showReadingSpeed(), true);
+        QCOMPARE(fresh.showReadingTime(), true);
+    }
+
+    object.reset();
+    window = nullptr;
+    {
+        niratan::viewmodels::SettingsViewModel off;
+        off.setEnableStatistics(false);
+    }
+    std::unique_ptr<QObject> second = create_settings_window(engine_, 640, window);
+    QVERIFY2(second != nullptr, "MainWindow was not created");
+    QQuickItem* hidden_appearance = appearance_detail(window);
+    QVERIFY(hidden_appearance);
+    QTest::qWait(50);
+    for (qsizetype index = 0; index < rows.size(); ++index) {
+        QVERIFY2(
+            !visible_item(hidden_appearance, rows.at(index)),
+            qPrintable(rows.at(index) + QStringLiteral(" is visible while statistics is off")));
+        QVERIFY2(!visible_item(hidden_appearance, separators.at(index)),
+                 qPrintable(separators.at(index) +
+                            QStringLiteral(" is visible while statistics is off")));
+    }
 
     const QString warnings = take_warnings();
     QVERIFY2(warnings.isEmpty(), qPrintable(warnings));

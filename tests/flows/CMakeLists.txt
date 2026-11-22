@@ -9,6 +9,17 @@ target_link_libraries(tst_flow_statistics PRIVATE niratan_app Qt6::Test)
 target_compile_options(tst_flow_statistics PRIVATE -Wall -Wextra -Wpedantic -Werror)
 add_test(NAME flow_statistics COMMAND tst_flow_statistics)
 
+qt_add_executable(tst_flow_reader_settings
+    tst_flow_reader_settings.cpp
+)
+target_include_directories(tst_flow_reader_settings PRIVATE
+    ${CMAKE_SOURCE_DIR}/src
+    ${CMAKE_CURRENT_SOURCE_DIR}/../viewmodels
+)
+target_link_libraries(tst_flow_reader_settings PRIVATE niratan_app Qt6::Test)
+target_compile_options(tst_flow_reader_settings PRIVATE -Wall -Wextra -Wpedantic -Werror)
+add_test(NAME flow_reader_settings COMMAND tst_flow_reader_settings)
+
 qt_add_executable(tst_flow_reader_mining
     tst_flow_reader_mining.cpp
 )

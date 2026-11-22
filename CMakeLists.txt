@@ -196,6 +196,7 @@ qt_add_library(niratan_app STATIC
     src/viewmodels/player/player_study_view_model.h
     src/viewmodels/settings/settings_popup_settings.cpp
     src/viewmodels/settings/settings_reader_colors.cpp
+    src/viewmodels/settings/settings_reader_display.cpp
     src/viewmodels/settings/settings_view_model.cpp
     src/viewmodels/settings/settings_view_model.h
     src/viewmodels/settings/settings_view_model_state.h
@@ -328,6 +329,7 @@ qt_add_qml_module(niratan_app
         src/views/pages/SettingRow.qml
         src/views/pages/SettingsSliderRow.qml
         src/views/settings/AppearanceSettings.qml
+        src/views/settings/ReaderDisplayCard.qml
         src/views/settings/SettingsActions.qml
         src/views/settings/SettingsCard.qml
         src/views/settings/SettingsColorRow.qml
