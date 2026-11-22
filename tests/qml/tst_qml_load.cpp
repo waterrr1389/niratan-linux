@@ -89,16 +89,6 @@ QStringList visual_page_texts(QQuickItem* page) {
     return texts;
 }
 
-// The dictionary page's search field (DictionarySearchView's TextField).
-QQuickItem* search_field(QQuickItem* page) {
-    for (QObject* child : page->findChildren<QObject*>()) {
-        if (child->property("placeholderText").toString() == QStringLiteral("Look up a word")) {
-            return qobject_cast<QQuickItem*>(child);
-        }
-    }
-    return nullptr;
-}
-
 // QML reports compile errors and binding failures through the message handler.
 // Binding loops arrive with the default category and the source file in the
 // text, so the file suffix is part of the match.
@@ -132,7 +122,6 @@ class QmlLoadTest : public QObject {
     void settings_page_offers_profiles_section();
     void dictionary_settings_page_lists_the_management_controls();
     void profiles_page_lists_the_management_controls();
-    void dictionary_page_search_field_uses_the_profile_text_size();
     void icon_table_resolves();
     void shared_components_load();
     void main_window_controls_fit();
@@ -467,51 +456,6 @@ void QmlLoadTest::profiles_page_lists_the_management_controls() {
 
     const QString warnings = warnings_after(QStringLiteral("ProfilesPage"));
     QVERIFY2(warnings.isEmpty(), qPrintable(warnings));
-}
-
-// B3, Decision 7: Core/UserConfig.swift searchTextSize sizes the dictionary
-// page's search field; DictionarySearchView's field uses it as font size.
-void QmlLoadTest::dictionary_page_search_field_uses_the_profile_text_size() {
-    const std::filesystem::path profile = niratan::storage::data_root() / "Profiles" / "default-ja";
-    std::filesystem::create_directories(profile);
-    auto settings = niratan::profiles::default_dictionary_settings();
-    settings.search_text_size = 30;
-    const std::filesystem::path settings_path = profile / "dictionary_settings.json";
-    {
-        QFile file(QString::fromStdString(settings_path.string()));
-        QVERIFY(file.open(QIODevice::WriteOnly | QIODevice::Truncate));
-        const QByteArray bytes =
-            niratan::profiles::dictionary_settings_to_json(settings).toJson(QJsonDocument::Compact);
-        QCOMPARE(file.write(bytes), bytes.size());
-    }
-
-    QQuickWindow window;
-    window.resize(960, 640);
-    QString error;
-    std::unique_ptr<QObject> sized = create_page(QStringLiteral("DictionaryPage"), window, error);
-    QVERIFY2(sized != nullptr, qPrintable(error));
-    auto* sized_page = qobject_cast<QQuickItem*>(sized.get());
-    QVERIFY2(sized_page != nullptr, "DictionaryPage is not an Item");
-    QQuickItem* sized_field = search_field(sized_page);
-    QVERIFY2(sized_field != nullptr, "DictionaryPage has no search field");
-    QCOMPARE(sized_field->property("font").value<QFont>().pixelSize(), 30);
-    const QString sized_warnings = warnings_after(QStringLiteral("DictionaryPage"));
-    QVERIFY2(sized_warnings.isEmpty(), qPrintable(sized_warnings));
-    sized.reset();
-    QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
-
-    QVERIFY(std::filesystem::remove(settings_path));
-    QString default_error;
-    std::unique_ptr<QObject> fallback =
-        create_page(QStringLiteral("DictionaryPage"), window, default_error);
-    QVERIFY2(fallback != nullptr, qPrintable(default_error));
-    auto* fallback_page = qobject_cast<QQuickItem*>(fallback.get());
-    QVERIFY2(fallback_page != nullptr, "DictionaryPage is not an Item");
-    QQuickItem* default_field = search_field(fallback_page);
-    QVERIFY2(default_field != nullptr, "DictionaryPage has no search field");
-    QCOMPARE(default_field->property("font").value<QFont>().pixelSize(), 26);
-    const QString default_warnings = warnings_after(QStringLiteral("DictionaryPage"));
-    QVERIFY2(default_warnings.isEmpty(), qPrintable(default_warnings));
 }
 
 // B2-B7 of the views-icons module: every SF Symbol name the shared components

@@ -736,6 +736,18 @@ add_test(NAME qml_load COMMAND tst_qml_load)
 set_tests_properties(qml_load PROPERTIES
     ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QTWEBENGINE_CHROMIUM_FLAGS=--disable-gpu")
 
+qt_add_executable(tst_dictionary_view
+    qml/tst_dictionary_view.cpp
+)
+target_include_directories(tst_dictionary_view PRIVATE ${CMAKE_SOURCE_DIR}/src
+    ${CMAKE_SOURCE_DIR}/tests/dictionary)
+target_link_libraries(tst_dictionary_view PRIVATE niratan_app niratan_appplugin Qt6::Test
+    Qt6::Quick Qt6::QuickControls2 Qt6::WebEngineQuick)
+target_compile_options(tst_dictionary_view PRIVATE -Wall -Wextra -Wpedantic -Werror)
+add_test(NAME dictionary_view COMMAND tst_dictionary_view)
+set_tests_properties(dictionary_view PROPERTIES
+    ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QTWEBENGINE_CHROMIUM_FLAGS=--disable-gpu")
+
 qt_add_executable(tst_popup_bridge
     web/tst_popup_bridge.cpp
 )

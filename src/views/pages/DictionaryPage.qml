@@ -1,18 +1,35 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
-// The dictionary page: a search field and the popup rendered by the
-// Yomitan-derived popup script, following Features/Dictionary/
-// DictionarySearchView.swift (performLookup, constructHtml and the search
-// field's searchTextSize font). The model builds the shell.
-// Features/Popup/PopupWebView.swift and PopupView.swift supply the mining
-// bridge, the inline lookup handlers and the toast displayed above the search
-// results.
+// The dictionary detail page: one capsule search bar at the top and the popup
+// document below it, following Features/Dictionary/DictionarySearchView.swift
+// `body` (the `safeAreaInset` search bar above `PopupWebView`),
+// `DictionarySearchBar.body`, `CustomSearchField.body` and
+// Features/Dictionary/DictionarySearchTextFieldBridge.swift (a borderless,
+// transparent, single-line field), through
+// NativeMac/NativeReuseViews.swift `NativeDictionaryReuseView.body` inside
+// NativeMac/NativeMacDetailView.swift `body`.
+//
+// The page has no title band, back control or toolbar: the section is chosen
+// in the shell sidebar and the bar is the page's first content, spanning the
+// width above the results. Return submits once with the text as typed; the
+// model trims it, so an empty or whitespace-only query clears the results.
+// `NativeGlassPageBackground` and `NativeGlassTopScrim` stay the shell's solid
+// window background (PLAN.md keeps glass a solid surface), and
+// `SearchResetInset` (pull down to clear or show the keyboard) is not ported:
+// WebEngine reports no scroll-offset or drag callbacks.
+//
+// The mining toast is a Linux addition (Decision D2): Swift's `onMine` awaits
+// `mineAnkiEntry` and drops the result, so the Mac page shows no feedback.
+//
+// Not ported: child popups (`nestedPopups`, `NativeDictionaryPopupView`), the
+// swipe back/forward gesture, `initialQuery`/`shouldFocus` (the Linux app has
+// no `hoshi://` open route) and the dictionary entry shortcuts (no global
+// shortcut manager outside the reader).
 
 pragma ComponentBehavior: Bound
 
 import QtQuick
 import QtQuick.Controls
-import QtQuick.Layouts
 import QtWebChannel
 import QtWebEngine
 import Niratan
@@ -20,10 +37,9 @@ import Niratan
 Item {
     id: page
 
-    signal backRequested()
-
     DictionaryPopupModel {
         id: model
+        objectName: "popupModel"
         dark: Theme.dark
         background: Theme.popupBackground
         textColor: Theme.popupText
@@ -87,151 +103,131 @@ Item {
         }
     }
 
-    TextMetrics {
-        id: titleMetrics
-        text: dictionaryHeader.title
-        font.pixelSize: 16
-        font.weight: Font.DemiBold
+    SearchBar {
+        id: searchBar
+
+        objectName: "searchBar"
+        x: 0
+        y: 0
+        width: page.width
+        onSubmitted: model.lookup(searchBar.text)
     }
 
-    Column {
-        anchors.fill: parent
-        spacing: 0
+    Item {
+        id: resultsArea
 
-        PageHeader {
-            id: dictionaryHeader
-            width: parent.width
-            title: qsTr("Dictionary")
-            showBack: false
-            onBackRequested: page.backRequested()
+        x: 0
+        y: searchBar.height
+        width: page.width
+        height: Math.max(0, page.height - searchBar.height)
 
-            TextField {
-                id: search
-                // The trailing row sizes to its controls; leave room for the
-                // shared header's back target, title and horizontal spacing.
-                Layout.fillWidth: true
-                Layout.preferredWidth: Math.max(0, dictionaryHeader.width
-                    - 40 - Math.ceil(titleMetrics.advanceWidth)
-                    - 2 * (Theme.spacingMd + Theme.spacingSm))
-                placeholderText: qsTr("Look up a word")
-                font.pixelSize: model.searchTextSize
-                selectByMouse: true
-                onAccepted: model.lookup(search.text)
+        WebEngineView {
+            id: view
 
-                Component.onCompleted: search.forceActiveFocus()
+            objectName: "results"
+            property bool loadingPopupDocument: false
+            // A new document must not consume outstanding replies for the old one.
+            property int lastMiningRequest: 0
+            anchors.fill: parent
+            visible: model.hasResults
+            backgroundColor: Theme.popupBackground
+
+            webChannel: WebChannel {
+                registeredObjects: [dictionaryBridge]
+            }
+            onNavigationRequested: function(request) {
+                // loadHtml sends the generated document as a data URL.
+                const popupDocument = view.loadingPopupDocument && request.isMainFrame
+                    && request.url.toString().startsWith("data:text/html;charset=UTF-8,")
+                if (popupDocument)
+                    view.loadingPopupDocument = false
+                else if (request.url.toString() !== "about:blank")
+                    request.reject()
+            }
+            onLoadingChanged: function(loadRequest) {
+                if (loadRequest.status === WebEngineView.LoadSucceededStatus && view.visible) {
+                    view.runJavaScript("window.hoshiMiningRequestBase = " + lastMiningRequest
+                        + "; window.hoshiMiningOptions = " + JSON.stringify(mining.popupMiningOptions())
+                        + ";\n" + model.bridgeScript)
+                }
             }
         }
 
-        Item {
-            width: parent.width
-            height: parent.height - dictionaryHeader.height
+        Label {
+            anchors.horizontalCenter: parent.horizontalCenter
+            anchors.bottom: parent.bottom
+            padding: Theme.spacingSm
+            visible: model.hasResults && model.audioError.length > 0
+            text: model.audioError
+            color: Theme.popupDanger
+            background: Rectangle { color: Theme.popupBackground }
+        }
 
-            WebEngineView {
-                id: view
-                property bool loadingPopupDocument: false
-                // A new document must not consume outstanding replies for the old one.
-                property int lastMiningRequest: 0
-                anchors.fill: parent
-                visible: model.hasResults
-                backgroundColor: Theme.popupBackground
+        Menu {
+            id: audioMenu
+            parent: view
+            property list<string> sourceNames
+            property int selectedSource: -1
+            property int entryIndex: -1
 
-                webChannel: WebChannel {
-                    registeredObjects: [dictionaryBridge]
-                }
-                onNavigationRequested: function(request) {
-                    // loadHtml sends the generated document as a data URL.
-                    const popupDocument = view.loadingPopupDocument && request.isMainFrame
-                        && request.url.toString().startsWith("data:text/html;charset=UTF-8,")
-                    if (popupDocument)
-                        view.loadingPopupDocument = false
-                    else if (request.url.toString() !== "about:blank")
-                        request.reject()
-                }
-                onLoadingChanged: function(loadRequest) {
-                    if (loadRequest.status === WebEngineView.LoadSucceededStatus && view.visible) {
-                        view.runJavaScript("window.hoshiMiningRequestBase = " + lastMiningRequest
-                            + "; window.hoshiMiningOptions = " + JSON.stringify(mining.popupMiningOptions())
-                            + ";\n" + model.bridgeScript)
+            MenuItem {
+                visible: audioMenu.sourceNames.length === 0
+                height: visible ? implicitHeight : 0
+                enabled: false
+                text: qsTr("No audio found")
+            }
+
+            Instantiator {
+                model: audioMenu.sourceNames
+                delegate: MenuItem {
+                    id: sourceItem
+                    required property string modelData
+                    required property int index
+                    contentItem: Label {
+                        text: sourceItem.text
+                        textFormat: Text.PlainText
+                        elide: Text.ElideRight
                     }
+                    text: modelData
+                    checkable: true
+                    checked: index === audioMenu.selectedSource
+                    onTriggered: model.selectAudioSource(audioMenu.entryIndex, index)
+                }
+                onObjectAdded: (index, object) => audioMenu.insertItem(index + 1, object)
+                onObjectRemoved: (index, object) => audioMenu.removeItem(object)
+            }
+        }
+
+        Text {
+            anchors.centerIn: parent
+            visible: !model.hasResults && model.error.length > 0
+            width: parent.width - 48
+            text: model.error
+            color: Theme.popupDanger
+            wrapMode: Text.WordWrap
+            horizontalAlignment: Text.AlignHCenter
+        }
+
+        Connections {
+            target: model
+
+            function onHtmlChanged() {
+                audioMenu.close()
+                if (model.html.length > 0) {
+                    view.loadingPopupDocument = true
+                    view.loadHtml(model.html, "about:blank")
                 }
             }
 
-            Label {
-                anchors.horizontalCenter: parent.horizontalCenter
-                anchors.bottom: parent.bottom
-                padding: Theme.spacingSm
-                visible: model.hasResults && model.audioError.length > 0
-                text: model.audioError
-                color: Theme.popupDanger
-                background: Rectangle { color: Theme.popupBackground }
+            function onAudioSourceMenuRequested(names, selected, x, y, entryIndex) {
+                audioMenu.sourceNames = names
+                audioMenu.selectedSource = selected
+                audioMenu.entryIndex = entryIndex
+                audioMenu.popup(view, Qt.point(x * view.zoomFactor, y * view.zoomFactor))
             }
 
-            Menu {
-                id: audioMenu
-                parent: view
-                property list<string> sourceNames
-                property int selectedSource: -1
-                property int entryIndex: -1
-
-                MenuItem {
-                    visible: audioMenu.sourceNames.length === 0
-                    height: visible ? implicitHeight : 0
-                    enabled: false
-                    text: qsTr("No audio found")
-                }
-
-                Instantiator {
-                    model: audioMenu.sourceNames
-                    delegate: MenuItem {
-                        id: sourceItem
-                        required property string modelData
-                        required property int index
-                        contentItem: Label {
-                            text: sourceItem.text
-                            textFormat: Text.PlainText
-                            elide: Text.ElideRight
-                        }
-                        text: modelData
-                        checkable: true
-                        checked: index === audioMenu.selectedSource
-                        onTriggered: model.selectAudioSource(audioMenu.entryIndex, index)
-                    }
-                    onObjectAdded: (index, object) => audioMenu.insertItem(index + 1, object)
-                    onObjectRemoved: (index, object) => audioMenu.removeItem(object)
-                }
-            }
-
-            Text {
-                anchors.centerIn: parent
-                visible: !model.hasResults && model.error.length > 0
-                width: parent.width - 48
-                text: model.error
-                color: Theme.popupDanger
-                wrapMode: Text.WordWrap
-                horizontalAlignment: Text.AlignHCenter
-            }
-
-            Connections {
-                target: model
-
-                function onHtmlChanged() {
-                    audioMenu.close()
-                    if (model.html.length > 0) {
-                        view.loadingPopupDocument = true
-                        view.loadHtml(model.html, "about:blank")
-                    }
-                }
-
-                function onAudioSourceMenuRequested(names, selected, x, y, entryIndex) {
-                    audioMenu.sourceNames = names
-                    audioMenu.selectedSource = selected
-                    audioMenu.entryIndex = entryIndex
-                    audioMenu.popup(view, Qt.point(x * view.zoomFactor, y * view.zoomFactor))
-                }
-
-                function onAudioSourceSelected(entryIndex, sourceIndex) {
-                    view.runJavaScript("playEntryAudio(" + entryIndex + ", " + sourceIndex + ");")
-                }
+            function onAudioSourceSelected(entryIndex, sourceIndex) {
+                view.runJavaScript("playEntryAudio(" + entryIndex + ", " + sourceIndex + ");")
             }
         }
     }
@@ -239,6 +235,6 @@ Item {
     AnkiMiningToast {
         status: mining.toastStatus
         message: mining.toastMessage
-        topInset: dictionaryHeader.height
+        topInset: searchBar.height
     }
 }
