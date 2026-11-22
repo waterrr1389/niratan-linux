@@ -70,7 +70,10 @@ QByteArray term_bank() {
     return R"([["decide","","","v",0,["to make up one's mind"],1,""],)"
            R"(["星","ホシ","","n",0,["star"],2,""],)"
            R"(["😀","","","",0,["grin"],3,""],)"
-           R"(["don't","","","",0,["do not"],4,""]]])";
+           R"(["don't","","","",0,["do not"],4,""],)"
+           R"(["前","","","",0,["before"],5,""],)"
+           R"(["現在","","","",0,["now"],6,""],)"
+           R"(["次","","","",0,["next"],7,""]]])";
 }
 
 // The single lookup path uses Japanese profile settings unless switched.
@@ -100,6 +103,7 @@ class PlayerLookupViewModelTest : public QObject {
     void b9_matched_text_shortens_the_highlight();
     void b10_current_cues_follow_position_and_delay();
     void b11_popup_model_is_reused_and_needs_a_result();
+    void mining_selection_follows_the_active_cue();
 
    private:
     std::unique_ptr<TempDataRoot> root_;
@@ -461,6 +465,43 @@ void PlayerLookupViewModelTest::b11_popup_model_is_reused_and_needs_a_result() {
     no_result.setPlaying(false);
     QVERIFY(no_result.lookupAt(QStringLiteral("1"), 0).isEmpty());
     QVERIFY(!no_result.has_popup());
+}
+
+void PlayerLookupViewModelTest::mining_selection_follows_the_active_cue() {
+    QVERIFY(use_profile(kJapaneseProfile));
+    const QByteArray cues = srt(QStringLiteral("a\n00:00:01,000 --> 00:00:02,000\n前。\n\n"
+                                               "b\n00:00:03,000 --> 00:00:04,000\n現在。\n\n"
+                                               "c\n00:00:05,000 --> 00:00:06,000\n次。\n\n"
+                                               "d\n00:00:07,000 --> 00:00:08,000\n次の次。\n"));
+
+    PlayerLookupViewModel model;
+    load(model, cues);
+    model.updatePlayback(3.5, 0.0);
+    QVERIFY(model.miningSelection().isEmpty());
+    QVERIFY(!model.lookupAt(QStringLiteral("b"), 0).isEmpty());
+    QCOMPARE(model.active_cue_id(), QStringLiteral("b"));
+    const auto selection = model.miningSelection();
+    QCOMPARE(selection.value("cueText").toString(), QString::fromUtf8("現在。"));
+    QCOMPARE(selection.value("sentence").toString(), QString::fromUtf8("現在。"));
+    QCOMPARE(selection.value("cueStart").toDouble(), 3.0);
+    QCOMPARE(selection.value("cueEnd").toDouble(), 4.0);
+    QCOMPARE(selection.value("previousCueText").toString(), QString::fromUtf8("前。"));
+    QCOMPARE(selection.value("nextCueText").toString(), QString::fromUtf8("次。"));
+
+    PlayerLookupViewModel first;
+    load(first, cues);
+    first.updatePlayback(1.5, 0.0);
+    QVERIFY(!first.lookupAt(QStringLiteral("a"), 0).isEmpty());
+    const auto first_selection = first.miningSelection();
+    QCOMPARE(first_selection.value("cueText").toString(), QString::fromUtf8("前。"));
+    QVERIFY(!first_selection.contains("previousCueText"));
+    QCOMPARE(first_selection.value("nextCueText").toString(), QString::fromUtf8("現在。"));
+
+    PlayerLookupViewModel loaded_without_active;
+    load(loaded_without_active, cues);
+    QVERIFY(loaded_without_active.miningSelection().isEmpty());
+    PlayerLookupViewModel without_document;
+    QVERIFY(without_document.miningSelection().isEmpty());
 }
 
 QTEST_MAIN(PlayerLookupViewModelTest)

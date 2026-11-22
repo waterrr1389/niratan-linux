@@ -16,12 +16,15 @@
 #include "services/anki/anki_requests.h"
 #include "services/anki/duplicate_lookup.h"
 #include "services/anki/mining.h"
+#include "services/anki/mining_gate.h"
 #include "services/anki/popup_options.h"
 #include "services/audio/web_audio_download.h"
 #include "services/dictionary/dictionary_media.h"
 #include "services/dictionary/term_dictionaries.h"
 #include "services/profiles/profile_repository.h"
 #include "services/storage/app_paths.h"
+#include "viewmodels/anki/video_mining_capture.h"
+#include "viewmodels/anki/video_mining_capture_start.h"
 
 namespace niratan::viewmodels {
 namespace {
@@ -219,6 +222,15 @@ std::shared_ptr<MiningBackend> shared_backend() {
 }  // namespace
 
 struct MiningViewModel::State {
+    struct VideoContext {
+        QString path;
+        QString title;
+        int audio_stream_index = -1;
+        player::MiningSelection selection;
+        double subtitle_delay = 0;
+        double duration = 0;
+    };
+
     explicit State(MiningViewModel& owner) {
         toast_timer.setSingleShot(true);
         toast_timer.setTimerType(Qt::PreciseTimer);
@@ -239,6 +251,9 @@ struct MiningViewModel::State {
     std::vector<anki::TermDictionary> dictionaries;
     QVariantMap toast;
     QTimer toast_timer;
+    std::optional<VideoContext> video;
+    std::unique_ptr<VideoMiningCapture> capture;
+    QString ffmpeg;
 };
 
 MiningViewModel::MiningViewModel(QObject* parent)
@@ -260,6 +275,8 @@ QString MiningViewModel::toast_note_id() const {
 
 void MiningViewModel::setContext(const QString& sentence, const QString& documentTitle,
                                  const QString& coverUrl, const QString& coverPath) {
+    state_->video.reset();
+    state_->capture.reset();
     state_->context.sentence = sentence.toStdString();
     state_->context.document_title =
         documentTitle.isEmpty() ? std::nullopt : std::optional{documentTitle.toStdString()};
@@ -269,6 +286,48 @@ void MiningViewModel::setContext(const QString& sentence, const QString& documen
 
 void MiningViewModel::set_term_dictionaries(std::vector<anki::TermDictionary> dictionaries) {
     state_->dictionaries = std::move(dictionaries);
+}
+
+void MiningViewModel::setVideoContext(const QVariant& video) {
+    state_->capture.reset();
+    const auto value = message_body(video);
+    if (value.typeId() != QMetaType::QVariantMap) {
+        state_->video.reset();
+        return;
+    }
+    const auto map = value.toMap();
+    State::VideoContext context;
+    context.path = map.value("path").toString();
+    context.title = map.value("title").toString();
+    context.audio_stream_index = map.value("audioStreamIndex", -1).toInt();
+    context.selection.sentence = map.value("cueText").toString();
+    context.selection.cue_text = context.selection.sentence;
+    context.selection.cue_start = map.value("cueStart").toDouble();
+    context.selection.cue_end = map.value("cueEnd").toDouble();
+    if (map.contains("previousCueText")) {
+        context.selection.previous_cue_text = map.value("previousCueText").toString();
+    }
+    if (map.contains("nextCueText")) {
+        context.selection.next_cue_text = map.value("nextCueText").toString();
+    }
+    context.subtitle_delay = map.value("subtitleDelay").toDouble();
+    context.duration = map.value("duration").toDouble();
+    state_->video = std::move(context);
+}
+
+void MiningViewModel::clearVideoContext() {
+    state_->capture.reset();
+    state_->video.reset();
+}
+
+void MiningViewModel::screenshotFinished(bool ok) {
+    if (state_->capture) {
+        state_->capture->screenshot_finished(ok);
+    }
+}
+
+void MiningViewModel::set_ffmpeg_path(QString ffmpeg) {
+    state_->ffmpeg = std::move(ffmpeg);
 }
 
 QVariantMap MiningViewModel::popupMiningOptions() {
@@ -298,8 +357,6 @@ void MiningViewModel::mineEntry(int requestId, const QVariant& content) {
         const auto payload = result.web_payload().toVariantMap();
         if (host) {
             host->state_->show_toast(*host, payload);
-        }
-        if (host) {
             emit host->replyReady(requestId, payload);
         }
     };
@@ -320,15 +377,60 @@ void MiningViewModel::mineEntry(int requestId, const QVariant& content) {
         attempt.content.emplace(entry.key().toStdString(), entry.value().toString().toStdString());
     }
     auto preflight_content = attempt.content;
-    backend->mining.preflight(std::move(preflight_content),
-                              [backend = backend.get(), attempt = std::move(attempt),
-                               finish](std::optional<anki::AnkiMiningResult> verdict) mutable {
-                                  if (verdict) {
-                                      finish(std::move(*verdict));
-                                  } else {
-                                      backend->mining.mine(std::move(attempt), finish);
-                                  }
-                              });
+    auto host = QPointer(this);
+    backend->mining.preflight(
+        std::move(preflight_content),
+        [host, backend = backend.get(), attempt = std::move(attempt),
+         finish](std::optional<anki::AnkiMiningResult> verdict) mutable {
+            if (verdict) {
+                finish(std::move(*verdict));
+                return;
+            }
+            if (!host || !host->state_->video) {
+                backend->mining.mine(std::move(attempt), finish);
+                return;
+            }
+            const auto& video = *host->state_->video;
+            const auto& settings = backend->config.settings();
+            VideoMiningCaptureRequest request;
+            request.video_path = video.path;
+            request.title = video.title;
+            request.audio_stream_index = video.audio_stream_index;
+            request.selection = video.selection;
+            request.subtitle_delay = video.subtitle_delay;
+            request.duration = video.duration;
+            request.capture_screenshot = anki::needs_video_screenshot(settings.field_mappings);
+            request.capture_audio_clip = anki::needs_video_audio_clip(settings.field_mappings);
+            request.compress_screenshot = settings.compress_images;
+            request.image_format = settings.image_compression_format;
+            request.screenshot_quality = settings.image_compression_quality;
+            request.audio_format = settings.audio_compression_format;
+            request.audio_bitrate_kbps = settings.audio_compression_bitrate_kbps;
+            request.animated_avif_maximum_height = settings.animated_avif_maximum_height;
+            request.animated_avif_frames_per_second = settings.animated_avif_frames_per_second;
+            request.ffmpeg_path = host->state_->ffmpeg;
+            auto capture = make_video_capture(
+                [backend](std::function<void(std::optional<std::string>)> complete) {
+                    backend->mining.media_directory(
+                        [complete = std::move(complete)](auto directory) {
+                            complete(directory ? std::optional<std::string>(directory->string())
+                                               : std::optional<std::string>{});
+                        });
+                },
+                [host](const QString& path) {
+                    if (host) {
+                        emit host->screenshotRequested(path);
+                    }
+                });
+            auto* active = capture.get();
+            host->state_->capture = std::move(capture);
+            active->start(request,
+                          [backend, attempt = std::move(attempt),
+                           finish](anki::MiningContext context) mutable {
+                              attempt.context = std::move(context);
+                              backend->mining.mine(std::move(attempt), finish);
+                          });
+        });
 }
 
 void MiningViewModel::duplicateCheck(int requestId, const QVariant& word) {

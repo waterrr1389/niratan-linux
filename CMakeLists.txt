@@ -129,6 +129,7 @@ target_compile_options(niratan_core PRIVATE -Wall -Wextra -Wpedantic -Werror)
 qt_add_library(niratan_app STATIC
     src/viewmodels/anki/mining_view_model.cpp
     src/viewmodels/anki/mining_view_model.h
+    src/viewmodels/anki/video_mining_capture.cpp
     src/viewmodels/anki/anki_settings_view_model.cpp
     src/viewmodels/anki/anki_settings_view_model.h
     src/viewmodels/dictionary/dictionary_popup_model.cpp

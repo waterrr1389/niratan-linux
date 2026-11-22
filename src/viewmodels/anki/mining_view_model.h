@@ -26,7 +26,29 @@
 // The dictionary page has no document context. The reader supplies its
 // available context: until the reader mining context is wired, the sentence
 // and cover are empty and the title is the library display title rather than
-// the EPUB title. The ordered term dictionaries come from the active profile's
+// the EPUB title. The video screen supplies setVideoContext instead; it is
+// cleared by setContext and clearVideoContext, so a reader or dictionary mine
+// never carries video fields.
+//
+// A video mine follows PopupView.mineEntry: preflight first, then the capture,
+// then the add with the same preflight already passed. The capture follows
+// VideoMiningCoordinator.context: needs flags come from the field mappings,
+// getMediaDirPath is requested only when a capture is needed, the frame and
+// clip carry the deterministic direct-media names, and an existing
+// destination is reused without a new capture. A requested screenshot emits
+// screenshotRequested(path); the page writes the still there and answers
+// screenshotFinished(ok). A clip is cut and encoded by services/player/
+// audio_clip. Without a usable media directory the captured temporary paths
+// reach the add as uploads. The card sees the same names, fields and failure
+// messages as Swift.
+//
+// Recorded differences: the frame and clip run one after the other rather
+// than concurrently, with no video thumbnails to suspend, so the card waits
+// for both the same way; imageCompressionQuality reaches the deterministic
+// name but not the still, because mpv writes it directly (Decision D3). An
+// AVIF request captures a JPEG still, and AVIF tokens remain name-only.
+//
+// The ordered term dictionaries come from the active profile's
 // dictionary_config.json and the installed scan; they are reloaded before the
 // popup options are computed and at the start of an add, then captured in the
 // attempt so the card build does not read them again. The cover URL is for
@@ -69,6 +91,19 @@ class MiningViewModel : public QObject {
                                 const QString& coverUrl, const QString& coverPath);
     void set_term_dictionaries(std::vector<anki::TermDictionary> dictionaries);
 
+    // The video screen's mining context. Keys: path, title, audioStreamIndex,
+    // cueText, cueStart, cueEnd, optional previousCueText/nextCueText,
+    // subtitleDelay and duration. Anything that is not a map clears it; so
+    // does setContext.
+    Q_INVOKABLE void setVideoContext(const QVariant& video);
+    Q_INVOKABLE void clearVideoContext();
+
+    // The page's answer to screenshotRequested. Ignored when no capture is
+    // waiting for it.
+    Q_INVOKABLE void screenshotFinished(bool ok);
+    // Empty means ffmpeg on PATH.
+    void set_ffmpeg_path(QString ffmpeg);
+
     // Popup script globals from the active profile, before rendering entries.
     Q_INVOKABLE QVariantMap popupMiningOptions();
 
@@ -87,6 +122,8 @@ class MiningViewModel : public QObject {
     void replyReady(int requestId, const QVariant& payload);
     void toastChanged();
     void ankiNoteButtonRequested(int entryIndex, const QString& noteId);
+    // The page captures a still at path and then calls screenshotFinished.
+    void screenshotRequested(const QString& path);
 
    private:
     struct State;

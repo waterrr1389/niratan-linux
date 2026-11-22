@@ -30,6 +30,12 @@
 // and highlightLength. matchedText is the first dictionary result's matched
 // expression, and the highlight is services/dictionary/text_selection
 // highlight_range(candidate, matchedText).
+//
+// miningSelection is the active cue's mining selection over the whole parsed
+// document, via services/player/video_mining resolve_mining_selection: the
+// clicked cue's text and timing and its list neighbours. It is empty when no
+// cue is active or no document is loaded. The mining-context selection sheet
+// is out of scope (Decision D4).
 
 #pragma once
 
@@ -73,6 +79,11 @@ class PlayerLookupViewModel : public QObject {
     // utf16Start, matchedText, highlightStart, highlightLength.
     Q_INVOKABLE QVariantMap lookupAt(const QString& cueId, int utf16Offset);
     Q_INVOKABLE void closeLookup();
+
+    // Empty when no cue is active or no document is loaded. Otherwise
+    // cueText, cueStart, cueEnd, sentence and, when present, previousCueText
+    // and nextCueText.
+    Q_INVOKABLE QVariantMap miningSelection() const;
 
     Q_INVOKABLE bool setShiftPressed(bool pressed);
     Q_INVOKABLE bool setHoverPointAvailable(bool available);

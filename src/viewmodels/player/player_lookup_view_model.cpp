@@ -7,6 +7,7 @@
 #include "player_lookup_policy.h"
 #include "services/dictionary/text_selection.h"
 #include "services/player/subtitle_document.h"
+#include "services/player/video_mining.h"
 #include "services/settings/dictionary_settings_watch.h"
 
 #include <algorithm>
@@ -173,6 +174,31 @@ QVariantMap PlayerLookupViewModel::lookupAt(const QString& cueId, int utf16Offse
     result.insert(QStringLiteral("highlightStart"),
                   highlight ? highlight->utf16_start : candidate->utf16_start);
     result.insert(QStringLiteral("highlightLength"), highlight ? highlight->utf16_length : 0);
+    return result;
+}
+
+QVariantMap PlayerLookupViewModel::miningSelection() const {
+    if (!state_->document || state_->active_cue_id.isEmpty()) {
+        return {};
+    }
+    const auto& cues = state_->document->cues;
+    const auto cue = std::ranges::find_if(
+        cues, [this](const auto& candidate) { return candidate.id == state_->active_cue_id; });
+    if (cue == cues.end()) {
+        return {};
+    }
+    const auto selection = player::resolve_mining_selection(*cue, cues);
+    QVariantMap result;
+    result.insert(QStringLiteral("cueText"), selection.cue_text);
+    result.insert(QStringLiteral("cueStart"), selection.cue_start);
+    result.insert(QStringLiteral("cueEnd"), selection.cue_end);
+    result.insert(QStringLiteral("sentence"), selection.sentence);
+    if (selection.previous_cue_text) {
+        result.insert(QStringLiteral("previousCueText"), *selection.previous_cue_text);
+    }
+    if (selection.next_cue_text) {
+        result.insert(QStringLiteral("nextCueText"), *selection.next_cue_text);
+    }
     return result;
 }
 

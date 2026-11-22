@@ -7,9 +7,13 @@
 #include "viewmodels/anki/mining_view_model.h"
 
 #include <QFile>
+#include <QCryptographicHash>
+#include <QDir>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QSignalSpy>
+#include <QTemporaryDir>
 #include <QtTest>
 
 #include <filesystem>
@@ -93,12 +97,96 @@ std::filesystem::path dictionary_config_path(const ProfileRepository& profiles,
     return directory ? *directory / "dictionary_config.json" : std::filesystem::path{};
 }
 
+bool write_file(const QString& path, const QByteArray& bytes) {
+    QFile file(path);
+    return file.open(QIODevice::WriteOnly | QIODevice::Truncate) &&
+        file.write(bytes) == bytes.size();
+}
+
+QString fake_ffmpeg(const QString& directory) {
+    const QString path = QDir(directory).filePath(QStringLiteral("ffmpeg"));
+    write_file(path,
+               "#!/bin/sh\n"
+               "for last; do :; done\n"
+               "printf '%s\\n' \"$@\" > \"$ARGS_FILE\"\n"
+               "printf '%s' \"$FAKE_OUTPUT\" > \"$last\"\n"
+               "exit ${FAKE_EXIT:-0}\n");
+    QFile::setPermissions(path, QFile::ReadOwner | QFile::WriteOwner | QFile::ExeOwner);
+    return path;
+}
+
+QString sha1_hex(const QByteArray& bytes) {
+    return QString::fromLatin1(QCryptographicHash::hash(bytes, QCryptographicHash::Sha1).toHex());
+}
+
+QString deterministic_name(const QString& prefix, const QString& path, qint64 start_ms,
+                           qint64 end_ms, const QString& tail) {
+    return prefix + sha1_hex(path.toUtf8()) + "_" + QString::number(start_ms) + "-" +
+        QString::number(end_ms) + tail;
+}
+
+QVariantMap video_context(const QString& path, const QString& title) {
+    return {{"path", path},
+            {"title", title},
+            {"audioStreamIndex", 3},
+            {"cueText", QString::fromUtf8("現在。")},
+            {"cueStart", 3.0},
+            {"cueEnd", 4.0},
+            {"previousCueText", QString::fromUtf8("前。")},
+            {"nextCueText", QString::fromUtf8("次。")},
+            {"subtitleDelay", 0.0},
+            {"duration", 30.0}};
+}
+
+QStringList recorded_arguments(const QString& path) {
+    QFile file(path);
+    if (!file.open(QIODevice::ReadOnly)) {
+        return {};
+    }
+    QStringList lines = QString::fromUtf8(file.readAll()).split(QLatin1Char('\n'));
+    if (!lines.isEmpty() && lines.last().isEmpty()) {
+        lines.removeLast();
+    }
+    return lines;
+}
+
+QString value_after(const QStringList& arguments, const QString& flag) {
+    const auto index = arguments.indexOf(flag);
+    return index >= 0 && index + 1 < arguments.size() ? arguments.at(index + 1) : QString{};
+}
+
+// Answers screenshotRequested the way the video page does: write the still and
+// report success or failure.
+struct ScreenshotWriter {
+    QByteArray bytes = QByteArray("frame");
+    bool ok = true;
+    QString path;
+    int calls = 0;
+
+    void attach(MiningViewModel& model) {
+        QObject::connect(&model, &MiningViewModel::screenshotRequested, &model,
+                         [this, &model](const QString& requested) {
+                             ++calls;
+                             path = requested;
+                             if (ok) {
+                                 write_file(requested, bytes);
+                             }
+                             model.screenshotFinished(ok);
+                         });
+    }
+};
+
 }  // namespace
 
 class MiningViewModelTest : public QObject {
     Q_OBJECT
 
    private slots:
+    void init() {
+        qputenv("FAKE_OUTPUT", "clip-bytes");
+        qputenv("FAKE_EXIT", "0");
+    }
+
     void malformed_request_bodies_have_no_payload();
     void duplicate_lookup_returns_decimal_ids();
     void open_note_filters_ids_in_first_seen_order();
@@ -119,6 +207,20 @@ class MiningViewModelTest : public QObject {
     void popup_options_defaults_match_the_anki_manager();
     void popup_options_track_each_profile_value();
     void popup_options_follow_the_active_profile();
+    void video_screenshot_is_written_to_the_media_directory_data();
+    void video_screenshot_is_written_to_the_media_directory();
+    void video_audio_clip_is_exported_and_attached();
+    void video_capture_needs_flags_data();
+    void video_capture_needs_flags();
+    void video_preflight_precedes_capture_data();
+    void video_preflight_precedes_capture();
+    void video_invalid_audio_range_fails_the_add();
+    void video_screenshot_failure_fails_the_add();
+    void video_audio_failure_fails_the_add();
+    void video_capture_falls_back_to_uploads();
+    void video_direct_media_is_reused();
+    void video_context_fields_use_the_title();
+    void video_context_is_cleared_by_reader_context();
 };
 
 // B2, B3: PopupWebView.Coordinator.userContentController (async).
@@ -646,6 +748,456 @@ void MiningViewModelTest::popup_options_follow_the_active_profile() {
     QCOMPARE(options.value("useAnkiConnect"), QVariant(true));
     QCOMPARE(options.value("embedMedia"), QVariant(false));
     QCOMPARE(options.value("compactGlossariesAnki"), QVariant(false));
+}
+
+void MiningViewModelTest::video_screenshot_is_written_to_the_media_directory_data() {
+    QTest::addColumn<bool>("compress");
+    QTest::addColumn<int>("format");
+    QTest::addColumn<QString>("suffix");
+    QTest::newRow("compressed jpeg")
+        << true << int(niratan::anki::ImageCompressionFormat::jpeg) << ".jpg";
+    QTest::newRow("compressed avif")
+        << true << int(niratan::anki::ImageCompressionFormat::avif) << ".jpg";
+    QTest::newRow("uncompressed") << false << int(niratan::anki::ImageCompressionFormat::jpeg)
+                                  << ".png";
+}
+
+void MiningViewModelTest::video_screenshot_is_written_to_the_media_directory() {
+    QFETCH(bool, compress);
+    QFETCH(int, format);
+    QFETCH(QString, suffix);
+    Fixture f;
+    QTemporaryDir media;
+    QVERIFY(media.isValid());
+    f.anki.responses["getMediaDirPath"] = {{"result", media.path()}};
+    auto& settings = f.config.settings();
+    settings.compress_images = compress;
+    settings.image_compression_format = static_cast<niratan::anki::ImageCompressionFormat>(format);
+    settings.field_mappings = {{"Word", "{expression}"}, {"Frame", "{video-screenshot}"}};
+    QVERIFY(f.save());
+
+    MiningViewModel model;
+    ScreenshotWriter writer;
+    writer.attach(model);
+    const QString path = f.data.path() + QStringLiteral("/Show 01.mkv");
+    model.setVideoContext(video_context(path, QStringLiteral("Episode 1")));
+    QSignalSpy replies(&model, &MiningViewModel::replyReady);
+    model.mineEntry(21, content());
+    QTRY_COMPARE_WITH_TIMEOUT(replies.size(), 1, 5000);
+    QCOMPARE(replies.first().at(1).toMap(),
+             mining_payload("added", "Added to Anki.", added_id_text));
+    QCOMPARE(writer.calls, 1);
+    QVERIFY(writer.path.endsWith(suffix));
+    const auto expected = deterministic_name("hoshi_video_frame_", path, 3000, 4000, suffix);
+    QVERIFY(QFileInfo::exists(media.filePath(expected)));
+    QVERIFY(!QFileInfo::exists(writer.path));
+    const auto fields =
+        f.anki.params("addNote").value("note").toObject().value("fields").toObject();
+    QCOMPARE(fields.value("Frame").toString(), QStringLiteral("<img src=\"%1\">").arg(expected));
+    QCOMPARE(f.anki.actions().count("getMediaDirPath"), 1);
+}
+
+void MiningViewModelTest::video_audio_clip_is_exported_and_attached() {
+    Fixture f;
+    QTemporaryDir media;
+    QVERIFY(media.isValid());
+    f.anki.responses["getMediaDirPath"] = {{"result", media.path()}};
+    const QString args_file = f.data.path() + QStringLiteral("/args.txt");
+    qputenv("ARGS_FILE", args_file.toUtf8());
+    auto& settings = f.config.settings();
+    settings.field_mappings = {{"Word", "{expression}"}, {"Clip", "{video-audio-clip}"}};
+    settings.audio_compression_format = niratan::anki::AudioCompressionFormat::mp3;
+    settings.audio_compression_bitrate_kbps = 96;
+    QVERIFY(f.save());
+
+    MiningViewModel model;
+    model.set_ffmpeg_path(fake_ffmpeg(f.data.path()));
+    const QString path = f.data.path() + QStringLiteral("/Show 01.mkv");
+    model.setVideoContext(video_context(path, QStringLiteral("Episode 1")));
+    QSignalSpy replies(&model, &MiningViewModel::replyReady);
+    model.mineEntry(22, content());
+    QTRY_COMPARE_WITH_TIMEOUT(replies.size(), 1, 5000);
+    QCOMPARE(replies.first().at(1).toMap(),
+             mining_payload("added", "Added to Anki.", added_id_text));
+    const auto expected = deterministic_name("hoshi_video_audio_", path, 2880, 4120, "_96k.mp3");
+    QVERIFY(QFileInfo::exists(media.filePath(expected)));
+    const auto arguments = recorded_arguments(args_file);
+    QCOMPARE(value_after(arguments, QStringLiteral("-ss")), QStringLiteral("2.880000"));
+    QCOMPARE(value_after(arguments, QStringLiteral("-t")), QStringLiteral("1.240000"));
+    QCOMPARE(value_after(arguments, QStringLiteral("-map")), QStringLiteral("0:3"));
+    QCOMPARE(value_after(arguments, QStringLiteral("-c:a")), QStringLiteral("libmp3lame"));
+    QCOMPARE(value_after(arguments, QStringLiteral("-b:a")), QStringLiteral("96k"));
+    QVERIFY(arguments.last().endsWith(QStringLiteral(".mp3")));
+    const auto fields =
+        f.anki.params("addNote").value("note").toObject().value("fields").toObject();
+    QCOMPARE(fields.value("Clip").toString(), QStringLiteral("[sound:%1]").arg(expected));
+    QCOMPARE(f.anki.actions().count("getMediaDirPath"), 1);
+}
+
+void MiningViewModelTest::video_capture_needs_flags_data() {
+    QTest::addColumn<QString>("mapping");
+    QTest::newRow("screenshot") << "screenshot";
+    QTest::newRow("audio") << "audio";
+    QTest::newRow("neither") << "neither";
+}
+
+void MiningViewModelTest::video_capture_needs_flags() {
+    QFETCH(QString, mapping);
+    Fixture f;
+    QTemporaryDir media;
+    QVERIFY(media.isValid());
+    f.anki.responses["getMediaDirPath"] = {{"result", media.path()}};
+    const QString args_file = f.data.path() + QStringLiteral("/args.txt");
+    qputenv("ARGS_FILE", args_file.toUtf8());
+    auto& settings = f.config.settings();
+    settings.field_mappings = {{"Word", "{expression}"}};
+    if (mapping == "screenshot") {
+        settings.field_mappings["Frame"] = "{video-screenshot}";
+    } else if (mapping == "audio") {
+        settings.field_mappings["Clip"] = "{video-audio-clip}";
+    }
+    QVERIFY(f.save());
+
+    MiningViewModel model;
+    model.set_ffmpeg_path(fake_ffmpeg(f.data.path()));
+    ScreenshotWriter writer;
+    writer.attach(model);
+    const QString path = f.data.path() + QStringLiteral("/Show 01.mkv");
+    model.setVideoContext(video_context(path, QStringLiteral("Episode 1")));
+    QSignalSpy replies(&model, &MiningViewModel::replyReady);
+    model.mineEntry(23, content());
+    QTRY_COMPARE_WITH_TIMEOUT(replies.size(), 1, 5000);
+    QCOMPARE(replies.first().at(1).toMap(),
+             mining_payload("added", "Added to Anki.", added_id_text));
+    QCOMPARE(writer.calls, mapping == "screenshot" ? 1 : 0);
+    QCOMPARE(QFileInfo::exists(args_file), mapping == "audio");
+    QCOMPARE(f.anki.actions().count("getMediaDirPath"), mapping == "neither" ? 0 : 1);
+}
+
+void MiningViewModelTest::video_preflight_precedes_capture_data() {
+    QTest::addColumn<QString>("verdict");
+    QTest::newRow("duplicate") << "duplicate";
+    QTest::newRow("missing-deck") << "missing-deck";
+}
+
+void MiningViewModelTest::video_preflight_precedes_capture() {
+    QFETCH(QString, verdict);
+    Fixture f;
+    QTemporaryDir media;
+    QVERIFY(media.isValid());
+    f.anki.responses["getMediaDirPath"] = {{"result", media.path()}};
+    auto& settings = f.config.settings();
+    settings.field_mappings = {{"Word", "{expression}"}, {"Frame", "{video-screenshot}"}};
+    if (verdict == "duplicate") {
+        f.anki.responses["canAddNotesWithErrorDetail"] = {
+            {"result", QJsonArray{QJsonObject{{"canAdd", false}}}}};
+    } else {
+        settings.selected_deck.reset();
+    }
+    QVERIFY(f.save());
+
+    MiningViewModel model;
+    ScreenshotWriter writer;
+    writer.attach(model);
+    const QString path = f.data.path() + QStringLiteral("/Show 01.mkv");
+    model.setVideoContext(video_context(path, QStringLiteral("Episode 1")));
+    QSignalSpy replies(&model, &MiningViewModel::replyReady);
+    model.mineEntry(24, content());
+    QTRY_COMPARE_WITH_TIMEOUT(replies.size(), 1, 5000);
+    QCOMPARE(replies.first().at(1).toMap(),
+             verdict == "duplicate"
+                 ? mining_payload("duplicate", "Already exists in Anki.", added_id_text)
+                 : mining_payload("failed", "Configure Anki deck and model first."));
+    QCOMPARE(writer.calls, 0);
+    QCOMPARE(f.anki.actions().count("getMediaDirPath"), 0);
+
+    // A passing preflight reaches the capture.
+    f.anki.responses["canAddNotesWithErrorDetail"] = {
+        {"result", QJsonArray{QJsonObject{{"canAdd", true}}}}};
+    if (verdict != "duplicate") {
+        settings.selected_deck = "Reading";
+    }
+    QVERIFY(f.save());
+    f.anki.requests.clear();
+    replies.clear();
+    writer.calls = 0;
+    model.mineEntry(25, content());
+    QTRY_COMPARE_WITH_TIMEOUT(replies.size(), 1, 5000);
+    QCOMPARE(replies.first().at(1).toMap(),
+             mining_payload("added", "Added to Anki.", added_id_text));
+    QCOMPARE(writer.calls, 1);
+}
+
+void MiningViewModelTest::video_invalid_audio_range_fails_the_add() {
+    Fixture f;
+    QTemporaryDir media;
+    QVERIFY(media.isValid());
+    f.anki.responses["getMediaDirPath"] = {{"result", media.path()}};
+    const QString args_file = f.data.path() + QStringLiteral("/args.txt");
+    qputenv("ARGS_FILE", args_file.toUtf8());
+    auto& settings = f.config.settings();
+    settings.field_mappings = {{"Word", "{expression}"}, {"Clip", "{video-audio-clip}"}};
+    QVERIFY(f.save());
+
+    MiningViewModel model;
+    model.set_ffmpeg_path(fake_ffmpeg(f.data.path()));
+    const QString path = f.data.path() + QStringLiteral("/Show 01.mkv");
+    auto context = video_context(path, QStringLiteral("Episode 1"));
+    context.insert("duration", 2.5);
+    model.setVideoContext(context);
+    QSignalSpy replies(&model, &MiningViewModel::replyReady);
+    model.mineEntry(26, content());
+    QTRY_COMPARE_WITH_TIMEOUT(replies.size(), 1, 5000);
+    QCOMPARE(replies.first().at(1).toMap(),
+             mining_payload("failed", "Unable to capture the subtitle audio clip."));
+    QCOMPARE(f.anki.actions().count("getMediaDirPath"), 1);
+    QVERIFY(!f.anki.actions().contains("addNote"));
+    QVERIFY(!QFileInfo::exists(args_file));
+
+    // A range that survives the padding exports as usual.
+    replies.clear();
+    f.anki.requests.clear();
+    model.setVideoContext(video_context(path, QStringLiteral("Episode 1")));
+    model.mineEntry(27, content());
+    QTRY_COMPARE_WITH_TIMEOUT(replies.size(), 1, 5000);
+    QCOMPARE(replies.first().at(1).toMap(),
+             mining_payload("added", "Added to Anki.", added_id_text));
+    QVERIFY(QFileInfo::exists(args_file));
+}
+
+void MiningViewModelTest::video_screenshot_failure_fails_the_add() {
+    Fixture f;
+    QTemporaryDir media;
+    QVERIFY(media.isValid());
+    f.anki.responses["getMediaDirPath"] = {{"result", media.path()}};
+    auto& settings = f.config.settings();
+    settings.field_mappings = {{"Word", "{expression}"}, {"Frame", "{video-screenshot}"}};
+    QVERIFY(f.save());
+
+    MiningViewModel model;
+    ScreenshotWriter writer;
+    writer.ok = false;
+    writer.attach(model);
+    const QString path = f.data.path() + QStringLiteral("/Show 01.mkv");
+    model.setVideoContext(video_context(path, QStringLiteral("Episode 1")));
+    QSignalSpy replies(&model, &MiningViewModel::replyReady);
+    model.mineEntry(28, content());
+    QTRY_COMPARE_WITH_TIMEOUT(replies.size(), 1, 5000);
+    QCOMPARE(replies.first().at(1).toMap(),
+             mining_payload("failed", "Unable to capture the video screenshot."));
+    QCOMPARE(writer.calls, 1);
+    QVERIFY(!f.anki.actions().contains("addNote"));
+
+    writer.ok = true;
+    replies.clear();
+    f.anki.requests.clear();
+    model.mineEntry(29, content());
+    QTRY_COMPARE_WITH_TIMEOUT(replies.size(), 1, 5000);
+    QCOMPARE(replies.first().at(1).toMap(),
+             mining_payload("added", "Added to Anki.", added_id_text));
+    QCOMPARE(writer.calls, 2);
+}
+
+void MiningViewModelTest::video_audio_failure_fails_the_add() {
+    Fixture f;
+    QTemporaryDir media;
+    QVERIFY(media.isValid());
+    f.anki.responses["getMediaDirPath"] = {{"result", media.path()}};
+    const QString args_file = f.data.path() + QStringLiteral("/args.txt");
+    qputenv("ARGS_FILE", args_file.toUtf8());
+    qputenv("FAKE_EXIT", "1");
+    auto& settings = f.config.settings();
+    settings.field_mappings = {{"Word", "{expression}"}, {"Clip", "{video-audio-clip}"}};
+    QVERIFY(f.save());
+
+    MiningViewModel model;
+    model.set_ffmpeg_path(fake_ffmpeg(f.data.path()));
+    const QString path = f.data.path() + QStringLiteral("/Show 01.mkv");
+    model.setVideoContext(video_context(path, QStringLiteral("Episode 1")));
+    QSignalSpy replies(&model, &MiningViewModel::replyReady);
+    model.mineEntry(30, content());
+    QTRY_COMPARE_WITH_TIMEOUT(replies.size(), 1, 5000);
+    QCOMPARE(replies.first().at(1).toMap(),
+             mining_payload("failed", "Unable to capture the subtitle audio clip."));
+    QVERIFY(!f.anki.actions().contains("addNote"));
+
+    qputenv("FAKE_EXIT", "0");
+    replies.clear();
+    f.anki.requests.clear();
+    model.mineEntry(31, content());
+    QTRY_COMPARE_WITH_TIMEOUT(replies.size(), 1, 5000);
+    QCOMPARE(replies.first().at(1).toMap(),
+             mining_payload("added", "Added to Anki.", added_id_text));
+}
+
+void MiningViewModelTest::video_capture_falls_back_to_uploads() {
+    Fixture f;
+    const QString args_file = f.data.path() + QStringLiteral("/args.txt");
+    qputenv("ARGS_FILE", args_file.toUtf8());
+    auto& settings = f.config.settings();
+    settings.field_mappings = {
+        {"Word", "{expression}"}, {"Frame", "{video-screenshot}"}, {"Clip", "{video-audio-clip}"}};
+    QVERIFY(f.save());
+
+    MiningViewModel model;
+    model.set_ffmpeg_path(fake_ffmpeg(f.data.path()));
+    ScreenshotWriter writer;
+    writer.attach(model);
+    const QString path = f.data.path() + QStringLiteral("/Show 01.mkv");
+    model.setVideoContext(video_context(path, QStringLiteral("Episode 1")));
+    QSignalSpy replies(&model, &MiningViewModel::replyReady);
+    model.mineEntry(32, content());
+    QTRY_COMPARE_WITH_TIMEOUT(replies.size(), 1, 5000);
+    QCOMPARE(replies.first().at(1).toMap(),
+             mining_payload("added", "Added to Anki.", added_id_text));
+    QCOMPARE(f.anki.actions().count("getMediaDirPath"), 1);
+    QCOMPARE(writer.calls, 1);
+    const auto note = f.anki.params("addNote").value("note").toObject();
+    const auto picture = note.value("picture").toArray();
+    QCOMPARE(picture.size(), 1);
+    QCOMPARE(picture.at(0).toObject().value("filename").toString(),
+             QStringLiteral("hoshi_video_frame_") + sha1_hex(QByteArray("frame")) +
+                 QStringLiteral(".jpg"));
+    QCOMPARE(picture.at(0).toObject().value("fields").toArray(), QJsonArray{"Frame"});
+    const auto audio = note.value("audio").toArray();
+    QCOMPARE(audio.size(), 1);
+    QCOMPARE(audio.at(0).toObject().value("filename").toString(),
+             QStringLiteral("hoshi_video_audio_") + sha1_hex(QByteArray("clip-bytes")) +
+                 QStringLiteral(".m4a"));
+    QCOMPARE(audio.at(0).toObject().value("fields").toArray(), QJsonArray{"Clip"});
+}
+
+void MiningViewModelTest::video_direct_media_is_reused() {
+    Fixture f;
+    QTemporaryDir media;
+    QVERIFY(media.isValid());
+    f.anki.responses["getMediaDirPath"] = {{"result", media.path()}};
+    const QString args_file = f.data.path() + QStringLiteral("/args.txt");
+    qputenv("ARGS_FILE", args_file.toUtf8());
+    auto& settings = f.config.settings();
+    settings.field_mappings = {
+        {"Word", "{expression}"}, {"Frame", "{video-screenshot}"}, {"Clip", "{video-audio-clip}"}};
+    QVERIFY(f.save());
+
+    MiningViewModel model;
+    model.set_ffmpeg_path(fake_ffmpeg(f.data.path()));
+    ScreenshotWriter writer;
+    writer.attach(model);
+    const QString path = f.data.path() + QStringLiteral("/Show 01.mkv");
+    model.setVideoContext(video_context(path, QStringLiteral("Episode 1")));
+    QSignalSpy replies(&model, &MiningViewModel::replyReady);
+    model.mineEntry(33, content());
+    QTRY_COMPARE_WITH_TIMEOUT(replies.size(), 1, 5000);
+    QCOMPARE(replies.first().at(1).toMap(),
+             mining_payload("added", "Added to Anki.", added_id_text));
+    const auto frame_name = deterministic_name("hoshi_video_frame_", path, 3000, 4000, ".jpg");
+    const auto audio_name = deterministic_name("hoshi_video_audio_", path, 2880, 4120, ".m4a");
+    auto first_fields =
+        f.anki.params("addNote").value("note").toObject().value("fields").toObject();
+    QCOMPARE(first_fields.value("Frame").toString(),
+             QStringLiteral("<img src=\"%1\">").arg(frame_name));
+    QCOMPARE(first_fields.value("Clip").toString(), QStringLiteral("[sound:%1]").arg(audio_name));
+
+    f.anki.requests.clear();
+    replies.clear();
+    writer.calls = 0;
+    QVERIFY(QFile::remove(args_file));
+    model.mineEntry(34, content());
+    QTRY_COMPARE_WITH_TIMEOUT(replies.size(), 1, 5000);
+    QCOMPARE(replies.first().at(1).toMap(),
+             mining_payload("added", "Added to Anki.", added_id_text));
+    QCOMPARE(writer.calls, 0);
+    QVERIFY(!QFileInfo::exists(args_file));
+    QCOMPARE(f.anki.actions().count("getMediaDirPath"), 0);
+    QCOMPARE(f.anki.actions().count("addNote"), 1);
+    const auto second_fields =
+        f.anki.params("addNote").value("note").toObject().value("fields").toObject();
+    QCOMPARE(second_fields.value("Frame").toString(),
+             QStringLiteral("<img src=\"%1\">").arg(frame_name));
+    QCOMPARE(second_fields.value("Clip").toString(), QStringLiteral("[sound:%1]").arg(audio_name));
+}
+
+void MiningViewModelTest::video_context_fields_use_the_title() {
+    Fixture f;
+    auto& settings = f.config.settings();
+    settings.field_mappings = {
+        {"Word", "{expression}"},         {"Sentence", "{sentence}"},
+        {"Title", "{document-title}"},    {"File", "{video-file-name}"},
+        {"Sub", "{video-subtitle}"},      {"Start", "{video-cue-start}"},
+        {"End", "{video-cue-end}"},       {"Prev", "{video-previous-subtitle}"},
+        {"Next", "{video-next-subtitle}"}};
+    QVERIFY(f.save());
+
+    MiningViewModel model;
+    const QString path = f.data.path() + QStringLiteral("/Show 01.mkv");
+    model.setVideoContext(video_context(path, QStringLiteral("Episode 1")));
+    QSignalSpy replies(&model, &MiningViewModel::replyReady);
+    model.mineEntry(35, content());
+    QTRY_COMPARE_WITH_TIMEOUT(replies.size(), 1, 5000);
+    QCOMPARE(replies.first().at(1).toMap(),
+             mining_payload("added", "Added to Anki.", added_id_text));
+    QCOMPARE(f.anki.actions().count("getMediaDirPath"), 0);
+    const auto fields =
+        f.anki.params("addNote").value("note").toObject().value("fields").toObject();
+    QCOMPARE(fields.value("Sentence").toString(), QString::fromUtf8("現在。"));
+    QCOMPARE(fields.value("Title").toString(), QStringLiteral("Episode 1"));
+    QCOMPARE(fields.value("File").toString(), QStringLiteral("Episode 1"));
+    QCOMPARE(fields.value("Sub").toString(), QString::fromUtf8("現在。"));
+    QCOMPARE(fields.value("Start").toString(), QStringLiteral("0:00:03.000"));
+    QCOMPARE(fields.value("End").toString(), QStringLiteral("0:00:04.000"));
+    QCOMPARE(fields.value("Prev").toString(), QString::fromUtf8("前。"));
+    QCOMPARE(fields.value("Next").toString(), QString::fromUtf8("次。"));
+    QVERIFY(!fields.value("File").toString().contains(QStringLiteral(".mkv")));
+}
+
+void MiningViewModelTest::video_context_is_cleared_by_reader_context() {
+    Fixture f;
+    QTemporaryDir media;
+    QVERIFY(media.isValid());
+    f.anki.responses["getMediaDirPath"] = {{"result", media.path()}};
+    auto& settings = f.config.settings();
+    settings.field_mappings = {
+        {"Word", "{expression}"}, {"Frame", "{video-screenshot}"}, {"Sentence", "{sentence}"}};
+    QVERIFY(f.save());
+
+    MiningViewModel model;
+    ScreenshotWriter writer;
+    writer.attach(model);
+    const QString path = f.data.path() + QStringLiteral("/Show 01.mkv");
+    QSignalSpy replies(&model, &MiningViewModel::replyReady);
+
+    model.setVideoContext(video_context(path, QStringLiteral("Episode 1")));
+    model.mineEntry(36, content());
+    QTRY_COMPARE_WITH_TIMEOUT(replies.size(), 1, 5000);
+    QCOMPARE(writer.calls, 1);
+    QCOMPARE(f.anki.actions().count("getMediaDirPath"), 1);
+
+    // The reader/dictionary context clears the video context.
+    f.anki.requests.clear();
+    replies.clear();
+    writer.calls = 0;
+    model.setContext(QStringLiteral("reader sentence"), QStringLiteral("Book"), {}, {});
+    model.mineEntry(37, content());
+    QTRY_COMPARE_WITH_TIMEOUT(replies.size(), 1, 5000);
+    QCOMPARE(replies.first().at(1).toMap(),
+             mining_payload("added", "Added to Anki.", added_id_text));
+    QCOMPARE(writer.calls, 0);
+    QCOMPARE(f.anki.actions().count("getMediaDirPath"), 0);
+    auto note = f.anki.params("addNote").value("note").toObject();
+    auto fields = note.value("fields").toObject();
+    QCOMPARE(fields.value("Sentence").toString(), QStringLiteral("reader sentence"));
+    QVERIFY(!note.contains("picture"));
+
+    f.anki.requests.clear();
+    replies.clear();
+    model.setVideoContext(video_context(path, QStringLiteral("Episode 1")));
+    model.clearVideoContext();
+    model.mineEntry(38, content());
+    QTRY_COMPARE_WITH_TIMEOUT(replies.size(), 1, 5000);
+    QCOMPARE(replies.first().at(1).toMap(),
+             mining_payload("added", "Added to Anki.", added_id_text));
+    QCOMPARE(writer.calls, 0);
+    QCOMPARE(f.anki.actions().count("getMediaDirPath"), 0);
 }
 
 QTEST_GUILESS_MAIN(MiningViewModelTest)
