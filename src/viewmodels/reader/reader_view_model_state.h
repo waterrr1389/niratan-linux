@@ -79,6 +79,8 @@ struct ReaderViewModel::State {
     int statistics_today_seconds = 0;
     int statistics_session_speed = 0;
     int statistics_session_minutes = 0;
+    // The session time statisticsString shows, in seconds.
+    double statistics_session_seconds = 0.0;
     bool tracking = false;
     int chapter_index = 0;
     double chapter_progress = 0.0;
@@ -87,6 +89,8 @@ struct ReaderViewModel::State {
     int page_count = 0;
     int page_index = 0;
     std::vector<int> spine_page_counts;
+    // Per spine, the spine-local character offset where each measured page starts.
+    std::vector<std::vector<int>> spine_page_starts;
     int spine_page_offset = 0;
     int revision = 0;
     bool restoring = false;

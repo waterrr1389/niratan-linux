@@ -118,6 +118,7 @@ window.webkit = {
         } },
         selectionState: { postMessage: function(payload) { window.hoshiSend('selectionState', JSON.stringify(payload)); } },
         pageChanged: { postMessage: function(payload) { window.hoshiSend('pageChanged', JSON.stringify(payload)); } },
+        pageStarts: { postMessage: function(payload) { window.hoshiSend('pageStarts', JSON.stringify(payload)); } },
         restoreCompleted: { postMessage: function(payload) {
             clearTimeout(window.hoshiRestoreTimeout);
             window.hoshiSend('restoreCompleted', JSON.stringify(payload));
@@ -315,6 +316,9 @@ std::string reader_script_block(const ShellInput& input, const ReaderScripts& sc
     if (!script.empty() && script.back() != '\n') {
         script += '\n';
     }
+
+    script += "    window.hoshiReader.measurePageStarts = ";
+    script += input.measure_page_starts ? "true;\n" : "false;\n";
 
     script += "    window.hoshiReader.sharedSyncCoordinates = ";
     script += input.shared_sync_coordinates ? "true;\n" : "false;\n";

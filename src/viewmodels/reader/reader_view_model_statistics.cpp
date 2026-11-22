@@ -5,6 +5,7 @@
 #include <QLocale>
 
 #include <algorithm>
+#include <cmath>
 
 #include "models/statistics/reader_statistics.h"
 
@@ -95,17 +96,23 @@ void ReaderViewModel::refresh_statistics(bool notify) {
     const int today_seconds = static_cast<int>(std::max(today.reading_time, 0.0));
     const int session_speed = session.reading_speed();
     const int session_minutes = static_cast<int>(std::max(session.reading_time, 0.0) / 60);
+    const double session_seconds = std::max(session.reading_time, 0.0);
     const bool tracking = state_->tracker && state_->tracker->is_tracking();
+    // statisticsString rounds to the nearest minute, so its text can change
+    // while the truncated minutes stay the same.
+    const auto shown_minutes = [](double seconds) { return std::nearbyint(seconds / 60.0); };
     if (!notify && state_->statistics_today_characters == today_characters &&
         state_->statistics_today_seconds == today_seconds &&
         state_->statistics_session_speed == session_speed &&
-        state_->statistics_session_minutes == session_minutes && state_->tracking == tracking) {
+        state_->statistics_session_minutes == session_minutes && state_->tracking == tracking &&
+        shown_minutes(state_->statistics_session_seconds) == shown_minutes(session_seconds)) {
         return;
     }
     state_->statistics_today_characters = today_characters;
     state_->statistics_today_seconds = today_seconds;
     state_->statistics_session_speed = session_speed;
     state_->statistics_session_minutes = session_minutes;
+    state_->statistics_session_seconds = session_seconds;
     state_->tracking = tracking;
     emit statisticsChanged();
 }

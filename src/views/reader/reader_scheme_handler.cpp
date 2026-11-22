@@ -44,7 +44,10 @@ void ReaderSchemeHandler::requestStarted(QWebEngineUrlRequestJob* job) {
     }
 
     const std::string document = view_model_->document_for(path);
-    const QByteArray mime = document.empty() ? QByteArray() : QByteArrayLiteral("text/html");
+    // The chapter carries the reader's inline scripts; without the charset the
+    // document decodes as Latin-1 and the script fails to parse.
+    const QByteArray mime =
+        document.empty() ? QByteArray() : QByteArrayLiteral("text/html; charset=utf-8");
     const QByteArray body =
         document.empty() ? QByteArray() : QByteArray::fromStdString(document);
 

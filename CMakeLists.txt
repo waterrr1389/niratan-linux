@@ -184,6 +184,9 @@ qt_add_library(niratan_app STATIC
     src/viewmodels/reader/reader_view_model_mining.cpp
     src/viewmodels/reader/reader_view_model_navigation.cpp
     src/viewmodels/reader/reader_view_model_pagination.cpp
+    src/viewmodels/reader/reader_view_model_presentation.cpp
+    src/viewmodels/reader/reader_presentation.cpp
+    src/viewmodels/reader/reader_presentation.h
     src/viewmodels/reader/reader_view_model_state.h
     src/viewmodels/reader/reader_view_model_statistics.cpp
     src/views/player/mpv_item.cpp
@@ -224,7 +227,15 @@ qt_add_qml_module(niratan_app
         src/views/components/SearchBar.qml
         src/views/dictionary/AnkiMiningToast.qml
         src/views/icons/icon_map.js
+        src/views/icons/phosphor/fill/eye-slash-fill.svg
+        src/views/icons/phosphor/fill/fast-forward-fill.svg
+        src/views/icons/phosphor/fill/pause-fill.svg
+        src/views/icons/phosphor/fill/play-fill.svg
+        src/views/icons/phosphor/fill/rewind-fill.svg
         src/views/icons/phosphor/fill/x-circle-fill.svg
+        src/views/icons/phosphor/regular/arrow-line-right.svg
+        src/views/icons/phosphor/regular/book.svg
+        src/views/icons/phosphor/regular/bookmark-simple.svg
         src/views/icons/phosphor/regular/book-open-text.svg
         src/views/icons/phosphor/regular/books.svg
         src/views/icons/phosphor/regular/chart-line.svg
@@ -233,6 +244,21 @@ qt_add_qml_module(niratan_app
         src/views/icons/phosphor/regular/magnifying-glass.svg
         src/views/icons/phosphor/regular/plus.svg
         src/views/icons/phosphor/regular/sidebar-simple.svg
+        src/views/icons/phosphor/regular/caret-left.svg
+        src/views/icons/phosphor/regular/caret-right.svg
+        src/views/icons/phosphor/regular/chart-bar.svg
+        src/views/icons/phosphor/regular/clock-clockwise.svg
+        src/views/icons/phosphor/regular/clock-counter-clockwise.svg
+        src/views/icons/phosphor/regular/headphones.svg
+        src/views/icons/phosphor/regular/highlighter.svg
+        src/views/icons/phosphor/regular/images.svg
+        src/views/icons/phosphor/regular/list-bullets.svg
+        src/views/icons/phosphor/regular/palette.svg
+        src/views/icons/phosphor/regular/timer.svg
+        src/views/icons/phosphor/regular/trash.svg
+        src/views/icons/phosphor/regular/tray-arrow-down.svg
+        src/views/icons/phosphor/regular/waveform.svg
+        src/views/icons/phosphor/regular/x.svg
         src/views/icons/phosphor/regular/video.svg
         src/views/shell/ReaderWindow.qml
         src/views/shell/Sidebar.qml
@@ -255,7 +281,18 @@ qt_add_qml_module(niratan_app
         src/views/pages/SettingRow.qml
         src/views/pages/SettingsSliderRow.qml
         src/views/reader/SasayakiChaptersTab.qml
+        src/views/reader/ReaderAppearancePanel.qml
+        src/views/reader/ReaderBottomControls.qml
+        src/views/reader/ReaderGoToChaptersTab.qml
+        src/views/reader/ReaderGoToHighlightsTab.qml
+        src/views/reader/ReaderGoToPanel.qml
+        src/views/reader/ReaderGoToSearchTab.qml
+        src/views/reader/ReaderInspectorHeader.qml
+        src/views/reader/ReaderInspectorTabBar.qml
+        src/views/reader/ReaderSidePanel.qml
+        src/views/reader/ReaderTopInfo.qml
         src/views/reader/SasayakiPanel.qml
+        src/views/reader/SasayakiPlaybackHeader.qml
         src/views/reader/SasayakiResourcesTab.qml
         src/views/reader/SasayakiSettingsTab.qml
         src/views/reader/SasayakiShortcuts.qml

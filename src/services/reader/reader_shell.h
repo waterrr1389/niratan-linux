@@ -53,6 +53,10 @@ struct ShellInput {
     // Distinguishes restores of the same page; the web view echoes it back.
     std::string restore_token;
 
+    // NativeReaderView.pageLayoutKey: measure page starts only when pages are
+    // shown and at least one progress line uses them.
+    bool measure_page_starts = false;
+
     // A JavaScript expression evaluated once fonts are ready, such as
     // "window.hoshiReader.restoreProgress(0.25)". Empty does nothing.
     std::string initial_restore_expression;

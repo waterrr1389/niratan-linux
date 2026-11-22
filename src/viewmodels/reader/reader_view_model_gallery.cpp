@@ -7,6 +7,7 @@
 #include <QUrl>
 #include <QUuid>
 
+#include <algorithm>
 #include <set>
 
 #include "services/reader/character_normalizer.h"
@@ -70,13 +71,26 @@ void ReaderViewModel::scan_gallery_chapter(int index, std::size_t revision, cons
     QStringList directory = QString::fromStdString(session.spine_path(index)).split(QLatin1Char('/'));
     directory.removeLast();
     const QString document = QString::fromStdString(session.chapter_document(index, {}, {}));
+    const auto chapter_info = session.info().chapter_info.find(session.spine_path(index));
+    const int chapter_start =
+        chapter_info != session.info().chapter_info.end() ? chapter_info->second.current_total : 0;
+    const int chapter_count =
+        chapter_info != session.info().chapter_info.end() ? chapter_info->second.chapter_count : 0;
+    const int reading_position =
+        session.character_offset(state_->chapter_index, state_->chapter_progress);
     auto tags = tag_expression.globalMatch(document);
     std::set<std::string> seen;
     while (tags.hasNext()) {
-        const QString tag = tags.next().captured();
+        const auto match = tags.next();
+        const QString tag = match.captured();
         if (!tag.startsWith(QStringLiteral("<img"), Qt::CaseInsensitive)) {
             continue;
         }
+        // ReaderImageGalleryIndex: the readable characters before the tag place
+        // the image in the chapter.
+        const int offset =
+            reader::readable_character_count(document.left(match.capturedStart()).toStdString());
+        const int position = chapter_start + std::min(offset, chapter_count);
         QString source;
         QString classes;
         auto attributes = attribute_expression.globalMatch(tag);
@@ -132,6 +146,9 @@ void ReaderViewModel::scan_gallery_chapter(int index, std::size_t revision, cons
             {QStringLiteral("chapterIndex"), index},
             {QStringLiteral("path"), image_path},
             {QStringLiteral("url"), url},
+            {QStringLiteral("position"), position},
+            {QStringLiteral("isRead"),
+             chapter_info == session.info().chapter_info.end() || position <= reading_position},
         });
     }
     // Yield between chapters to keep the drawer responsive during the scan.

@@ -65,9 +65,19 @@ ReaderViewModel* ReaderViewModel::create(QQmlEngine*, QJSEngine*) {
 ReaderViewModel::ReaderViewModel()
     : state_(std::make_unique<State>([this] { reload_settings(true); })) {
     // The inspector's text follows the tracker, the position and the profile.
-    connect(this, &ReaderViewModel::statisticsChanged, this, &ReaderViewModel::statisticsInspectorChanged);
-    connect(this, &ReaderViewModel::progressChanged, this, &ReaderViewModel::statisticsInspectorChanged);
-    connect(this, &ReaderViewModel::settingsChanged, this, &ReaderViewModel::statisticsInspectorChanged);
+    connect(this, &ReaderViewModel::statisticsChanged, this,
+            &ReaderViewModel::statisticsInspectorChanged);
+    connect(this, &ReaderViewModel::progressChanged, this,
+            &ReaderViewModel::statisticsInspectorChanged);
+    connect(this, &ReaderViewModel::settingsChanged, this,
+            &ReaderViewModel::statisticsInspectorChanged);
+    // The overlay text follows the position, the pages, the settings and the totals.
+    for (const auto signal :
+         {&ReaderViewModel::progressChanged, &ReaderViewModel::paginationChanged,
+          &ReaderViewModel::settingsChanged, &ReaderViewModel::statisticsChanged,
+          &ReaderViewModel::bookChanged, &ReaderViewModel::chapterChanged}) {
+        connect(this, signal, this, &ReaderViewModel::infoTextChanged);
+    }
     reload_settings(false);
     update_palette();
 }
@@ -159,22 +169,6 @@ int ReaderViewModel::popup_swipe_threshold() const { return state_->settings.pop
 int ReaderViewModel::popup_width() const { return state_->settings.popup_width; }
 QString ReaderViewModel::ui_theme() const { return QString::fromStdString(state_->settings.ui_theme); }
 bool ReaderViewModel::english_content() const { return state_->content_language == "en"; }
-
-QVariantList ReaderViewModel::chapters() const {
-    QVariantList result;
-    if (!state_->session.has_value()) {
-        return result;
-    }
-    for (const auto& entry : state_->session->contents()) {
-        const int start = state_->session->contents_character_start(entry).value_or(-1);
-        result.append(QVariantMap{{QStringLiteral("index"), entry.spine_index},
-                                  {QStringLiteral("characterStart"), start},
-                                  {QStringLiteral("level"), entry.level},
-                                  {QStringLiteral("title"), QString::fromStdString(entry.title)},
-                                  {QStringLiteral("fragment"), QString::fromStdString(entry.fragment)}});
-    }
-    return result;
-}
 
 QVariantList ReaderViewModel::search_results() const { return state_->search_results; }
 
@@ -550,6 +544,7 @@ void ReaderViewModel::closeBook() {
     state_->fragment.clear();
     state_->chapter_url.clear();
     state_->spine_page_counts.clear();
+    state_->spine_page_starts.clear();
     set_pagination(0, 0);
     emit bookChanged();
     emit highlightsChanged();
@@ -664,6 +659,19 @@ void ReaderViewModel::message(const QString& name, const QString& payload) {
         if (count > 0 && index >= 1 && index <= count) {
             set_pagination(index, count);
         }
+    } else if (name == QStringLiteral("pageStarts")) {
+        const QJsonArray values = data.value(QStringLiteral("starts")).toArray();
+        std::vector<int> starts;
+        starts.reserve(static_cast<std::size_t>(values.size()));
+        for (const auto& value : values) {
+            starts.push_back(value.toInt());
+        }
+        const int spine = state_->chapter_index;
+        if (!starts.empty() && spine >= 0 &&
+            static_cast<std::size_t>(spine) < state_->spine_page_starts.size()) {
+            state_->spine_page_starts[static_cast<std::size_t>(spine)] = std::move(starts);
+            emit paginationChanged();
+        }
     }
 }
 
@@ -713,6 +721,7 @@ void ReaderViewModel::reload_document(bool reflow) {
     state_->chapter_url = QString::fromUtf8(url.toEncoded());
     if (reflow) {
         state_->spine_page_counts.assign(state_->session->spine_count(), 0);
+        state_->spine_page_starts.assign(state_->session->spine_count(), {});
     }
     set_pagination(0, 0);
     emit restoreStateChanged();
@@ -765,6 +774,9 @@ std::string ReaderViewModel::shell_document(const std::string& path) {
         return {};
     }
     ShellInput input;
+    input.measure_page_starts = !state_->settings.continuous_mode &&
+        state_->settings.progress_count.value_or("Characters") == "Pages" &&
+        (show_progress() || show_chapter_progress());
     input.appearance.vertical_writing = state_->settings.vertical_writing;
     input.appearance.continuous = state_->settings.continuous_mode;
     input.wheel_page_turn = state_->settings.wheel_page_turn;

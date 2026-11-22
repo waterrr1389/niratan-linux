@@ -1,4 +1,28 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
+//
+// The reader window's page. The chapter web view fills the whole content
+// rectangle on the reader page colour, and the open tools float above it
+// following NativeMac/NativeReaderView.swift (NativeReaderView.body,
+// NativeReaderLoader.body): onTapOutside and focus mode, the side-panel
+// dismiss layer, nativeTopInfoOverlay, nativeBottomInfoOverlay,
+// nativeBottomControls, toggleSidePanel and updateReaderContentCoverage, the
+// .gallery overlay with GalleryView.swift, the Jump to alert of
+// Features/Reader/Search/ReaderGoToView.swift, and the Sasayaki inspector of
+// Features/Sasayaki/SasayakiSheet.swift.
+//
+// The page owns the single active tool: Go to opens on the leading edge, the
+// Appearance, Statistics and Sasayaki inspectors on the trailing edge, and the
+// Gallery covers everything above the panels. Opening another tool replaces
+// the open one; pressing the same Go to, Appearance or Statistics button again
+// closes it, while Sasayaki always opens its inspector. A click outside an open
+// side panel closes only the panel, so focus mode stays off. Escape closes a
+// side panel even while the chapter has focus; in the gallery it first closes
+// the preview and then the gallery.
+//
+// Swift's ReaderLyricsModeView, the history back/forward capsules, cloud
+// sync-on-open and the Fushi conflict sheet have no Linux backing and are not
+// drawn. The web view keeps the live chapter, restore revision, selection and
+// highlight menu, page turns, lookup anchoring and cue callbacks.
 
 pragma ComponentBehavior: Bound
 
@@ -11,16 +35,26 @@ import QtWebChannel
 import QtWebEngine
 import Niratan
 
-// The web view reports through the bridge; page turning and progress polling
-// run here because the model never touches QtWebEngine.
 Item {
     id: page
     focus: true
 
     signal backRequested()
+
+    // The one open tool: "", "goTo", "appearance", "statistics", "sasayaki" or
+    // "gallery".
+    property string activeTool: ""
+    property bool focusMode: false
+
     readonly property bool readerWindowActive: Window.window ? Window.window.active : true
+    readonly property bool leadingPanelRequested: activeTool === "goTo"
+    readonly property bool trailingPanelRequested: activeTool === "appearance"
+                                                   || activeTool === "statistics"
+                                                   || activeTool === "sasayaki"
+    readonly property bool sidePanelOpen: leadingPanelRequested || trailingPanelRequested
+    // updateReaderContentCoverage: every tool but Statistics covers the reader.
     readonly property bool statisticsContextActive: visible && readerWindowActive
-        && (statisticsPanel.visible || (!toc.visible && !sasayakiPanel.opened))
+        && (activeTool === "" || activeTool === "statistics")
 
     function dismissLookup(resumePausedPlayback) {
         lookupSurface.dismiss(resumePausedPlayback !== false)
@@ -92,6 +126,23 @@ Item {
         }
     }
 
+    function openTool(tool) {
+        if (tool === "gallery") {
+            ReaderViewModel.loadGallery()
+            activeTool = "gallery"
+            return
+        }
+        if (tool === "sasayaki") {
+            activeTool = "sasayaki"
+            return
+        }
+        activeTool = activeTool === tool ? "" : tool
+    }
+
+    function closeTool() {
+        activeTool = ""
+    }
+
     Component.onCompleted: {
         ReaderViewModel.setReaderActive(statisticsContextActive)
         ReaderViewModel.setDark(ThemeState.systemDark)
@@ -100,6 +151,15 @@ Item {
     onReaderWindowActiveChanged: {
         if (readerWindowActive)
             sasayakiSettings.reload()
+    }
+
+    // NativeReaderEscapeDismissal: Escape closes an open side panel even while
+    // the web view holds focus, and does not close the reader.
+    Shortcut {
+        sequence: "Esc"
+        context: Qt.WindowShortcut
+        enabled: page.sidePanelOpen
+        onActivated: page.closeTool()
     }
 
     Connections {
@@ -128,26 +188,31 @@ Item {
                    || event.key === Qt.Key_PageUp) {
             forward = false
         } else if (event.key === Qt.Key_T && event.modifiers === Qt.NoModifier
-                   && ReaderViewModel.statisticsEnabled
-                   && !statisticsPanel.visible && !toc.visible && !sasayakiPanel.opened) {
+                   && ReaderViewModel.statisticsEnabled && !page.sidePanelOpen
+                   && page.activeTool === "") {
             ReaderViewModel.toggleTracking()
             event.accepted = true
             return
         } else if (event.key === Qt.Key_Escape) {
             if (lookupModel.hasResults) {
                 dismissLookup()
-                event.accepted = true
-                return
+            } else if (page.activeTool === "gallery") {
+                gallery.handleEscape()
+            } else if (page.sidePanelOpen) {
+                page.closeTool()
+            } else {
+                ReaderViewModel.setReaderActive(false)
+                backRequested()
             }
-            ReaderViewModel.setReaderActive(false)
-            backRequested()
             event.accepted = true
             return
         } else {
             handled = false
         }
-        if (handled) {
+        if (handled && !page.sidePanelOpen && page.activeTool === "") {
             turnPage(forward)
+            event.accepted = true
+        } else if (handled) {
             event.accepted = true
         }
     }
@@ -173,6 +238,8 @@ Item {
         function onReaderTappedOutside() {
             if (lookupModel.hasResults)
                 page.dismissLookup()
+            else
+                page.focusMode = !page.focusMode
         }
         function onChapterUrlChanged() {
             lookupModel.clear()
@@ -212,7 +279,7 @@ Item {
     SasayakiShortcuts {
         id: sasayakiShortcuts
         surface: lookupSurface
-        active: sasayakiSettings.enable && !toc.opened && !statisticsPanel.opened && !gallery.opened
+        active: sasayakiSettings.enable && page.activeTool === ""
     }
 
     QtObject {
@@ -229,6 +296,9 @@ Item {
         function onActiveCueChanged(cueId, reveal) {
             page.highlightSasayakiCue(cueId, reveal)
         }
+        function onMatchApplied() {
+            page.applySasayakiCues()
+        }
     }
 
     FileDialog {
@@ -238,377 +308,188 @@ Item {
         onAccepted: ReaderViewModel.importAndOpen(selectedFile)
     }
 
-    GridLayout {
+    Rectangle {
         anchors.fill: parent
-        columns: 1
-        rowSpacing: 0
-        PageHeader {
-            Layout.row: 0
-            Layout.column: 0
-            title: ReaderViewModel.hasBook ? ReaderViewModel.chapterTitle
-                                          : qsTr("No book open")
-            subtitle: ReaderViewModel.hasBook && ReaderViewModel.showTitle ? ReaderViewModel.title : ""
-            subtitleColor: ReaderViewModel.usesCustomInfoColor ? ReaderViewModel.infoColor : Theme.textSecondary
-            onBackRequested: {
-                ReaderViewModel.setReaderActive(false)
-                page.backRequested()
-            }
+        color: ReaderViewModel.hasBook ? ReaderViewModel.pageBackground
+                                       : Theme.windowBackground
+    }
 
-            ToolButton {
-                text: "A-"
-                onClicked: ReaderViewModel.fontSize -= 2
-            }
-            ToolButton {
-                text: "A+"
-                onClicked: ReaderViewModel.fontSize += 2
-            }
-            ToolButton {
-                text: ReaderViewModel.verticalWriting ? qsTr("Vertical") : qsTr("Horizontal")
-                font.pixelSize: 12
-                onClicked: ReaderViewModel.verticalWriting = !ReaderViewModel.verticalWriting
-            }
-            ToolButton {
-                text: qsTr("Go to")
-                font.pixelSize: 12
-                enabled: ReaderViewModel.hasBook
-                ToolTip.visible: hovered
-                ToolTip.text: text
-                onClicked: toc.open()
-            }
-            BarButton {
-                glyph: "▦"
-                tip: qsTr("Gallery")
-                Accessible.name: tip
-                visible: ReaderViewModel.hasBook
-                onClicked: {
-                    ReaderViewModel.loadGallery()
-                    gallery.open()
-                }
-            }
-            ToolButton {
-                text: qsTr("Statistics")
-                visible: ReaderViewModel.statisticsEnabled
-                ToolTip.visible: hovered
-                ToolTip.text: text
-                onClicked: statisticsPanel.open()
-            }
-            ReaderChrome {
-                player: sasayaki
-                sasayakiEnabled: sasayakiSettings.enable
-                pausedByLookup: lookupSurface.wasPaused
-                onSasayakiToggleRequested: lookupSurface.togglePlayback()
-            }
-            ToolButton {
-                text: qsTr("Sasayaki")
-                font.pixelSize: 12
-                visible: sasayakiSettings.enable && ReaderViewModel.hasBook
-                onClicked: sasayakiPanel.open()
+    WebEngineView {
+        id: web
+        objectName: "readerWeb"
+        readonly property size viewportSize: Qt.size(Math.round(width), Math.round(height))
+        onViewportSizeChanged: ReaderViewModel.setPageSize(viewportSize.width, viewportSize.height)
+        anchors.fill: parent
+        visible: ReaderViewModel.hasBook
+        opacity: ReaderViewModel.restoring ? 0 : 1
+        url: ReaderViewModel.chapterUrl
+        backgroundColor: ReaderViewModel.pageBackground
+        onLoadingChanged: function(request) {
+            if (request.status === WebEngineView.LoadFailedStatus)
+                ReaderViewModel.revealAfterLoadFailure(request.url.toString())
+        }
+        onContextMenuRequested: function(request) {
+            if (request.selectedText.length > 0) {
+                request.accepted = true
+                selectionMenu.popup()
             }
         }
-
-        Rectangle {
-            Layout.row: 2
-            Layout.column: 0
-            Layout.fillWidth: true
-            Layout.fillHeight: true
-            color: ReaderViewModel.hasBook ? ReaderViewModel.pageBackground : Theme.windowBackground
-
-            WebEngineView {
-                id: web
-                readonly property size viewportSize: Qt.size(Math.round(width), Math.round(height))
-                onViewportSizeChanged: ReaderViewModel.setPageSize(viewportSize.width, viewportSize.height)
-                anchors.fill: parent
-                visible: ReaderViewModel.hasBook
-                opacity: ReaderViewModel.restoring ? 0 : 1
-                url: ReaderViewModel.chapterUrl
-                backgroundColor: ReaderViewModel.pageBackground
-                onLoadingChanged: function(request) {
-                    if (request.status === WebEngineView.LoadFailedStatus)
-                        ReaderViewModel.revealAfterLoadFailure(request.url.toString())
-                }
-                onContextMenuRequested: function(request) {
-                    if (request.selectedText.length > 0) {
-                        request.accepted = true
-                        selectionMenu.popup()
-                    }
-                }
-                webChannel: WebChannel {
-                    id: channel
-                    registeredObjects: [readerBridge]
-                }
-            }
-
-            Menu {
-                id: selectionMenu
-                MenuItem {
-                    text: qsTr("Copy")
-                    onTriggered: web.triggerWebAction(WebEngineView.Copy)
-                }
-                Menu {
-                    title: qsTr("Highlights")
-                    MenuItem { text: qsTr("Yellow"); onTriggered: page.createHighlight("yellow") }
-                    MenuItem { text: qsTr("Green"); onTriggered: page.createHighlight("green") }
-                    MenuItem { text: qsTr("Blue"); onTriggered: page.createHighlight("blue") }
-                    MenuItem { text: qsTr("Pink"); onTriggered: page.createHighlight("pink") }
-                    MenuItem { text: qsTr("Purple"); onTriggered: page.createHighlight("purple") }
-                }
-            }
-
-            ReaderLookupSurface {
-                id: lookupSurface
-                popupModel: lookupModel
-                miningModel: mining
-                player: sasayaki
-                z: 1
-                visible: ReaderViewModel.hasBook && lookupModel.hasResults
-                onDismissRequested: resume => page.dismissLookup(resume)
-            }
-
-            ColumnLayout {
-                anchors.centerIn: parent
-                spacing: 12
-                visible: !ReaderViewModel.hasBook
-                Label {
-                    Layout.alignment: Qt.AlignHCenter
-                    text: qsTr("Open an EPUB to start reading")
-                    color: Theme.textSecondary
-                }
-                Button {
-                    Layout.alignment: Qt.AlignHCenter
-                    text: qsTr("Open EPUB")
-                    onClicked: openDialog.open()
-                }
-                Label {
-                    Layout.alignment: Qt.AlignHCenter
-                    visible: ReaderViewModel.error.length > 0
-                    text: ReaderViewModel.error
-                    color: Theme.textSecondary
-                    wrapMode: Text.WordWrap
-                }
-            }
-        }
-
-        ReaderProgress {
-            id: readerProgress
-            Layout.row: ReaderViewModel.showProgressTop ? 1 : 3
-            Layout.column: 0
-            Layout.fillWidth: true
+        webChannel: WebChannel {
+            id: channel
+            registeredObjects: [readerBridge]
         }
     }
 
-    ReaderStatisticsInspector {
-        id: statisticsPanel
+    Menu {
+        id: selectionMenu
+        MenuItem {
+            text: qsTr("Copy")
+            onTriggered: web.triggerWebAction(WebEngineView.Copy)
+        }
+        Menu {
+            title: qsTr("Highlights")
+            MenuItem { text: qsTr("Yellow"); onTriggered: page.createHighlight("yellow") }
+            MenuItem { text: qsTr("Green"); onTriggered: page.createHighlight("green") }
+            MenuItem { text: qsTr("Blue"); onTriggered: page.createHighlight("blue") }
+            MenuItem { text: qsTr("Pink"); onTriggered: page.createHighlight("pink") }
+            MenuItem { text: qsTr("Purple"); onTriggered: page.createHighlight("purple") }
+        }
     }
 
-    Drawer {
-        id: toc
+    ReaderLookupSurface {
+        id: lookupSurface
+        objectName: "readerLookupSurface"
+        popupModel: lookupModel
+        miningModel: mining
+        player: sasayaki
+        z: 1
+        visible: ReaderViewModel.hasBook && lookupModel.hasResults
+        onDismissRequested: resume => page.dismissLookup(resume)
+    }
+
+    ColumnLayout {
+        anchors.centerIn: parent
+        spacing: 12
+        visible: !ReaderViewModel.hasBook
+        Label {
+            Layout.alignment: Qt.AlignHCenter
+            text: qsTr("Open an EPUB to start reading")
+            color: Theme.textSecondary
+        }
+        Button {
+            Layout.alignment: Qt.AlignHCenter
+            text: qsTr("Open EPUB")
+            onClicked: openDialog.open()
+        }
+        Label {
+            Layout.alignment: Qt.AlignHCenter
+            visible: ReaderViewModel.error.length > 0
+            text: ReaderViewModel.error
+            color: Theme.textSecondary
+            wrapMode: Text.WordWrap
+        }
+    }
+
+    // isSidePanelOpen: a click on the page closes the panel and never reaches
+    // the chapter. It sits below the bottom controls and the panels, so their
+    // controls stay reachable.
+    MouseArea {
+        anchors.fill: parent
+        visible: page.sidePanelOpen
+        onClicked: page.closeTool()
+    }
+
+    ReaderTopInfo {
+        visible: !page.focusMode && (ReaderViewModel.showTitle
+                                     || (ReaderViewModel.showProgressTop
+                                         && ReaderViewModel.progressText.length > 0))
+    }
+
+    ReaderBottomControls {
+        anchors.fill: parent
+        visible: !page.focusMode
+        player: sasayaki
+        sasayakiEnabled: sasayakiSettings.enable
+        pausedByLookup: lookupSurface.wasPaused
+        onToolRequested: tool => page.openTool(tool)
+        onSasayakiToggleRequested: lookupSurface.togglePlayback()
+    }
+
+    ReaderSidePanel {
+        id: leadingPanel
+        objectName: "readerLeadingPanel"
         edge: Qt.LeftEdge
-        width: Math.min(380, page.width * 0.65)
-        height: page.height
-        modal: true
-        padding: 0
-        onAboutToShow: navigationTabs.currentIndex = 0
-        onOpened: {
-            if (chaptersList.visible && chaptersList.currentIndex >= 0)
-                chaptersList.positionViewAtIndex(chaptersList.currentIndex, ListView.Center)
-        }
-        onClosed: {
-            bookSearch.text = ""
-            ReaderViewModel.clearBookSearch()
-        }
+        width: 440
+        height: page.height - 24
+        y: 12
+        x: page.leadingPanelRequested ? 12 : -452
+        opacity: page.leadingPanelRequested ? 1 : 0
+        visible: page.leadingPanelRequested || opacity > 0
 
-        background: Rectangle {
-            color: Theme.cardBackground
-            border.width: 1
-            border.color: Theme.cardStroke
-        }
+        Behavior on x { NumberAnimation { duration: 220; easing.type: Easing.OutCubic } }
+        Behavior on opacity { NumberAnimation { duration: 220 } }
 
-        ColumnLayout {
+        Loader {
             anchors.fill: parent
-            spacing: 0
-
-            RowLayout {
-                Layout.fillWidth: true
-                Layout.margins: 16
-                Label {
-                    Layout.fillWidth: true
-                    text: qsTr("Go to")
-                    color: Theme.textPrimary
-                    font.pixelSize: 16
-                    font.bold: true
-                }
-                ToolButton {
-                    text: "\u00d7"
-                    Accessible.name: qsTr("Close")
-                    ToolTip.visible: hovered
-                    ToolTip.text: qsTr("Close")
-                    onClicked: toc.close()
-                }
-            }
-
-            TabBar {
-                id: navigationTabs
-                Layout.fillWidth: true
-                TabButton { text: qsTr("Chapters") }
-                TabButton { text: qsTr("Search") }
-                TabButton { text: qsTr("Highlights") }
-            }
-
-            ReaderContents {
-                id: chaptersList
-                Layout.fillWidth: true
-                Layout.fillHeight: true
-                visible: navigationTabs.currentIndex === 0
-                onChapterSelected: toc.close()
-            }
-
-            ColumnLayout {
-                visible: navigationTabs.currentIndex === 1
-                Layout.fillWidth: true
-                Layout.fillHeight: true
-
-                RowLayout {
-                    Layout.fillWidth: true
-                    Layout.margins: Theme.spacingSm
-                    TextField {
-                        id: bookSearch
-                        Layout.fillWidth: true
-                        placeholderText: qsTr("Search in this book")
-                        onAccepted: ReaderViewModel.searchBook(text)
-                        onTextChanged: {
-                            if (!ReaderViewModel.hasSearchableText(text))
-                                ReaderViewModel.clearBookSearch()
-                        }
-                    }
-                    ToolButton {
-                        text: qsTr("Search")
-                        enabled: ReaderViewModel.hasSearchableText(bookSearch.text)
-                                 && ReaderViewModel.searchState !== 1
-                        ToolTip.visible: hovered
-                        ToolTip.text: text
-                        onClicked: ReaderViewModel.searchBook(bookSearch.text)
-                    }
-                }
-
-                Item {
-                    Layout.fillWidth: true
-                    Layout.fillHeight: true
-                    BusyIndicator {
-                        anchors.horizontalCenter: parent.horizontalCenter
-                        anchors.bottom: searchStatus.top
-                        running: ReaderViewModel.searchState === 1
-                    }
-                    Label {
-                        id: searchStatus
-                        anchors.centerIn: parent
-                        visible: ReaderViewModel.searchResults.length === 0
-                        color: Theme.textSecondary
-                        text: {
-                            switch (ReaderViewModel.searchState) {
-                            case 1: return qsTr("Searching…")
-                            case 2: return qsTr("No matches")
-                            case 3: return qsTr("Could not search this book")
-                            default: return qsTr("Enter text to search this book")
-                            }
-                        }
-                    }
-                    ListView {
-                        anchors.fill: parent
-                        clip: true
-                        visible: ReaderViewModel.searchResults.length > 0
-                        model: ReaderViewModel.searchResults
-                        delegate: Column {
-                            id: hitGroup
-                            required property var modelData
-                            width: ListView.view.width
-                            Label {
-                                visible: hitGroup.modelData.groupCount > 0
-                                padding: Theme.spacingSm
-                                color: Theme.textSecondary
-                                text: (hitGroup.modelData.label || qsTr("Untitled Chapter"))
-                                      + " · " + qsTr("%n result(s)", "", hitGroup.modelData.groupCount)
-                            }
-                            ItemDelegate {
-                                width: hitGroup.width
-                                contentItem: Label {
-                                    wrapMode: Text.Wrap
-                                    maximumLineCount: 3
-                                    textFormat: Text.RichText
-                                    text: hitGroup.modelData.before
-                                          + "<span style=\"background-color:" + Theme.accent + "\">"
-                                          + hitGroup.modelData.match + "</span>" + hitGroup.modelData.after
-                                    color: Theme.textPrimary
-                                }
-                                onClicked: {
-                                    ReaderViewModel.jumpToCharacter(hitGroup.modelData.character)
-                                    toc.close()
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-
-            Item {
-                visible: navigationTabs.currentIndex === 2
-                Layout.fillWidth: true
-                Layout.fillHeight: true
-                Label {
-                    anchors.centerIn: parent
-                    visible: ReaderViewModel.highlights.length === 0
-                    text: qsTr("No Highlights")
-                    color: Theme.textSecondary
-                }
-                ListView {
-                    anchors.fill: parent
-                    clip: true
-                    model: ReaderViewModel.highlights
-                    section.property: "label"
-                    section.delegate: Label {
-                        required property string section
-                        text: section
-                        padding: Theme.spacingSm
-                        color: Theme.textSecondary
-                    }
-                    delegate: ItemDelegate {
-                        id: highlightRow
-                        required property var modelData
-                        width: ListView.view.width
-                        contentItem: Label {
-                            text: highlightRow.modelData.text
-                            textFormat: Text.PlainText
-                            color: Theme.textPrimary
-                            wrapMode: Text.Wrap
-                            maximumLineCount: 4
-                        }
-                        onClicked: {
-                            ReaderViewModel.jumpToCharacter(modelData.character)
-                            toc.close()
-                        }
-                        TapHandler {
-                            acceptedButtons: Qt.RightButton
-                            onTapped: highlightMenu.popup()
-                        }
-                        Menu {
-                            id: highlightMenu
-                            MenuItem {
-                                text: qsTr("Delete")
-                                onTriggered: ReaderViewModel.removeHighlight(highlightRow.modelData.id)
-                            }
-                        }
-                    }
-                }
-            }
+            active: page.leadingPanelRequested
+            sourceComponent: goToComponent
         }
     }
 
-    SasayakiPanel {
-        id: sasayakiPanel
-        anchors.fill: parent; player: sasayaki; shortcuts: sasayakiShortcuts
+    ReaderSidePanel {
+        id: trailingPanel
+        objectName: "readerTrailingPanel"
+        edge: Qt.RightEdge
+        width: 440
+        height: page.height - 24
+        y: 12
+        x: page.trailingPanelRequested ? page.width - 12 - 440 : page.width + 12
+        opacity: page.trailingPanelRequested ? 1 : 0
+        visible: page.trailingPanelRequested || opacity > 0
+
+        Behavior on x { NumberAnimation { duration: 220; easing.type: Easing.OutCubic } }
+        Behavior on opacity { NumberAnimation { duration: 220 } }
+
+        Loader {
+            anchors.fill: parent
+            active: page.trailingPanelRequested
+            sourceComponent: page.activeTool === "appearance" ? appearanceComponent
+                           : page.activeTool === "statistics" ? statisticsComponent
+                           : sasayakiComponent
+        }
     }
 
     ReaderGallery {
         id: gallery
-        readerPage: page
+        anchors.fill: parent
+        opened: page.activeTool === "gallery"
+        onCloseRequested: page.closeTool()
     }
+
+    component GoToPanel: ReaderGoToPanel {
+        anchors.fill: parent
+        onCloseRequested: page.closeTool()
+    }
+
+    component AppearancePanel: ReaderAppearancePanel {
+        anchors.fill: parent
+        onCloseRequested: page.closeTool()
+    }
+
+    component StatisticsPanel: ReaderStatisticsInspector {
+        anchors.fill: parent
+        onCloseRequested: page.closeTool()
+    }
+
+    component SasayakiInspector: SasayakiPanel {
+        anchors.fill: parent
+        opened: page.activeTool === "sasayaki"
+        player: sasayaki
+        onCloseRequested: page.closeTool()
+    }
+
+    Component { id: goToComponent; GoToPanel {} }
+    Component { id: appearanceComponent; AppearancePanel {} }
+    Component { id: statisticsComponent; StatisticsPanel {} }
+    Component { id: sasayakiComponent; SasayakiInspector {} }
 }

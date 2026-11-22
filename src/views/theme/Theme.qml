@@ -35,6 +35,10 @@ QtObject {
     // The video stage stays black in both themes: letterboxing must not follow
     // the window surface.
     readonly property color videoBackground: "#000000"
+    // Glyphs drawn over a dark media overlay stay white in both themes; the
+    // scrim is black at 45% for the unread-image cue and thumbnail badge.
+    readonly property color overlayForeground: "#FFFFFF"
+    readonly property color mediaOverlayScrim: "#73000000"
 
     readonly property color cardBackground: dark ? "#262626" : "#F1F1F1"
     readonly property color cardStroke: dark ? "#21FFFFFF" : "#17000000"

@@ -100,9 +100,10 @@ class BookSession {
     int chapter_characters_remaining(int spine_index, double progress) const;
     // NativeReaderView.progressString uses the same range for its chapter line.
     double logical_chapter_progress(int spine_index, double progress) const;
+    // The position inside that range and the range's character count.
+    std::pair<int, int> logical_chapter_position(int spine_index, double progress) const;
 
    private:
-    std::pair<int, int> logical_chapter_position(int spine_index, double progress) const;
     BookSession(niratan::novels::EpubBook book, niratan::books::BookInfo info,
                  std::vector<std::string> spine_paths,
                  std::vector<std::optional<std::string>> spine_titles,

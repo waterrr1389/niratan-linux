@@ -194,6 +194,14 @@ class ReaderViewModel : public QObject {
     Q_PROPERTY(bool tracking READ tracking NOTIFY statisticsChanged)
     Q_PROPERTY(QVariantMap statisticsInspector READ statistics_inspector NOTIFY
                    statisticsInspectorChanged)
+    // The reader overlays' text, following NativeReaderView.progressString and
+    // statisticsString, and ReaderGoToView.progressText for the current
+    // position. reader_presentation.h owns the wording; these supply the
+    // book's raw counts, the table-of-contents chapter range, the measured
+    // pages and the session totals. Empty without a book.
+    Q_PROPERTY(QString progressText READ progress_text NOTIFY infoTextChanged)
+    Q_PROPERTY(QString statisticsText READ statistics_text NOTIFY infoTextChanged)
+    Q_PROPERTY(QString positionText READ position_text NOTIFY infoTextChanged)
 
    public:
     ~ReaderViewModel() override;
@@ -297,6 +305,16 @@ class ReaderViewModel : public QObject {
     Q_INVOKABLE void toggleTracking();
     Q_INVOKABLE void tickTracking();
 
+    QString progress_text() const;
+    QString statistics_text() const;
+    QString position_text() const;
+    // ReaderGoToView.progressText for a search result's raw character.
+    Q_INVOKABLE QString positionTextAt(int rawCharacter) const;
+    // The Jump to alert's Go action: a valid display count jumps to its raw
+    // character and returns true; anything else changes nothing and returns
+    // false, which the page reports as Invalid input.
+    Q_INVOKABLE bool jumpToDisplayCount(const QString& input);
+
     // Imports the EPUB into Books and opens it. The title names the folder.
     Q_INVOKABLE bool importAndOpen(const QUrl& file);
     // Opens an already imported book folder.
@@ -369,6 +387,8 @@ class ReaderViewModel : public QObject {
     void searchChanged();
     void highlightsChanged();
     void galleryChanged();
+    // progressText, statisticsText or positionText may have changed.
+    void infoTextChanged();
     // The page should run navigation for this direction ("forward"/"backward").
     void pageTurnRequested(const QString& direction);
 

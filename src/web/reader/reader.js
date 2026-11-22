@@ -21,6 +21,8 @@ window.hoshiReader = {
     horizontalSpreadPageSize: null,
     horizontalTerminalPageTarget: null,
     horizontalContentMetricsCache: null,
+    measurePageStarts: false,
+    pageStartsMeasured: false,
     
     isVertical() {
         return window.getComputedStyle(document.body).writingMode === "vertical-rl";
@@ -277,6 +279,28 @@ window.hoshiReader = {
         return Math.min(pageCount - 1, Math.max(0, Math.round(scroll / context.pageSize)));
     },
 
+    // Once per document/layout: an intra-document restore or fragment jump
+    // reuses the starts measured after the chapter laid out.
+    measurePageStartsIfNeeded() {
+        if (!this.measurePageStarts || this.pageStartsMeasured) {
+            return;
+        }
+        this.pageStartsMeasured = true;
+        this.notifyPageStarts();
+    },
+
+    notifyPageStarts() {
+        const context = this.getScrollContext();
+        const scroll = context.vertical ? context.scrollEl.scrollTop : context.scrollEl.scrollLeft;
+        this.setScrollOffset(context, 0);
+        const starts = this.calculatePageStarts();
+        this.setScrollOffset(context, scroll);
+        window.webkit?.messageHandlers?.pageStarts?.postMessage({
+            token: window.hoshiReaderRestoreToken,
+            starts: starts
+        });
+    },
+
     notifyPageChanged() {
         const context = this.getScrollContext();
         const count = this.pageCount(context);
@@ -323,6 +347,11 @@ window.hoshiReader = {
         let node;
 
         while (node = walker.nextNode()) {
+            // The injected reader script lives in the body; it is not chapter
+            // text and must not move a page start.
+            if (node.parentElement?.closest('script, style')) {
+                continue;
+            }
             const nodeLen = this.countNativeChars(node.textContent);
             if (!nodeLen) {
                 continue;
@@ -819,6 +848,7 @@ window.hoshiReader = {
     
     async restoreProgress(progress) {
         await document.fonts.ready;
+        this.measurePageStartsIfNeeded();
         this.horizontalTerminalPageTarget = null;
         var context = this.getScrollContext();
         
@@ -910,6 +940,7 @@ window.hoshiReader = {
     
     async jumpToFragment(fragment) {
         await document.fonts.ready;
+        this.measurePageStartsIfNeeded();
         var context = this.getScrollContext();
         var target = fragment && (document.getElementById(fragment) || document.getElementsByName(fragment)[0]);
         

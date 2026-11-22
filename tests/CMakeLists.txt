@@ -725,6 +725,14 @@ target_link_libraries(tst_reader_sasayaki_navigation PRIVATE niratan_app Qt6::Te
 target_compile_options(tst_reader_sasayaki_navigation PRIVATE -Wall -Wextra -Wpedantic -Werror)
 add_test(NAME reader_sasayaki_navigation COMMAND tst_reader_sasayaki_navigation)
 
+qt_add_executable(tst_reader_presentation_text
+    viewmodels/tst_reader_presentation_text.cpp
+)
+target_include_directories(tst_reader_presentation_text PRIVATE ${CMAKE_SOURCE_DIR}/src)
+target_link_libraries(tst_reader_presentation_text PRIVATE niratan_app Qt6::Test)
+target_compile_options(tst_reader_presentation_text PRIVATE -Wall -Wextra -Wpedantic -Werror)
+add_test(NAME reader_presentation_text COMMAND tst_reader_presentation_text)
+
 qt_add_executable(tst_qml_load
     qml/tst_qml_load.cpp
 )
@@ -746,6 +754,22 @@ target_link_libraries(tst_dictionary_view PRIVATE niratan_app niratan_appplugin 
 target_compile_options(tst_dictionary_view PRIVATE -Wall -Wextra -Wpedantic -Werror)
 add_test(NAME dictionary_view COMMAND tst_dictionary_view)
 set_tests_properties(dictionary_view PROPERTIES
+    ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QTWEBENGINE_CHROMIUM_FLAGS=--disable-gpu")
+
+qt_add_executable(tst_reader_presentation
+    qml/tst_reader_presentation.cpp
+)
+target_include_directories(tst_reader_presentation PRIVATE
+    ${CMAKE_SOURCE_DIR}/src
+    ${CMAKE_CURRENT_SOURCE_DIR}/viewmodels
+    ${CMAKE_CURRENT_SOURCE_DIR}/flows
+    ${CMAKE_CURRENT_SOURCE_DIR}/dictionary
+)
+target_link_libraries(tst_reader_presentation PRIVATE niratan_app niratan_appplugin Qt6::Test
+    Qt6::Quick Qt6::QuickControls2 Qt6::WebEngineQuick)
+target_compile_options(tst_reader_presentation PRIVATE -Wall -Wextra -Wpedantic -Werror)
+add_test(NAME reader_presentation COMMAND tst_reader_presentation)
+set_tests_properties(reader_presentation PROPERTIES
     ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QTWEBENGINE_CHROMIUM_FLAGS=--disable-gpu")
 
 qt_add_executable(tst_popup_bridge
