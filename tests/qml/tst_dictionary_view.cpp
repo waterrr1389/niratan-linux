@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
 // The dictionary detail page as Features/Dictionary/DictionarySearchView.swift
-// lays it out: `DictionarySearchBar` is the page's first content at the top,
+// lays it out: `DictionarySearchBar` is the page's first content below a
+// deliberate top gap that takes the place of the macOS window-toolbar band,
 // the popup document fills the rest, and there is no title band, back control
 // or page toolbar (`NativeMac/NativeMacDetailView.swift` dictionary case,
 // `NativeMac/NativeReuseViews.swift` `NativeDictionaryReuseView.body`).
@@ -161,7 +162,7 @@ class DictionaryViewTest : public QObject {
    private slots:
     void initTestCase();
     void page_has_no_title_band();
-    void search_bar_sits_at_the_page_top();
+    void search_bar_keeps_a_top_gap();
     void clear_control_clears_and_refocuses();
     void submit_looks_up_the_query();
     void dictionary_page_shows_the_query_heading();
@@ -289,17 +290,26 @@ void DictionaryViewTest::page_has_no_title_band() {
              "the search field has a placeholder");
 }
 
-// B2, B9: the capsule bar spans the page at y = 0 with its 20 px outer inset,
-// and the field stays inside that inset at the default and minimum sizes.
-void DictionaryViewTest::search_bar_sits_at_the_page_top() {
+// B2, B3, B4: the capsule bar spans the page at a deliberate gap (at least
+// Theme.spacingSm, 8 px) below the page top, keeps its 20 px outer inset, and
+// the results surface and mining toast start at or below its bottom, so
+// neither overlaps it at the default and minimum sizes.
+void DictionaryViewTest::search_bar_keeps_a_top_gap() {
     const auto verify = [](QQuickItem* page) {
+        constexpr qreal minimum_top_gap = 8.0;  // Theme.spacingSm
+
         auto* bar = page->findChild<QQuickItem*>(QStringLiteral("searchBar"));
         QVERIFY2(bar != nullptr, "DictionaryPage has no search bar");
         auto* field = page->findChild<QQuickItem*>(QStringLiteral("field"));
         QVERIFY2(field != nullptr, "DictionaryPage has no search field");
+        auto* results = page->findChild<QQuickItem*>(QStringLiteral("results"));
+        QVERIFY2(results != nullptr, "DictionaryPage has no results surface");
 
         QCOMPARE(bar->x(), 0.0);
-        QCOMPARE(bar->y(), 0.0);
+        QVERIFY2(
+            bar->y() >= minimum_top_gap,
+            qPrintable(
+                QStringLiteral("the search bar sits flush with the page top: %1").arg(bar->y())));
         QCOMPARE(bar->width(), page->width());
 
         const QPointF field_top_left = field->mapToItem(page, QPointF(0, 0));
@@ -309,6 +319,29 @@ void DictionaryViewTest::search_bar_sits_at_the_page_top() {
         QVERIFY2(field_top_left.x() + field->width() <= page->width() - 20.0,
                  qPrintable(QStringLiteral("the field ends right of the 20 px inset: %1")
                                 .arg(field_top_left.x() + field->width())));
+
+        const qreal bar_bottom = bar->y() + bar->height();
+        const qreal results_top = results->mapToItem(page, QPointF()).y();
+        QVERIFY2(results_top >= bar_bottom,
+                 qPrintable(QStringLiteral("the results surface overlaps the bar: %1 < %2")
+                                .arg(results_top)
+                                .arg(bar_bottom)));
+        const qreal results_bottom = results->mapToItem(page, QPointF(0, results->height())).y();
+        QVERIFY2(results_bottom >= page->height() - 1.0,
+                 qPrintable(QStringLiteral("the results surface stops short of the page "
+                                           "bottom: %1 < %2")
+                                .arg(results_bottom)
+                                .arg(page->height())));
+
+        // The toast rests below its top inset; its dismissal transform is not
+        // part of the layout, so the inset is checked rather than the mapping.
+        auto* toast = page->findChild<QQuickItem*>(QStringLiteral("miningToast"));
+        QVERIFY2(toast != nullptr, "DictionaryPage has no mining toast");
+        QVERIFY2(
+            toast->property("topInset").toReal() >= bar_bottom,
+            qPrintable(QStringLiteral("the mining toast starts above the bar's bottom: %1 < %2")
+                           .arg(toast->property("topInset").toReal())
+                           .arg(bar_bottom)));
     };
 
     QQuickWindow window;
@@ -528,8 +561,9 @@ void DictionaryViewTest::page_opens_without_focusing_the_field() {
     QTRY_VERIFY2(field->hasActiveFocus(), "clicking the field did not focus it");
 }
 
-// B1: MainWindow treats the Dictionary section as owning the toolbar row, so
-// the page and its bar start at the window content top with no band above it.
+// B1, B2, B3: MainWindow treats the Dictionary section as owning the toolbar
+// row, so the page starts at the window content top with no band above it, the
+// bar keeps its top gap, and the results start at the bar's bottom.
 void DictionaryViewTest::shell_places_the_dictionary_at_the_content_top() {
     QQmlApplicationEngine engine;
     engine.loadFromModule(QStringLiteral("Niratan"), QStringLiteral("MainWindow"));
@@ -546,13 +580,15 @@ void DictionaryViewTest::shell_places_the_dictionary_at_the_content_top() {
     QVERIFY2(page != nullptr, "the search bar has no page parent");
 
     QTRY_COMPARE(page->mapToItem(window->contentItem(), QPointF()).y(), 0.0);
-    QTRY_COMPARE(bar->mapToItem(window->contentItem(), QPointF()).y(), 0.0);
+    QTRY_VERIFY2(bar->mapToItem(window->contentItem(), QPointF()).y() >= 8.0,
+                 qPrintable(QStringLiteral("the search bar sits flush with the window top: %1")
+                                .arg(bar->mapToItem(window->contentItem(), QPointF()).y())));
     QTRY_COMPARE(page->mapToItem(window->contentItem(), QPointF(0, page->height())).y(),
                  window->contentItem()->height());
 
     auto* results = item_named_in(page, QStringLiteral("results"));
     QVERIFY2(results != nullptr, "DictionaryPage has no results surface");
-    QVERIFY2(results->mapToItem(page, QPointF()).y() >= bar->height(),
+    QVERIFY2(results->mapToItem(page, QPointF()).y() >= bar->y() + bar->height(),
              "the results surface starts above the search bar's bottom");
 
     for (QObject* child : page->findChildren<QObject*>()) {
@@ -565,8 +601,9 @@ void DictionaryViewTest::shell_places_the_dictionary_at_the_content_top() {
     QVERIFY2(warnings.isEmpty(), qPrintable(warnings));
 }
 
-// B2: the collapsed sidebar passes toolbarInset 44 and the bar leaves exactly
-// that room; restoring the sidebar returns the full-page span.
+// B4: the collapsed sidebar passes toolbarInset 44 and the bar leaves exactly
+// that room; the top gap and the results below the bar hold in both states,
+// and restoring the sidebar returns the full-page span.
 void DictionaryViewTest::collapsed_sidebar_insets_the_search_bar() {
     QQmlApplicationEngine engine;
     engine.loadFromModule(QStringLiteral("Niratan"), QStringLiteral("MainWindow"));
@@ -582,26 +619,37 @@ void DictionaryViewTest::collapsed_sidebar_insets_the_search_bar() {
     auto* page = bar->parentItem();
     QVERIFY2(page != nullptr, "the search bar has no page parent");
 
+    auto* results = item_named_in(page, QStringLiteral("results"));
+    QVERIFY2(results != nullptr, "DictionaryPage has no results surface");
+
     QTRY_COMPARE(page->property("toolbarInset").toReal(), 0.0);
     QTRY_COMPARE(bar->x(), 0.0);
     QTRY_VERIFY(qAbs(bar->width() - page->width()) <= 0.5);
+    QTRY_VERIFY2(bar->y() >= 8.0, "the search bar lost its top gap with the sidebar shown");
+    QVERIFY2(results->mapToItem(page, QPointF()).y() >= bar->y() + bar->height(),
+             "the results surface overlaps the bar with the sidebar shown");
 
     window->setProperty("sidebarVisible", false);
     QTRY_COMPARE(page->property("toolbarInset").toReal(), 44.0);
     QTRY_COMPARE(bar->x(), 44.0);
     QTRY_VERIFY(qAbs(bar->width() - (page->width() - 44.0)) <= 0.5);
+    QTRY_VERIFY2(bar->y() >= 8.0, "the search bar lost its top gap with the sidebar collapsed");
+    QVERIFY2(results->mapToItem(page, QPointF()).y() >= bar->y() + bar->height(),
+             "the results surface overlaps the bar with the sidebar collapsed");
 
     window->setProperty("sidebarVisible", true);
     QTRY_COMPARE(page->property("toolbarInset").toReal(), 0.0);
     QTRY_COMPARE(bar->x(), 0.0);
     QTRY_VERIFY(qAbs(bar->width() - page->width()) <= 0.5);
+    QTRY_VERIFY2(bar->y() >= 8.0, "restoring the sidebar removed the top gap");
 
     const QString warnings = warnings_after(QStringLiteral("MainWindow"));
     QVERIFY2(warnings.isEmpty(), qPrintable(warnings));
 }
 
-// B3, B4: the aligned page keeps its first-content bar, empty placeholder and
-// results below the bar at the default and minimum window sizes.
+// B1, B2, B3: the page keeps its first-content bar below a top gap, the empty
+// placeholder and the results below the bar at the default and minimum window
+// sizes.
 void DictionaryViewTest::aligned_page_checks_after_the_shell_change() {
     for (const QSize& size : {QSize(960, 640), QSize(900, 620)}) {
         QQuickWindow window;
@@ -618,11 +666,14 @@ void DictionaryViewTest::aligned_page_checks_after_the_shell_change() {
         auto* results = page->findChild<QQuickItem*>(QStringLiteral("results"));
         QVERIFY2(results != nullptr, "DictionaryPage has no results surface");
 
-        QCOMPARE(bar->y(), 0.0);
+        QVERIFY2(
+            bar->y() >= 8.0,
+            qPrintable(
+                QStringLiteral("the search bar sits flush with the page top: %1").arg(bar->y())));
         QCOMPARE(bar->x(), 0.0);
         QVERIFY2(field->property("placeholderText").toString().isEmpty(),
                  "the search field has a placeholder");
-        QVERIFY2(results->mapToItem(page, QPointF()).y() >= bar->height(),
+        QVERIFY2(results->mapToItem(page, QPointF()).y() >= bar->y() + bar->height(),
                  "the results surface starts above the search bar's bottom");
 
         const QString warnings = warnings_after(QStringLiteral("DictionaryPage"));

@@ -15,9 +15,12 @@
 // model trims it, so an empty or whitespace-only query clears the results.
 //
 // The page owns the shell's toolbar row, so the shell leaves no 52 px strip
-// above it. While the main sidebar is collapsed the window passes
-// `toolbarInset` 44 and the bar starts at that x, leaving the floating sidebar
-// toggle clear of the capsule and field.
+// above it. A Theme.spacingSm gap above the bar stands in for the macOS window
+// toolbar band that Swift's top safe-area inset sits below (Decision D1); the
+// results surface and the mining toast start at the bar's bottom. While the
+// main sidebar is collapsed the window passes `toolbarInset` 44 and the bar
+// starts at that x, leaving the floating sidebar toggle clear of the capsule
+// and field.
 // `NativeGlassPageBackground` and `NativeGlassTopScrim` stay the shell's solid
 // window background (PLAN.md keeps glass a solid surface), and
 // `SearchResetInset` (pull down to clear or show the keyboard) is not ported:
@@ -118,7 +121,7 @@ Item {
 
         objectName: "searchBar"
         x: page.toolbarInset
-        y: 0
+        y: Theme.spacingSm
         width: page.width - page.toolbarInset
         onSubmitted: model.lookup(searchBar.text)
     }
@@ -127,9 +130,9 @@ Item {
         id: resultsArea
 
         x: 0
-        y: searchBar.height
+        y: searchBar.y + searchBar.height
         width: page.width
-        height: Math.max(0, page.height - searchBar.height)
+        height: Math.max(0, page.height - y)
 
         WebEngineView {
             id: view
@@ -243,8 +246,9 @@ Item {
     }
 
     AnkiMiningToast {
+        objectName: "miningToast"
         status: mining.toastStatus
         message: mining.toastMessage
-        topInset: searchBar.height
+        topInset: searchBar.y + searchBar.height
     }
 }

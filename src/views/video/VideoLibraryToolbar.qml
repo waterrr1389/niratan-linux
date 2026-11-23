@@ -14,6 +14,11 @@
 // `refreshAllSources`, disabled without sources or while scanning; and the Add
 // menu with "Add Video Folder", which asks the page to open the directory
 // picker.
+//
+// The row is the page's top row. Its content sits a Theme.spacingSm gap below
+// the page top, standing in for the macOS window toolbar band that Swift's
+// `.searchable(placement: .toolbar)` and `videoToolbarContent` share (Decision
+// D1); the search capsule and every trailing control keep one vertical centre.
 pragma ComponentBehavior: Bound
 
 import QtQuick
@@ -34,8 +39,8 @@ Item {
 
         objectName: "searchBar"
         x: 12 + toolbar.toolbarInset
+        y: Theme.spacingSm
         width: Math.min(260, Math.max(140, toolbar.width * 0.32))
-        anchors.verticalCenter: parent.verticalCenter
         placeholderText: qsTr("Search Videos")
         text: toolbar.model ? toolbar.model.searchText : ""
         onTextChanged: {
@@ -47,7 +52,7 @@ Item {
     ToolbarGroup {
         anchors.right: parent.right
         anchors.rightMargin: 12
-        anchors.verticalCenter: parent.verticalCenter
+        anchors.verticalCenter: searchBar.verticalCenter
 
         ToolbarButton {
             id: sortButton

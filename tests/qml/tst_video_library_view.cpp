@@ -13,10 +13,11 @@
 // Collection alerts. `VideoLibraryViewModel.sections`, `modeCounts`,
 // `emptyTitleKey` and `emptyDescriptionKey` supply the content.
 //
-// Only load, fitting 960x640 and wiring are asserted, never a size, spacing or
-// colour value (owner decision D). The data root is a temporary directory with
-// two generated videos, one bound subtitle, one saved playback position and
-// one collection, so no test reads the developer's library.
+// Only load, fitting 960x640, wiring and the search toolbar's top gap (owner
+// decision D2) are asserted, never another size, spacing or colour value. The
+// data root is a temporary directory with two generated videos, one bound
+// subtitle, one saved playback position and one collection, so no test reads
+// the developer's library.
 //
 // The shell test loads MainWindow and follows a card into PlayerPage, because
 // `VideoLibraryView.open` hands the URL, subtitle and flag to the shell rather
@@ -302,6 +303,8 @@ class VideoLibraryViewTest : public QObject {
     void refresh_finds_missing_files_and_the_missing_row_appears();
     void delete_collection_asks_then_removes_only_the_collection();
     void stored_layout_mode_survives_a_new_page();
+    void search_toolbar_keeps_a_top_gap_and_shared_centre();
+    void collapsed_sidebar_keeps_the_search_toolbar_clear();
     void default_window_fits_every_visible_control();
     void main_window_pushes_the_player_with_the_video();
 
@@ -1024,6 +1027,125 @@ void VideoLibraryViewTest::stored_layout_mode_survives_a_new_page() {
     QVERIFY(model != nullptr);
     QCOMPARE(model->property("layoutMode").toString(), QStringLiteral("list"));
     QCOMPARE(model->property("posterSize").toDouble(), 200.0);
+}
+
+// B5, B6: the search capsule keeps a visible gap (at least Theme.spacingSm,
+// 8 px) below the page top while the toolbar stays the page's top row and the
+// mode column stays visible; the capsule and the trailing toolbar controls
+// share one vertical centre and every visible control stays inside the page.
+void VideoLibraryViewTest::search_toolbar_keeps_a_top_gap_and_shared_centre() {
+    niratan::test::TempDataRoot root;
+    QVERIFY(root.isValid());
+    make_fixture(root.path());
+
+    QQuickWindow window;
+    QString error;
+    std::unique_ptr<QObject> object = create_page(window, QSize(960, 640), error);
+    QVERIFY2(object != nullptr, qPrintable(error));
+    auto* page = qobject_cast<QQuickItem*>(object.get());
+    QVERIFY(page != nullptr);
+
+    QVERIFY2(shown_item_named(page, QStringLiteral("librarySidebar")) != nullptr,
+             "the mode column is hidden at 960x640");
+    QQuickItem* search_bar = nullptr;
+    QTRY_VERIFY((search_bar = shown_item_named(page, QStringLiteral("searchBar"))) != nullptr);
+    QQuickItem* toolbar = search_bar->parentItem();
+    QVERIFY2(toolbar != nullptr, "the search bar has no toolbar parent");
+
+    QCOMPARE(toolbar->mapToItem(page, QPointF()).y(), 0.0);
+    const QPointF search_top = search_bar->mapToItem(page, QPointF());
+    QVERIFY2(search_top.y() >= 8.0,
+             qPrintable(QStringLiteral("the search capsule sits flush with the page top: %1")
+                            .arg(search_top.y())));
+
+    const qreal centre = search_top.y() + search_bar->height() / 2;
+    const QRectF bounds = page->mapRectToScene(page->boundingRect());
+    QVERIFY2(fits_viewport(*search_bar, bounds), "the search capsule leaves the page");
+
+    for (const QString& name :
+         QStringList{QStringLiteral("sortButton"), QStringLiteral("layoutListButton"),
+                     QStringLiteral("layoutPostersButton"), QStringLiteral("coverSizeButton"),
+                     QStringLiteral("refreshButton"), QStringLiteral("addButton")}) {
+        QQuickItem* control = shown_item_named(page, name);
+        QVERIFY2(control != nullptr, qPrintable(QStringLiteral("the toolbar has no ") + name));
+        const QPointF top = control->mapToItem(page, QPointF());
+        QVERIFY2(qAbs(top.y() + control->height() / 2 - centre) <= 1.0,
+                 qPrintable(QStringLiteral("%1 is not centred with the search capsule").arg(name)));
+        QVERIFY2(fits_viewport(*control, bounds),
+                 qPrintable(QStringLiteral("%1 leaves the page").arg(name)));
+    }
+
+    const QString warnings = warnings_after(QStringLiteral("VideoLibraryPage"));
+    QVERIFY2(warnings.isEmpty(), qPrintable(warnings));
+}
+
+// B7: the collapsed main sidebar passes toolbarInset 44 and the search field
+// stays clear of the floating toggle without losing the top gap or the shared
+// centre; expanding the sidebar returns the toolbar row to the page's leading
+// edge.
+void VideoLibraryViewTest::collapsed_sidebar_keeps_the_search_toolbar_clear() {
+    niratan::test::TempDataRoot root;
+    QVERIFY(root.isValid());
+    make_fixture(root.path());
+
+    QQmlApplicationEngine engine;
+    engine.loadFromModule(QStringLiteral("Niratan"), QStringLiteral("MainWindow"));
+    QVERIFY2(!engine.rootObjects().isEmpty(), "MainWindow was not created");
+    auto* window = qobject_cast<QQuickWindow*>(engine.rootObjects().constFirst());
+    QVERIFY(window != nullptr);
+    QVERIFY(QTest::qWaitForWindowExposed(window));
+
+    window->setProperty("sectionIndex", 2);
+    QQuickItem* search_bar = nullptr;
+    QTRY_VERIFY((search_bar = shown_item_named(window->contentItem(),
+                                               QStringLiteral("searchBar"))) != nullptr);
+    QQuickItem* toolbar = search_bar->parentItem();
+    QVERIFY2(toolbar != nullptr, "the search bar has no toolbar parent");
+    // The page declares the toolbar row's height; the toolbar itself does not.
+    QQuickItem* page = toolbar;
+    while (page != nullptr && page->metaObject()->indexOfProperty("toolbarHeight") < 0) {
+        page = page->parentItem();
+    }
+    QVERIFY2(page != nullptr, "the search bar has no page above it");
+
+    QTRY_COMPARE(page->property("toolbarInset").toReal(), 0.0);
+    QCOMPARE(toolbar->mapToItem(page, QPointF()).x(), 0.0);
+    QVERIFY2(search_bar->mapToItem(page, QPointF()).x() < 44.0,
+             "the expanded search bar keeps the collapsed-inset room");
+    QTRY_VERIFY2(search_bar->mapToItem(page, QPointF()).y() >= 8.0,
+                 "the expanded search capsule sits flush with the page top");
+
+    window->setProperty("sidebarVisible", false);
+    QTRY_COMPARE(page->property("toolbarInset").toReal(), 44.0);
+    QTRY_VERIFY2(search_bar->mapToItem(page, QPointF()).x() >= 44.0,
+                 qPrintable(QStringLiteral("the collapsed search bar starts inside the "
+                                           "floating toggle: %1")
+                                .arg(search_bar->mapToItem(page, QPointF()).x())));
+    QTRY_VERIFY2(search_bar->mapToItem(page, QPointF()).y() >= 8.0,
+                 "the collapsed search capsule sits flush with the page top");
+
+    const QRectF bounds = page->mapRectToScene(page->boundingRect());
+    QVERIFY2(fits_viewport(*search_bar, bounds), "the collapsed search capsule leaves the page");
+    const qreal centre = search_bar->mapToItem(page, QPointF()).y() + search_bar->height() / 2;
+    for (const QString& name :
+         QStringList{QStringLiteral("sortButton"), QStringLiteral("layoutListButton"),
+                     QStringLiteral("layoutPostersButton"), QStringLiteral("coverSizeButton"),
+                     QStringLiteral("refreshButton"), QStringLiteral("addButton")}) {
+        QQuickItem* control = shown_item_named(page, name);
+        QVERIFY2(control != nullptr, qPrintable(QStringLiteral("the toolbar has no ") + name));
+        const QPointF top = control->mapToItem(page, QPointF());
+        QVERIFY2(qAbs(top.y() + control->height() / 2 - centre) <= 1.0,
+                 qPrintable(QStringLiteral("%1 loses the shared centre when collapsed").arg(name)));
+        QVERIFY2(fits_viewport(*control, bounds),
+                 qPrintable(QStringLiteral("%1 leaves the page when collapsed").arg(name)));
+    }
+
+    window->setProperty("sidebarVisible", true);
+    QTRY_COMPARE(page->property("toolbarInset").toReal(), 0.0);
+    QTRY_COMPARE(toolbar->mapToItem(page, QPointF()).x(), 0.0);
+
+    const QString warnings = warnings_after(QStringLiteral("MainWindow"));
+    QVERIFY2(warnings.isEmpty(), qPrintable(warnings));
 }
 
 // B12: at 960x640 nothing visible leaves the page, and the mode column is
