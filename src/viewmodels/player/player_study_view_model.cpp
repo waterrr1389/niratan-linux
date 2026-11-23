@@ -444,7 +444,7 @@ void PlayerStudyViewModel::mineCurrentSubtitle() {
     MiningHistoryItem item;
     item.id = QUuid::createUuid().toString(QUuid::WithoutBraces).toUpper().toStdString();
     item.created_at = QDateTime::currentMSecsSinceEpoch() / 1000.0 - kFoundationEpoch;
-    item.video_file_name = state_->video.fileName().toStdString();
+    item.video_file_name = state_->video.fileName().section(u'.', 0, -2).toStdString();
     item.video_title = item.video_file_name;
     if (state_->video.isLocalFile()) {
         item.video_path = state_->video.toLocalFile().toStdString();

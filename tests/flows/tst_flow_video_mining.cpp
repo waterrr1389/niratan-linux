@@ -1,11 +1,24 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
-// Flow 2: open a local video, look up a subtitle word and add the Anki card.
+// Flow 2: open a local video from the library, resume it, mine a subtitle,
+// look a word up and add the Anki card, then close and refresh the library.
 //
 // The test drives the same view models and services the player page binds,
 // without loading mpv or QML, with a loopback AnkiConnect stub and a headless
-// QWebEnginePage for the popup bridge, from the sidecar subtitle to the
-// addNote request:
+// QWebEnginePage for the popup bridge:
+//
+// - Features/Video/VideoLibraryView.swift (open, the history notification) and
+//   Features/Video/VideoLibraryViewModel.swift (openURL,
+//   openFromBeginningURL, subtitleURLForOpening, refreshPlaybackHistory): B1's
+//   row resolution and B5's library refresh after the player closes.
+// - Features/Video/VideoPlaybackHistoryStore.swift (VideoPlaybackState,
+//   VideoPlaybackResumeOptions, prepareOpen, clearProgress): B2's restored
+//   position, resume options and resumability bounds.
+// - Features/Video/VideoPlayerScreen+Mining.swift (mineCurrentSubtitle),
+//   Features/Video/VideoMiningHistoryStore.swift (record) and
+//   Features/Video/Playback/PlaybackEngine.swift (VideoPlaybackSource.title):
+//   B3's study-sidebar record, its filename stem (Decision D8 of video-gap)
+//   and the current cue.
 //
 // - Features/Video/VideoPlayerScreen+Opening.swift (openVideo),
 //   Features/Video/VideoPlayerScreen+Subtitles.swift
@@ -45,6 +58,8 @@
 #include "viewmodels/anki/mining_view_model.h"
 #include "viewmodels/dictionary/dictionary_popup_model.h"
 #include "viewmodels/player/player_lookup_view_model.h"
+#include "viewmodels/player/player_study_view_model.h"
+#include "viewmodels/video/video_library_view_model.h"
 
 #include <QCryptographicHash>
 #include <QDir>
@@ -79,12 +94,18 @@
 
 #include "services/anki/anki_config.h"
 #include "services/dictionary/dictionary_store.h"
+#include "services/player/mining_history_store.h"
+#include "services/player/playback_history.h"
+#include "services/player/resume_options.h"
 #include "services/player/transcript_extractor.h"
 #include "services/profiles/profile_repository.h"
 #include "services/storage/app_paths.h"
 
 using niratan::anki::AnkiConfigStore;
 using niratan::dictionary::DictionaryStore;
+using niratan::player::MiningHistoryStore;
+using niratan::player::PlaybackHistory;
+using niratan::player::ResumeOptions;
 using niratan::profiles::ProfileRepository;
 using niratan::test::added_id;
 using niratan::test::AnkiStub;
@@ -93,6 +114,8 @@ using niratan::test::write_stored_zip;
 using niratan::viewmodels::DictionaryPopupModel;
 using niratan::viewmodels::MiningViewModel;
 using niratan::viewmodels::PlayerLookupViewModel;
+using niratan::viewmodels::PlayerStudyViewModel;
+using niratan::viewmodels::VideoLibraryViewModel;
 
 namespace {
 
@@ -159,6 +182,38 @@ QByteArray srt_bytes() {
                           "00:00:07,000 --> 00:00:08,000\n"
                           "次の次。\n")
         .toUtf8();
+}
+
+// A library source holding one clip and its bound sidecar, as adding a folder
+// to the Video section does.
+struct LibraryFixture {
+    QString source;
+    QString video;
+    QString subtitle;
+};
+
+LibraryFixture make_library(const QString& folder) {
+    LibraryFixture fixture;
+    fixture.source =
+        QString::fromStdString((niratan::storage::data_root() / folder.toStdString()).string());
+    QDir().mkpath(fixture.source);
+    fixture.video = QDir(fixture.source).filePath(QStringLiteral("Show 01.mkv"));
+    fixture.subtitle = QDir(fixture.source).filePath(QStringLiteral("Show 01.srt"));
+    write_file(fixture.video, wav_bytes());
+    write_file(fixture.subtitle, srt_bytes());
+    return fixture;
+}
+
+// The row map for id across the sections, as the page reads it.
+QVariantMap library_row(VideoLibraryViewModel& library, const QString& id) {
+    for (const QVariant& section : library.sections()) {
+        for (const QVariant& row : section.toMap().value(QStringLiteral("rows")).toList()) {
+            if (row.toMap().value(QStringLiteral("id")).toString() == id) {
+                return row.toMap();
+            }
+        }
+    }
+    return {};
 }
 
 QString fake_ffmpeg(const QString& directory) {
@@ -247,6 +302,10 @@ class FlowVideoMiningTest : public QObject {
 
    private slots:
     void initTestCase();
+    void library_resolves_the_row_clip_and_subtitle();
+    void resume_restores_the_saved_playback_state();
+    void study_sidebar_records_the_mined_subtitle();
+    void closing_saves_and_the_library_refreshes();
     void open_lookup_and_add_the_card();
 
    private:
@@ -260,6 +319,145 @@ class FlowVideoMiningTest : public QObject {
     QString media_directory_;
     int screenshot_requests_ = 0;
 };
+
+// B1: VideoLibraryView.open / VideoLibraryViewModel.openURL,
+// openFromBeginningURL and subtitleURLForOpening.
+void FlowVideoMiningTest::library_resolves_the_row_clip_and_subtitle() {
+    const LibraryFixture fixture = make_library(QStringLiteral("Library One"));
+    QVERIFY(!fixture.video.isEmpty());
+
+    VideoLibraryViewModel library;
+    library.setDisplayMode(QStringLiteral("all"));
+    library.addFolders({fixture.source});
+    QTRY_VERIFY(!library.sections().isEmpty());
+    QCOMPARE(library.openUrl(fixture.video), fixture.video);
+
+    // A bound sidecar opens only while the file exists.
+    library.bindSubtitle(fixture.video, fixture.subtitle);
+    QCOMPARE(library.subtitleUrlForOpening(fixture.video), fixture.subtitle);
+    QVERIFY(QFile::remove(fixture.subtitle));
+    QCOMPARE(library.subtitleUrlForOpening(fixture.video), QString());
+
+    // From the beginning opens the same clip and drops the stored position.
+    PlaybackHistory history(niratan::storage::data_root() / "video_playback_history.json");
+    QVERIFY(history.save(fixture.video, 20, 100));
+    QCOMPARE(library.openFromBeginningUrl(fixture.video), fixture.video);
+    QVERIFY(!PlaybackHistory(niratan::storage::data_root() / "video_playback_history.json")
+                 .state(fixture.video)
+                 .has_value());
+
+    // A vanished clip rescans its source and stays unopened.
+    QVERIFY(QFile::remove(fixture.video));
+    QCOMPARE(library.openUrl(fixture.video), QString());
+    QTRY_VERIFY(library_row(library, fixture.video).isEmpty());
+    QCOMPARE(library.errorMessage(),
+             QStringLiteral("The saved video file is no longer available."));
+}
+
+// B2: VideoPlaybackState.isResumable and VideoPlaybackHistoryStore.prepareOpen.
+void FlowVideoMiningTest::resume_restores_the_saved_playback_state() {
+    PlaybackHistory history(niratan::storage::data_root() / "resume_flow.json");
+    const QString key = QStringLiteral("/videos/Show 01.mkv");
+
+    ResumeOptions options;
+    options.speed = 1.5;
+    options.subtitle_delay = -0.25;
+    QVERIFY(history.save(key, 20, 100, options));
+    const auto state = history.state(key);
+    QVERIFY(state.has_value());
+    QVERIFY(state->resumable());
+    QCOMPARE(state->progress(), std::optional(0.2));
+
+    const auto restored = history.prepare_open(key, true, false);
+    QCOMPARE(restored.position, std::optional(20.0));
+    QCOMPARE(restored.options.speed, std::optional(1.5));
+    QCOMPARE(restored.options.subtitle_delay, std::optional(-0.25));
+
+    // An explicit start restores at 0 and removes the entry.
+    const auto fresh = history.prepare_open(key, true, true);
+    QCOMPARE(fresh.position, std::optional(0.0));
+    QVERIFY(!history.state(key).has_value());
+
+    // Under two seconds in is not stored at all (updatePlaybackState removes
+    // the entry).
+    QVERIFY(!history.save(QStringLiteral("/videos/a.mkv"), 1.5, 100));
+    QVERIFY(!history.state(QStringLiteral("/videos/a.mkv")).has_value());
+
+    // At 98 % of a long clip the state is stored but not resumable.
+    QVERIFY(history.save(QStringLiteral("/videos/b.mkv"), 980, 1000));
+    const auto near_end = history.state(QStringLiteral("/videos/b.mkv"));
+    QVERIFY(near_end.has_value());
+    QCOMPARE(near_end->progress(), std::optional(0.98));
+    QVERIFY(!near_end->resumable());
+}
+
+// B3: VideoPlayerScreen+Mining.mineCurrentSubtitle and
+// VideoMiningHistoryStore.record (videoFileName is the filename stem, D8).
+void FlowVideoMiningTest::study_sidebar_records_the_mined_subtitle() {
+    const std::filesystem::path data_root = niratan::storage::data_root();
+    QVERIFY(!data_root.empty());
+    const QString video = QString::fromStdString((data_root / "Show 01.mkv").string());
+    const QString subtitle = QString::fromStdString((data_root / "Show 01.srt").string());
+    QVERIFY(QFileInfo::exists(video));
+    QVERIFY(QFileInfo::exists(subtitle));
+
+    MiningHistoryStore::at_data_root().clear();
+
+    PlayerStudyViewModel study;
+    study.setVideo(QUrl::fromLocalFile(video));
+    const std::optional<QByteArray> document = niratan::player::read_subtitle_document(subtitle);
+    QVERIFY(document.has_value());
+    study.setSubtitleDocument(QUrl::fromLocalFile(subtitle), *document, true);
+    study.setPlaybackReady(true);
+    study.updatePlayback(3.0, 0.0);
+    QVERIFY(study.can_mine());
+    study.mineCurrentSubtitle();
+
+    const auto snapshot = MiningHistoryStore::at_data_root().load_snapshot();
+    QCOMPARE(snapshot.items.size(), std::size_t(1));
+    const auto& item = snapshot.items.front();
+    QCOMPARE(QString::fromStdString(item.video_file_name), QStringLiteral("Show 01"));
+    QCOMPARE(QString::fromStdString(item.video_title), QStringLiteral("Show 01"));
+    QCOMPARE(QString::fromStdString(item.subtitle_text), QString::fromUtf8(kCueCurrent));
+    QCOMPARE(item.cue_start, 3.0);
+    QCOMPARE(item.cue_end, 4.0);
+    QCOMPARE(QString::fromStdString(item.video_path.value_or("")), video);
+}
+
+// B5: VideoPlayerViewModel.saveCurrentPosition, the history change and the
+// library refresh (VideoLibraryView's didChange notification).
+void FlowVideoMiningTest::closing_saves_and_the_library_refreshes() {
+    const LibraryFixture fixture = make_library(QStringLiteral("Library Two"));
+    VideoLibraryViewModel library;
+    library.setDisplayMode(QStringLiteral("all"));
+    library.addFolders({fixture.source});
+    QTRY_VERIFY(!library.sections().isEmpty());
+
+    PlaybackHistory history(niratan::storage::data_root() / "video_playback_history.json");
+    QVERIFY(history.save(fixture.video, 20, 100));
+
+    QSignalSpy revisions(&library, &VideoLibraryViewModel::playbackHistoryRevisionChanged);
+    library.refreshPlaybackHistory();
+    QCOMPARE(revisions.size(), 1);
+
+    const QVariantMap row = library_row(library, fixture.video);
+    QVERIFY(!row.isEmpty());
+    const QVariantMap playback = row.value(QStringLiteral("playback")).toMap();
+    QCOMPARE(playback.value(QStringLiteral("position")).toDouble(), 20.0);
+    QCOMPARE(playback.value(QStringLiteral("resumable")).toBool(), true);
+    QCOMPARE(playback.value(QStringLiteral("progress")).toDouble(), 0.2);
+    QCOMPARE(library.openUrl(fixture.video), fixture.video);
+
+    library.markWatched(fixture.video);
+    const QVariantMap watched =
+        library_row(library, fixture.video).value(QStringLiteral("playback")).toMap();
+    QCOMPARE(watched.value(QStringLiteral("finished")).toBool(), true);
+    QCOMPARE(watched.value(QStringLiteral("resumable")).toBool(), false);
+
+    library.clearProgress(fixture.video);
+    QVERIFY(
+        library_row(library, fixture.video).value(QStringLiteral("playback")).toMap().isEmpty());
+}
 
 void FlowVideoMiningTest::initTestCase() {
     const std::filesystem::path data_root = niratan::storage::data_root();
@@ -336,8 +534,16 @@ void FlowVideoMiningTest::open_lookup_and_add_the_card() {
         QVERIFY(store.save().ok);
     }
 
-    video_path_ = QString::fromStdString((data_root / "Show 01.mkv").string());
-    const QString subtitle_path = QString::fromStdString((data_root / "Show 01.srt").string());
+    const LibraryFixture fixture = make_library(QStringLiteral("Library Lookup"));
+    VideoLibraryViewModel library;
+    library.setDisplayMode(QStringLiteral("all"));
+    library.addFolders({fixture.source});
+    QTRY_VERIFY(!library.sections().isEmpty());
+    library.bindSubtitle(fixture.video, fixture.subtitle);
+    video_path_ = library.openUrl(fixture.video);
+    const QString subtitle_path = library.subtitleUrlForOpening(fixture.video);
+    QVERIFY(!video_path_.isEmpty());
+    QVERIFY(!subtitle_path.isEmpty());
 
     // VideoPlayerScreen+Opening openVideo / autoloadSubtitleIfAvailable: the
     // sidecar bytes become the lookup document, and playback at 3.5 s shows
