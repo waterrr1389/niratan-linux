@@ -1,11 +1,11 @@
 #!/bin/sh
-# Ratchet on literal type and spacing values in QML.
+# Ratchet on literal type, spacing and size values in QML.
 #
 # Pages take text sizes, weights and spacing from the control kit
 # (src/views/components/) or the theme (src/views/theme/) and do not spell
 # them as bare numbers (AGENTS.md, "Writing a view", Design language). Those
 # two directories are exempt; every other src/**/*.qml file, src/views/style/
-# included, is counted in three categories:
+# included, is counted in four categories:
 #
 #   fonts    lines assigning pixelSize or pointSize (font.pixelSize:,
 #            font.pointSize: or inside a font { } group) whose right-hand side
@@ -18,6 +18,10 @@
 #            `anchors.`) whose right-hand side holds a numeric literal other
 #            than a bare 0: `spacing: 6`, `Layout.leftMargin: Theme.spacingSm + 4`
 #            count; `spacing: 0` and `cond ? Theme.spacingSm : 0` do not
+#   sizes    lines assigning width, height, implicitWidth, implicitHeight,
+#            radius, size, iconSize, diameter or a Layout preferred, minimum
+#            or maximum width or height, with the same literal rule:
+#            `width: 64`, `radius: 8` count; `width: parent.width` does not
 #
 # An assignment, or a property declaration with a value, starts a line or
 # follows `{` or `;`, and its right-hand side ends at the next `;` or closing
@@ -122,8 +126,8 @@ function occurrences(line, pattern,    n) {
     return n
 }
 
-function count(file,    line, text, fonts, weights, spacing) {
-    fonts = weights = spacing = 0
+function count(file,    line, text, fonts, weights, spacing, sizes) {
+    fonts = weights = spacing = sizes = 0
     while ((getline line < file) > 0) {
         if (line ~ /^[ \t]*\/\//)
             continue
@@ -135,15 +139,17 @@ function count(file,    line, text, fonts, weights, spacing) {
         weights += occurrences(" " text, "[^A-Za-z0-9_]weight[ \t]*:[ \t]*[-+]?[0-9]")
         if (assigns_literal(text, "((Layout|anchors)\\.)?(spacing|rowSpacing|columnSpacing|margins|leftMargin|rightMargin|topMargin|bottomMargin|padding|leftPadding|rightPadding|topPadding|bottomPadding|horizontalPadding|verticalPadding)", 0))
             spacing++
+        if (assigns_literal(text, "(Layout\\.)?(width|height|implicitWidth|implicitHeight|radius|size|iconSize|diameter|preferredWidth|preferredHeight|minimumWidth|minimumHeight|maximumWidth|maximumHeight)", 0))
+            sizes++
     }
     close(file)
-    return fonts " " weights " " spacing
+    return fonts " " weights " " spacing " " sizes
 }
 
-# A baseline line is "<path> <fonts> <weights> <spacing>"; the path may hold
+# A baseline line is "<path> <fonts> <weights> <spacing> <sizes>"; the path may hold
 # spaces.
 function path_of(line) {
-    sub(/[ \t]+[0-9]+[ \t]+[0-9]+[ \t]+[0-9]+[ \t]*$/, "", line)
+    sub(/[ \t]+[0-9]+[ \t]+[0-9]+[ \t]+[0-9]+[ \t]+[0-9]+[ \t]*$/, "", line)
     return line
 }
 
@@ -154,11 +160,11 @@ BEGIN {
             continue
         n = split(line, fields, /[ \t]+/)
         path = path_of(line)
-        frozen[path] = fields[n - 2] " " fields[n - 1] " " fields[n]
+        frozen[path] = fields[n - 3] " " fields[n - 2] " " fields[n - 1] " " fields[n]
         order[++entries] = path
     }
     close(baseline)
-    split("fonts weights spacing", names, " ")
+    split("fonts weights spacing sizes", names, " ")
 }
 
 {
@@ -168,7 +174,7 @@ BEGIN {
     close(file)
     counts = count(file)
     if (mode == "--print") {
-        if (counts != "0 0 0")
+        if (counts != "0 0 0 0")
             print file " " counts
         next
     }
@@ -176,7 +182,7 @@ BEGIN {
     if (file in frozen) {
         split(frozen[file], allowed, " ")
         lowered = 0
-        for (i = 1; i <= 3; i++) {
+        for (i = 1; i <= 4; i++) {
             if (now[i] + 0 > allowed[i] + 0) {
                 print "design violation: " file " " names[i] " " now[i] ", frozen at " allowed[i]
                 fail = 1
@@ -187,7 +193,7 @@ BEGIN {
         if (lowered)
             print "baseline entry can be lowered: " file " " counts
     } else {
-        for (i = 1; i <= 3; i++) {
+        for (i = 1; i <= 4; i++) {
             if (now[i] + 0 > 0) {
                 print "design violation: " file " " names[i] " " now[i] ", limit is 0"
                 fail = 1

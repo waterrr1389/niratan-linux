@@ -454,12 +454,8 @@ qt_add_qml_module(niratan_app
         src/views/reader/SasayakiSettingsTab.qml
         src/views/reader/SasayakiShortcuts.qml
         src/views/reader/ReaderStatisticsInspector.qml
-        src/views/reader/ReaderProgress.qml
-        src/views/reader/ReaderContents.qml
         src/views/reader/ReaderGallery.qml
-        src/views/reader/ReaderChrome.qml
         src/views/reader/ReaderLookupSurface.qml
-        src/views/player/BarButton.qml
         src/views/player/PlayerEmptyState.qml
         src/views/player/PlayerLoadingOverlay.qml
         src/views/player/PlayerOsd.qml
