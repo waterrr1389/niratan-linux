@@ -176,6 +176,14 @@ QVariantList VideoLibraryViewModel::sourceSummaries() const {
 
 void VideoLibraryViewModel::load() {
     refreshPlaybackHistory();
+    // Nothing to resume: open on every video rather than an empty list, so a
+    // scanned folder does not look lost. Swift always opens on Continue
+    // Watching.
+    if (display_mode_ == QStringLiteral("continueWatching") && !store_.catalog().items.isEmpty() &&
+        modeCountsData().value(QStringLiteral("continueWatching")).toInt() == 0) {
+        setDisplayMode(QStringLiteral("all"));
+        return;
+    }
     notifyRows();
 }
 

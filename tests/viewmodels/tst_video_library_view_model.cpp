@@ -243,6 +243,27 @@ class VideoLibraryViewModelTest : public QObject {
         QCOMPARE(fallback.posterSize(), 160.0);
     }
 
+    // Opening the library with nothing in progress shows every video instead
+    // of an empty Continue Watching list, so a scanned folder never looks lost.
+    void loadFallsBackToAllWithoutProgress() {
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        const auto fixture = build_simple_fixture(dir.path());
+        QVERIFY(QFile::remove(QString::fromStdString(
+            (niratan::storage::data_root() / "video_playback_history.json").string())));
+
+        VideoLibraryViewModel view_model;
+        view_model.load();
+        QCOMPARE(view_model.displayMode(), QStringLiteral("all"));
+        QCOMPARE(titles(view_model).size(), 3);
+
+        PlaybackHistory history(niratan::storage::data_root() / "video_playback_history.json");
+        history.save(fixture.alpha, 20, 100, QDateTime::fromSecsSinceEpoch(100, QTimeZone::UTC));
+        VideoLibraryViewModel resuming;
+        resuming.load();
+        QCOMPARE(resuming.displayMode(), QStringLiteral("continueWatching"));
+    }
+
     void continueWatchingShowsOnlyResumableVideos() {
         QTemporaryDir dir;
         QVERIFY(dir.isValid());
