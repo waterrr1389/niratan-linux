@@ -185,6 +185,7 @@ class PlayerControlsTest : public QObject {
     void chrome_visibility_and_hit_testing();
     void page_hosts_the_bar_and_wires_the_actions();
     void legacy_controls_are_gone();
+    void bar_glyphs_keep_their_size();
 };
 
 namespace {
@@ -871,6 +872,74 @@ void PlayerControlsTest::legacy_controls_are_gone() {
     // F, R and the delay and A-B keys stay with PlayerPage.handleKey, which
     // requires a loaded clip; the bar draws none of their buttons. Full screen
     // itself is covered by the utility group test.
+}
+
+// The round bar buttons reset the style's capsule inset, so each glyph keeps
+// its size instead of being squeezed into what the inset leaves of the
+// button, and the episode buttons share the play button's centre line, as
+// VideoControlsView.episodeControls' HStack centres them.
+void PlayerControlsTest::bar_glyphs_keep_their_size() {
+    QQmlApplicationEngine engine;
+    QString error;
+    std::unique_ptr<QObject> object =
+        create_player_component(engine, QStringLiteral("VideoControlBar"),
+                                {{QStringLiteral("layoutMode"), QStringLiteral("floating")},
+                                 {QStringLiteral("availableWidth"), 712.0},
+                                 {QStringLiteral("videoFileSet"), true},
+                                 {QStringLiteral("chromeShown"), true}},
+                                error);
+    QVERIFY2(object != nullptr, qPrintable(error));
+    QQuickWindow window;
+    QQuickItem* bar = attach(window, object.get());
+    QVERIFY(bar != nullptr);
+    QTRY_COMPARE(bar->property("density").toString(), QStringLiteral("full"));
+
+    for (const QString& name :
+         {QStringLiteral("volumeButton"), QStringLiteral("previousButton"),
+          QStringLiteral("playButton"), QStringLiteral("nextButton"),
+          QStringLiteral("miningHistoryButton"), QStringLiteral("openVideoButton"),
+          QStringLiteral("mineSubtitleButton"), QStringLiteral("cycleSubtitlesButton"),
+          QStringLiteral("videoSettingsButton"), QStringLiteral("fullScreenButton")}) {
+        QQuickItem* button = item_named(bar, name);
+        QVERIFY2(button != nullptr, qPrintable(name));
+        auto* content = qvariant_cast<QQuickItem*>(button->property("contentItem"));
+        QVERIFY2(content != nullptr, qPrintable(name));
+        QVERIFY2(content->property("known").toBool(),
+                 qPrintable(QStringLiteral("%1 names no bundled glyph").arg(name)));
+        QVERIFY2(content->width() >= 14 && content->height() >= 14,
+                 qPrintable(QStringLiteral("%1 glyph is %2x%3")
+                                .arg(name)
+                                .arg(content->width())
+                                .arg(content->height())));
+    }
+
+    const auto center_y = [bar](const QString& name) {
+        QQuickItem* item = item_named(bar, name);
+        return item == nullptr ? -1.0 : item->mapToScene(item->boundingRect().center()).y();
+    };
+    const double play = center_y(QStringLiteral("playButton"));
+    QVERIFY(play >= 0);
+    QCOMPARE(center_y(QStringLiteral("previousButton")), play);
+    QCOMPARE(center_y(QStringLiteral("nextButton")), play);
+
+    // primaryControlGroup: the trailing tools keep their width and push the
+    // episode group left rather than overlapping it.
+    const auto scene_rect = [bar](const QString& name) {
+        QQuickItem* item = item_named(bar, name);
+        return item == nullptr ? QRectF() : item->mapRectToScene(item->boundingRect());
+    };
+    QVERIFY2(scene_rect(QStringLiteral("nextButton")).right() + 8 <=
+                 scene_rect(QStringLiteral("speedButton")).left(),
+             "the episode group overlaps the speed pill");
+    QVERIFY2(scene_rect(QStringLiteral("volumeTrack")).right() <=
+                 scene_rect(QStringLiteral("previousButton")).left(),
+             "the episode group overlaps the volume control");
+
+    // With room on both sides, play/pause sits at the bar's centre.
+    bar->setProperty("availableWidth", 2000.0);
+    QTRY_COMPARE(bar->property("density").toString(), QStringLiteral("full"));
+    QTRY_VERIFY(std::abs(scene_rect(QStringLiteral("playButton")).center().x() -
+                         bar->mapRectToScene(bar->boundingRect()).center().x()) <= 1.0);
 }
 
 int main(int argc, char* argv[]) {

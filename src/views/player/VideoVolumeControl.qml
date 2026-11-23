@@ -42,9 +42,10 @@ Row {
 
         objectName: "volumeButton"
         property string tip: volumeControl.isMuted ? qsTr("Unmute") : qsTr("Mute")
-        implicitWidth: 30
-        implicitHeight: 30
+        implicitWidth: 34
+        implicitHeight: 34
         padding: 0
+        horizontalPadding: 0
         focusPolicy: Qt.NoFocus
         onClicked: volumeControl.toggleMuteRequested()
 
@@ -55,7 +56,7 @@ Row {
 
         contentItem: Icon {
             name: volumeControl.volumeSymbol
-            size: 14
+            size: 17
             color: Theme.textPrimary
         }
 

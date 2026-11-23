@@ -10,6 +10,7 @@ Button {
     implicitWidth: 20
     implicitHeight: 20
     padding: 0
+    horizontalPadding: 0
     focusPolicy: Qt.TabFocus
     ToolTip.visible: hovered
     contentItem: Text {

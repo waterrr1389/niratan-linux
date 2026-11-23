@@ -31,6 +31,7 @@ var icons = {
     "square.resize": { weight: "regular", name: "arrows-out-simple" },
     "photo": { weight: "regular", name: "image" },
     "clock": { weight: "regular", name: "clock" },
+    "clock.arrow.circlepath": { weight: "regular", name: "clock-counter-clockwise" },
     "textformat.size.larger.ja": { weight: "regular", name: "text-aa" },
     "line.3.horizontal": { weight: "regular", name: "list" },
     "folder": { weight: "regular", name: "folder" },

@@ -53,9 +53,10 @@ Item {
         property string symbol
         property bool active: false
 
-        implicitWidth: 30
-        implicitHeight: 30
+        implicitWidth: 32
+        implicitHeight: 32
         padding: 0
+        horizontalPadding: 0
         focusPolicy: Qt.NoFocus
 
         ToolTip.visible: button.hovered && button.tip.length > 0
@@ -65,7 +66,7 @@ Item {
 
         contentItem: Icon {
             name: button.symbol
-            size: 15
+            size: 18
             color: button.active ? Theme.accent : Theme.textPrimary
         }
 
@@ -81,7 +82,7 @@ Item {
     Row {
         id: row
 
-        spacing: 2
+        spacing: 6
 
         UtilityButton {
             objectName: "miningHistoryButton"
@@ -112,7 +113,7 @@ Item {
         UtilityButton {
             objectName: "cycleSubtitlesButton"
             tip: qsTr("Cycle Subtitle Track (S)")
-            symbol: "chat-exclamation"
+            symbol: "exclamationmark.bubble"
             onClicked: utility.cycleSubtitlesRequested()
         }
 
@@ -132,7 +133,7 @@ Item {
             contentItem: Icon {
                 objectName: "fullScreenIcon"
                 name: utility.isFullScreen ? "arrows-in" : "arrows-out"
-                size: 15
+                size: 18
                 color: Theme.textPrimary
             }
         }

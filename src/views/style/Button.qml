@@ -23,8 +23,9 @@ T.Button {
                              implicitContentHeight + topPadding + bottomPadding)
 
     padding: 5
-    leftPadding: 12
-    rightPadding: 12
+    // The capsule inset. A control that sets its own padding resets this too,
+    // since horizontalPadding takes precedence over padding.
+    horizontalPadding: 12
     spacing: 6
     opacity: enabled ? 1 : 0.45
 

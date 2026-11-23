@@ -13,8 +13,7 @@
 // Object names: previousButton, playButton, nextButton, volumeButton,
 // volumeTrack; the play glyph is playIcon. Each button carries a `tip` string
 // for the tooltip and its accessibility name. `volumeLeads` orders the two
-// clusters so the compact row can put the episode group first; `centered`
-// centres the episode group inside a stretched transport.
+// clusters so the compact row can put the episode group first.
 pragma ComponentBehavior: Bound
 
 import QtQuick
@@ -34,7 +33,6 @@ Item {
     property bool nextEnabled: false
     property bool volumeLeads: true
     property bool showVolume: true
-    property bool centered: false
 
     readonly property string volumeSymbol: {
         if (transport.isMuted || transport.volume <= 0)
@@ -46,10 +44,9 @@ Item {
         return "speaker.wave.3.fill"
     }
 
-    implicitWidth: transport.centered ? 0
-        : (transport.showVolume ? volumeLoader.width + episodeCluster.width + 10
-                                : episodeCluster.width)
-    implicitHeight: 42
+    implicitWidth: transport.showVolume ? volumeLoader.width + episodeCluster.width + 10
+                                        : episodeCluster.width
+    implicitHeight: 46
 
     signal togglePlaybackRequested()
     signal previousRequested()
@@ -62,12 +59,13 @@ Item {
 
         property string tip
         property string symbol
-        property double symbolSize: 15
+        property double symbolSize: 18
         property bool active: false
 
-        implicitWidth: 30
-        implicitHeight: 30
+        implicitWidth: 34
+        implicitHeight: 34
         padding: 0
+        horizontalPadding: 0
         focusPolicy: Qt.NoFocus
 
         ToolTip.visible: button.hovered && button.tip.length > 0
@@ -108,7 +106,7 @@ Item {
                 objectName: "volumeButton"
                 tip: transport.isMuted ? qsTr("Unmute") : qsTr("Mute")
                 symbol: transport.volumeSymbol
-                symbolSize: 14
+                symbolSize: 17
                 onClicked: transport.toggleMuteRequested()
             }
 
@@ -135,17 +133,14 @@ Item {
 
         active: transport.showVolume
         sourceComponent: volumeComponent
-        x: transport.centered ? 0
-                              : (transport.volumeLeads ? 0 : episodeCluster.width + 10)
+        x: transport.volumeLeads ? 0 : episodeCluster.width + 10
         anchors.verticalCenter: parent.verticalCenter
     }
 
     Item {
         id: episodeCluster
 
-        x: transport.centered
-           ? Math.max(0, (transport.width - width) / 2)
-           : (transport.volumeLeads && transport.showVolume ? volumeLoader.width + 10 : 0)
+        x: transport.volumeLeads && transport.showVolume ? volumeLoader.width + 10 : 0
         anchors.verticalCenter: parent.verticalCenter
         width: episodeRow.implicitWidth
         height: episodeRow.implicitHeight
@@ -157,6 +152,7 @@ Item {
 
             TransportButton {
                 objectName: "previousButton"
+                anchors.verticalCenter: parent.verticalCenter
                 tip: qsTr("Previous Episode")
                 symbol: "backward.end.fill"
                 enabled: transport.previousEnabled
@@ -168,9 +164,10 @@ Item {
 
                 objectName: "playButton"
                 property string tip: transport.isPlaying ? qsTr("Pause") : qsTr("Play")
-                implicitWidth: 42
-                implicitHeight: 42
+                implicitWidth: 46
+                implicitHeight: 46
                 padding: 0
+                horizontalPadding: 0
                 focusPolicy: Qt.NoFocus
 
                 ToolTip.visible: playButton.hovered
@@ -183,7 +180,7 @@ Item {
                 contentItem: Icon {
                     objectName: "playIcon"
                     name: transport.isPlaying ? "pause.fill" : "play.fill"
-                    size: 22
+                    size: 25
                     color: Theme.textPrimary
                 }
 
@@ -198,6 +195,7 @@ Item {
 
             TransportButton {
                 objectName: "nextButton"
+                anchors.verticalCenter: parent.verticalCenter
                 tip: qsTr("Next Episode")
                 symbol: "forward.end.fill"
                 enabled: transport.nextEnabled

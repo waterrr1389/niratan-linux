@@ -18,6 +18,7 @@ Button {
     implicitWidth: barButton.buttonWidth
     implicitHeight: barButton.buttonHeight
     padding: 0
+    horizontalPadding: 0
     focusPolicy: Qt.NoFocus
     Layout.alignment: Qt.AlignVCenter
     text: barButton.glyph

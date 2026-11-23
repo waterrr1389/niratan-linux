@@ -71,7 +71,7 @@ Item {
     readonly property bool compactLayout: bar.layoutMode === "compactBottom"
     readonly property real chromeWidth: bar.compactLayout
         ? Math.max(0, bar.availableWidth)
-        : Math.min(760, Math.max(1, bar.availableWidth - 32))
+        : Math.min(840, Math.max(1, bar.availableWidth - 32))
     readonly property string density: {
         const fullThreshold = bar.compactLayout ? 720 : 680
         if (bar.chromeWidth >= fullThreshold)
@@ -87,7 +87,7 @@ Item {
         + " / " + bar.formatTime(bar.duration)
 
     width: chromeWidth
-    height: bar.compactLayout ? 84 : 90
+    height: bar.compactLayout ? 88 : 94
     opacity: bar.interactive ? 1 : 0
     visible: bar.interactive || bar.opacity > 0
 
@@ -241,7 +241,7 @@ Item {
 
         Loader {
             width: layoutColumn.width
-            height: 42
+            height: 46
             sourceComponent: bar.compactLayout ? compactRowComponent : floatingRowComponent
         }
     }
@@ -253,11 +253,17 @@ Item {
     Component {
         id: floatingRowComponent
 
-        // Three clusters over the same row: volume leading, the transport
-        // stretched across it so the episode group stays centred, and the
-        // speed pill with the tools trailing.
+        // Three clusters over the same row: volume leading, the episode group,
+        // and the speed pill with the tools trailing. As in
+        // primaryControlGroup's HStack, the episode group is centred while the
+        // outer clusters fit beside it; when the trailing tools need more than
+        // half the row, they keep their width and the group moves left.
         Item {
+            id: floatingRow
+
             VideoVolumeControl {
+                id: floatingVolume
+
                 anchors.left: parent.left
                 anchors.verticalCenter: parent.verticalCenter
                 visible: bar.density === "full"
@@ -270,15 +276,20 @@ Item {
             }
 
             VideoTransportControls {
-                anchors.left: parent.left
+                readonly property real leadingEdge: floatingVolume.visible
+                    ? floatingVolume.width + 8 : 0
+                readonly property real trailingEdge: floatingTrailing.x - 8
+
+                x: bar.density === "condensed" ? 0
+                    : Math.max(leadingEdge,
+                               Math.min((floatingRow.width - width) / 2, trailingEdge - width))
                 anchors.verticalCenter: parent.verticalCenter
-                width: bar.density === "condensed" ? implicitWidth : parent.width
+                width: implicitWidth
                 isPlaying: bar.isPlaying
                 isPaused: bar.isPaused
                 isMuted: bar.isMuted
                 volume: bar.volume
                 showVolume: false
-                centered: bar.density !== "condensed"
                 onTogglePlaybackRequested: bar.togglePlaybackRequested()
                 onPreviousRequested: bar.previousRequested()
                 onNextRequested: bar.nextRequested()
@@ -289,9 +300,11 @@ Item {
             }
 
             Row {
+                id: floatingTrailing
+
                 anchors.right: parent.right
                 anchors.verticalCenter: parent.verticalCenter
-                spacing: 4
+                spacing: 10
 
                 SpeedPill {
                     anchors.verticalCenter: parent.verticalCenter
@@ -392,9 +405,10 @@ Item {
 
         objectName: "speedButton"
         Layout.alignment: Qt.AlignVCenter
-        implicitWidth: 46
-        implicitHeight: 24
+        implicitWidth: 52
+        implicitHeight: 28
         padding: 0
+        horizontalPadding: 0
         focusPolicy: Qt.NoFocus
         text: bar.speedLabel(bar.speed)
         onClicked: bar.speedPanelToggleRequested()
@@ -407,14 +421,14 @@ Item {
         contentItem: Text {
             text: speedPill.text
             color: bar.compactLayout ? Theme.overlayForeground : Theme.textPrimary
-            font.pixelSize: 11
+            font.pixelSize: 13
             font.bold: true
             horizontalAlignment: Text.AlignHCenter
             verticalAlignment: Text.AlignVCenter
         }
 
         background: Rectangle {
-            radius: 12
+            radius: 14
             color: bar.speedPanelOpen
                 ? Theme.cardStroke
                 : (bar.compactLayout ? Qt.rgba(0, 0, 0, 0.2) : Theme.floatingBackground)
