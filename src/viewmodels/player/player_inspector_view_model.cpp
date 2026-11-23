@@ -105,8 +105,11 @@ std::optional<double> parse_speed_text(QString text) {
     return value;
 }
 
-QString track_title(const QVariantMap& track) {
-    const QString title = track.value(QStringLiteral("title")).toString();
+QString track_title(const QVariantMap& track, const QString& type, int id) {
+    QString title = track.value(QStringLiteral("title")).toString();
+    if (title.isEmpty()) {
+        title = type.left(1).toUpper() + type.sliced(1) + u' ' + QString::number(id);
+    }
     const QString language = track.value(QStringLiteral("language")).toString();
     return language.isEmpty() ? title : title + QStringLiteral(" · ") + language;
 }
@@ -387,10 +390,10 @@ void PlayerInspectorViewModel::rebuild_tracks() {
         const QString codec = track.value(QStringLiteral("codec")).toString();
         const bool selected = track.value(QStringLiteral("isSelected")).toBool();
         if (type == QStringLiteral("video")) {
-            video_tracks_.append(track_row(id, track_title(track), codec, selected));
+            video_tracks_.append(track_row(id, track_title(track, type, id), codec, selected));
         } else if (type == QStringLiteral("audio")) {
             audioSelected = audioSelected || selected;
-            audioRows.append(track_row(id, track_title(track), codec, selected));
+            audioRows.append(track_row(id, track_title(track, type, id), codec, selected));
         } else if (type == QStringLiteral("sub")) {
             subtitleSelected = subtitleSelected || selected;
             QString detail = codec;
@@ -398,7 +401,7 @@ void PlayerInspectorViewModel::rebuild_tracks() {
                 detail = codec.isEmpty() ? tr("External Subtitles")
                                          : tr("External Subtitles") + QStringLiteral(" · ") + codec;
             }
-            subtitleRows.append(track_row(id, track_title(track), detail, selected));
+            subtitleRows.append(track_row(id, track_title(track, type, id), detail, selected));
         }
     }
 

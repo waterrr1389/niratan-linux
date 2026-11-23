@@ -94,6 +94,7 @@ class PlayerInspectorViewModelTest : public QObject {
     void headerCaptionAndDisplayTitle();
     void episodeRowsAndSelection();
     void trackRows();
+    void untitledTrackRows();
     void selectingTracksRequestsMpvIds();
     void subtitleTimingValueText();
     void subtitleTimingCommands();
@@ -260,6 +261,26 @@ void PlayerInspectorViewModelTest::trackRows() {
     QCOMPARE(row_at(model.subtitle_tracks(), 1).value(QStringLiteral("detail")).toString(),
              QStringLiteral("External Subtitles"));
     QCOMPARE(row_at(model.subtitle_tracks(), 0).value(QStringLiteral("selected")).toBool(), true);
+}
+
+void PlayerInspectorViewModelTest::untitledTrackRows() {
+    // HSMpvClient assigns a title from the raw type and ID before
+    // VideoTrack.displayName appends a nonempty language.
+    PlayerInspectorViewModel model;
+    model.setTracks(QVariantList{
+        track(QStringLiteral("video"), 1, QString(), QString(), QStringLiteral("h264"), true),
+        track(QStringLiteral("audio"), 2, QStringLiteral(""), QStringLiteral("ja"),
+              QStringLiteral("aac"), true),
+        track(QStringLiteral("sub"), 5, QString(), QStringLiteral("en"), QStringLiteral("subrip"),
+              false, QStringLiteral("/tmp/sidecar.srt")),
+    });
+
+    QCOMPARE(row_at(model.video_tracks(), 0).value(QStringLiteral("title")).toString(),
+             QStringLiteral("Video 1"));
+    QCOMPARE(row_at(model.audio_tracks(), 1).value(QStringLiteral("title")).toString(),
+             QStringLiteral("Audio 2 · ja"));
+    QCOMPARE(row_at(model.subtitle_tracks(), 1).value(QStringLiteral("title")).toString(),
+             QStringLiteral("Sub 5 · en"));
 }
 
 void PlayerInspectorViewModelTest::selectingTracksRequestsMpvIds() {

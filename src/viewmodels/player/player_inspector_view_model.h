@@ -9,7 +9,8 @@
 // `audioTab`, `speedRows`, `isSpeedSelected`, `setSpeed`,
 // `commitSpeedInput`), VideoInspectorState.swift (`speed`, `subtitleDelay`,
 // `audioDelay`, `tracks`), VideoPlaylist.swift, VideoTrack.swift
-// (`displayName`), PlaybackEngine.swift (`VideoSubtitleTiming`,
+// (`displayName`), HSMpvClient.mm (`emitTracksFromNode:`),
+// PlaybackEngine.swift (`VideoSubtitleTiming`,
 // `VideoPlaybackSpeed`) and VideoPlayerViewModel.swift (`playlistURLs`,
 // `setSubtitleDelay`, `setAudioDelay`, `setSpeed`, `selectTrack`).
 //
@@ -19,6 +20,8 @@
 // the model never calls mpv, opens a file or writes the playback history.
 // `selectTrack` emits mpv's track type spelling and id, with 0 for Off;
 // audio and subtitle ids are the ones the history stores, never renumbered.
+// Untitled track rows use the capitalized mpv type and ID before adding any
+// language suffix; supplied titles are unchanged.
 //
 // Display strings match Swift exactly where they show a stored or computed
 // value: the episode names, the `Now Playing · n / total` caption, the
