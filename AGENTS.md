@@ -39,8 +39,13 @@ options: what should happen when they do something. Never ask them to judge
 code, layout values or technical trade-offs. When Niratan and Niratan-win
 both answer a question, do not ask at all.
 
-A problem the owner reports is reproduced as a failing test before it is
-fixed, wherever the layer allows it.
+A problem the owner reports in logic, data or anything a headless test
+reaches (services, view models, flow tests, QML loading and wiring) is
+reproduced as a failing test before it is fixed. A visual or interaction
+problem that only shows with real media, a real window or the GPU (a bar
+covering subtitles, a knob too small to grab) gets no contrived test: fix it
+from the Swift source and renders, run the existing tests and the gate, say
+in the commit body what was wrong, and the owner confirms it on the device.
 
 ## Workflow
 
@@ -222,7 +227,9 @@ Unicode rules, do the same rather than assuming ASCII.
   characters and the same banned words.
 - Install the hooks once per clone: `git config core.hooksPath scripts/hooks`.
   `pre-commit` runs the gate and refuses a commit while unstaged or untracked
-  changes exist, because the gate builds the working tree.
+  changes exist, because the gate builds the working tree. A commit that
+  stages only Markdown runs `scripts/check-style.sh` instead of the full
+  gate. Close a running Niratan before the gate: flow tests bind port 18765.
 - Above the services, three layers of tests catch what unit tests cannot,
   without rendering or screenshots:
   - QML load test: each page loads offscreen with its view model; any QML
