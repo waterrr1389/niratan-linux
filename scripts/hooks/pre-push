@@ -29,7 +29,7 @@ fi
 for commit in $commits; do
     echo "pre-push: checking $(git log -1 --format='%h %s' "$commit")" >&2
     git -C "$worktree" checkout --quiet --detach "$commit"
-    git -C "$worktree" submodule update --init --quiet
+    git -C "$worktree" submodule update --init --recursive --quiet
     if ! "$worktree/scripts/check.sh" >"$worktree.log" 2>&1; then
         tail -n 40 "$worktree.log" >&2
         echo "pre-push: $(git log -1 --format=%h "$commit") fails the gate; full log in $worktree.log" >&2
