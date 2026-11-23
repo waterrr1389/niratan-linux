@@ -222,6 +222,7 @@ void QmlLoadTest::page_components_load() {
         QStringLiteral("ReaderPage"),
         QStringLiteral("SettingsPage"),
         QStringLiteral("StatisticsPage"),
+        QStringLiteral("VideoLibraryPage"),
     };
 
     QQuickWindow window;

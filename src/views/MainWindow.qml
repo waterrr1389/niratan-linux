@@ -19,7 +19,9 @@
 // statistics page as an overlay with a back that returns to the shelf.
 // Dictionary hides its back control. Settings draws its own toolbar and
 // source list, following NativeMac/NativeReuseViews.swift NativeSettingsReuseView.
-// The Video section is the interim PlayerPage.
+// Video shows VideoLibraryPage and pushes the interim PlayerPage when a row
+// opens, carrying the URL, bound subtitle and from-beginning flag; the player
+// is still a stack page until it gets its own window.
 //
 // The reader is not a section: opening a book opens or raises the single
 // ReaderWindow after ReaderViewModel.openBook succeeds, following
@@ -52,6 +54,7 @@ ApplicationWindow {
 
     readonly property int toolbarHeight: 52
     readonly property bool pageOwnsToolbar: window.sectionIndex === 3
+                                            || window.sectionIndex === 2
                                             || (window.sectionIndex === 0 && window.bookshelfDepth === 1)
 
     readonly property var sectionTitles: [
@@ -164,8 +167,39 @@ ApplicationWindow {
     Component {
         id: videoDetail
 
-        PlayerPage {
-            onBackRequested: window.sectionIndex = 0
+        StackView {
+            id: videoStack
+
+            property var libraryPage: null
+
+            initialItem: VideoLibraryPage {
+                id: libraryPageItem
+
+                toolbarInset: window.sidebarVisible ? 0 : 44
+                Component.onCompleted: videoStack.libraryPage = libraryPageItem
+                onVideoOpened: function (url, subtitleUrl, fromBeginning) {
+                    videoStack.push(videoPlayerDetail, {
+                        initialVideoUrl: url,
+                        initialSubtitleUrl: subtitleUrl,
+                        startFromBeginning: fromBeginning
+                    })
+                }
+            }
+
+            Component {
+                id: videoPlayerDetail
+
+                PlayerPage {
+                    objectName: "videoPlayerPage"
+                    onBackRequested: {
+                        videoStack.pop()
+                        var libraryPage = videoStack.libraryPage
+                        var refresh = libraryPage ? libraryPage.refreshPlayback : undefined
+                        if (refresh)
+                            refresh()
+                    }
+                }
+            }
         }
     }
 

@@ -118,6 +118,8 @@ class VideoLibraryViewModel : public QObject {
 
     Q_INVOKABLE void load();
     Q_INVOKABLE void refreshPlaybackHistory();
+    // Dismisses the error alert without changing the catalog.
+    Q_INVOKABLE void clearError();
     Q_INVOKABLE void addFolders(const QStringList& folders);
     Q_INVOKABLE void refreshAllSources();
     Q_INVOKABLE void refreshSource(const QString& id);

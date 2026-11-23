@@ -21,6 +21,8 @@ Item {
     property bool selected: false
     property bool emphasized: false
     property color symbolColor: Theme.accent
+    // Names the badge for a page test; empty leaves it anonymous.
+    property string badgeObjectName
 
     signal clicked()
     signal contextMenuRequested()
@@ -98,6 +100,7 @@ Item {
     Text {
         id: badgeText
 
+        objectName: row.badgeObjectName
         anchors.right: parent.right
         anchors.rightMargin: 6
         anchors.verticalCenter: parent.verticalCenter

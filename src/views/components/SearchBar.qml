@@ -8,8 +8,9 @@
 // `text`.
 //
 // The field is objectName "field" and the clear control objectName
-// "clearButton", so the QML load test can reach them. The field's placeholder
-// stays empty, as CustomSearchField's TextField("") is.
+// "clearButton", so the QML load test can reach them. `placeholderText` is
+// empty by default, as CustomSearchField's TextField("") is; the video library
+// passes "Search Videos".
 
 import QtQuick
 import QtQuick.Controls
@@ -20,6 +21,7 @@ Item {
     id: searchBar
 
     property alias text: field.text
+    property alias placeholderText: field.placeholderText
 
     signal submitted()
 

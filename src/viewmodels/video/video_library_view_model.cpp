@@ -232,4 +232,12 @@ void VideoLibraryViewModel::showError(const QString& message) {
     emit errorMessageChanged();
 }
 
+void VideoLibraryViewModel::clearError() {
+    if (error_message_.isEmpty()) {
+        return;
+    }
+    error_message_.clear();
+    emit errorMessageChanged();
+}
+
 }  // namespace niratan::viewmodels

@@ -71,6 +71,13 @@ Item {
     property real osdMeter: -1
     // The loaded local video, for the video mining context.
     property url videoFile
+    // The library opens the player with its first video already chosen.
+    property url initialVideoUrl
+    property url initialSubtitleUrl
+    property bool startFromBeginning: false
+    // A bound subtitle waits for mpv to open the file; sub-add before the
+    // load fails (VideoPlayerScreen.loadSubtitle's ordered open).
+    property url pendingSubtitleUrl
 
     onStudyOpenChanged: page.scheduleHide()
 
@@ -349,6 +356,7 @@ Item {
     function openVideo(url, fromBeginning) {
         if (!url || url.toString().length === 0)
             return
+        page.pendingSubtitleUrl = ""
         page.speedPanelOpen = false
         page.speedPanelHovered = false
         page.chromeVisible = true
@@ -373,7 +381,11 @@ Item {
     }
 
     function loadSubtitle(file: url): bool {
-        if (mpv.loadExternalSubtitle(file))
+        // MpvItem::load_external_subtitle accepts a local file URL only; the
+        // library hands a bare path.
+        const text = file.toString()
+        const target = text.indexOf("file:") === 0 ? file : "file://" + text
+        if (mpv.loadExternalSubtitle(target))
             return true
         page.showSubtitleLoadError()
         return false
@@ -552,7 +564,13 @@ Item {
         }
     }
 
-    Component.onCompleted: page.forceActiveFocus()
+    Component.onCompleted: {
+        page.forceActiveFocus()
+        if (page.initialVideoUrl.toString().length > 0) {
+            page.openVideo(page.initialVideoUrl, page.startFromBeginning)
+            page.pendingSubtitleUrl = page.initialSubtitleUrl
+        }
+    }
 
     Timer {
         id: hideTimer
@@ -590,6 +608,11 @@ Item {
                 studyModel.setPlaybackReady(mpv.loaded)
                 if (!mpv.loaded)
                     return
+                if (page.pendingSubtitleUrl.toString().length > 0) {
+                    const subtitle = page.pendingSubtitleUrl
+                    page.pendingSubtitleUrl = ""
+                    page.loadSubtitle(subtitle)
+                }
                 page.speedPanelOpen = false
                 page.speedPanelHovered = false
                 page.chromeVisible = true
@@ -1345,30 +1368,8 @@ Item {
         }
     }
 
-    Dialog {
+    VideoErrorDialog {
         id: videoErrorDialog
-        property string message
-
-        function showError(error: string) {
-            if (error.length > 0) {
-                videoErrorDialog.message = error
-                videoErrorDialog.open()
-            }
-        }
-
-        anchors.centerIn: parent
-        width: Math.min(440, page.width)
-        modal: true
-        focus: true
-        title: qsTr("Video Error")
-        standardButtons: Dialog.Ok
-        onClosed: page.forceActiveFocus()
-
-        contentItem: Label {
-            text: videoErrorDialog.message
-            textFormat: Text.PlainText
-            wrapMode: Text.Wrap
-        }
     }
 
     VideoSettingsPanel {

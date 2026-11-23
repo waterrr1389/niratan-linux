@@ -266,10 +266,28 @@ qt_add_qml_module(niratan_app
         src/views/icons/phosphor/regular/bookmark-simple.svg
         src/views/icons/phosphor/regular/book-open-text.svg
         src/views/icons/phosphor/regular/books.svg
+        src/views/icons/phosphor/regular/calendar-blank.svg
         src/views/icons/phosphor/regular/chart-line.svg
         src/views/icons/phosphor/regular/brackets-curly.svg
         src/views/icons/phosphor/regular/chat-exclamation.svg
         src/views/icons/phosphor/regular/circle.svg
+        src/views/icons/phosphor/regular/circle-dashed.svg
+        src/views/icons/phosphor/regular/check-circle.svg
+        src/views/icons/phosphor/regular/dots-three.svg
+        src/views/icons/phosphor/regular/film-script.svg
+        src/views/icons/phosphor/regular/film-strip.svg
+        src/views/icons/phosphor/regular/folder-plus.svg
+        src/views/icons/phosphor/regular/info.svg
+        src/views/icons/phosphor/regular/play-circle.svg
+        src/views/icons/phosphor/regular/skip-back.svg
+        src/views/icons/phosphor/regular/squares-four.svg
+        src/views/icons/phosphor/regular/stack.svg
+        src/views/icons/phosphor/regular/stack-simple.svg
+        src/views/icons/phosphor/regular/star.svg
+        src/views/icons/phosphor/regular/text-t.svg
+        src/views/icons/phosphor/regular/warning.svg
+        src/views/icons/phosphor/regular/x-circle.svg
+        src/views/icons/phosphor/fill/star-fill.svg
         src/views/icons/phosphor/regular/gear.svg
         src/views/icons/phosphor/regular/list-checks.svg
         src/views/icons/phosphor/regular/magnifying-glass.svg
@@ -324,6 +342,14 @@ qt_add_qml_module(niratan_app
         src/views/pages/ProfilesPage.qml
         src/views/pages/SasayakiSettingsForm.qml
         src/views/pages/StatisticsPage.qml
+        src/views/pages/VideoLibraryPage.qml
+        src/views/video/VideoLibraryContent.qml
+        src/views/video/VideoLibraryDialogs.qml
+        src/views/video/VideoLibraryListRow.qml
+        src/views/video/VideoLibraryPosterCard.qml
+        src/views/video/VideoLibrarySectionHeader.qml
+        src/views/video/VideoLibrarySidebar.qml
+        src/views/video/VideoLibraryToolbar.qml
         src/views/statistics/StatisticsDeleteDialog.qml
         src/views/pages/SettingsPage.qml
         src/views/pages/SettingsNote.qml
@@ -364,6 +390,7 @@ qt_add_qml_module(niratan_app
         src/views/reader/ReaderChrome.qml
         src/views/reader/ReaderLookupSurface.qml
         src/views/player/BarButton.qml
+        src/views/player/VideoErrorDialog.qml
         src/views/player/StudySidebar.qml
         src/views/player/StudyLoopMarker.qml
         src/views/player/StudyTimelineRow.qml
