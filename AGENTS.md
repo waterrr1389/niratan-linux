@@ -141,6 +141,17 @@ spacing and control shapes follow Mac, adapted where Linux differs. Windows
 keep the desktop's title bar; toolbars sit below it. Glass is a solid theme
 surface with a thin border.
 
+Design language: structure and hierarchy follow Mac; text sizes and row
+heights are slightly larger than macOS so they read well with Linux font
+rendering. On the Mac, SwiftUI's system styles (`Form`, `Section`, `Toggle`,
+`.font(.callout)`) make every page consistent for free; here the control kit
+in `src/views/components/` plays that role. Pages build sections, rows,
+toggles, sliders, pickers and panels from the kit and take text sizes,
+weights and spacing from it or from the theme; they do not spell sizes or
+spacing as bare numbers. A control the kit lacks is added to the kit, not
+drawn inside a page. Existing pages move to the kit when they are next
+changed.
+
 1. The top comment of each QML file names the Swift files and views it
    follows.
 2. Structure, visibility conditions and state bindings come from the SwiftUI
