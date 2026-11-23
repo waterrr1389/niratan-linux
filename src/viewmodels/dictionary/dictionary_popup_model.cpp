@@ -32,6 +32,7 @@
 #include "services/dictionary/popup_html.h"
 #include "services/profiles/profile_repository.h"
 #include "services/settings/dictionary_settings_watch.h"
+#include "services/settings/global_settings.h"
 #include "services/storage/app_paths.h"
 
 namespace niratan::viewmodels {
@@ -407,9 +408,15 @@ void DictionaryPopupModel::run_lookup() {
                                      : std::nullopt,
         .search_text_size = state_->search_text_size,
     };
-    const dictionary::AudioSource source = dictionary::default_audio_source();
-    config.audio.sources = {source.url};
-    config.audio.source_names = {source.name};
+    // PopupWebView.swift passes enabledAudioSources in preference order.
+    auto preferred = settings::GlobalSettings::at_data_root().preferred_audio_source();
+    const auto fallback = dictionary::default_audio_source();
+    if (!preferred.empty() && preferred != fallback.url) {
+        config.audio.sources.push_back(std::move(preferred));
+        config.audio.source_names.push_back(tr("Preferred").toStdString());
+    }
+    config.audio.sources.push_back(fallback.url);
+    config.audio.source_names.push_back(fallback.name);
     config.mining = {.needs_audio = mining.needs_audio,
                      .allow_dupes = mining.allow_dupes,
                      .use_anki_connect = mining.use_anki_connect,

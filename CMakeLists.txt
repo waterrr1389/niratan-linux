@@ -209,6 +209,7 @@ qt_add_library(niratan_app STATIC
     src/viewmodels/settings/settings_reader_colors.cpp
     src/viewmodels/settings/settings_reader_display.cpp
     src/viewmodels/settings/settings_view_model.cpp
+    src/viewmodels/settings/settings_audio.cpp
     src/viewmodels/settings/settings_view_model.h
     src/viewmodels/settings/settings_view_model_state.h
     src/viewmodels/reader/reader_view_model.cpp
@@ -420,6 +421,7 @@ qt_add_qml_module(niratan_app
         src/views/settings/SettingsSeparator.qml
         src/views/settings/SettingsToggle.qml
         src/views/settings/StatisticsSettings.qml
+        src/views/settings/WordAudioSettings.qml
         src/views/reader/SasayakiChaptersTab.qml
         src/views/reader/ReaderAppearancePanel.qml
         src/views/reader/ReaderBottomControls.qml

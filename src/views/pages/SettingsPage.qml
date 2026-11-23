@@ -49,6 +49,7 @@ RowLayout {
                 case 3: return anki
                 case 4: return statistics
                 case 5: return sasayaki
+                case 6: return wordAudio
                 default: return appearance
                 }
             }
@@ -61,4 +62,5 @@ RowLayout {
     Component { id: anki; AnkiSettingsPage {} }
     Component { id: statistics; StatisticsSettings {} }
     Component { id: sasayaki; SasayakiSettingsForm {} }
+    Component { id: wordAudio; WordAudioSettings {} }
 }

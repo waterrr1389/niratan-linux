@@ -20,6 +20,7 @@ Rectangle {
         { key: "anki", title: qsTr("Anki"), symbol: "tray.full" },
         { key: "statistics", title: qsTr("Statistics"), symbol: "chart.xyaxis.line" },
         { key: "sasayaki", title: qsTr("Sasayaki (Audiobooks)"), symbol: "waveform" },
+        { key: "wordAudio", title: qsTr("Word Audio"), symbol: "speaker.wave.2.fill" },
         { key: "report", title: qsTr("Report an Issue"), symbol: "exclamationmark.bubble" }
     ]
     readonly property int lastSection: sections.length - 2

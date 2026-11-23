@@ -11,6 +11,7 @@
 #include "services/anki/anki_config.h"
 #include "services/dictionary/dictionary_store.h"
 #include "services/profiles/profile_repository.h"
+#include "services/settings/global_settings.h"
 #include "services/storage/app_paths.h"
 #include "viewmodels/dictionary/dictionary_popup_model.h"
 #include "yomitan_fixture.h"
@@ -27,6 +28,8 @@
 using niratan::anki::AnkiConfigStore;
 using niratan::dictionary::DictionaryStore;
 using niratan::profiles::ProfileRepository;
+using niratan::settings::GlobalSettings;
+using niratan::settings::StoreError;
 using niratan::test::minimal_index;
 using niratan::test::minimal_term_bank;
 using niratan::test::TempDataRoot;
@@ -111,6 +114,7 @@ class DictionaryPopupModelTest : public QObject {
     void whitespace_clears_results();
     void matched_text_is_the_first_result();
     void invalid_audio_url_is_reported();
+    void preferred_audio_source_precedes_the_default();
     void shell_globals_come_from_the_anki_configuration();
     void shell_globals_follow_the_active_profile();
     void the_query_follows_the_active_profile_configuration();
@@ -184,6 +188,30 @@ void DictionaryPopupModelTest::invalid_audio_url_is_reported() {
 
     QCOMPARE(audio_error_spy.count(), 1);
     QVERIFY(!model.audio_error().isEmpty());
+}
+
+void DictionaryPopupModelTest::preferred_audio_source_precedes_the_default() {
+    auto settings = GlobalSettings::at_data_root();
+    DictionaryPopupModel model;
+    model.lookup(QStringLiteral("decide"));
+    QVERIFY(model.has_results());
+    QVERIFY(model.html().contains(QStringLiteral("window.audioSourceNames = [\"Default\"];")));
+    QCOMPARE(settings.save_preferred_audio_source(
+                 "http://127.0.0.1:5050/localaudio/get/?term={term}&reading={reading}"),
+             StoreError::none);
+    model.lookup(QStringLiteral("decide"));
+
+    QVERIFY(model.html().contains(
+        QStringLiteral("window.audioSources = [\"http://127.0.0.1:5050/localaudio/get/"
+                       "?term={term}&reading={reading}\","
+                       "\"https://hoshi-reader.manhhaoo-do.workers.dev/"
+                       "?term={term}&reading={reading}\"];")));
+    QVERIFY(model.html().contains(
+        QStringLiteral("window.audioSourceNames = [\"Preferred\",\"Default\"];")));
+
+    QCOMPARE(settings.save_preferred_audio_source({}), StoreError::none);
+    model.lookup(QStringLiteral("decide"));
+    QVERIFY(model.html().contains(QStringLiteral("window.audioSourceNames = [\"Default\"];")));
 }
 
 // B9–B13, B15: the shell carries the five mining globals from the active

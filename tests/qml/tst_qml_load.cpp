@@ -396,10 +396,10 @@ void QmlLoadTest::settings_column_switches_details() {
         }
     }
     const QStringList keys{"profiles",   "appearance", "dictionaries", "anki",
-                           "statistics", "sasayaki",   "report"};
-    const QStringList titles{"Profiles",       "Appearance", "Dictionaries",
-                             "Anki",           "Statistics", "Sasayaki (Audiobooks)",
-                             "Report an Issue"};
+                           "statistics", "sasayaki",   "wordAudio",    "report"};
+    const QStringList titles{"Profiles",   "Appearance",     "Dictionaries",
+                             "Anki",       "Statistics",     "Sasayaki (Audiobooks)",
+                             "Word Audio", "Report an Issue"};
     QCOMPARE(rows.size(), keys.size());
     auto* title = window->findChild<QQuickItem*>(QStringLiteral("settingsTitle"));
     QVERIFY(title);
@@ -446,7 +446,17 @@ void QmlLoadTest::settings_column_switches_details() {
     const qreal expanded_x = title->x();
     QVERIFY(window->setProperty("sidebarVisible", false));
     QTRY_VERIFY(title->x() > expanded_x);
-    QCOMPARE(title->property("text").toString(), titles.at(5));
+    QCOMPARE(title->property("text").toString(), titles.at(6));
+    auto* source = detail->findChild<QQuickItem*>("preferredAudioSource");
+    auto* save = detail->findChild<QQuickItem*>("savePreferredAudioSource");
+    QVERIFY(source);
+    QVERIFY(save);
+    const QString url = "http://127.0.0.1:5050/localaudio/get/?term={term}&reading={reading}";
+    QVERIFY(source->setProperty("text", "  " + url + "  "));
+    QVERIFY(QMetaObject::invokeMethod(save, "clicked"));
+    QCOMPARE(source->property("text").toString(), url);
+    QTest::keyClick(window, Qt::Key_Up);
+    QTRY_COMPARE(title->property("text").toString(), titles.at(5));
     QTest::keyClick(window, Qt::Key_Up);
     QTRY_COMPARE(title->property("text").toString(), titles.at(4));
     QQuickItem* statistics = nullptr;

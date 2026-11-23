@@ -133,6 +133,7 @@ class PopupBridgeTest : public QObject {
 
    private slots:
     void play_word_audio_reaches_the_bridge();
+    void preferred_word_audio_falls_back_on_missing_or_unavailable_source();
     void play_entry_audio_uses_the_entry_reading();
     void mine_entry_posts_a_string_map_and_awaits_its_payload();
     void duplicate_check_awaits_its_payload_and_reveals_note_button();
@@ -142,6 +143,38 @@ class PopupBridgeTest : public QObject {
     void the_shell_defines_the_selection_object();
     void inline_lookup_requests_reach_the_bridge();
 };
+
+void PopupBridgeTest::preferred_word_audio_falls_back_on_missing_or_unavailable_source() {
+    MiningPopup popup;
+    QVERIFY(popup.load());
+    popup.js(QStringLiteral(R"JS(
+        window.audioSources = [
+            "http://localhost:5050/?term={term}&reading={reading}",
+            "https://example.org/?term={term}&reading={reading}"
+        ];
+        window.fetch = async (request) => {
+            const url = new URL(new URL(request).searchParams.get("url"));
+            if (url.searchParams.get("term") !== "面目ない")
+                throw new Error("Unexpected term");
+            if (url.hostname === "localhost" && window.failure === "offline")
+                throw new Error("Connection refused");
+            const sources = url.hostname === "localhost" && window.failure === "empty"
+                ? [] : [{url: url.origin + "/word.mp3"}];
+            return {json: async () => ({type: "audioSourceList", audioSources: sources})};
+        };
+        (async () => {
+            const results = [];
+            for (const state of ["ok", "empty", "offline"]) {
+                window.failure = state;
+                results.push(await fetchAudioUrl("面目ない", "めんぼくない"));
+            }
+            window.audioProbe = results.join(",");
+        })();
+    )JS"));
+    QTRY_COMPARE(popup.js("window.audioProbe"),
+                 QString("http://localhost:5050/word.mp3,https://example.org/word.mp3,"
+                         "https://example.org/word.mp3"));
+}
 
 void PopupBridgeTest::play_word_audio_reaches_the_bridge() {
     const auto assets = niratan::dictionary::load_popup_assets();

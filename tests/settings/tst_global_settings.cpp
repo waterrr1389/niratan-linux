@@ -388,6 +388,32 @@ class GlobalSettingsTest : public QObject {
         QCOMPARE(read_text(settings_file(dir)), std::string("[1]"));
     }
 
+    void preferredAudioSource_preservesOtherSettingsAndCanBeCleared() {
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        GlobalSettings settings(settings_file(dir));
+        QVERIFY(settings.preferred_audio_source().empty());
+        write_text(settings_file(dir), R"({"customCSS":"p{}"})");
+        const std::string source = "http://127.0.0.1:5050/?term={term}&reading={reading}";
+        QCOMPARE(settings.save_preferred_audio_source(source), StoreError::none);
+        QCOMPARE(settings.preferred_audio_source(), source);
+        QCOMPARE(read_object(settings_file(dir)).value("customCSS").toString(), QString("p{}"));
+        QCOMPARE(settings.save_preferred_audio_source({}), StoreError::none);
+        QVERIFY(settings.preferred_audio_source().empty());
+    }
+
+    void preferredAudioSource_rejectsInvalidTemplates() {
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        GlobalSettings settings(settings_file(dir));
+        for (const auto* source : {"https://example.org/", "file:///tmp/{term}",
+                                   "http://user@example.org/{term}", "http:///{term}"}) {
+            QCOMPARE(settings.save_preferred_audio_source(source), StoreError::io_error);
+        }
+        write_text(settings_file(dir), R"({"preferredAudioSource":true})");
+        QVERIFY(settings.preferred_audio_source().empty());
+    }
+
     // B7: a colour save writes the normalized value, not its input, and keeps
     // every other key.
     void saveSasayakiColors_writeNormalizedValues() {

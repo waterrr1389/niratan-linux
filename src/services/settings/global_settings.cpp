@@ -6,6 +6,7 @@
 #include <QJsonObject>
 #include <QJsonValue>
 #include <QString>
+#include <QUrl>
 
 #include <optional>
 #include <string>
@@ -37,6 +38,7 @@ const auto kSasayakiTextColor = QStringLiteral("sasayakiTextColor");
 const auto kSasayakiBackgroundColor = QStringLiteral("sasayakiBackgroundColor");
 const auto kSasayakiDarkTextColor = QStringLiteral("sasayakiDarkTextColor");
 const auto kSasayakiDarkBackgroundColor = QStringLiteral("sasayakiDarkBackgroundColor");
+const auto kPreferredAudioSource = QStringLiteral("preferredAudioSource");
 
 QString id_text(std::string_view id) { return QString::fromUtf8(id.data(), qsizetype(id.size())); }
 
@@ -239,6 +241,36 @@ StoreError GlobalSettings::save_sasayaki_dark_background_color(std::string_view 
         return StoreError::io_error;
     }
     return write(QJsonObject{{kSasayakiDarkBackgroundColor, *normalized}});
+}
+
+std::string GlobalSettings::preferred_audio_source() const {
+    const auto source = read_document(file_).object.value(kPreferredAudioSource).toString();
+    const auto text = source.toStdString();
+    return valid_preferred_audio_source(text) ? text : std::string{};
+}
+
+bool GlobalSettings::valid_preferred_audio_source(std::string_view source) {
+    if (source.empty()) {
+        return true;
+    }
+    if (!source.contains("{term}")) {
+        return false;
+    }
+    QString expanded = id_text(source);
+    expanded.replace(QStringLiteral("{term}"), QStringLiteral("word"));
+    expanded.replace(QStringLiteral("{reading}"), QStringLiteral("reading"));
+    const QUrl url(expanded, QUrl::StrictMode);
+    if (url.scheme() != QStringLiteral("http") && url.scheme() != QStringLiteral("https")) {
+        return false;
+    }
+    return url.isValid() && !url.host().isEmpty() && url.userInfo().isEmpty() && !url.hasFragment();
+}
+
+StoreError GlobalSettings::save_preferred_audio_source(std::string_view source) {
+    if (!valid_preferred_audio_source(source)) {
+        return StoreError::io_error;
+    }
+    return write(QJsonObject{{kPreferredAudioSource, id_text(source)}});
 }
 
 StoreError GlobalSettings::write(const QJsonObject& values) {

@@ -118,6 +118,12 @@ class GlobalSettings {
     StoreError save_sasayaki_dark_text_color(std::string_view hex);
     StoreError save_sasayaki_dark_background_color(std::string_view hex);
 
+    // One optional Yomitan JSON source, tried before the built-in source.
+    // Empty disables it. Nonempty templates need HTTP(S), a host and {term}.
+    std::string preferred_audio_source() const;
+    static bool valid_preferred_audio_source(std::string_view source);
+    StoreError save_preferred_audio_source(std::string_view source);
+
    private:
     StoreError write(const QJsonObject& values);
 

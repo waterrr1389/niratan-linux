@@ -160,6 +160,8 @@ class SettingsViewModel : public QObject {
     int section() const;
     void setSection(int value);
     QString error() const;
+    Q_INVOKABLE QString preferredAudioSource() const;
+    Q_INVOKABLE QString savePreferredAudioSource(const QString& source);
 
     QString theme() const;
     void setTheme(const QString& value);
