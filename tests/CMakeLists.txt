@@ -873,6 +873,21 @@ add_test(NAME statistics_view COMMAND tst_statistics_view)
 set_tests_properties(statistics_view PROPERTIES
     ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QTWEBENGINE_CHROMIUM_FLAGS=--disable-gpu")
 
+qt_add_executable(tst_interface_theme
+    qml/tst_interface_theme.cpp
+)
+target_include_directories(tst_interface_theme PRIVATE
+    ${CMAKE_SOURCE_DIR}/src
+    ${CMAKE_CURRENT_SOURCE_DIR}/viewmodels
+)
+target_link_libraries(tst_interface_theme PRIVATE niratan_app niratan_appplugin niratan_style
+    niratan_styleplugin Qt6::Test
+    Qt6::Quick Qt6::QuickControls2 Qt6::WebEngineQuick)
+target_compile_options(tst_interface_theme PRIVATE -Wall -Wextra -Wpedantic -Werror)
+add_test(NAME interface_theme COMMAND tst_interface_theme)
+set_tests_properties(interface_theme PROPERTIES
+    ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QTWEBENGINE_CHROMIUM_FLAGS=--disable-gpu")
+
 qt_add_executable(tst_reader_presentation
     qml/tst_reader_presentation.cpp
 )

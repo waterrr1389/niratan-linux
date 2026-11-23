@@ -167,7 +167,14 @@ double ReaderViewModel::popup_scale() const { return state_->settings.popup_scal
 bool ReaderViewModel::popup_swipe_to_dismiss() const { return state_->settings.popup_swipe_to_dismiss; }
 int ReaderViewModel::popup_swipe_threshold() const { return state_->settings.popup_swipe_threshold; }
 int ReaderViewModel::popup_width() const { return state_->settings.popup_width; }
-QString ReaderViewModel::ui_theme() const { return QString::fromStdString(state_->settings.ui_theme); }
+QString ReaderViewModel::interface_theme() const {
+    const auto& settings = state_->settings;
+    const std::string& scheme = settings.theme == "Custom" ? settings.ui_theme : settings.theme;
+    if (scheme == "Light" || scheme == "Dark") {
+        return QString::fromStdString(scheme);
+    }
+    return QStringLiteral("System");
+}
 bool ReaderViewModel::english_content() const { return state_->content_language == "en"; }
 
 QVariantList ReaderViewModel::search_results() const { return state_->search_results; }

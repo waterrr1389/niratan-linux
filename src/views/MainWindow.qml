@@ -65,11 +65,12 @@ ApplicationWindow {
         qsTr("Settings")
     ]
 
-    // The reader model loads and watches the active profile's settings.
+    // The reader model loads and watches the active profile's settings and
+    // resolves UserConfig.preferredColorScheme from them.
     Binding {
         target: ThemeState
         property: "uiTheme"
-        value: ReaderViewModel.uiTheme
+        value: ReaderViewModel.interfaceTheme
     }
 
     function openReader(folder) {

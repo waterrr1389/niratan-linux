@@ -162,7 +162,10 @@ class ReaderViewModel : public QObject {
     Q_PROPERTY(bool popupSwipeToDismiss READ popup_swipe_to_dismiss NOTIFY settingsChanged)
     Q_PROPERTY(int popupSwipeThreshold READ popup_swipe_threshold NOTIFY settingsChanged)
     Q_PROPERTY(int popupWidth READ popup_width NOTIFY settingsChanged)
-    Q_PROPERTY(QString uiTheme READ ui_theme NOTIFY settingsChanged)
+    // The interface appearance, Core/UserConfig.swift `preferredColorScheme`:
+    // Light and Dark force theirs, Custom takes `uiTheme`, and System and
+    // Sepia (and any unknown value) yield "System", which follows the desktop.
+    Q_PROPERTY(QString interfaceTheme READ interface_theme NOTIFY settingsChanged)
     Q_PROPERTY(bool englishContent READ english_content NOTIFY settingsChanged)
     Q_PROPERTY(QString chapterUrl READ chapter_url NOTIFY chapterUrlChanged)
     Q_PROPERTY(QVariantList chapters READ chapters NOTIFY bookChanged)
@@ -248,7 +251,7 @@ class ReaderViewModel : public QObject {
     bool popup_swipe_to_dismiss() const;
     int popup_swipe_threshold() const;
     int popup_width() const;
-    QString ui_theme() const;
+    QString interface_theme() const;
     bool english_content() const;
     QString chapter_url() const;
     QVariantList chapters() const;
