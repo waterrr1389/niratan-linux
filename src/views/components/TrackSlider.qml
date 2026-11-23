@@ -3,7 +3,7 @@
 // A thin capsule track that grows and shows a round knob while hovered or
 // dragged, following Features/Video/VideoControlsView.swift
 // `VideoTimelineTrack` as `VideoVolumeTrack` uses it: 3 px at rest, 5 px when
-// emphasized, an 11 px white knob whose centre sits on the filled end and may
+// emphasized, a white knob (Theme.trackSliderKnob) whose centre sits on the filled end and may
 // overhang the track's ends. A press anywhere on the track jumps there.
 //
 // It is a Slider underneath, so `value`, `from`, `to`, `stepSize` and moved()
