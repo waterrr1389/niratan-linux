@@ -17,14 +17,15 @@ PanelScaffold {
     id: form
 
     objectName: "settings-appearance"
+    property SettingsViewModel settingsModel: SettingsViewModel {}
     readonly property list<string> themes: ["System", "Light", "Dark", "Sepia", "Custom"]
     readonly property list<string> themeLabels: [qsTr("System"), qsTr("Light"), qsTr("Dark"), qsTr("Sepia"), qsTr("Custom")]
     readonly property list<string> furiganaModes: ["Off", "Dimmed", "Toggle", "Hidden"]
     readonly property list<string> furiganaLabels: [qsTr("Show"), qsTr("Dimmed"), qsTr("Tap to Reveal"), qsTr("Hidden")]
     readonly property list<string> fonts: Qt.fontFamilies()
-    readonly property bool paginated: !settingsModel.continuousMode
-    readonly property bool paragraph: paginated && settingsModel.paragraphMode
-    readonly property bool spreadsAvailable: paginated && !settingsModel.verticalWriting && !settingsModel.paragraphMode
+    readonly property bool paginated: !form.settingsModel.continuousMode
+    readonly property bool paragraph: paginated && form.settingsModel.paragraphMode
+    readonly property bool spreadsAvailable: paginated && !form.settingsModel.verticalWriting && !form.settingsModel.paragraphMode
     readonly property bool narrow: column.width < Theme.appearanceWideFormWidth
 
     function formatted(value, decimals, suffix) {
@@ -45,17 +46,13 @@ PanelScaffold {
         valueText: form.formatted(value, 0, suffix)
     }
 
-    SettingsViewModel {
-        id: settingsModel
-    }
-
     SasayakiSettingsViewModel {
         id: sasayakiModel
     }
 
     StyledLabel {
-        visible: settingsModel.error.length > 0
-        text: settingsModel.error
+        visible: form.settingsModel.error.length > 0
+        text: form.settingsModel.error
         color: Theme.popupDanger
         wrapMode: Text.Wrap
     }
@@ -66,75 +63,75 @@ PanelScaffold {
         FormSegmentedRow {
             fillsWidth: true
             model: form.themeLabels
-            currentIndex: form.themes.indexOf(settingsModel.theme)
-            onActivated: index => settingsModel.theme = form.themes[index]
+            currentIndex: form.themes.indexOf(form.settingsModel.theme)
+            onActivated: index => form.settingsModel.theme = form.themes[index]
         }
 
         FormDivider { visible: lightSepia.visible }
         FormToggleRow {
             id: lightSepia
-            visible: settingsModel.theme === "System"
+            visible: form.settingsModel.theme === "System"
             label: qsTr("Use Sepia as Light Theme")
-            checked: settingsModel.systemLightSepia
-            onToggled: value => settingsModel.systemLightSepia = value
+            checked: form.settingsModel.systemLightSepia
+            onToggled: value => form.settingsModel.systemLightSepia = value
         }
 
         FormDivider { visible: sepiaInvert.visible }
         FormToggleRow {
             id: sepiaInvert
-            visible: settingsModel.theme === "Sepia"
+            visible: form.settingsModel.theme === "Sepia"
             label: qsTr("Invert Sepia in Dark Mode")
-            checked: settingsModel.sepiaInvertInDark
-            onToggled: value => settingsModel.sepiaInvertInDark = value
+            checked: form.settingsModel.sepiaInvertInDark
+            onToggled: value => form.settingsModel.sepiaInvertInDark = value
         }
 
         FormDivider { visible: interfaceRow.visible }
         FormSegmentedRow {
             id: interfaceRow
-            visible: settingsModel.theme === "Custom"
+            visible: form.settingsModel.theme === "Custom"
             label: qsTr("Interface")
             model: form.themeLabels.slice(0, 3)
-            currentIndex: form.themes.indexOf(settingsModel.uiTheme)
-            onActivated: index => settingsModel.uiTheme = form.themes[index]
+            currentIndex: form.themes.indexOf(form.settingsModel.uiTheme)
+            onActivated: index => form.settingsModel.uiTheme = form.themes[index]
         }
 
         FormDivider {
             objectName: "customBackgroundColorSeparator"
-            visible: settingsModel.theme === "Custom"
+            visible: form.settingsModel.theme === "Custom"
         }
         FormColorRow {
             objectName: "customBackgroundColorRow"
             controlName: "customBackgroundColorRowSwatch"
-            visible: settingsModel.theme === "Custom"
+            visible: form.settingsModel.theme === "Custom"
             label: qsTr("Background Color")
-            color: settingsModel.customBackgroundColor
-            onPicked: value => settingsModel.customBackgroundColor = value
+            color: form.settingsModel.customBackgroundColor
+            onPicked: value => form.settingsModel.customBackgroundColor = value
         }
 
         FormDivider {
             objectName: "customTextColorSeparator"
-            visible: settingsModel.theme === "Custom"
+            visible: form.settingsModel.theme === "Custom"
         }
         FormColorRow {
             objectName: "customTextColorRow"
             controlName: "customTextColorRowSwatch"
-            visible: settingsModel.theme === "Custom"
+            visible: form.settingsModel.theme === "Custom"
             label: qsTr("Text Color")
-            color: settingsModel.customTextColor
-            onPicked: value => settingsModel.customTextColor = value
+            color: form.settingsModel.customTextColor
+            onPicked: value => form.settingsModel.customTextColor = value
         }
 
         FormDivider {
             objectName: "customInfoColorSeparator"
-            visible: settingsModel.theme === "Custom"
+            visible: form.settingsModel.theme === "Custom"
         }
         FormColorRow {
             objectName: "customInfoColorRow"
             controlName: "customInfoColorRowSwatch"
-            visible: settingsModel.theme === "Custom"
+            visible: form.settingsModel.theme === "Custom"
             label: qsTr("Info Color")
-            color: settingsModel.customInfoColor
-            onPicked: value => settingsModel.customInfoColor = value
+            color: form.settingsModel.customInfoColor
+            onPicked: value => form.settingsModel.customInfoColor = value
         }
     }
 
@@ -144,17 +141,17 @@ PanelScaffold {
         FormSegmentedRow {
             label: qsTr("Text Orientation")
             model: [qsTr("Vertical"), qsTr("Horizontal")]
-            currentIndex: settingsModel.verticalWriting ? 0 : 1
-            onActivated: index => settingsModel.verticalWriting = index === 0
+            currentIndex: form.settingsModel.verticalWriting ? 0 : 1
+            onActivated: index => form.settingsModel.verticalWriting = index === 0
         }
 
         FormDivider {}
         FormPickerRow {
             label: qsTr("Font")
-            model: form.fonts.includes(settingsModel.selectedFont)
-                   ? form.fonts : [settingsModel.selectedFont].concat(form.fonts)
-            currentIndex: Math.max(0, model.indexOf(settingsModel.selectedFont))
-            onActivated: index => settingsModel.selectedFont = model[index]
+            model: form.fonts.includes(form.settingsModel.selectedFont)
+                   ? form.fonts : [form.settingsModel.selectedFont].concat(form.fonts)
+            currentIndex: Math.max(0, model.indexOf(form.settingsModel.selectedFont))
+            onActivated: index => form.settingsModel.selectedFont = model[index]
         }
 
         FormDivider {}
@@ -162,8 +159,8 @@ PanelScaffold {
             label: qsTr("Font Size")
             from: 16
             to: 40
-            value: settingsModel.fontSize
-            onStepped: value => settingsModel.fontSize = value
+            value: form.settingsModel.fontSize
+            onStepped: value => form.settingsModel.fontSize = value
         }
 
         FormDivider {}
@@ -171,8 +168,8 @@ PanelScaffold {
             visible: !form.narrow
             label: qsTr("Furigana")
             model: form.furiganaLabels
-            currentIndex: form.furiganaModes.indexOf(settingsModel.furiganaMode)
-            onActivated: index => settingsModel.furiganaMode = form.furiganaModes[index]
+            currentIndex: form.furiganaModes.indexOf(form.settingsModel.furiganaMode)
+            onActivated: index => form.settingsModel.furiganaMode = form.furiganaModes[index]
         }
         FormRow {
             visible: form.narrow
@@ -182,8 +179,8 @@ PanelScaffold {
             visible: form.narrow
             fillsWidth: true
             model: form.furiganaLabels
-            currentIndex: form.furiganaModes.indexOf(settingsModel.furiganaMode)
-            onActivated: index => settingsModel.furiganaMode = form.furiganaModes[index]
+            currentIndex: form.furiganaModes.indexOf(form.settingsModel.furiganaMode)
+            onActivated: index => form.settingsModel.furiganaMode = form.furiganaModes[index]
         }
     }
 
@@ -193,53 +190,53 @@ PanelScaffold {
         FormSegmentedRow {
             label: qsTr("Mode")
             model: [qsTr("Paginated"), qsTr("Continuous")]
-            currentIndex: settingsModel.continuousMode ? 1 : 0
-            onActivated: index => settingsModel.continuousMode = index === 1
+            currentIndex: form.settingsModel.continuousMode ? 1 : 0
+            onActivated: index => form.settingsModel.continuousMode = index === 1
         }
 
         FormDivider { visible: form.paginated }
         FormToggleRow {
             visible: form.paginated
             label: qsTr("Paragraph Mode")
-            checked: settingsModel.paragraphMode
-            onToggled: value => settingsModel.paragraphMode = value
+            checked: form.settingsModel.paragraphMode
+            onToggled: value => form.settingsModel.paragraphMode = value
         }
 
         FormDivider { visible: form.paragraph }
         FormToggleRow {
             visible: form.paragraph
             label: qsTr("Text Animation")
-            checked: settingsModel.textAnimation
-            onToggled: value => settingsModel.textAnimation = value
+            checked: form.settingsModel.textAnimation
+            onToggled: value => form.settingsModel.textAnimation = value
         }
 
         FormDivider { visible: speed.visible }
         ValueSlider {
             id: speed
-            visible: form.paragraph && settingsModel.textAnimation
+            visible: form.paragraph && form.settingsModel.textAnimation
             label: qsTr("Text Speed")
             from: 25
             to: 100
             stepSize: 5
             suffix: qsTr("/s")
-            value: settingsModel.textSpeed
-            onMoved: value => settingsModel.textSpeed = value
+            value: form.settingsModel.textSpeed
+            onMoved: value => form.settingsModel.textSpeed = value
         }
 
         FormDivider { visible: form.spreadsAvailable }
         FormToggleRow {
             visible: form.spreadsAvailable
             label: qsTr("Two-Column Horizontal Pages")
-            checked: settingsModel.twoColumnHorizontalPages
-            onToggled: value => settingsModel.twoColumnHorizontalPages = value
+            checked: form.settingsModel.twoColumnHorizontalPages
+            onToggled: value => form.settingsModel.twoColumnHorizontalPages = value
         }
 
         FormDivider {}
         FormToggleRow {
             objectName: "wheelPageTurnRow"
             label: qsTr("Mouse Wheel Page Turn")
-            checked: settingsModel.wheelPageTurnEnabled
-            onToggled: value => settingsModel.wheelPageTurnEnabled = value
+            checked: form.settingsModel.wheelPageTurnEnabled
+            onToggled: value => form.settingsModel.wheelPageTurnEnabled = value
         }
 
         FormDivider {}
@@ -248,8 +245,8 @@ PanelScaffold {
             from: 0
             to: 80
             suffix: "%"
-            value: settingsModel.horizontalPadding
-            onStepped: value => settingsModel.horizontalPadding = value
+            value: form.settingsModel.horizontalPadding
+            onStepped: value => form.settingsModel.horizontalPadding = value
         }
 
         FormDivider {}
@@ -258,78 +255,78 @@ PanelScaffold {
             from: 0
             to: 50
             suffix: "%"
-            value: settingsModel.verticalPadding
-            onStepped: value => settingsModel.verticalPadding = value
+            value: form.settingsModel.verticalPadding
+            onStepped: value => form.settingsModel.verticalPadding = value
         }
 
         FormDivider {}
         FormToggleRow {
             label: qsTr("Avoid Page Break")
-            checked: settingsModel.avoidPageBreak
-            onToggled: value => settingsModel.avoidPageBreak = value
+            checked: form.settingsModel.avoidPageBreak
+            onToggled: value => form.settingsModel.avoidPageBreak = value
         }
 
         FormDivider {}
         FormToggleRow {
             label: qsTr("Justify Text")
-            checked: settingsModel.justifyText
-            onToggled: value => settingsModel.justifyText = value
+            checked: form.settingsModel.justifyText
+            onToggled: value => form.settingsModel.justifyText = value
         }
 
         FormDivider {}
         FormToggleRow {
             label: qsTr("Blur Images")
-            checked: settingsModel.blurImages
-            onToggled: value => settingsModel.blurImages = value
+            checked: form.settingsModel.blurImages
+            onToggled: value => form.settingsModel.blurImages = value
         }
 
         FormDivider {}
         FormToggleRow {
             label: qsTr("Advanced")
-            checked: settingsModel.layoutAdvanced
-            onToggled: value => settingsModel.layoutAdvanced = value
+            checked: form.settingsModel.layoutAdvanced
+            onToggled: value => form.settingsModel.layoutAdvanced = value
         }
 
-        FormDivider { visible: settingsModel.layoutAdvanced }
+        FormDivider { visible: form.settingsModel.layoutAdvanced }
         ValueSlider {
-            visible: settingsModel.layoutAdvanced
+            visible: form.settingsModel.layoutAdvanced
             label: qsTr("Line Height")
             from: 1
             to: 2.5
             stepSize: 0.05
             decimals: 2
-            value: settingsModel.lineHeight
-            onMoved: value => settingsModel.lineHeight = value
+            value: form.settingsModel.lineHeight
+            onMoved: value => form.settingsModel.lineHeight = value
         }
 
-        FormDivider { visible: settingsModel.layoutAdvanced }
+        FormDivider { visible: form.settingsModel.layoutAdvanced }
         ValueSlider {
-            visible: settingsModel.layoutAdvanced
+            visible: form.settingsModel.layoutAdvanced
             label: qsTr("Character Spacing")
             from: -10
             to: 10
             stepSize: 1
             suffix: "%"
-            value: settingsModel.characterSpacing
-            onMoved: value => settingsModel.characterSpacing = value
+            value: form.settingsModel.characterSpacing
+            onMoved: value => form.settingsModel.characterSpacing = value
         }
 
-        FormDivider { visible: settingsModel.layoutAdvanced }
+        FormDivider { visible: form.settingsModel.layoutAdvanced }
         ValueSlider {
-            visible: settingsModel.layoutAdvanced
+            visible: form.settingsModel.layoutAdvanced
             label: qsTr("Paragraph Spacing")
             from: 0
             to: 3
             stepSize: 0.1
             decimals: 1
             suffix: qsTr("em")
-            value: settingsModel.paragraphSpacing
-            onMoved: value => settingsModel.paragraphSpacing = value
+            value: form.settingsModel.paragraphSpacing
+            onMoved: value => form.settingsModel.paragraphSpacing = value
         }
     }
 
     ReaderDisplayCard {
-        settings: settingsModel
+        settings: form.settingsModel
         sasayaki: sasayakiModel
     }
 
@@ -343,8 +340,8 @@ PanelScaffold {
             from: 100
             to: 1400
             stepSize: 10
-            value: settingsModel.popupWidth
-            onMoved: value => settingsModel.popupWidth = value
+            value: form.settingsModel.popupWidth
+            onMoved: value => form.settingsModel.popupWidth = value
         }
 
         FormDivider { objectName: "popupSeparator" }
@@ -354,8 +351,8 @@ PanelScaffold {
             from: 100
             to: 800
             stepSize: 10
-            value: settingsModel.popupHeight
-            onMoved: value => settingsModel.popupHeight = value
+            value: form.settingsModel.popupHeight
+            onMoved: value => form.settingsModel.popupHeight = value
         }
 
         FormDivider { objectName: "popupSeparator" }
@@ -366,55 +363,55 @@ PanelScaffold {
             to: 1.5
             stepSize: 0.05
             decimals: 2
-            value: settingsModel.popupScale
-            onMoved: value => settingsModel.popupScale = value
+            value: form.settingsModel.popupScale
+            onMoved: value => form.settingsModel.popupScale = value
         }
 
         FormDivider { objectName: "popupSeparator" }
         FormToggleRow {
             objectName: "popupActionBarRow"
             label: qsTr("Show Action Bar")
-            checked: settingsModel.popupActionBar
-            onToggled: value => settingsModel.popupActionBar = value
+            checked: form.settingsModel.popupActionBar
+            onToggled: value => form.settingsModel.popupActionBar = value
         }
 
         FormDivider { objectName: "popupSeparator" }
         FormToggleRow {
             objectName: "popupDisableTransparencyRow"
             label: qsTr("Disable Transparency")
-            checked: settingsModel.popupDisableTransparency
-            onToggled: value => settingsModel.popupDisableTransparency = value
+            checked: form.settingsModel.popupDisableTransparency
+            onToggled: value => form.settingsModel.popupDisableTransparency = value
         }
 
         FormDivider { objectName: "popupSeparator" }
         FormToggleRow {
             objectName: "popupFullWidthRow"
             label: qsTr("Full-width")
-            checked: settingsModel.popupFullWidth
-            onToggled: value => settingsModel.popupFullWidth = value
+            checked: form.settingsModel.popupFullWidth
+            onToggled: value => form.settingsModel.popupFullWidth = value
         }
 
         FormDivider { objectName: "popupSeparator" }
         FormToggleRow {
             objectName: "popupSwipeToDismissRow"
             label: qsTr("Swipe to Dismiss")
-            checked: settingsModel.popupSwipeToDismiss
-            onToggled: value => settingsModel.popupSwipeToDismiss = value
+            checked: form.settingsModel.popupSwipeToDismiss
+            onToggled: value => form.settingsModel.popupSwipeToDismiss = value
         }
 
         FormDivider {
             objectName: "popupSwipeThresholdSeparator"
-            visible: settingsModel.popupSwipeToDismiss
+            visible: form.settingsModel.popupSwipeToDismiss
         }
         ValueSlider {
             objectName: "popupSwipeThresholdRow"
-            visible: settingsModel.popupSwipeToDismiss
+            visible: form.settingsModel.popupSwipeToDismiss
             label: qsTr("Swipe Threshold")
             from: 20
             to: 80
             stepSize: 5
-            value: settingsModel.popupSwipeThreshold
-            onMoved: value => settingsModel.popupSwipeThreshold = value
+            value: form.settingsModel.popupSwipeThreshold
+            onMoved: value => form.settingsModel.popupSwipeThreshold = value
         }
     }
 }

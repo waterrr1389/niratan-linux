@@ -28,6 +28,10 @@ using settings::GlobalSettings;
 using settings::SettingsStore;
 using settings::StoreError;
 
+constexpr int kMinFontSize = 16;
+constexpr int kMaxFontSize = 40;
+constexpr int kWheelNotch = 120;
+
 bool is_theme(std::string_view value) {
     return value == "System" || value == "Light" || value == "Dark" || value == "Sepia"
            || value == "Custom";
@@ -191,7 +195,25 @@ void SettingsViewModel::setSelectedFont(const QString& value) {
 int SettingsViewModel::fontSize() const { return state_->reader.font_size; }
 
 void SettingsViewModel::setFontSize(int value) {
-    update_reader(state_->reader.font_size, std::clamp(value, 16, 40));
+    update_reader(state_->reader.font_size, std::clamp(value, kMinFontSize, kMaxFontSize));
+}
+
+void SettingsViewModel::adjustFontSizeFromWheel(int angleDelta) {
+    const qint64 accumulated = qint64(state_->font_wheel_remainder) + angleDelta;
+    state_->font_wheel_remainder = static_cast<int>(accumulated % kWheelNotch);
+    const int steps = static_cast<int>(accumulated / kWheelNotch);
+    if (steps != 0) {
+        apply_font_size_steps(steps);
+    }
+}
+
+void SettingsViewModel::stepFontSize(bool increase) {
+    apply_font_size_steps(increase ? 1 : -1);
+}
+
+void SettingsViewModel::apply_font_size_steps(int steps) {
+    const qint64 size = qint64(fontSize()) + steps;
+    setFontSize(static_cast<int>(std::clamp<qint64>(size, kMinFontSize, kMaxFontSize)));
 }
 
 QString SettingsViewModel::furiganaMode() const {

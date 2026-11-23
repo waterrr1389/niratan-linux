@@ -22,6 +22,7 @@ struct SettingsViewModel::State {
     profiles::ReaderProfileSettings reader = profiles::default_reader_settings();
     profiles::DictionaryProfileSettings dictionary = profiles::default_dictionary_settings();
     settings::StatisticsPreferences statistics;
+    int font_wheel_remainder = 0;
 
     bool reader_writable = false;
     bool dictionary_writable = false;

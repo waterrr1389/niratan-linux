@@ -177,6 +177,10 @@ class SettingsViewModel : public QObject {
     void setSelectedFont(const QString& value);
     int fontSize() const;
     void setFontSize(int value);
+    // Reader gestures share the Appearance stepper's persisted font size.
+    // A wheel notch is 120 angle units; shortcuts do not spend the remainder.
+    Q_INVOKABLE void adjustFontSizeFromWheel(int angleDelta);
+    Q_INVOKABLE void stepFontSize(bool increase);
     QString furiganaMode() const;
     void setFuriganaMode(const QString& value);
     bool continuousMode() const;
@@ -297,6 +301,7 @@ class SettingsViewModel : public QObject {
     void update_reader(Field& field, Value value);
     template <typename Field, typename Value>
     void update_dictionary(Field& field, Value value);
+    void apply_font_size_steps(int steps);
     void save_reader();
     void save_dictionary();
     void report_statistics_save(settings::StoreError error);

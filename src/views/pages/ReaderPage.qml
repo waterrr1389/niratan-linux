@@ -45,6 +45,7 @@ Item {
     // "gallery".
     property string activeTool: ""
     property bool focusMode: false
+    property SettingsViewModel appearanceSettingsModel
 
     readonly property bool readerWindowActive: Window.window ? Window.window.active : true
     readonly property bool leadingPanelRequested: activeTool === "goTo"
@@ -55,6 +56,25 @@ Item {
     // updateReaderContentCoverage: every tool but Statistics covers the reader.
     readonly property bool statisticsContextActive: visible && readerWindowActive
         && (activeTool === "" || activeTool === "statistics")
+    readonly property bool fontSizeShortcutsEnabled: visible && ReaderViewModel.hasBook
+        && appearanceSettingsModel !== null && !lookupHasFocus()
+
+    function lookupHasFocus(): bool {
+        let item = page.Window.activeFocusItem
+        while (item) {
+            if (item === lookupSurface)
+                return true
+            item = item.parent
+        }
+        return false
+    }
+
+    function refreshAppearanceSettings() {
+        const previous = appearanceSettingsModel
+        appearanceSettingsModel = settingsComponent.createObject(page)
+        if (previous)
+            previous.destroy()
+    }
 
     function dismissLookup(resumePausedPlayback) {
         lookupSurface.dismiss(resumePausedPlayback !== false)
@@ -146,11 +166,16 @@ Item {
     Component.onCompleted: {
         ReaderViewModel.setReaderActive(statisticsContextActive)
         ReaderViewModel.setDark(ThemeState.systemDark)
+        if (!appearanceSettingsModel)
+            refreshAppearanceSettings()
     }
     onStatisticsContextActiveChanged: ReaderViewModel.setReaderActive(statisticsContextActive)
     onReaderWindowActiveChanged: {
-        if (readerWindowActive)
+        if (readerWindowActive) {
             sasayakiSettings.reload()
+            // Settings may have changed in the main window since the last visit.
+            refreshAppearanceSettings()
+        }
     }
 
     // NativeReaderEscapeDismissal: Escape closes an open side panel even while
@@ -160,6 +185,29 @@ Item {
         context: Qt.WindowShortcut
         enabled: page.sidePanelOpen
         onActivated: page.closeTool()
+    }
+
+    Shortcut {
+        sequences: ["Ctrl++", "Ctrl+="]
+        enabled: page.fontSizeShortcutsEnabled
+        onActivated: page.appearanceSettingsModel.stepFontSize(true)
+    }
+
+    Shortcut {
+        sequence: "Ctrl+-"
+        enabled: page.fontSizeShortcutsEnabled
+        onActivated: page.appearanceSettingsModel.stepFontSize(false)
+    }
+
+    Shortcut {
+        sequence: "Ctrl+0"
+        enabled: page.fontSizeShortcutsEnabled
+        onActivated: {}
+    }
+
+    Component {
+        id: settingsComponent
+        SettingsViewModel {}
     }
 
     Connections {
@@ -324,6 +372,11 @@ Item {
         opacity: ReaderViewModel.restoring ? 0 : 1
         url: ReaderViewModel.chapterUrl
         backgroundColor: ReaderViewModel.pageBackground
+        zoomFactor: 1.0
+        onZoomFactorChanged: {
+            if (zoomFactor !== 1.0)
+                zoomFactor = 1.0
+        }
         onLoadingChanged: function(request) {
             if (request.status === WebEngineView.LoadFailedStatus)
                 ReaderViewModel.revealAfterLoadFailure(request.url.toString())
@@ -337,6 +390,21 @@ Item {
         webChannel: WebChannel {
             id: channel
             registeredObjects: [readerBridge]
+        }
+    }
+
+    // Handle modified wheel input before it reaches Chromium. The lookup
+    // surface is separate and layered above the chapter and this handler.
+    Item {
+        anchors.fill: web
+        visible: web.visible
+
+        WheelHandler {
+            enabled: page.appearanceSettingsModel !== null
+            acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad
+            acceptedModifiers: Qt.ControlModifier
+            target: null
+            onWheel: event => page.appearanceSettingsModel.adjustFontSizeFromWheel(event.angleDelta.y)
         }
     }
 
@@ -473,6 +541,7 @@ Item {
 
     component AppearancePanel: ReaderAppearancePanel {
         anchors.fill: parent
+        settingsModel: page.appearanceSettingsModel
         onCloseRequested: page.closeTool()
     }
 

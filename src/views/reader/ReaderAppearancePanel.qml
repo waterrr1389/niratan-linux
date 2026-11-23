@@ -21,6 +21,7 @@ import Niratan
 ColumnLayout {
     id: panel
 
+    required property SettingsViewModel settingsModel
     signal closeRequested()
 
     spacing: 0
@@ -32,6 +33,7 @@ ColumnLayout {
     }
 
     AppearanceSettings {
+        settingsModel: panel.settingsModel
         Layout.fillWidth: true
         Layout.fillHeight: true
     }
