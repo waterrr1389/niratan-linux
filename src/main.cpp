@@ -71,6 +71,9 @@ int main(int argc, char* argv[]) {
     std::setlocale(LC_NUMERIC, "C");
     QGuiApplication::setApplicationName("Niratan");
     QGuiApplication::setOrganizationName("niratan");
+    // Wayland compositors match the window to niratan.desktop for its icon
+    // and taskbar entry.
+    QGuiApplication::setDesktopFileName("niratan");
     apply_interface_font();
 
     // Controls are drawn by the Niratan style, after their macOS
