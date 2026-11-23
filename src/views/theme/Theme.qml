@@ -271,6 +271,14 @@ QtObject {
     readonly property int tabItemSpacing: 3
     readonly property int tabGlyphBox: 17
     readonly property int tabGlyphSize: 14
+    // VideoVolumeTrack: a 64 px VideoTimelineTrack, 3 px at rest and 5 px
+    // emphasized with an 11 px knob, in an 18 px hit area.
+    readonly property int trackSliderWidth: 64
+    readonly property int trackSliderHitHeight: 18
+    readonly property int trackSliderHeight: 3
+    readonly property int trackSliderEmphasizedHeight: 5
+    readonly property int trackSliderKnob: 11
+    readonly property real trackSliderFillOpacity: 0.85
     readonly property int tooltipDelay: 600
     readonly property int inlineFieldWidth: 36
     readonly property int wideInlineFieldWidth: 64

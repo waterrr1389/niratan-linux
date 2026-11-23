@@ -69,12 +69,10 @@ Row {
         }
     }
 
-    Slider {
+    TrackSlider {
         id: volumeTrack
 
         objectName: "volumeTrack"
-        width: 64
-        height: 18
         anchors.verticalCenter: parent.verticalCenter
         from: 0
         to: 100

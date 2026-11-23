@@ -280,6 +280,7 @@ qt_add_qml_module(niratan_app
         src/views/components/IconTabBar.qml
         src/views/components/InlineField.qml
         src/views/components/StepperDisplay.qml
+        src/views/components/TrackSlider.qml
         src/views/components/GlassCapsule.qml
         src/views/components/GlassSurface.qml
         src/views/components/Icon.qml
