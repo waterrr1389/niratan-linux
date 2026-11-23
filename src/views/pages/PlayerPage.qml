@@ -67,6 +67,10 @@ Item {
     property real osdMeter: -1
     // The loaded local video, for the video mining context.
     property url videoFile
+    // VideoPlayerScreen.model.currentURL != nil: a Video session is open from
+    // the open request until unloadVideo, and the library suspends thumbnail
+    // generation for its whole lifetime (Decisions D9, D10).
+    readonly property bool videoSessionActive: page.videoFile.toString().length > 0
     // The library opens the player with its first video already chosen.
     property url initialVideoUrl
     property url initialSubtitleUrl

@@ -28,9 +28,12 @@
 // Decision: local sources only. Media servers, remote links, source
 // management, the collection and smart-collection editors and the details
 // inspector are out of scope, so the page never draws their toolbar items,
-// sheets or context-menu entries. Thumbnails are a later slice: every artwork
-// is the film placeholder and no frame is requested. "Reveal in Finder"
-// becomes "Reveal in File Manager" and opens the item's parent folder.
+// sheets or context-menu entries. Each created row and card asks the view
+// model for its cached frame; an artwork without one keeps the film
+// placeholder. While the Video window has a session open, thumbnail
+// generation is suspended and already-published frames stay drawn.
+// "Reveal in Finder" becomes "Reveal in File Manager" and opens the item's
+// parent folder.
 //
 // Opening selects the row first, then emits `videoOpened(videoUrl,
 // boundSubtitleUrl, fromBeginning)`; the shell opens the player, which calls
@@ -124,6 +127,16 @@ Item {
     }
 
     Component.onCompleted: video.load()
+
+    // VideoPlayerScreen.observedContent: generation pauses for the session's
+    // whole lifetime, including lookup and mining (D10). With no player
+    // window the library keeps generating.
+    Binding {
+        target: video
+        property: "thumbnailsSuspended"
+        value: page.playerWindow !== null && page.playerWindow !== undefined
+               && page.playerWindow.videoSessionActive === true
+    }
 
     Connections {
         target: page.playerWindow ? page.playerWindow : null

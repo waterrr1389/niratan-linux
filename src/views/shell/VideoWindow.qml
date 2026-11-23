@@ -41,6 +41,10 @@ ApplicationWindow {
 
     signal videoClosed()
 
+    // The player's session flag, forwarded to the library page so poster
+    // generation pauses while this window has a video loaded.
+    readonly property bool videoSessionActive: player.videoSessionActive
+
     // The first show places the frame; later opens keep the user's size and
     // place (VideoWindowPresenter makes the window once).
     property bool placed: false

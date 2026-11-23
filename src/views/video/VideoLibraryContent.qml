@@ -13,7 +13,8 @@
 // empty mode draws its own symbol, title and description. Otherwise the mode's
 // sections are listed as rows or posted as 16:9 cards. Series, Folders and
 // Collections sections collapse from their header; a single generated section
-// hides its header.
+// hides its header. Each created row and card receives the view model so it
+// can ask for its item's thumbnail and read the published URL.
 pragma ComponentBehavior: Bound
 
 import QtQuick
@@ -238,7 +239,10 @@ Item {
                         objectName: "videoRow"
                         width: parent.width
                         rowData: entry.modelData.row
+                        thumbnailUrl: content.model
+                                      ? (content.model.thumbnailUrls[rowData.id] ?? "") : ""
                         selected: content.model.selectedItemID === rowData.id
+                        onThumbnailRequested: content.model.requestThumbnail(rowData.id)
                         onClicked: content.openRequested(rowData, false)
                         onContextMenuRequested: (position) => content.openContextMenu(
                             rowData, videoRow.mapToItem(content, position.x, position.y))
@@ -272,7 +276,10 @@ Item {
                             objectName: "videoCard"
                             posterWidth: libraryList.cellWidth
                             rowData: modelData
+                            thumbnailUrl: content.model
+                                          ? (content.model.thumbnailUrls[rowData.id] ?? "") : ""
                             selected: content.model.selectedItemID === rowData.id
+                            onThumbnailRequested: content.model.requestThumbnail(rowData.id)
                             onClicked: content.openRequested(rowData, false)
                             onContextMenuRequested: (position) => content.openContextMenu(
                                 rowData, videoCard.mapToItem(content, position.x, position.y))

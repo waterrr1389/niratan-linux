@@ -20,10 +20,14 @@
 #include "services/player/playback_history.h"
 #include "services/storage/app_paths.h"
 #include "services/video/library_catalog.h"
+#include "services/video/thumbnail_store.h"
 
+#include <QBuffer>
+#include <QColor>
 #include <QDir>
 #include <QFile>
 #include <QGuiApplication>
+#include <QImage>
 #include <QMetaObject>
 #include <QObject>
 #include <QQmlApplicationEngine>
@@ -138,6 +142,35 @@ QString touch_file(const QString& path, int size) {
     return QFileInfo(path).absoluteFilePath();
 }
 
+void seed_thumbnail_cache() {
+    const auto directory = niratan::video::default_thumbnail_cache_directory();
+    if (directory.empty()) {
+        return;
+    }
+    std::error_code error;
+    std::filesystem::create_directories(directory, error);
+    if (error) {
+        return;
+    }
+    QImage image(16, 9, QImage::Format_RGB32);
+    image.fill(QColor(52, 96, 132));
+    QBuffer buffer;
+    buffer.open(QIODevice::WriteOnly);
+    image.save(&buffer, "PNG");
+    const QByteArray bytes = buffer.data();
+
+    niratan::video::LibraryStore store;
+    for (const auto& item : store.catalog().items) {
+        const auto request = niratan::video::ThumbnailRequest::for_item(item);
+        const auto file =
+            directory / (niratan::video::thumbnail_cache_key(request).toStdString() + ".png");
+        QFile output(QString::fromStdString(file.string()));
+        if (output.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
+            output.write(bytes);
+        }
+    }
+}
+
 struct Fixture {
     QString source;
     QString alpha;
@@ -161,6 +194,7 @@ Fixture make_fixture(const QString& base) {
     niratan::player::PlaybackHistory history(root / "video_playback_history.json");
     history.save(fixture.alpha, 20, 100);
     history.save(fixture.beta, 50, 100);
+    seed_thumbnail_cache();
     return fixture;
 }
 
@@ -187,6 +221,7 @@ class VideoWindowTest : public QObject {
     void closing_unloads_and_refreshes_the_library();
     void closing_resets_the_player_and_reopening_shows_only_the_new_clip();
     void empty_window_shows_the_no_video_copy();
+    void opening_a_video_suspends_library_thumbnails_and_closing_resumes();
 };
 
 void VideoWindowTest::initTestCase() {
@@ -537,6 +572,49 @@ void VideoWindowTest::empty_window_shows_the_no_video_copy() {
                 nullptr);
     QTRY_COMPARE(opened->property("videoFile").toUrl(), QUrl::fromLocalFile(fixture.beta));
     QTRY_VERIFY(!empty->isVisible());
+}
+
+// B6, B7: a Video session suspends the library's poster generation from the
+// open request until the window closes, and the main window sees the flag.
+void VideoWindowTest::opening_a_video_suspends_library_thumbnails_and_closing_resumes() {
+    niratan::test::TempDataRoot root;
+    QVERIFY(root.isValid());
+    const Fixture fixture = make_fixture(root.path());
+
+    QQmlApplicationEngine engine;
+    auto* window = load_main_window(engine);
+    QVERIFY(window != nullptr);
+    QVERIFY(QTest::qWaitForWindowExposed(window));
+    window->setProperty("sectionIndex", 2);
+    QObject* model = window->findChild<QObject*>(QStringLiteral("videoLibraryModel"));
+    QVERIFY(model != nullptr);
+    QVERIFY(model->setProperty("displayMode", QStringLiteral("all")));
+    QVERIFY(!model->property("thumbnailsSuspended").toBool());
+
+    QQuickItem* card = nullptr;
+    QTRY_VERIFY((card = card_with_id(window->contentItem(), fixture.alpha)) != nullptr);
+    auto* video = window->findChild<QQuickWindow*>(QStringLiteral("videoWindow"));
+    QVERIFY(video != nullptr);
+    click(card);
+    QTRY_VERIFY(video->isVisible());
+    QQuickItem* player = nullptr;
+    QTRY_VERIFY((player = video->findChild<QQuickItem*>(QStringLiteral("videoPlayerPage"))) !=
+                nullptr);
+    QTRY_COMPARE(player->property("videoFile").toUrl(), QUrl::fromLocalFile(fixture.alpha));
+    QTRY_VERIFY(player->property("videoSessionActive").toBool());
+    QTRY_VERIFY(video->property("videoSessionActive").toBool());
+    QTRY_VERIFY(model->property("thumbnailsSuspended").toBool());
+
+    QVERIFY(QMetaObject::invokeMethod(video, "close"));
+    QTRY_VERIFY(!video->isVisible());
+    QTRY_VERIFY(!player->property("videoSessionActive").toBool());
+    QTRY_VERIFY(!video->property("videoSessionActive").toBool());
+    QTRY_VERIFY(!model->property("thumbnailsSuspended").toBool());
+    QVERIFY(window->isVisible());
+
+    const QString warnings = warnings_after(QStringLiteral("Video session"));
+    QVERIFY2(warnings.isEmpty(), qPrintable(warnings));
+    engine.clearComponentCache();
 }
 
 int main(int argc, char* argv[]) {

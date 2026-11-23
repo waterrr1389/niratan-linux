@@ -6,7 +6,8 @@
 // `VideoLibraryProgressTrack`, `VideoThumbnailPlaceholderView` and
 // `VideoLibraryItemContextMenu` (local branch).
 //
-// The row draws the 16:9 film placeholder, a favorite star, the display title
+// The row draws the item's cached frame over its 16:9 film placeholder (the
+// placeholder alone without a URL), a favorite star, the display title
 // on one line with middle elision, the metadata line (source, parent folder,
 // file size and modified date, with the folder and date dropped first when
 // narrow), and the trailing playback text: "Watched" with a check, otherwise
@@ -23,6 +24,8 @@ Item {
     id: row
 
     property var rowData
+    // The page's published file: URL for this item, from the view model's map.
+    property string thumbnailUrl: ""
     property bool selected: false
 
     readonly property string rowID: rowData ? rowData.id : ""
@@ -37,8 +40,21 @@ Item {
 
     signal clicked()
     signal contextMenuRequested(point position)
+    // VideoThumbnailImageView.task(id:): a created row asks once.
+    signal thumbnailRequested()
 
     implicitHeight: Math.max(artwork.height, textColumn.implicitHeight) + 6
+
+    Component.onCompleted: {
+        if (row.rowID.length > 0)
+            row.thumbnailRequested()
+    }
+
+    // A recycled ListView delegate asks for its new item (thumbnailTaskID).
+    onRowIDChanged: {
+        if (row.rowID.length > 0)
+            row.thumbnailRequested()
+    }
 
     function pad(value) {
         return value < 10 ? "0" + value : "" + value
@@ -121,17 +137,39 @@ Item {
         width: 120
         height: 67.5
 
-        Rectangle {
+        Item {
+            objectName: "thumbnailPlaceholder"
+
+            // ZStack order: the placeholder stays under the image while the
+            // frame decodes, and the image covers it once loaded.
             anchors.fill: parent
-            radius: 7
-            color: Theme.inactiveSelection
+
+            Rectangle {
+                anchors.fill: parent
+                radius: 7
+                color: Theme.inactiveSelection
+            }
+
+            Icon {
+                anchors.centerIn: parent
+                name: "film"
+                size: 26
+                color: Theme.textTertiary
+            }
         }
 
-        Icon {
-            anchors.centerIn: parent
-            name: "film"
-            size: 26
-            color: Theme.textTertiary
+        // VideoThumbnailImageView.body: scaled to fill the 16:9 artwork and
+        // clipped to its corner; the placeholder stays behind it.
+        RoundedImage {
+            objectName: "thumbnailImage"
+
+            anchors.fill: parent
+            visible: row.thumbnailUrl.length > 0
+            source: row.thumbnailUrl
+            fillMode: Image.PreserveAspectCrop
+            radius: 7
+            maskWidth: 7
+            maskColor: Theme.windowBackground
         }
 
         Rectangle {

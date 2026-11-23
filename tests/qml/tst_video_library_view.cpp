@@ -28,10 +28,14 @@
 #include "services/player/playback_history.h"
 #include "services/storage/app_paths.h"
 #include "services/video/library_catalog.h"
+#include "services/video/thumbnail_store.h"
 
+#include <QBuffer>
+#include <QColor>
 #include <QDir>
 #include <QFile>
 #include <QGuiApplication>
+#include <QImage>
 #include <QMetaObject>
 #include <QObject>
 #include <QQmlApplicationEngine>
@@ -43,6 +47,7 @@
 #include <QSignalSpy>
 #include <QTemporaryDir>
 #include <QUrl>
+#include <QVariantMap>
 #include <QtQml/qqmlextensionplugin.h>
 #include <QtTest>
 
@@ -220,6 +225,84 @@ QString touch_file(const QString& path, int size) {
     return QFileInfo(path).absoluteFilePath();
 }
 
+// The page's playerWindow seam: the Video window's session flag and close
+// signal, without the player itself.
+class PlayerWindowStub : public QObject {
+    Q_OBJECT
+    Q_PROPERTY(bool videoSessionActive READ videoSessionActive WRITE setVideoSessionActive NOTIFY
+                   videoSessionActiveChanged)
+
+   public:
+    explicit PlayerWindowStub(QObject* parent = nullptr) : QObject(parent) {}
+
+    bool videoSessionActive() const { return video_session_active_; }
+    void setVideoSessionActive(bool active) {
+        if (video_session_active_ == active) {
+            return;
+        }
+        video_session_active_ = active;
+        emit videoSessionActiveChanged();
+    }
+
+   signals:
+    void videoSessionActiveChanged();
+    void videoClosed();
+
+   private:
+    bool video_session_active_ = false;
+};
+
+QByteArray thumbnail_png_bytes() {
+    QImage image(16, 9, QImage::Format_RGB32);
+    image.fill(QColor(52, 96, 132));
+    QBuffer buffer;
+    buffer.open(QIODevice::WriteOnly);
+    image.save(&buffer, "PNG");
+    return buffer.data();
+}
+
+// B9: every library fixture seeds one small valid PNG per video so no view
+// test starts a real thumbnail generator.
+void seed_thumbnail_cache() {
+    const auto directory = niratan::video::default_thumbnail_cache_directory();
+    if (directory.empty()) {
+        return;
+    }
+    std::error_code error;
+    std::filesystem::create_directories(directory, error);
+    if (error) {
+        return;
+    }
+    niratan::video::LibraryStore store;
+    for (const auto& item : store.catalog().items) {
+        const auto request = niratan::video::ThumbnailRequest::for_item(item);
+        const auto file =
+            directory / (niratan::video::thumbnail_cache_key(request).toStdString() + ".png");
+        QFile output(QString::fromStdString(file.string()));
+        if (output.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
+            output.write(thumbnail_png_bytes());
+        }
+    }
+}
+
+// The cache path the store would use, so a test can prove the view model's
+// published URL is the cached frame and not merely self-consistent.
+QString thumbnail_url_for(const QString& item_path) {
+    niratan::video::LibraryStore store;
+    const auto directory = niratan::video::default_thumbnail_cache_directory();
+    for (const auto& item : store.catalog().items) {
+        if (item.path != item_path) {
+            continue;
+        }
+        const auto key =
+            niratan::video::thumbnail_cache_key(niratan::video::ThumbnailRequest::for_item(item));
+        return QUrl::fromLocalFile(
+                   QString::fromStdString((directory / (key.toStdString() + ".png")).string()))
+            .toString();
+    }
+    return {};
+}
+
 struct Fixture {
     QString source;
     QString alpha;
@@ -228,7 +311,7 @@ struct Fixture {
     QString collection_id;
 };
 
-Fixture make_fixture(const QString& base) {
+Fixture make_fixture(const QString& base, bool seed_thumbnails = true) {
     Fixture fixture;
     fixture.source = base + QStringLiteral("/Anime");
     QDir().mkpath(fixture.source);
@@ -246,6 +329,9 @@ Fixture make_fixture(const QString& base) {
 
     niratan::player::PlaybackHistory history(root / "video_playback_history.json");
     history.save(fixture.alpha, 20, 100);
+    if (seed_thumbnails) {
+        seed_thumbnail_cache();
+    }
     return fixture;
 }
 
@@ -309,10 +395,13 @@ class VideoLibraryViewTest : public QObject {
     void search_toolbar_keeps_a_top_gap_and_shared_centre();
     void collapsed_sidebar_keeps_the_search_toolbar_clear();
     void default_window_fits_every_visible_control();
+    void cached_thumbnails_draw_in_the_poster_grid_and_list_rows();
+    void thumbnails_stay_off_while_a_video_session_is_active_and_draw_on_resume();
     void main_window_pushes_the_player_with_the_video();
 
    private:
-    std::unique_ptr<QObject> create_page(QQuickWindow& window, const QSize& size, QString& error);
+    std::unique_ptr<QObject> create_page(QQuickWindow& window, const QSize& size, QString& error,
+                                         const QVariantMap& initial_properties = {});
 
     QQmlApplicationEngine engine_;
 };
@@ -322,7 +411,8 @@ void VideoLibraryViewTest::initTestCase() {
 }
 
 std::unique_ptr<QObject> VideoLibraryViewTest::create_page(QQuickWindow& window, const QSize& size,
-                                                           QString& error) {
+                                                           QString& error,
+                                                           const QVariantMap& initial_properties) {
     window.resize(size);
     window.show();
     if (!QTest::qWaitForWindowExposed(&window)) {
@@ -356,6 +446,9 @@ std::unique_ptr<QObject> VideoLibraryViewTest::create_page(QQuickWindow& window,
     item->setParentItem(window.contentItem());
     item->setWidth(size.width());
     item->setHeight(size.height());
+    if (!initial_properties.isEmpty()) {
+        component.setInitialProperties(object.get(), initial_properties);
+    }
     component.completeCreate();
     return object;
 }
@@ -883,6 +976,7 @@ void VideoLibraryViewTest::large_library_creates_only_viewport_delegates() {
     const auto source = store.add_source(std::filesystem::path(folder.toStdString()));
     QVERIFY(store.scan_source(source.id));
     QCOMPARE(store.catalog().items.size(), 320);
+    seed_thumbnail_cache();
 
     QQuickWindow window;
     QString error;
@@ -1304,6 +1398,115 @@ void VideoLibraryViewTest::default_window_fits_every_visible_control() {
         }
     };
     verify(page);
+}
+
+// B1, B2, B3, B5, D11: cached posters draw over the placeholder in both
+// layouts without generating anything.
+void VideoLibraryViewTest::cached_thumbnails_draw_in_the_poster_grid_and_list_rows() {
+    niratan::test::TempDataRoot root;
+    QVERIFY(root.isValid());
+    const Fixture fixture = make_fixture(root.path());
+
+    QQuickWindow window;
+    QString error;
+    std::unique_ptr<QObject> object = create_page(window, QSize(960, 640), error);
+    QVERIFY2(object != nullptr, qPrintable(error));
+    auto* page = qobject_cast<QQuickItem*>(object.get());
+    QVERIFY(page != nullptr);
+    auto* model = find_model(page);
+    QVERIFY(model != nullptr);
+
+    // The image must consume the view model's map; the map itself must be the
+    // cached frame's file: URL.
+    QQuickItem* card = nullptr;
+    QTRY_VERIFY((card = card_with_id(page, fixture.alpha)) != nullptr);
+    QQuickItem* image = nullptr;
+    QTRY_VERIFY((image = shown_item_named(card, QStringLiteral("thumbnailImage"))) != nullptr);
+    const QString published =
+        model->property("thumbnailUrls").toMap().value(fixture.alpha).toString();
+    QCOMPARE(published, thumbnail_url_for(fixture.alpha));
+    QVERIFY(QUrl(published).isLocalFile());
+    QCOMPARE(image->property("source").toString(), published);
+    QVERIFY2(item_named(card, QStringLiteral("thumbnailPlaceholder")) != nullptr,
+             "the poster card has no placeholder item");
+
+    QVERIFY(model->setProperty("layoutMode", QStringLiteral("list")));
+    QQuickItem* row = nullptr;
+    QTRY_VERIFY((row = row_with_id(page, fixture.alpha)) != nullptr);
+    QQuickItem* row_image = nullptr;
+    QTRY_VERIFY((row_image = shown_item_named(row, QStringLiteral("thumbnailImage"))) != nullptr);
+    QCOMPARE(row_image->property("source").toString(), published);
+    QVERIFY2(item_named(row, QStringLiteral("thumbnailPlaceholder")) != nullptr,
+             "the list row has no placeholder item");
+
+    const QString warnings = warnings_after(QStringLiteral("cached thumbnails"));
+    QVERIFY2(warnings.isEmpty(), qPrintable(warnings));
+}
+
+// B4, B5, B6, B7, D9: a session open keeps posters off; the refused requests
+// run again when the session closes and the already-published ones stay drawn
+// when a new session opens.
+void VideoLibraryViewTest::
+    thumbnails_stay_off_while_a_video_session_is_active_and_draw_on_resume() {
+    niratan::test::TempDataRoot root;
+    QVERIFY(root.isValid());
+    QTemporaryDir dir;
+    QVERIFY(dir.isValid());
+    const Fixture fixture = make_fixture(dir.path(), false);
+
+    PlayerWindowStub player_window;
+    player_window.setVideoSessionActive(true);
+    QVariantMap initial;
+    initial.insert(QStringLiteral("playerWindow"),
+                   QVariant::fromValue(static_cast<QObject*>(&player_window)));
+
+    QQuickWindow window;
+    QString error;
+    std::unique_ptr<QObject> object = create_page(window, QSize(960, 640), error, initial);
+    QVERIFY2(object != nullptr, qPrintable(error));
+    auto* page = qobject_cast<QQuickItem*>(object.get());
+    QVERIFY(page != nullptr);
+    auto* model = find_model(page);
+    QVERIFY(model != nullptr);
+    QVERIFY(model->setProperty("displayMode", QStringLiteral("all")));
+    QVERIFY(model->property("thumbnailsSuspended").toBool());
+
+    QQuickItem* alpha_card = nullptr;
+    QQuickItem* beta_card = nullptr;
+    QTRY_VERIFY((alpha_card = card_with_id(page, fixture.alpha)) != nullptr);
+    QTRY_VERIFY((beta_card = card_with_id(page, fixture.beta)) != nullptr);
+    QVERIFY(shown_item_named(alpha_card, QStringLiteral("thumbnailImage")) == nullptr);
+    QVERIFY(shown_item_named(beta_card, QStringLiteral("thumbnailImage")) == nullptr);
+    QVERIFY2(item_named(alpha_card, QStringLiteral("thumbnailPlaceholder")) != nullptr,
+             "the suspended card lost its placeholder");
+
+    const auto cache_directory = niratan::video::default_thumbnail_cache_directory();
+    QVERIFY(!cache_directory.empty());
+    QVERIFY(QDir(QString::fromStdString(cache_directory.string()))
+                .entryList(QDir::Files | QDir::NoDotAndDotDot)
+                .isEmpty());
+
+    seed_thumbnail_cache();
+    player_window.setVideoSessionActive(false);
+    QQuickItem* alpha_image = nullptr;
+    QQuickItem* beta_image = nullptr;
+    QTRY_VERIFY((alpha_image = shown_item_named(alpha_card, QStringLiteral("thumbnailImage"))) !=
+                nullptr);
+    QTRY_VERIFY((beta_image = shown_item_named(beta_card, QStringLiteral("thumbnailImage"))) !=
+                nullptr);
+    const QVariantMap urls = model->property("thumbnailUrls").toMap();
+    QCOMPARE(alpha_image->property("source").toString(), urls.value(fixture.alpha).toString());
+    QCOMPARE(beta_image->property("source").toString(), urls.value(fixture.beta).toString());
+    QCOMPARE(urls.value(fixture.alpha).toString(), thumbnail_url_for(fixture.alpha));
+    QCOMPARE(urls.value(fixture.beta).toString(), thumbnail_url_for(fixture.beta));
+    QVERIFY(QUrl(urls.value(fixture.alpha).toString()).isLocalFile());
+
+    player_window.setVideoSessionActive(true);
+    QTRY_VERIFY(model->property("thumbnailsSuspended").toBool());
+    QVERIFY(shown_item_named(alpha_card, QStringLiteral("thumbnailImage")) != nullptr);
+
+    const QString warnings = warnings_after(QStringLiteral("suspended thumbnails"));
+    QVERIFY2(warnings.isEmpty(), qPrintable(warnings));
 }
 
 // B1: MainWindow turns `videoOpened` into a PlayerPage carrying the URL,
