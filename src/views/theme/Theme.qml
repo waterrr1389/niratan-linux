@@ -236,6 +236,9 @@ QtObject {
     // and NativeSettingsButtonRow, 2 px taller than Swift's 30 point minimum.
     readonly property int capsuleHeight: 32
     readonly property int capsuleSpacing: 8
+    // The reader's top title and progress capsule.
+    readonly property int readerInfoCapsulePaddingHorizontal: 16
+    readonly property int readerInfoCapsulePaddingVertical: 6
     readonly property int pickerPaddingHorizontal: 14
     readonly property int pickerGlyphSize: 12
     readonly property int pickerMinimumWidth: 96
