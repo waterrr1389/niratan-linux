@@ -50,6 +50,21 @@ add_test(NAME flow_video_mining COMMAND tst_flow_video_mining)
 set_tests_properties(flow_video_mining PROPERTIES
     ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QTWEBENGINE_CHROMIUM_FLAGS=--disable-gpu")
 
+qt_add_executable(tst_flow_video_inspector
+    tst_flow_video_inspector.cpp
+)
+target_include_directories(tst_flow_video_inspector PRIVATE
+    ${CMAKE_SOURCE_DIR}/src
+    ${CMAKE_CURRENT_SOURCE_DIR}/../viewmodels
+)
+target_link_libraries(tst_flow_video_inspector PRIVATE niratan_app niratan_appplugin
+    niratan_style niratan_styleplugin Qt6::Test Qt6::Quick Qt6::QuickControls2
+    Qt6::WebEngineQuick)
+target_compile_options(tst_flow_video_inspector PRIVATE -Wall -Wextra -Wpedantic -Werror)
+add_test(NAME flow_video_inspector COMMAND tst_flow_video_inspector)
+set_tests_properties(flow_video_inspector PROPERTIES
+    ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QTWEBENGINE_CHROMIUM_FLAGS=--disable-gpu")
+
 qt_add_executable(tst_flow_sasayaki
     tst_flow_sasayaki.cpp
 )
