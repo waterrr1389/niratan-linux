@@ -109,6 +109,23 @@ QStringList visual_page_texts(QQuickItem* page) {
     return texts;
 }
 
+void collect_named_items(QQuickItem* item, const QString& name, QList<QQuickItem*>& found) {
+    if (item->objectName() == name) {
+        found.append(item);
+    }
+    for (QQuickItem* child : item->childItems()) {
+        collect_named_items(child, name, found);
+    }
+}
+
+QQuickItem* item_named_in(QQuickItem* root, const QString& name) {
+    QList<QQuickItem*> found;
+    if (root != nullptr) {
+        collect_named_items(root, name, found);
+    }
+    return found.isEmpty() ? nullptr : found.first();
+}
+
 // The trailing slot of QML reports no type for a JS function's `data`
 // parameter, so the bridge is located by the method it must answer.
 QObject* dictionary_bridge(QQuickItem* page) {
@@ -151,6 +168,9 @@ class DictionaryViewTest : public QObject {
     void bridge_answers_its_inline_lookups();
     void profile_switch_reloads_the_searched_page();
     void page_opens_without_focusing_the_field();
+    void shell_places_the_dictionary_at_the_content_top();
+    void collapsed_sidebar_insets_the_search_bar();
+    void aligned_page_checks_after_the_shell_change();
 
    private:
     // Creates the page at size inside a shown, active window; null with error
@@ -506,6 +526,108 @@ void DictionaryViewTest::page_opens_without_focusing_the_field() {
         field->mapToItem(window.contentItem(), QPointF(field->width() / 2, field->height() / 2));
     QTest::mouseClick(&window, Qt::LeftButton, Qt::NoModifier, center.toPoint());
     QTRY_VERIFY2(field->hasActiveFocus(), "clicking the field did not focus it");
+}
+
+// B1: MainWindow treats the Dictionary section as owning the toolbar row, so
+// the page and its bar start at the window content top with no band above it.
+void DictionaryViewTest::shell_places_the_dictionary_at_the_content_top() {
+    QQmlApplicationEngine engine;
+    engine.loadFromModule(QStringLiteral("Niratan"), QStringLiteral("MainWindow"));
+    QVERIFY2(!engine.rootObjects().isEmpty(), "MainWindow was not created");
+    auto* window = qobject_cast<QQuickWindow*>(engine.rootObjects().constFirst());
+    QVERIFY(window != nullptr);
+    QVERIFY(QTest::qWaitForWindowExposed(window));
+
+    window->setProperty("sectionIndex", 1);
+    QQuickItem* bar = nullptr;
+    QTRY_VERIFY((bar = item_named_in(window->contentItem(), QStringLiteral("searchBar"))) !=
+                nullptr);
+    auto* page = bar->parentItem();
+    QVERIFY2(page != nullptr, "the search bar has no page parent");
+
+    QTRY_COMPARE(page->mapToItem(window->contentItem(), QPointF()).y(), 0.0);
+    QTRY_COMPARE(bar->mapToItem(window->contentItem(), QPointF()).y(), 0.0);
+    QTRY_COMPARE(page->mapToItem(window->contentItem(), QPointF(0, page->height())).y(),
+                 window->contentItem()->height());
+
+    auto* results = item_named_in(page, QStringLiteral("results"));
+    QVERIFY2(results != nullptr, "DictionaryPage has no results surface");
+    QVERIFY2(results->mapToItem(page, QPointF()).y() >= bar->height(),
+             "the results surface starts above the search bar's bottom");
+
+    for (QObject* child : page->findChildren<QObject*>()) {
+        QVERIFY2(child->metaObject()->indexOfProperty("showBack") < 0,
+                 qPrintable(QStringLiteral("a page header band is present: ") +
+                            QString::fromLatin1(child->metaObject()->className())));
+    }
+
+    const QString warnings = warnings_after(QStringLiteral("MainWindow"));
+    QVERIFY2(warnings.isEmpty(), qPrintable(warnings));
+}
+
+// B2: the collapsed sidebar passes toolbarInset 44 and the bar leaves exactly
+// that room; restoring the sidebar returns the full-page span.
+void DictionaryViewTest::collapsed_sidebar_insets_the_search_bar() {
+    QQmlApplicationEngine engine;
+    engine.loadFromModule(QStringLiteral("Niratan"), QStringLiteral("MainWindow"));
+    QVERIFY2(!engine.rootObjects().isEmpty(), "MainWindow was not created");
+    auto* window = qobject_cast<QQuickWindow*>(engine.rootObjects().constFirst());
+    QVERIFY(window != nullptr);
+    QVERIFY(QTest::qWaitForWindowExposed(window));
+
+    window->setProperty("sectionIndex", 1);
+    QQuickItem* bar = nullptr;
+    QTRY_VERIFY((bar = item_named_in(window->contentItem(), QStringLiteral("searchBar"))) !=
+                nullptr);
+    auto* page = bar->parentItem();
+    QVERIFY2(page != nullptr, "the search bar has no page parent");
+
+    QTRY_COMPARE(page->property("toolbarInset").toReal(), 0.0);
+    QTRY_COMPARE(bar->x(), 0.0);
+    QTRY_VERIFY(qAbs(bar->width() - page->width()) <= 0.5);
+
+    window->setProperty("sidebarVisible", false);
+    QTRY_COMPARE(page->property("toolbarInset").toReal(), 44.0);
+    QTRY_COMPARE(bar->x(), 44.0);
+    QTRY_VERIFY(qAbs(bar->width() - (page->width() - 44.0)) <= 0.5);
+
+    window->setProperty("sidebarVisible", true);
+    QTRY_COMPARE(page->property("toolbarInset").toReal(), 0.0);
+    QTRY_COMPARE(bar->x(), 0.0);
+    QTRY_VERIFY(qAbs(bar->width() - page->width()) <= 0.5);
+
+    const QString warnings = warnings_after(QStringLiteral("MainWindow"));
+    QVERIFY2(warnings.isEmpty(), qPrintable(warnings));
+}
+
+// B3, B4: the aligned page keeps its first-content bar, empty placeholder and
+// results below the bar at the default and minimum window sizes.
+void DictionaryViewTest::aligned_page_checks_after_the_shell_change() {
+    for (const QSize& size : {QSize(960, 640), QSize(900, 620)}) {
+        QQuickWindow window;
+        QString error;
+        std::unique_ptr<QObject> object = create_page(window, size, error);
+        QVERIFY2(object != nullptr, qPrintable(error));
+        auto* page = qobject_cast<QQuickItem*>(object.get());
+        QVERIFY2(page != nullptr, "DictionaryPage is not an Item");
+
+        auto* bar = page->findChild<QQuickItem*>(QStringLiteral("searchBar"));
+        QVERIFY2(bar != nullptr, "DictionaryPage has no search bar");
+        auto* field = page->findChild<QQuickItem*>(QStringLiteral("field"));
+        QVERIFY2(field != nullptr, "DictionaryPage has no search field");
+        auto* results = page->findChild<QQuickItem*>(QStringLiteral("results"));
+        QVERIFY2(results != nullptr, "DictionaryPage has no results surface");
+
+        QCOMPARE(bar->y(), 0.0);
+        QCOMPARE(bar->x(), 0.0);
+        QVERIFY2(field->property("placeholderText").toString().isEmpty(),
+                 "the search field has a placeholder");
+        QVERIFY2(results->mapToItem(page, QPointF()).y() >= bar->height(),
+                 "the results surface starts above the search bar's bottom");
+
+        const QString warnings = warnings_after(QStringLiteral("DictionaryPage"));
+        QVERIFY2(warnings.isEmpty(), qPrintable(warnings));
+    }
 }
 
 int main(int argc, char* argv[]) {

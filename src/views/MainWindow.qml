@@ -55,6 +55,7 @@ ApplicationWindow {
     readonly property int toolbarHeight: 52
     readonly property bool pageOwnsToolbar: window.sectionIndex === 3
                                             || window.sectionIndex === 2
+                                            || window.sectionIndex === 1
                                             || window.sectionIndex === 0
 
     readonly property var sectionTitles: [
@@ -171,7 +172,9 @@ ApplicationWindow {
     Component {
         id: dictionaryDetail
 
-        DictionaryPage {}
+        DictionaryPage {
+            toolbarInset: window.sidebarVisible ? 0 : 44
+        }
     }
 
     Component {

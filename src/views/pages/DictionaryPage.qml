@@ -13,6 +13,11 @@
 // in the shell sidebar and the bar is the page's first content, spanning the
 // width above the results. Return submits once with the text as typed; the
 // model trims it, so an empty or whitespace-only query clears the results.
+//
+// The page owns the shell's toolbar row, so the shell leaves no 52 px strip
+// above it. While the main sidebar is collapsed the window passes
+// `toolbarInset` 44 and the bar starts at that x, leaving the floating sidebar
+// toggle clear of the capsule and field.
 // `NativeGlassPageBackground` and `NativeGlassTopScrim` stay the shell's solid
 // window background (PLAN.md keeps glass a solid surface), and
 // `SearchResetInset` (pull down to clear or show the keyboard) is not ported:
@@ -37,12 +42,16 @@ import Niratan
 Item {
     id: page
 
+    // Room the window asks for at the leading edge, where its sidebar toggle
+    // floats while the main sidebar is collapsed.
+    property real toolbarInset: 0
+
     DictionaryPopupModel {
         id: model
         objectName: "popupModel"
         page: true
         dark: Theme.dark
-        background: Theme.popupBackground
+        background: Theme.windowBackground
         textColor: Theme.popupText
     }
 
@@ -108,9 +117,9 @@ Item {
         id: searchBar
 
         objectName: "searchBar"
-        x: 0
+        x: page.toolbarInset
         y: 0
-        width: page.width
+        width: page.width - page.toolbarInset
         onSubmitted: model.lookup(searchBar.text)
     }
 
@@ -131,7 +140,7 @@ Item {
             property int lastMiningRequest: 0
             anchors.fill: parent
             visible: model.hasResults
-            backgroundColor: Theme.popupBackground
+            backgroundColor: Theme.windowBackground
 
             webChannel: WebChannel {
                 registeredObjects: [dictionaryBridge]
@@ -161,7 +170,7 @@ Item {
             visible: model.hasResults && model.audioError.length > 0
             text: model.audioError
             color: Theme.popupDanger
-            background: Rectangle { color: Theme.popupBackground }
+            background: Rectangle { color: Theme.windowBackground }
         }
 
         Menu {
