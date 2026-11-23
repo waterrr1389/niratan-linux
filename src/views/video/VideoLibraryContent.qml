@@ -25,6 +25,7 @@ Item {
     id: content
 
     property var model
+    property var sections: []
     property var collapsedSections: ({})
 
     signal openRequested(var row, bool fromBeginning)
@@ -34,7 +35,10 @@ Item {
     signal deleteCollectionRequested(string collectionId)
     signal addFolderRequested()
 
-    readonly property bool hasSections: model && model.sections.length > 0
+    readonly property bool hasSections: sections.length > 0
+    readonly property bool listMode: model && model.layoutMode === "list"
+    readonly property string mode: model ? model.displayMode : ""
+    property var contextRow: null
 
     function usesCollapsibleSections(mode) {
         return mode === "series" || mode === "folders" || mode === "collections"
@@ -56,24 +60,57 @@ Item {
     }
 
     // shouldHideSingleSectionHeader: one generated section draws no header.
-    function sectionHeaderVisible(mode, section) {
-        if (content.usesCollapsibleSections(mode))
-            return true
-        var sections = content.model.sections
-        return !(sections.length === 1 && section.id === content.duplicateHeaderID(mode))
+    function sectionHeaderVisible(section) {
+        return usesCollapsibleSections(mode)
+               || !(sections.length === 1 && section.id === duplicateHeaderID(mode))
     }
 
     function sectionCollapsed(sectionId) {
         return content.collapsedSections[sectionId] === true
     }
 
-    function toggleSection(sectionId) {
+    function toggleSection(sectionId, index) {
         var next = Object.assign({}, content.collapsedSections)
         if (next[sectionId] === true)
             delete next[sectionId]
         else
             next[sectionId] = true
         content.collapsedSections = next
+        // The section keeps its index when only its own rows change.
+        libraryList.positionViewAtIndex(index, ListView.Contain)
+    }
+
+    // A single viewport owns the scroll extent. Each poster delegate covers
+    // one visual grid row, so even a section with hundreds of cards stays lazy.
+    function entries(columns) {
+        const result = []
+        const collapsible = usesCollapsibleSections(mode)
+        for (const section of sections) {
+            const firstGap = result.length === 0 ? 0 : listMode ? 2 : 30
+            const showHeader = sectionHeaderVisible(section)
+            const expanded = !collapsible || !sectionCollapsed(section.id)
+            if (showHeader)
+                result.push({ section: section, gap: firstGap, expanded: expanded })
+            if (!expanded)
+                continue
+            const rows = section.rows
+            for (let i = 0; i < rows.length; i += columns) {
+                const gap = i === 0 ? (showHeader ? (listMode ? 2 : 12) : firstGap)
+                                    : (listMode ? 2 : 26)
+                if (listMode)
+                    result.push({ row: rows[i], gap: gap, separator: i + 1 < rows.length })
+                else
+                    result.push({ cards: rows.slice(i, i + columns), gap: gap })
+            }
+        }
+        return result
+    }
+
+    function openContextMenu(row, position) {
+        contextRow = row
+        contextMenuLoader.active = true
+        const menu = contextMenuLoader.item as Menu
+        menu.popup(content, position.x, position.y)
     }
 
     // VideoLibraryDisplayMode.sidebarSystemImage, for the empty state.
@@ -131,90 +168,114 @@ Item {
         message: content.model ? content.model.emptyDescription : ""
     }
 
-    Flickable {
-        id: listContent
+    ListView {
+        id: libraryList
 
+        readonly property int sideMargin: content.listMode ? 10 : 16
+        readonly property real rowWidth: Math.max(0, width - 2 * sideMargin)
+        readonly property real posterWidth: content.model ? content.model.posterWidth : 160
+        readonly property int columnCount: content.listMode ? 1
+                                          : Math.max(1, Math.floor((rowWidth + 20)
+                                                                  / (posterWidth + 20)))
+        readonly property real cellWidth: Math.min(posterWidth * 1.5,
+            Math.max(posterWidth, (rowWidth - (columnCount - 1) * 20) / columnCount))
+
+        objectName: content.listMode ? "videoLibraryList" : "videoLibraryPosterList"
         anchors.fill: parent
-        visible: content.hasSections && content.model.layoutMode === "list"
-        contentHeight: listSections.implicitHeight + 28
+        visible: content.hasSections
         clip: true
         boundsBehavior: Flickable.StopAtBounds
-
+        topMargin: 4
+        bottomMargin: 24
+        currentIndex: -1
+        keyNavigationEnabled: false
+        cacheBuffer: 0
+        model: content.entries(columnCount)
         ScrollBar.vertical: ScrollBar {}
 
-        Column {
-            id: listSections
+        delegate: Item {
+            id: entry
 
-            x: 10
-            width: listContent.width - 20
-            topPadding: 4
-            bottomPadding: 24
-            spacing: 2
+            required property var modelData
+            required property int index
 
-            Repeater {
-                model: content.model ? content.model.sections : []
+            width: libraryList.width
+            height: body.height + modelData.gap
 
-                delegate: Column {
-                    id: listBlock
+            Loader {
+                id: body
 
-                    required property var modelData
+                x: libraryList.sideMargin
+                y: entry.modelData.gap
+                width: libraryList.rowWidth
+                sourceComponent: entry.modelData.section ? sectionHeader
+                                 : entry.modelData.row ? listRow : posterRow
+            }
 
-                    width: listSections.width
-                    spacing: 2
+            Component {
+                id: sectionHeader
 
-                    VideoLibrarySectionHeader {
-                        objectName: "sectionHeader"
-                        width: listBlock.width
-                        visible: content.sectionHeaderVisible(content.model.displayMode,
-                                                              listBlock.modelData)
-                        title: listBlock.modelData.title
-                        count: listBlock.modelData.rows.length
-                        collapsible: content.usesCollapsibleSections(content.model.displayMode)
-                        expanded: !content.sectionCollapsed(listBlock.modelData.id)
-                        hasCollection: listBlock.modelData.collectionId.length > 0
-                        onClicked: content.toggleSection(listBlock.modelData.id)
-                        onDeleteCollectionRequested: content.deleteCollectionRequested(
-                                                         listBlock.modelData.collectionId)
+                VideoLibrarySectionHeader {
+                    objectName: "sectionHeader"
+                    title: entry.modelData.section.title
+                    count: entry.modelData.section.rows.length
+                    collapsible: content.usesCollapsibleSections(content.mode)
+                    expanded: entry.modelData.expanded
+                    hasCollection: entry.modelData.section.collectionId.length > 0
+                    onClicked: content.toggleSection(entry.modelData.section.id, entry.index)
+                    onDeleteCollectionRequested: content.deleteCollectionRequested(
+                                                     entry.modelData.section.collectionId)
+                }
+            }
+
+            Component {
+                id: listRow
+
+                Column {
+                    VideoLibraryListRow {
+                        id: videoRow
+
+                        objectName: "videoRow"
+                        width: parent.width
+                        rowData: entry.modelData.row
+                        selected: content.model.selectedItemID === rowData.id
+                        onClicked: content.openRequested(rowData, false)
+                        onContextMenuRequested: (position) => content.openContextMenu(
+                            rowData, videoRow.mapToItem(content, position.x, position.y))
                     }
 
-                    Repeater {
-                        model: content.usesCollapsibleSections(content.model.displayMode)
-                               && content.sectionCollapsed(listBlock.modelData.id)
-                               ? [] : listBlock.modelData.rows
+                    // Swift List's separator is omitted after a section's last row.
+                    Rectangle {
+                        x: 12
+                        width: parent.width - 24
+                        height: 1
+                        color: Theme.separator
+                        visible: entry.modelData.separator
+                    }
+                }
+            }
 
-                        delegate: Column {
-                            id: rowBlock
+            Component {
+                id: posterRow
+
+                Row {
+                    spacing: 20
+
+                    Repeater {
+                        model: entry.modelData.cards
+
+                        delegate: VideoLibraryPosterCard {
+                            id: videoCard
 
                             required property var modelData
-                            required property int index
 
-                            width: listBlock.width
-                            spacing: 0
-
-                            VideoLibraryListRow {
-                                objectName: "videoRow"
-                                width: parent.width
-                                rowData: rowBlock.modelData
-                                selected: content.model.selectedItemID === rowBlock.modelData.id
-                                onClicked: content.openRequested(rowBlock.modelData, false)
-                                onPlayFromBeginningRequested: content.openRequested(
-                                                                 rowBlock.modelData, true)
-                                onMarkWatchedRequested: content.markWatchedRequested(
-                                                            rowBlock.modelData)
-                                onClearProgressRequested: content.clearProgressRequested(
-                                                              rowBlock.modelData)
-                                onRevealRequested: content.revealRequested(rowBlock.modelData)
-                            }
-
-                            // Swift List's row separator; none after the last
-                            // row of a section.
-                            Rectangle {
-                                x: 12
-                                width: parent.width - 24
-                                height: 1
-                                color: Theme.separator
-                                visible: rowBlock.index < listBlock.modelData.rows.length - 1
-                            }
+                            objectName: "videoCard"
+                            posterWidth: libraryList.cellWidth
+                            rowData: modelData
+                            selected: content.model.selectedItemID === rowData.id
+                            onClicked: content.openRequested(rowData, false)
+                            onContextMenuRequested: (position) => content.openContextMenu(
+                                rowData, videoCard.mapToItem(content, position.x, position.y))
                         }
                     }
                 }
@@ -222,86 +283,47 @@ Item {
         }
     }
 
-    Flickable {
-        id: posterContent
+    Loader {
+        id: contextMenuLoader
 
-        anchors.fill: parent
-        visible: content.hasSections && content.model.layoutMode !== "list"
-        contentHeight: posterSections.implicitHeight + 28
-        clip: true
-        boundsBehavior: Flickable.StopAtBounds
+        active: false
+        sourceComponent: Menu {
+            id: contextMenu
 
-        ScrollBar.vertical: ScrollBar {}
+            objectName: "videoContextMenu"
 
-        Column {
-            id: posterSections
-
-            x: 16
-            width: posterContent.width - 32
-            topPadding: 4
-            bottomPadding: 24
-            spacing: 30
-
-            Repeater {
-                model: content.model ? content.model.sections : []
-
-                delegate: Column {
-                    id: posterBlock
-
-                    required property var modelData
-
-                    width: posterSections.width
-                    spacing: 12
-
-                    VideoLibrarySectionHeader {
-                        objectName: "sectionHeader"
-                        width: posterBlock.width
-                        visible: content.sectionHeaderVisible(content.model.displayMode,
-                                                              posterBlock.modelData)
-                        title: posterBlock.modelData.title
-                        count: posterBlock.modelData.rows.length
-                        collapsible: content.usesCollapsibleSections(content.model.displayMode)
-                        expanded: !content.sectionCollapsed(posterBlock.modelData.id)
-                        hasCollection: posterBlock.modelData.collectionId.length > 0
-                        onClicked: content.toggleSection(posterBlock.modelData.id)
-                        onDeleteCollectionRequested: content.deleteCollectionRequested(
-                                                         posterBlock.modelData.collectionId)
-                    }
-
-                    Grid {
-                        id: cardGrid
-
-                        readonly property real cellWidth: Math.min(
-                            content.model.posterWidth * 1.5,
-                            Math.max(content.model.posterWidth,
-                                     (width - (columns - 1) * 20) / Math.max(1, columns)))
-
-                        width: posterBlock.width
-                        columns: Math.max(1, Math.floor((width + 20)
-                                                        / (content.model.posterWidth + 20)))
-                        columnSpacing: 20
-                        rowSpacing: 26
-
-                        Repeater {
-                            model: content.usesCollapsibleSections(content.model.displayMode)
-                                   && content.sectionCollapsed(posterBlock.modelData.id)
-                                   ? [] : posterBlock.modelData.rows
-
-                            delegate: VideoLibraryPosterCard {
-                                required property var modelData
-
-                                objectName: "videoCard"
-                                posterWidth: cardGrid.cellWidth
-                                rowData: modelData
-                                selected: content.model.selectedItemID === modelData.id
-                                onClicked: content.openRequested(modelData, false)
-                                onPlayFromBeginningRequested: content.openRequested(modelData, true)
-                                onMarkWatchedRequested: content.markWatchedRequested(modelData)
-                                onClearProgressRequested: content.clearProgressRequested(modelData)
-                                onRevealRequested: content.revealRequested(modelData)
-                            }
-                        }
-                    }
+            MenuItem {
+                text: qsTr("Play from Beginning")
+                icon.source: IconMap.source("backward.end")
+                onTriggered: {
+                    contextMenu.close()
+                    content.openRequested(content.contextRow, true)
+                }
+            }
+            MenuItem {
+                text: qsTr("Mark as Watched")
+                icon.source: IconMap.source("checkmark.circle")
+                onTriggered: {
+                    contextMenu.close()
+                    content.markWatchedRequested(content.contextRow)
+                }
+            }
+            MenuItem {
+                text: qsTr("Clear Progress")
+                icon.source: IconMap.source("xmark.circle")
+                enabled: !!content.contextRow && !!content.contextRow.playback
+                onTriggered: {
+                    contextMenu.close()
+                    content.clearProgressRequested(content.contextRow)
+                }
+            }
+            MenuSeparator {}
+            MenuItem {
+                text: qsTr("Reveal in File Manager")
+                icon.source: IconMap.source("folder")
+                onTriggered: {
+                    contextMenu.close()
+                    content.revealRequested(content.contextRow)
                 }
             }
         }

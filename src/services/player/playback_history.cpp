@@ -81,6 +81,20 @@ PlaybackState decode_state(const QJsonObject& object) {
     return state;
 }
 
+std::optional<PlaybackState> state_for(const QString& key, const QJsonObject& states,
+                                       const QJsonObject& positions) {
+    if (const auto entry = states.constFind(key); entry != states.constEnd()) {
+        return decode_state(entry.value().toObject());
+    }
+    if (const auto position = positions.constFind(key); position != positions.constEnd()) {
+        PlaybackState legacy;
+        legacy.position = position.value().toDouble();
+        legacy.updated_at = QDateTime::fromSecsSinceEpoch(kDistantPastSeconds, QTimeZone::UTC);
+        return legacy;
+    }
+    return std::nullopt;
+}
+
 QJsonObject encode_state(const PlaybackState& state) {
     QJsonObject object{{"position", state.position},
                        {"updatedAt", reference_from_date(state.updated_at)},
@@ -159,18 +173,24 @@ PlaybackHistory::PlaybackHistory(std::filesystem::path file, std::filesystem::pa
 
 std::optional<PlaybackState> PlaybackHistory::state(const QString& key) const {
     const auto document = read();
+    return state_for(key, document.value(kStates).toObject(),
+                     document.value(kPositions).toObject());
+}
+
+QHash<QString, PlaybackState> PlaybackHistory::states_for(const QSet<QString>& keys) const {
+    if (keys.isEmpty()) {
+        return {};
+    }
+    const auto document = read();
     const auto states = document.value(kStates).toObject();
-    if (states.contains(key)) {
-        return decode_state(states.value(key).toObject());
-    }
     const auto positions = document.value(kPositions).toObject();
-    if (positions.contains(key)) {
-        PlaybackState legacy;
-        legacy.position = positions.value(key).toDouble();
-        legacy.updated_at = QDateTime::fromSecsSinceEpoch(kDistantPastSeconds, QTimeZone::UTC);
-        return legacy;
+    QHash<QString, PlaybackState> result;
+    for (const auto& key : keys) {
+        if (const auto state = state_for(key, states, positions)) {
+            result.insert(key, *state);
+        }
     }
-    return std::nullopt;
+    return result;
 }
 
 std::optional<double> PlaybackHistory::resume_position(const QString& key) const {

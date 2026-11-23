@@ -601,7 +601,7 @@ class VideoLibraryViewModelTest : public QObject {
                  QFileInfo(fixture.subtitle).absoluteFilePath());
         QCOMPARE(pilot.value(QStringLiteral("subtitleCandidatePath")).toString(),
                  QFileInfo(fixture.subtitle).absoluteFilePath());
-        QCOMPARE(view_model.subtitleUrlForOpening(episode1_id),
+        QCOMPARE(view_model.subtitleUrlForOpening(episode1_id).toLocalFile(),
                  QFileInfo(fixture.subtitle).absoluteFilePath());
 
         view_model.bindSubtitle(episode1_id, QString());
@@ -898,11 +898,11 @@ class VideoLibraryViewModelTest : public QObject {
         view_model.setDisplayMode(QStringLiteral("continueWatching"));
         const QString alpha_id = id_titled(view_model, QStringLiteral("Alpha"));
         QVERIFY(!alpha_id.isEmpty());
-        QCOMPARE(view_model.openFromBeginningUrl(alpha_id), fixture.alpha);
+        QCOMPARE(view_model.openFromBeginningUrl(alpha_id), QUrl::fromLocalFile(fixture.alpha));
         QVERIFY(titles(view_model).isEmpty());
 
         view_model.setDisplayMode(QStringLiteral("all"));
-        QCOMPARE(view_model.openUrl(beta_id), fixture.beta);
+        QCOMPARE(view_model.openUrl(beta_id), QUrl::fromLocalFile(fixture.beta));
         QVERIFY(view_model.errorMessage().isEmpty());
     }
 
@@ -979,7 +979,7 @@ class VideoLibraryViewModelTest : public QObject {
         const QString episode1_id = id_titled(view_model, QStringLiteral("Episode 01"));
         QVERIFY(!episode1_id.isEmpty());
         view_model.bindSubtitle(episode1_id, fixture.subtitle);
-        QCOMPARE(view_model.subtitleUrlForOpening(episode1_id),
+        QCOMPARE(view_model.subtitleUrlForOpening(episode1_id).toLocalFile(),
                  QFileInfo(fixture.subtitle).absoluteFilePath());
 
         QVERIFY(QFile::remove(fixture.subtitle));
@@ -988,6 +988,44 @@ class VideoLibraryViewModelTest : public QObject {
                      .value(QStringLiteral("subtitleCandidatePath"))
                      .toString(),
                  QFileInfo(fixture.subtitle).absoluteFilePath());
+    }
+
+    void playbackFromLibraryUsesTheCatalogHistoryKey() {
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        const auto root = use_data_home(dir.path());
+        const QString source_path = make_directory(dir.filePath(QStringLiteral("Library")));
+        const QString clip =
+            touch_file(source_path + QStringLiteral("/日本語 #1 %20?.mkv"), 10, 10);
+        const QString subtitle =
+            touch_file(source_path + QStringLiteral("/日本語 #1 %20?.srt"), 10, 10);
+        QVERIFY(!clip.isEmpty());
+        QVERIFY(!subtitle.isEmpty());
+        LibraryStore store(root / "video_library.json");
+        const auto source = store.add_source(fs_path(source_path));
+        store.scan_source(source.id);
+        store.bind_subtitle(clip, subtitle);
+
+        VideoLibraryViewModel library;
+        library.load();
+        QCOMPARE(library.displayMode(), QStringLiteral("all"));
+
+        const QUrl opened = library.openUrl(clip);
+        QVERIFY2(opened.isLocalFile(), "the player cannot save resume state for a non-local URL");
+        QCOMPARE(opened.toLocalFile(), clip);
+        QCOMPARE(library.subtitleUrlForOpening(clip), QUrl::fromLocalFile(subtitle));
+
+        PlaybackHistory history = PlaybackHistory::at_data_root();
+        QVERIFY(history.save(QFileInfo(opened.toLocalFile()).absoluteFilePath(), 50, 100));
+        library.refreshPlaybackHistory();
+        QCOMPARE(library.displayMode(), QStringLiteral("all"));
+        library.setDisplayMode(QStringLiteral("continueWatching"));
+        QCOMPARE(id_titled(library, QStringLiteral("日本語 #1 %20?")), clip);
+
+        VideoLibraryViewModel reopened;
+        reopened.load();
+        QCOMPARE(reopened.displayMode(), QStringLiteral("continueWatching"));
+        QCOMPARE(reopened.modeCounts().value(QStringLiteral("continueWatching")).toInt(), 1);
     }
 
     void openUrlReportsMissingFile() {

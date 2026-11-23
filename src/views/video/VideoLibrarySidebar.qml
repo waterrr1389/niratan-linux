@@ -26,6 +26,7 @@ Rectangle {
     property var model
     property real toolbarInset: 0
     readonly property int toolbarHeight: 52
+    readonly property var counts: model ? model.modeCounts : ({})
 
     // VideoLibraryDisplayMode.libraryModes, .organizationModes and
     // .sidebarSystemImage, in Swift's order.
@@ -102,7 +103,7 @@ Rectangle {
                     width: rows.width
                     symbol: modelData.symbol
                     title: modelData.title
-                    badge: sidebar.model.modeCounts[modelData.mode] ?? 0
+                    badge: sidebar.counts[modelData.mode] ?? 0
                     selected: sidebar.model.displayMode === modelData.mode
                     emphasized: true
                     onClicked: sidebar.model.displayMode = modelData.mode
@@ -115,11 +116,11 @@ Rectangle {
                 property string mode: "missing"
 
                 width: rows.width
-                visible: (sidebar.model.modeCounts["missing"] ?? 0) > 0
+                visible: (sidebar.counts["missing"] ?? 0) > 0
                          || sidebar.model.displayMode === "missing"
                 symbol: "exclamationmark.triangle"
                 title: qsTr("Missing")
-                badge: sidebar.model.modeCounts["missing"] ?? 0
+                badge: sidebar.counts["missing"] ?? 0
                 selected: sidebar.model.displayMode === "missing"
                 emphasized: true
                 onClicked: sidebar.model.displayMode = "missing"
@@ -148,7 +149,7 @@ Rectangle {
                     width: rows.width
                     symbol: modelData.symbol
                     title: modelData.title
-                    badge: sidebar.model.modeCounts[modelData.mode] ?? 0
+                    badge: sidebar.counts[modelData.mode] ?? 0
                     selected: sidebar.model.displayMode === modelData.mode
                     emphasized: true
                     onClicked: sidebar.model.displayMode = modelData.mode

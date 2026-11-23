@@ -330,25 +330,25 @@ void FlowVideoMiningTest::library_resolves_the_row_clip_and_subtitle() {
     library.setDisplayMode(QStringLiteral("all"));
     library.addFolders({fixture.source});
     QTRY_VERIFY(!library.sections().isEmpty());
-    QCOMPARE(library.openUrl(fixture.video), fixture.video);
+    QCOMPARE(library.openUrl(fixture.video), QUrl::fromLocalFile(fixture.video));
 
     // A bound sidecar opens only while the file exists.
     library.bindSubtitle(fixture.video, fixture.subtitle);
-    QCOMPARE(library.subtitleUrlForOpening(fixture.video), fixture.subtitle);
+    QCOMPARE(library.subtitleUrlForOpening(fixture.video), QUrl::fromLocalFile(fixture.subtitle));
     QVERIFY(QFile::remove(fixture.subtitle));
-    QCOMPARE(library.subtitleUrlForOpening(fixture.video), QString());
+    QVERIFY(library.subtitleUrlForOpening(fixture.video).isEmpty());
 
     // From the beginning opens the same clip and drops the stored position.
     PlaybackHistory history(niratan::storage::data_root() / "video_playback_history.json");
     QVERIFY(history.save(fixture.video, 20, 100));
-    QCOMPARE(library.openFromBeginningUrl(fixture.video), fixture.video);
+    QCOMPARE(library.openFromBeginningUrl(fixture.video), QUrl::fromLocalFile(fixture.video));
     QVERIFY(!PlaybackHistory(niratan::storage::data_root() / "video_playback_history.json")
                  .state(fixture.video)
                  .has_value());
 
     // A vanished clip rescans its source and stays unopened.
     QVERIFY(QFile::remove(fixture.video));
-    QCOMPARE(library.openUrl(fixture.video), QString());
+    QVERIFY(library.openUrl(fixture.video).isEmpty());
     QTRY_VERIFY(library_row(library, fixture.video).isEmpty());
     QCOMPARE(library.errorMessage(),
              QStringLiteral("The saved video file is no longer available."));
@@ -446,7 +446,7 @@ void FlowVideoMiningTest::closing_saves_and_the_library_refreshes() {
     QCOMPARE(playback.value(QStringLiteral("position")).toDouble(), 20.0);
     QCOMPARE(playback.value(QStringLiteral("resumable")).toBool(), true);
     QCOMPARE(playback.value(QStringLiteral("progress")).toDouble(), 0.2);
-    QCOMPARE(library.openUrl(fixture.video), fixture.video);
+    QCOMPARE(library.openUrl(fixture.video), QUrl::fromLocalFile(fixture.video));
 
     library.markWatched(fixture.video);
     const QVariantMap watched =
@@ -540,21 +540,21 @@ void FlowVideoMiningTest::open_lookup_and_add_the_card() {
     library.addFolders({fixture.source});
     QTRY_VERIFY(!library.sections().isEmpty());
     library.bindSubtitle(fixture.video, fixture.subtitle);
-    video_path_ = library.openUrl(fixture.video);
-    const QString subtitle_path = library.subtitleUrlForOpening(fixture.video);
+    video_path_ = library.openUrl(fixture.video).toLocalFile();
+    const QUrl subtitle_url = library.subtitleUrlForOpening(fixture.video);
     QVERIFY(!video_path_.isEmpty());
-    QVERIFY(!subtitle_path.isEmpty());
+    QVERIFY(subtitle_url.isLocalFile());
 
     // VideoPlayerScreen+Opening openVideo / autoloadSubtitleIfAvailable: the
     // sidecar bytes become the lookup document, and playback at 3.5 s shows
     // cue b.
     const std::optional<QByteArray> subtitle =
-        niratan::player::read_subtitle_document(subtitle_path);
+        niratan::player::read_subtitle_document(subtitle_url.toLocalFile());
     QVERIFY(subtitle.has_value());
     lookup_ = std::make_unique<PlayerLookupViewModel>();
     lookup_->setLookupSettings(false, 45);
     lookup_->setPlaying(true);
-    lookup_->setSubtitleDocument(QUrl::fromLocalFile(subtitle_path), *subtitle, true);
+    lookup_->setSubtitleDocument(subtitle_url, *subtitle, true);
     lookup_->updatePlayback(3.5, 0.0);
 
     // F1: the current cue is b (3-4 s, "現在。").

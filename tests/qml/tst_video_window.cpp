@@ -273,7 +273,19 @@ void VideoWindowTest::opening_from_beginning_passes_the_flag() {
     window->setProperty("sectionIndex", 2);
     QQuickItem* card = nullptr;
     QTRY_VERIFY((card = card_with_id(window->contentItem(), fixture.alpha)) != nullptr);
-    QVERIFY(QMetaObject::invokeMethod(card, "playFromBeginningRequested"));
+    QVERIFY(QMetaObject::invokeMethod(card, "contextMenuRequested",
+                                      Q_ARG(QPointF, card->boundingRect().center())));
+    QObject* menu = nullptr;
+    QTRY_VERIFY((menu = window->findChild<QObject*>(QStringLiteral("videoContextMenu"))) !=
+                nullptr);
+    QTRY_VERIFY(menu->property("visible").toBool());
+    QQuickItem* play_from_beginning = nullptr;
+    QVERIFY(QMetaObject::invokeMethod(
+        menu, "itemAt", Q_RETURN_ARG(QQuickItem*, play_from_beginning), Q_ARG(int, 0)));
+    QVERIFY(play_from_beginning != nullptr);
+    QCOMPARE(play_from_beginning->property("text").toString(),
+             QStringLiteral("Play from Beginning"));
+    QVERIFY(QMetaObject::invokeMethod(play_from_beginning, "triggered"));
 
     auto* video = window->findChild<QQuickWindow*>(QStringLiteral("videoWindow"));
     QVERIFY(video != nullptr);
@@ -282,7 +294,7 @@ void VideoWindowTest::opening_from_beginning_passes_the_flag() {
     QTRY_VERIFY((player = video->findChild<QQuickItem*>(QStringLiteral("videoPlayerPage"))) !=
                 nullptr);
     QCOMPARE(player->property("startFromBeginning").toBool(), true);
-    QTRY_COMPARE(player->property("videoFile").toUrl().toString(), fixture.alpha);
+    QTRY_COMPARE(player->property("videoFile").toUrl(), QUrl::fromLocalFile(fixture.alpha));
 }
 
 // B4, B8: the page's full-screen toggle drives the Video window and leaves
@@ -340,16 +352,17 @@ void VideoWindowTest::opening_reuses_one_window_and_passes_the_request() {
     QQuickItem* player = nullptr;
     QTRY_VERIFY((player = video->findChild<QQuickItem*>(QStringLiteral("videoPlayerPage"))) !=
                 nullptr);
-    QCOMPARE(player->property("initialVideoUrl").toUrl().toString(), fixture.alpha);
-    QCOMPARE(player->property("initialSubtitleUrl").toUrl().toString(), fixture.subtitle);
+    QCOMPARE(player->property("initialVideoUrl").toUrl(), QUrl::fromLocalFile(fixture.alpha));
+    QCOMPARE(player->property("initialSubtitleUrl").toUrl(), QUrl::fromLocalFile(fixture.subtitle));
     QCOMPARE(player->property("startFromBeginning").toBool(), false);
-    QTRY_COMPARE(player->property("videoFile").toUrl().toString(), fixture.alpha);
-    QTRY_COMPARE(player->property("pendingSubtitleUrl").toUrl().toString(), fixture.subtitle);
+    QTRY_COMPARE(player->property("videoFile").toUrl(), QUrl::fromLocalFile(fixture.alpha));
+    QTRY_COMPARE(player->property("pendingSubtitleUrl").toUrl(),
+                 QUrl::fromLocalFile(fixture.subtitle));
 
     QQuickItem* second = nullptr;
     QTRY_VERIFY((second = card_with_id(window->contentItem(), fixture.beta)) != nullptr);
     click(second);
-    QTRY_COMPARE(player->property("videoFile").toUrl().toString(), fixture.beta);
+    QTRY_COMPARE(player->property("videoFile").toUrl(), QUrl::fromLocalFile(fixture.beta));
     QTRY_VERIFY(player->property("pendingSubtitleUrl").toUrl().toString().isEmpty());
     QCOMPARE(window->findChildren<QQuickWindow*>(QStringLiteral("videoWindow")).size(), 1);
     QCOMPARE(video->findChildren<QQuickItem*>(QStringLiteral("videoPlayerPage")).size(), 1);
@@ -425,8 +438,8 @@ void VideoWindowTest::closing_resets_the_player_and_reopening_shows_only_the_new
     QQuickItem* player = nullptr;
     QTRY_VERIFY((player = video->findChild<QQuickItem*>(QStringLiteral("videoPlayerPage"))) !=
                 nullptr);
-    QTRY_COMPARE(player->property("videoFile").toUrl().toString(), fixture.alpha);
-    QCOMPARE(player->property("pendingSubtitleUrl").toUrl().toString(), fixture.subtitle);
+    QTRY_COMPARE(player->property("videoFile").toUrl(), QUrl::fromLocalFile(fixture.alpha));
+    QCOMPARE(player->property("pendingSubtitleUrl").toUrl(), QUrl::fromLocalFile(fixture.subtitle));
 
     // Per-video and transient state that must not survive the close.
     player->setProperty("studyOpen", true);
@@ -463,7 +476,7 @@ void VideoWindowTest::closing_resets_the_player_and_reopening_shows_only_the_new
     QTRY_COMPARE(video->findChildren<QQuickItem*>(QStringLiteral("videoPlayerPage")).size(), 1);
     QQuickItem* reopened = video->findChild<QQuickItem*>(QStringLiteral("videoPlayerPage"));
     QVERIFY(reopened != nullptr);
-    QTRY_COMPARE(reopened->property("videoFile").toUrl().toString(), fixture.beta);
+    QTRY_COMPARE(reopened->property("videoFile").toUrl(), QUrl::fromLocalFile(fixture.beta));
     QVERIFY(reopened->property("pendingSubtitleUrl").toUrl().toString().isEmpty());
     QCOMPARE(reopened->property("studyOpen").toBool(), false);
     QCOMPARE(reopened->property("speedPanelOpen").toBool(), false);
@@ -522,7 +535,7 @@ void VideoWindowTest::empty_window_shows_the_no_video_copy() {
     QQuickItem* opened = nullptr;
     QTRY_VERIFY((opened = video->findChild<QQuickItem*>(QStringLiteral("videoPlayerPage"))) !=
                 nullptr);
-    QTRY_COMPARE(opened->property("videoFile").toUrl().toString(), fixture.beta);
+    QTRY_COMPARE(opened->property("videoFile").toUrl(), QUrl::fromLocalFile(fixture.beta));
     QTRY_VERIFY(!empty->isVisible());
 }
 

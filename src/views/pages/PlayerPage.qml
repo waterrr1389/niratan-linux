@@ -386,11 +386,7 @@ Item {
     }
 
     function loadSubtitle(file: url): bool {
-        // MpvItem::load_external_subtitle accepts a local file URL only; the
-        // library hands a bare path.
-        const text = file.toString()
-        const target = text.indexOf("file:") === 0 ? file : "file://" + text
-        if (mpv.loadExternalSubtitle(target))
+        if (mpv.loadExternalSubtitle(file))
             return true
         page.showSubtitleLoadError()
         return false
@@ -688,12 +684,7 @@ Item {
         objectName: "playerEmptyState"
         anchors.fill: stage
         visible: page.videoFile.toString().length === 0
-        onFileChosen: function (file) {
-            var path = file.toString()
-            if (path.indexOf("file://") === 0)
-                path = decodeURIComponent(path.substring("file://".length))
-            page.openVideo(path, false)
-        }
+        onFileChosen: function (file) { page.openVideo(file, false) }
     }
 
     PlayerLoadingOverlay {

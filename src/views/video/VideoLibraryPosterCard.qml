@@ -14,9 +14,7 @@
 pragma ComponentBehavior: Bound
 
 import QtQuick
-import QtQuick.Controls
 import Niratan
-import "../icons/icon_map.js" as IconMap
 
 Item {
     id: card
@@ -36,10 +34,7 @@ Item {
                                        ? rowData.metadata.isFavorite === true : false
 
     signal clicked()
-    signal playFromBeginningRequested()
-    signal markWatchedRequested()
-    signal clearProgressRequested()
-    signal revealRequested()
+    signal contextMenuRequested(point position)
 
     width: posterWidth
     implicitHeight: artwork.height + 9 + titleText.height + 3 + locationText.height
@@ -93,7 +88,7 @@ Item {
 
     TapHandler {
         acceptedButtons: Qt.RightButton
-        onTapped: contextMenu.popup()
+        onTapped: (eventPoint) => card.contextMenuRequested(eventPoint.position)
     }
 
     Item {
@@ -296,33 +291,6 @@ Item {
             text: card.rowData ? card.sizeText(card.rowData.fileSize) : ""
             color: Theme.textSecondary
             font.pixelSize: Theme.fontCaption
-        }
-    }
-
-    Menu {
-        id: contextMenu
-
-        MenuItem {
-            text: qsTr("Play from Beginning")
-            icon.source: IconMap.source("backward.end")
-            onTriggered: card.playFromBeginningRequested()
-        }
-        MenuItem {
-            text: qsTr("Mark as Watched")
-            icon.source: IconMap.source("checkmark.circle")
-            onTriggered: card.markWatchedRequested()
-        }
-        MenuItem {
-            text: qsTr("Clear Progress")
-            icon.source: IconMap.source("xmark.circle")
-            enabled: card.hasPlayback
-            onTriggered: card.clearProgressRequested()
-        }
-        MenuSeparator {}
-        MenuItem {
-            text: qsTr("Reveal in File Manager")
-            icon.source: IconMap.source("folder")
-            onTriggered: card.revealRequested()
         }
     }
 }

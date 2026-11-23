@@ -35,7 +35,9 @@
 #include "services/player/resume_options.h"
 
 #include <QDateTime>
+#include <QHash>
 #include <QJsonObject>
+#include <QSet>
 #include <QString>
 
 #include <filesystem>
@@ -96,6 +98,8 @@ class PlaybackHistory {
     // playbackState(for:): the stored state, else a legacy position as a
     // state with no duration and an updatedAt of Date.distantPast.
     std::optional<PlaybackState> state(const QString& key) const;
+    // Resolve a library's keys from one snapshot, omitting absent entries.
+    QHash<QString, PlaybackState> states_for(const QSet<QString>& keys) const;
     // position(for:): the state's position when resumable, else the legacy
     // position, else none.
     std::optional<double> resume_position(const QString& key) const;

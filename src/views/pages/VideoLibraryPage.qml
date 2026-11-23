@@ -32,8 +32,8 @@
 // is the film placeholder and no frame is requested. "Reveal in Finder"
 // becomes "Reveal in File Manager" and opens the item's parent folder.
 //
-// Opening selects the row first, then emits `videoOpened(absolutePath,
-// boundSubtitlePath, fromBeginning)`; the shell pushes the player, which calls
+// Opening selects the row first, then emits `videoOpened(videoUrl,
+// boundSubtitleUrl, fromBeginning)`; the shell opens the player, which calls
 // openVideo and loadSubtitle. A row whose file disappeared shows the view
 // model's error and emits nothing.
 pragma ComponentBehavior: Bound
@@ -46,7 +46,7 @@ import "../icons/icon_map.js" as IconMap
 Item {
     id: page
 
-    signal videoOpened(string url, string subtitleUrl, bool fromBeginning)
+    signal videoOpened(url videoUrl, url subtitleUrl, bool fromBeginning)
 
     property real toolbarInset: 0
     readonly property int toolbarHeight: 52
@@ -74,9 +74,10 @@ Item {
     })
 
     readonly property string modeTitle: page.modeTitles[video.displayMode] ?? ""
+    readonly property var sections: video.sections
     readonly property int sectionCount: {
         var count = 0
-        var list = video.sections
+        var list = page.sections
         for (var i = 0; i < list.length; ++i)
             count += list[i].rows.length
         return count
@@ -90,7 +91,7 @@ Item {
             return
         video.select(row.id)
         var url = fromBeginning ? video.openFromBeginningUrl(row.id) : video.openUrl(row.id)
-        if (url.length === 0)
+        if (url.toString().length === 0)
             return
         page.videoOpened(url, video.subtitleUrlForOpening(row.id), fromBeginning)
     }
@@ -122,10 +123,7 @@ Item {
         objectName: "videoLibraryModel"
     }
 
-    Component.onCompleted: {
-        video.load()
-        video.refreshPlaybackHistory()
-    }
+    Component.onCompleted: video.load()
 
     Connections {
         target: page.playerWindow ? page.playerWindow : null
@@ -322,6 +320,7 @@ Item {
             anchors.left: parent.left
             anchors.right: parent.right
             model: video
+            sections: page.sections
             onOpenRequested: function (row, fromBeginning) {
                 page.openItem(row, fromBeginning)
             }

@@ -142,7 +142,7 @@ void VideoLibraryViewModel::addFolders(const QStringList& folders) {
     }
     scanning_ = false;
     emit scanningChanged();
-    refreshPlaybackHistory();
+    updatePlaybackHistoryCache();
     notifyRows();
     if (!failure.isEmpty()) {
         showError(failure);
@@ -159,7 +159,7 @@ void VideoLibraryViewModel::refreshAllSources() {
     const bool ok = store_.scan_all_sources(&error);
     scanning_ = false;
     emit scanningChanged();
-    refreshPlaybackHistory();
+    updatePlaybackHistoryCache();
     notifyRows();
     if (!ok) {
         showError(error);
@@ -173,7 +173,7 @@ void VideoLibraryViewModel::refreshSource(const QString& id) {
     const bool ok = store_.scan_source(QUuid::fromString(id), &error);
     scanning_ = false;
     emit scanningChanged();
-    refreshPlaybackHistory();
+    updatePlaybackHistoryCache();
     notifyRows();
     if (!ok) {
         showError(error);
@@ -185,7 +185,7 @@ void VideoLibraryViewModel::removeSource(const QString& id) {
     if (prune_selection(store_.catalog(), selected_item_id_, selected_item_ids_)) {
         emit selectionChanged();
     }
-    refreshPlaybackHistory();
+    updatePlaybackHistoryCache();
     notifyRows();
 }
 
@@ -212,7 +212,7 @@ void VideoLibraryViewModel::setSelectedItemIDs(const QStringList& ids) {
     emit selectionChanged();
 }
 
-QString VideoLibraryViewModel::openUrl(const QString& id) {
+QUrl VideoLibraryViewModel::openUrl(const QString& id) {
     const auto& items = store_.catalog().items;
     const auto entry =
         std::find_if(items.begin(), items.end(),
@@ -229,26 +229,26 @@ QString VideoLibraryViewModel::openUrl(const QString& id) {
         showError(tr("The saved video file is no longer available."));
         return {};
     }
-    return path;
+    return QUrl::fromLocalFile(path);
 }
 
-QString VideoLibraryViewModel::openFromBeginningUrl(const QString& id) {
-    const QString url = openUrl(id);
+QUrl VideoLibraryViewModel::openFromBeginningUrl(const QString& id) {
+    const QUrl url = openUrl(id);
     if (url.isEmpty()) {
         return {};
     }
-    history_.clear(url);
+    history_.clear(url.toLocalFile());
     refreshPlaybackHistory();
     return url;
 }
 
-QString VideoLibraryViewModel::subtitleUrlForOpening(const QString& id) {
+QUrl VideoLibraryViewModel::subtitleUrlForOpening(const QString& id) {
     const auto metadata = store_.metadata_for_path(id);
     const auto& subtitle = metadata.bound_subtitle_path;
     if (!subtitle || subtitle->isEmpty() || !QFileInfo::exists(*subtitle)) {
         return {};
     }
-    return *subtitle;
+    return QUrl::fromLocalFile(*subtitle);
 }
 
 void VideoLibraryViewModel::markWatched(const QString& id) {
@@ -358,7 +358,7 @@ int VideoLibraryViewModel::removeMissingItems(const QString& source_id) {
     if (prune_selection(store_.catalog(), selected_item_id_, selected_item_ids_)) {
         emit selectionChanged();
     }
-    refreshPlaybackHistory();
+    updatePlaybackHistoryCache();
     notifyRows();
     return removed;
 }

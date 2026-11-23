@@ -10,6 +10,7 @@
 #include "services/player/video_settings.h"
 
 #include <algorithm>
+#include <utility>
 
 namespace niratan::viewmodels {
 namespace {
@@ -48,7 +49,8 @@ void VideoLibraryViewModel::setDisplayMode(const QString& mode) {
     }
     display_mode_ = mode;
     emit displayModeChanged();
-    notifyRows();
+    emit sectionsChanged();
+    notifyEmptyState();
 }
 
 void VideoLibraryViewModel::setSortOption(const QString& option) {
@@ -57,7 +59,7 @@ void VideoLibraryViewModel::setSortOption(const QString& option) {
     }
     sort_option_ = option;
     emit sortOptionChanged();
-    notifyRows();
+    emit sectionsChanged();
 }
 
 void VideoLibraryViewModel::setLayoutMode(const QString& mode) {
@@ -90,7 +92,8 @@ void VideoLibraryViewModel::setSearchText(const QString& text) {
     }
     search_text_ = text;
     emit searchTextChanged();
-    notifyRows();
+    emit sectionsChanged();
+    notifyEmptyState();
 }
 
 void VideoLibraryViewModel::setShowUnfinishedOnly(bool enabled) {
@@ -99,7 +102,8 @@ void VideoLibraryViewModel::setShowUnfinishedOnly(bool enabled) {
     }
     show_unfinished_only_ = enabled;
     emit showUnfinishedOnlyChanged();
-    notifyRows();
+    emit sectionsChanged();
+    notifyEmptyState();
 }
 
 bool VideoLibraryViewModel::hasSources() const {
@@ -175,64 +179,62 @@ QVariantList VideoLibraryViewModel::sourceSummaries() const {
 }
 
 void VideoLibraryViewModel::load() {
-    refreshPlaybackHistory();
+    const bool history_changed = updatePlaybackHistoryCache();
     // Nothing to resume: open on every video rather than an empty list, so a
     // scanned folder does not look lost. Swift always opens on Continue
     // Watching.
     if (display_mode_ == QStringLiteral("continueWatching") && !store_.catalog().items.isEmpty() &&
-        modeCountsData().value(QStringLiteral("continueWatching")).toInt() == 0) {
-        setDisplayMode(QStringLiteral("all"));
-        return;
+        std::ranges::none_of(playback_states_, &player::PlaybackState::resumable)) {
+        display_mode_ = QStringLiteral("all");
+        emit displayModeChanged();
+        if (!history_changed) {
+            emit sectionsChanged();
+            notifyEmptyState();
+        }
     }
-    notifyRows();
-}
-
-void VideoLibraryViewModel::refreshPlaybackHistory() {
-    const auto previous_states = playback_states_;
-    const auto previous_keys = cached_playback_keys_;
-    rebuildPlaybackHistoryCache();
-    if (previous_states != playback_states_ || previous_keys != cached_playback_keys_) {
-        ++playback_history_revision_;
-        emit playbackHistoryRevisionChanged();
+    if (history_changed) {
         notifyRows();
     }
 }
 
+void VideoLibraryViewModel::refreshPlaybackHistory() {
+    if (updatePlaybackHistoryCache()) {
+        notifyRows();
+    }
+}
+
+bool VideoLibraryViewModel::updatePlaybackHistoryCache() {
+    const auto previous_states = playback_states_;
+    const auto previous_keys = cached_playback_keys_;
+    rebuildPlaybackHistoryCache();
+    if (previous_states == playback_states_ && previous_keys == cached_playback_keys_) {
+        return false;
+    }
+    ++playback_history_revision_;
+    emit playbackHistoryRevisionChanged();
+    return true;
+}
+
 void VideoLibraryViewModel::rebuildPlaybackHistoryCache() {
-    QHash<QString, player::PlaybackState> states;
     QSet<QString> keys;
     for (const auto& item : store_.catalog().items) {
         keys.insert(item.path);
-        if (const auto state = history_.state(item.path)) {
-            states.insert(item.path, *state);
-        }
     }
-    playback_states_ = states;
-    cached_playback_keys_ = keys;
-}
-
-void VideoLibraryViewModel::synchronizePlaybackHistoryCache(const QStringList& keys, bool force) {
-    const QSet<QString> key_set(keys.begin(), keys.end());
-    if (!force && key_set == cached_playback_keys_) {
-        return;
-    }
-    QHash<QString, player::PlaybackState> states;
-    for (const auto& key : keys) {
-        if (const auto state = history_.state(key)) {
-            states.insert(key, *state);
-        }
-    }
-    playback_states_ = states;
-    cached_playback_keys_ = key_set;
+    playback_states_ = history_.states_for(keys);
+    cached_playback_keys_ = std::move(keys);
 }
 
 void VideoLibraryViewModel::notifyRows() {
     emit sectionsChanged();
     emit modeCountsChanged();
     emit sourceSummariesChanged();
+    emit hasSourcesChanged();
+    notifyEmptyState();
+}
+
+void VideoLibraryViewModel::notifyEmptyState() {
     emit emptyTitleChanged();
     emit emptyDescriptionChanged();
-    emit hasSourcesChanged();
 }
 
 void VideoLibraryViewModel::showError(const QString& message) {

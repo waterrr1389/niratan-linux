@@ -298,6 +298,9 @@ class VideoLibraryViewTest : public QObject {
     void context_menu_marks_watched_and_clears_progress();
     void narrow_page_moves_the_modes_into_the_title_menu();
     void poster_grid_opens_a_card_and_cover_size_follows_the_layout();
+    void large_library_creates_only_viewport_delegates();
+    void selection_keeps_the_visible_delegates();
+    void context_menu_is_created_on_demand_for_rows_and_cards();
     void list_row_shows_favorite_metadata_and_progress();
     void folder_headers_collapse_and_a_single_section_hides_its_header();
     void refresh_finds_missing_files_and_the_missing_row_appears();
@@ -623,12 +626,12 @@ void VideoLibraryViewTest::clicking_a_row_opens_it() {
 
     QQuickItem* row = nullptr;
     QTRY_VERIFY((row = row_with_id(page, fixture.alpha)) != nullptr);
-    QSignalSpy spy(page, SIGNAL(videoOpened(QString, QString, bool)));
+    QSignalSpy spy(page, SIGNAL(videoOpened(QUrl, QUrl, bool)));
     click(row);
 
     QTRY_COMPARE(spy.count(), 1);
-    QCOMPARE(spy.at(0).at(0).toString(), fixture.alpha);
-    QCOMPARE(spy.at(0).at(1).toString(), fixture.subtitle);
+    QCOMPARE(spy.at(0).at(0).toUrl(), QUrl::fromLocalFile(fixture.alpha));
+    QCOMPARE(spy.at(0).at(1).toUrl(), QUrl::fromLocalFile(fixture.subtitle));
     QCOMPARE(spy.at(0).at(2).toBool(), false);
     QTRY_COMPARE(model->property("selectedItemID").toString(), fixture.alpha);
 }
@@ -654,7 +657,7 @@ void VideoLibraryViewTest::opening_a_vanished_video_shows_the_error_and_emits_no
     QTRY_VERIFY((row = row_with_id(page, fixture.alpha)) != nullptr);
     QVERIFY(QFile::remove(fixture.alpha));
 
-    QSignalSpy spy(page, SIGNAL(videoOpened(QString, QString, bool)));
+    QSignalSpy spy(page, SIGNAL(videoOpened(QUrl, QUrl, bool)));
     click(row);
     QTest::qWait(100);
     QCOMPARE(spy.count(), 0);
@@ -705,10 +708,10 @@ void VideoLibraryViewTest::play_from_beginning_clears_progress_and_sets_the_flag
                            QStringLiteral("Reveal in File Manager")) != nullptr,
              "the context menu has no Reveal in File Manager");
 
-    QSignalSpy spy(page, SIGNAL(videoOpened(QString, QString, bool)));
+    QSignalSpy spy(page, SIGNAL(videoOpened(QUrl, QUrl, bool)));
     trigger_menu_item(item);
     QTRY_COMPARE(spy.count(), 1);
-    QCOMPARE(spy.at(0).at(0).toString(), fixture.alpha);
+    QCOMPARE(spy.at(0).at(0).toUrl(), QUrl::fromLocalFile(fixture.alpha));
     QCOMPARE(spy.at(0).at(2).toBool(), true);
 
     QTRY_VERIFY(row_with_id(page, fixture.alpha) == nullptr);
@@ -855,12 +858,134 @@ void VideoLibraryViewTest::poster_grid_opens_a_card_and_cover_size_follows_the_l
         "the file size is missing");
     QVERIFY2(card_texts.contains(QStringLiteral("Alpha")), "the card has no display title");
 
-    QSignalSpy spy(page, SIGNAL(videoOpened(QString, QString, bool)));
+    QSignalSpy spy(page, SIGNAL(videoOpened(QUrl, QUrl, bool)));
     click(card);
     QTRY_COMPARE(spy.count(), 1);
-    QCOMPARE(spy.at(0).at(0).toString(), fixture.alpha);
+    QCOMPARE(spy.at(0).at(0).toUrl(), QUrl::fromLocalFile(fixture.alpha));
     QCOMPARE(spy.at(0).at(2).toBool(), false);
     QTRY_VERIFY(card_with_id(page, fixture.alpha)->property("selected").toBool());
+}
+
+void VideoLibraryViewTest::large_library_creates_only_viewport_delegates() {
+    niratan::test::TempDataRoot root;
+    QVERIFY(root.isValid());
+    const QString folder = root.path() + QStringLiteral("/Anime");
+    QString first;
+    QString last;
+    for (int i = 1; i <= 320; ++i) {
+        last = touch_file(folder + QStringLiteral("/Episode %1.mkv").arg(i, 3, 10, u'0'), 1);
+        QVERIFY(!last.isEmpty());
+        if (i == 1) {
+            first = last;
+        }
+    }
+    niratan::video::LibraryStore store(niratan::storage::data_root() / "video_library.json");
+    const auto source = store.add_source(std::filesystem::path(folder.toStdString()));
+    QVERIFY(store.scan_source(source.id));
+    QCOMPARE(store.catalog().items.size(), 320);
+
+    QQuickWindow window;
+    QString error;
+    std::unique_ptr<QObject> object = create_page(window, QSize(960, 640), error);
+    QVERIFY2(object != nullptr, qPrintable(error));
+    auto* page = qobject_cast<QQuickItem*>(object.get());
+    QVERIFY(page != nullptr);
+    auto* model = find_model(page);
+    QVERIFY(model != nullptr);
+    QCOMPARE(model->property("displayMode").toString(), QStringLiteral("all"));
+
+    const auto check_layout = [page, &first, &last](const QString& view_name,
+                                                    const QString& delegate_name, auto find) {
+        QTRY_VERIFY(find(page, first) != nullptr);
+        QVERIFY(items_named(page, delegate_name).size() < 60);
+        QVERIFY(find(page, last) == nullptr);
+
+        auto* view = item_named(page, view_name);
+        QVERIFY(view != nullptr);
+        QVERIFY(QMetaObject::invokeMethod(view, "positionViewAtEnd"));
+        QTRY_VERIFY(find(page, last) != nullptr);
+        QVERIFY(items_named(page, delegate_name).size() < 60);
+        if (auto* first_item = find(page, first)) {
+            const QRectF viewport = view->mapRectToScene(view->boundingRect());
+            QVERIFY(!viewport.intersects(first_item->mapRectToScene(first_item->boundingRect())));
+        }
+        QVERIFY(QMetaObject::invokeMethod(view, "positionViewAtBeginning"));
+        QTRY_VERIFY(find(page, first) != nullptr);
+    };
+    check_layout(QStringLiteral("videoLibraryPosterList"), QStringLiteral("videoCard"),
+                 card_with_id);
+    QVERIFY(model->setProperty("layoutMode", QStringLiteral("list")));
+    check_layout(QStringLiteral("videoLibraryList"), QStringLiteral("videoRow"), row_with_id);
+    const QString warnings = warnings_after(QStringLiteral("large video library"));
+    QVERIFY2(warnings.isEmpty(), qPrintable(warnings));
+}
+
+void VideoLibraryViewTest::selection_keeps_the_visible_delegates() {
+    niratan::test::TempDataRoot root;
+    QVERIFY(root.isValid());
+    const Fixture fixture = make_fixture(root.path());
+
+    QQuickWindow window;
+    QString error;
+    std::unique_ptr<QObject> object = create_page(window, QSize(960, 640), error);
+    QVERIFY2(object != nullptr, qPrintable(error));
+    auto* page = qobject_cast<QQuickItem*>(object.get());
+    QVERIFY(page != nullptr);
+    auto* model = find_model(page);
+    QVERIFY(model != nullptr);
+
+    QTRY_VERIFY(card_with_id(page, fixture.alpha) != nullptr);
+    QPointer<QQuickItem> card = card_with_id(page, fixture.alpha);
+    QVERIFY(!card->property("selected").toBool());
+    QVERIFY(QMetaObject::invokeMethod(model, "select", Q_ARG(QString, fixture.alpha)));
+    QVERIFY(card);
+    QCOMPARE(card_with_id(page, fixture.alpha), card.data());
+    QVERIFY(card->property("selected").toBool());
+}
+
+void VideoLibraryViewTest::context_menu_is_created_on_demand_for_rows_and_cards() {
+    niratan::test::TempDataRoot root;
+    QVERIFY(root.isValid());
+    const Fixture fixture = make_fixture(root.path());
+
+    QQuickWindow window;
+    QString error;
+    std::unique_ptr<QObject> object = create_page(window, QSize(960, 640), error);
+    QVERIFY2(object != nullptr, qPrintable(error));
+    auto* page = qobject_cast<QQuickItem*>(object.get());
+    QVERIFY(page != nullptr);
+    auto* model = find_model(page);
+    QVERIFY(model != nullptr);
+    QVERIFY(model->setProperty("displayMode", QStringLiteral("all")));
+
+    const QString menu_name = QStringLiteral("videoContextMenu");
+    const auto right_click = [&window](QQuickItem* item) {
+        const QPoint center =
+            item->mapToScene(QPointF(item->width() / 2, item->height() / 2)).toPoint();
+        QTest::mouseClick(&window, Qt::RightButton, Qt::NoModifier, center);
+    };
+    QTRY_VERIFY(card_with_id(page, fixture.alpha) != nullptr);
+    QVERIFY(page->findChildren<QObject*>(menu_name).isEmpty());
+    right_click(card_with_id(page, fixture.alpha));
+
+    QObject* menu = nullptr;
+    QTRY_VERIFY((menu = page->findChild<QObject*>(menu_name)) != nullptr);
+    QTRY_VERIFY(menu->property("visible").toBool());
+    auto* clear =
+        shown_control(window.contentItem(), "QQuickMenuItem", QStringLiteral("Clear Progress"));
+    QVERIFY(clear != nullptr);
+    QVERIFY(clear->property("enabled").toBool());
+    QVERIFY(QMetaObject::invokeMethod(menu, "close"));
+    QTRY_VERIFY(!menu->property("visible").toBool());
+
+    QVERIFY(model->setProperty("layoutMode", QStringLiteral("list")));
+    QTRY_VERIFY(row_with_id(page, fixture.beta) != nullptr);
+    right_click(row_with_id(page, fixture.beta));
+    QTRY_VERIFY(menu->property("visible").toBool());
+    QCOMPARE(page->findChildren<QObject*>(menu_name), QList<QObject*>{menu});
+    clear = shown_control(window.contentItem(), "QQuickMenuItem", QStringLiteral("Clear Progress"));
+    QVERIFY(clear != nullptr);
+    QVERIFY(!clear->property("enabled").toBool());
 }
 
 // B5: the list row draws the favorite star, the metadata line, the playback
@@ -1205,10 +1330,10 @@ void VideoLibraryViewTest::main_window_pushes_the_player_with_the_video() {
     QQuickItem* player = nullptr;
     QTRY_VERIFY((player = video->findChild<QQuickItem*>(QStringLiteral("videoPlayerPage"))) !=
                 nullptr);
-    QCOMPARE(player->property("initialVideoUrl").toUrl().toString(), fixture.alpha);
-    QCOMPARE(player->property("initialSubtitleUrl").toUrl().toString(), fixture.subtitle);
+    QCOMPARE(player->property("initialVideoUrl").toUrl(), QUrl::fromLocalFile(fixture.alpha));
+    QCOMPARE(player->property("initialSubtitleUrl").toUrl(), QUrl::fromLocalFile(fixture.subtitle));
     QCOMPARE(player->property("startFromBeginning").toBool(), false);
-    QTRY_COMPARE(player->property("videoFile").toUrl().toString(), fixture.alpha);
+    QTRY_COMPARE(player->property("videoFile").toUrl(), QUrl::fromLocalFile(fixture.alpha));
 
     niratan::player::PlaybackHistory history(niratan::storage::data_root() /
                                              "video_playback_history.json");

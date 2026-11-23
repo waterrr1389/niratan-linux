@@ -289,6 +289,30 @@ class PlaybackHistoryTest : public QObject {
         QVERIFY(!state(50, 100, true).resumable());
     }
 
+    void statesForUsesStoredStateBeforeLegacyPositionAndOmitsAbsentKeys() {
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        const auto file = path_in(dir, "history.json");
+        const QString legacy = QStringLiteral("/videos/Legacy.mkv");
+        const QString absent = QStringLiteral("/videos/Absent.mkv");
+        const QJsonObject state{{"position", 100},
+                                {"duration", 100},
+                                {"updatedAt", kDateReference},
+                                {"isFinished", true}};
+        write_object(file,
+                     {{"positions", QJsonObject{{kShow, 40}, {legacy, 15}}},
+                      {"playbackStates", QJsonObject{{kShow, state}}}});
+        const PlaybackHistory history(file);
+
+        const auto states = history.states_for({kShow, legacy, absent});
+        QCOMPARE(states.size(), 2);
+        QCOMPARE(std::optional(states.value(kShow)), history.state(kShow));
+        QVERIFY(states.value(kShow).finished);
+        QCOMPARE(std::optional(states.value(legacy)), history.state(legacy));
+        QCOMPARE(states.value(legacy).position, 15.0);
+        QVERIFY(!states.contains(absent));
+    }
+
     void progress_clampsAndNeedsDuration() {
         PlaybackState state;
         state.position = 150;

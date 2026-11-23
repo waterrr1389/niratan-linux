@@ -52,6 +52,7 @@
 #include <QSet>
 #include <QString>
 #include <QStringList>
+#include <QUrl>
 #include <QVariantList>
 #include <QVariantMap>
 #include <QtQml/qqmlregistration.h>
@@ -126,9 +127,10 @@ class VideoLibraryViewModel : public QObject {
     Q_INVOKABLE void removeSource(const QString& id);
     Q_INVOKABLE void select(const QString& id);
     Q_INVOKABLE void clearSelection();
-    Q_INVOKABLE QString openUrl(const QString& id);
-    Q_INVOKABLE QString openFromBeginningUrl(const QString& id);
-    Q_INVOKABLE QString subtitleUrlForOpening(const QString& id);
+    // Keep local URLs distinct from the absolute path used as a history key.
+    Q_INVOKABLE QUrl openUrl(const QString& id);
+    Q_INVOKABLE QUrl openFromBeginningUrl(const QString& id);
+    Q_INVOKABLE QUrl subtitleUrlForOpening(const QString& id);
     Q_INVOKABLE void markWatched(const QString& id);
     Q_INVOKABLE void clearProgress(const QString& id);
     Q_INVOKABLE void setDisplayTitle(const QString& id, const QString& title);
@@ -174,8 +176,9 @@ class VideoLibraryViewModel : public QObject {
     QVariantList previewRows(const QVariantList& rules, int limit) const;
 
     void rebuildPlaybackHistoryCache();
-    void synchronizePlaybackHistoryCache(const QStringList& keys, bool force);
+    bool updatePlaybackHistoryCache();
     void notifyRows();
+    void notifyEmptyState();
     void showError(const QString& message);
 
     video::LibraryStore store_;
