@@ -813,6 +813,21 @@ add_test(NAME dictionary_view COMMAND tst_dictionary_view)
 set_tests_properties(dictionary_view PROPERTIES
     ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QTWEBENGINE_CHROMIUM_FLAGS=--disable-gpu")
 
+qt_add_executable(tst_video_window
+    qml/tst_video_window.cpp
+)
+target_include_directories(tst_video_window PRIVATE
+    ${CMAKE_SOURCE_DIR}/src
+    ${CMAKE_CURRENT_SOURCE_DIR}/viewmodels
+)
+target_link_libraries(tst_video_window PRIVATE niratan_app niratan_appplugin niratan_style
+    niratan_styleplugin Qt6::Test
+    Qt6::Quick Qt6::QuickControls2 Qt6::WebEngineQuick)
+target_compile_options(tst_video_window PRIVATE -Wall -Wextra -Wpedantic -Werror)
+add_test(NAME video_window COMMAND tst_video_window)
+set_tests_properties(video_window PROPERTIES
+    ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QTWEBENGINE_CHROMIUM_FLAGS=--disable-gpu")
+
 qt_add_executable(tst_video_library_view
     qml/tst_video_library_view.cpp
 )

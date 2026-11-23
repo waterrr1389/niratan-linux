@@ -19,9 +19,9 @@
 // statistics page as an overlay with a back that returns to the shelf.
 // Dictionary hides its back control. Settings draws its own toolbar and
 // source list, following NativeMac/NativeReuseViews.swift NativeSettingsReuseView.
-// Video shows VideoLibraryPage and pushes the interim PlayerPage when a row
-// opens, carrying the URL, bound subtitle and from-beginning flag; the player
-// is still a stack page until it gets its own window.
+// Video shows VideoLibraryPage only; opening a video shows or raises the
+// single dedicated VideoWindow, which holds PlayerPage. The main window draws
+// no player controls and stays independent of that window.
 //
 // The reader is not a section: opening a book opens or raises the single
 // ReaderWindow after ReaderViewModel.openBook succeeds, following
@@ -79,6 +79,7 @@ ApplicationWindow {
         readerWindow.requestActivate()
     }
 
+
     RowLayout {
         anchors.fill: parent
         spacing: 0
@@ -102,6 +103,8 @@ ApplicationWindow {
             Layout.fillHeight: true
 
             Loader {
+                id: detailLoader
+
                 anchors.fill: parent
                 anchors.topMargin: window.pageOwnsToolbar ? 0 : window.toolbarHeight
                 sourceComponent: window.sectionIndex === 0 ? bookshelfDetail
@@ -128,6 +131,12 @@ ApplicationWindow {
             if (!readerWindow.visible)
                 ++window.readerCloses
         }
+    }
+
+    VideoWindow {
+        id: videoWindow
+
+        ownerScreen: window.screen
     }
 
     Component {
@@ -167,38 +176,11 @@ ApplicationWindow {
     Component {
         id: videoDetail
 
-        StackView {
-            id: videoStack
-
-            property var libraryPage: null
-
-            initialItem: VideoLibraryPage {
-                id: libraryPageItem
-
-                toolbarInset: window.sidebarVisible ? 0 : 44
-                Component.onCompleted: videoStack.libraryPage = libraryPageItem
-                onVideoOpened: function (url, subtitleUrl, fromBeginning) {
-                    videoStack.push(videoPlayerDetail, {
-                        initialVideoUrl: url,
-                        initialSubtitleUrl: subtitleUrl,
-                        startFromBeginning: fromBeginning
-                    })
-                }
-            }
-
-            Component {
-                id: videoPlayerDetail
-
-                PlayerPage {
-                    objectName: "videoPlayerPage"
-                    onBackRequested: {
-                        videoStack.pop()
-                        var libraryPage = videoStack.libraryPage
-                        var refresh = libraryPage ? libraryPage.refreshPlayback : undefined
-                        if (refresh)
-                            refresh()
-                    }
-                }
+        VideoLibraryPage {
+            toolbarInset: window.sidebarVisible ? 0 : 44
+            playerWindow: videoWindow
+            onVideoOpened: function (url, subtitleUrl, fromBeginning) {
+                videoWindow.openVideo(url, subtitleUrl, fromBeginning)
             }
         }
     }

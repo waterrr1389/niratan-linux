@@ -51,6 +51,10 @@ Item {
     property real toolbarInset: 0
     readonly property int toolbarHeight: 52
 
+    // Set by the shell; the page refreshes its history when the Video window
+    // closes, keeping the section's mode, sort and selection.
+    property var playerWindow
+
     // VideoLibraryView.showsLibrarySidebar: narrow windows spend their width
     // on the app sidebar, so the modes move into the title menu.
     readonly property bool showsLibrarySidebar: page.width >= 760
@@ -121,6 +125,16 @@ Item {
     Component.onCompleted: {
         video.load()
         video.refreshPlaybackHistory()
+    }
+
+    Connections {
+        target: page.playerWindow ? page.playerWindow : null
+        ignoreUnknownSignals: true
+        enabled: page.playerWindow !== null && page.playerWindow !== undefined
+
+        function onVideoClosed() {
+            page.refreshPlayback()
+        }
     }
 
     Connections {

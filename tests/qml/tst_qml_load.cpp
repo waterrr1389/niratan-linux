@@ -178,6 +178,7 @@ class QmlLoadTest : public QObject {
     void icon_table_resolves();
     void icon_table_entries_have_files();
     void shared_components_load();
+    void video_window_is_declared_once();
     void main_window_controls_fit();
 
    private:
@@ -911,6 +912,23 @@ void QmlLoadTest::shared_components_load() {
 // lies inside the 960x640 frame. The failure names each clipped control by its
 // text, or its class when it has none, so a control pushed out by the toolbar
 // is identifiable.
+void QmlLoadTest::video_window_is_declared_once() {
+    QQmlApplicationEngine engine;
+    engine.loadFromModule(QStringLiteral("Niratan"), QStringLiteral("MainWindow"));
+    QVERIFY2(!engine.rootObjects().isEmpty(), "MainWindow was not created");
+    auto* window = qobject_cast<QQuickWindow*>(engine.rootObjects().value(0));
+    QVERIFY(window != nullptr);
+
+    auto* video = window->findChild<QQuickWindow*>(QStringLiteral("videoWindow"));
+    QVERIFY2(video != nullptr, "the Video window is not declared in MainWindow");
+    QCOMPARE(window->findChildren<QQuickWindow*>(QStringLiteral("videoWindow")).size(), 1);
+    QCOMPARE(video->title(), QStringLiteral("Video"));
+    QVERIFY2(!video->isVisible(), "the Video window shows before anything opens");
+
+    const QString warnings = warnings_after(QStringLiteral("MainWindow with the Video window"));
+    QVERIFY2(warnings.isEmpty(), qPrintable(warnings));
+}
+
 void QmlLoadTest::main_window_controls_fit() {
     QQmlApplicationEngine engine;
     engine.loadFromModule(QStringLiteral("Niratan"), QStringLiteral("MainWindow"));

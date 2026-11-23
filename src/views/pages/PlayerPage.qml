@@ -18,8 +18,6 @@ import Niratan
 Item {
     id: page
 
-    signal backRequested()
-
     // VideoControlsView.swift: chromeSize and metrics(for: .floating).
     readonly property int chromeMaxWidth: 760
     readonly property bool compactChrome: mpv.videoSettings.videoControlBarLayout === "compactBottom"
@@ -75,9 +73,12 @@ Item {
     property url initialVideoUrl
     property url initialSubtitleUrl
     property bool startFromBeginning: false
-    // A bound subtitle waits for mpv to open the file; sub-add before the
-    // load fails (VideoPlayerScreen.loadSubtitle's ordered open).
+    // A bound subtitle waits for mpv to open the file; sub-add before it fails.
     property url pendingSubtitleUrl
+    // VideoPlayerScreen.shouldShowVideoLoadingIndicator: an open with a URL,
+    // no loaded file and no error.
+    readonly property bool openingVideo: page.videoFile.toString().length > 0
+                                         && !mpv.loaded && mpv.error.length === 0
 
     onStudyOpenChanged: page.scheduleHide()
 
@@ -345,17 +346,51 @@ Item {
             window.visibility = Window.Windowed
     }
 
-    function closePlayer() {
-        // The player is a stack page here, unlike Niratan's own window, so a
-        // full screen left behind would also make the bookshelf full screen.
+    // Clears everything that belongs to the previous clip, so a reused window
+    // never shows its title, panels or alert.
+    function resetVideoState() {
+        page.pendingSubtitleUrl = ""
+        page.studyOpen = false
+        page.speedPanelOpen = false
+        page.speedPanelHovered = false
+        page.osdTitle = ""
+        page.osdValue = ""
+        page.osdMeter = -1
+        osdTimer.stop()
+        if (videoErrorDialog.visible)
+            videoErrorDialog.close()
+    }
+
+    // Called by the Video window when it closes: stop the player, leave full
+    // screen and forget the clip before the window hides.
+    function unloadVideo() {
         page.exitFullScreen()
         mpv.unload()
-        page.backRequested()
+        page.videoFile = ""
+        page.resetVideoState()
+    }
+
+    // VideoWindow.openVideo -> VideoPlayerScreen+Opening.handleExternalOpenRequest:
+    // replay the page state, then open the new clip with its subtitle.
+    function openRequest(url, subtitleUrl, fromBeginning) {
+        page.resetVideoState()
+        page.initialVideoUrl = url
+        page.initialSubtitleUrl = subtitleUrl
+        page.startFromBeginning = fromBeginning
+        page.openVideo(url, fromBeginning)
+        page.pendingSubtitleUrl = subtitleUrl
+    }
+
+    function closePlayer() {
+        const window = page.Window.window
+        if (window)
+            window.close()
     }
 
     function openVideo(url, fromBeginning) {
         if (!url || url.toString().length === 0)
             return
+        page.resetVideoState()
         page.pendingSubtitleUrl = ""
         page.speedPanelOpen = false
         page.speedPanelHovered = false
@@ -680,78 +715,29 @@ Item {
     }
 
     PlayerEmptyState {
-        anchors.centerIn: stage
-        width: Math.min(440, Math.max(0, stage.width - 64))
-        visible: !mpv.loaded
-        extensionList: page.extensionList
-        onOpenRequested: openMenu.popup()
-        onSettingsRequested: videoSettings.open()
+        objectName: "playerEmptyState"
+        anchors.fill: stage
+        visible: page.videoFile.toString().length === 0
+        onFileChosen: function (file) {
+            var path = file.toString()
+            if (path.indexOf("file://") === 0)
+                path = decodeURIComponent(path.substring("file://".length))
+            page.openVideo(path, false)
+        }
     }
 
-    // VideoPlayerScreen+OSD.swift places the OSD 30 from the top and 28 from
-    // the leading edge; the panel is added so the text stays readable on both
-    // themes over the black stage.
-    Rectangle {
-        id: osd
+    PlayerLoadingOverlay {
+        anchors.fill: stage
+        z: 50
+        visible: page.openingVideo
+    }
+
+    PlayerOsd {
         anchors.top: stage.top
         anchors.left: stage.left
-        anchors.topMargin: 30
-        anchors.leftMargin: 28
-        width: Math.max(osdRow.implicitWidth, meter.visible ? meter.width : 0) + 24
-        height: meter.visible ? 46 : 34
-        radius: 10
-        color: Theme.floatingBackground
-        border.width: Theme.cardBorderWidth
-        border.color: Theme.floatingStroke
-        opacity: page.osdTitle.length > 0 ? 1 : 0
-        visible: page.osdTitle.length > 0 || opacity > 0
-
-        Behavior on opacity {
-            NumberAnimation {
-                duration: 120
-            }
-        }
-
-        Row {
-            id: osdRow
-            anchors.top: parent.top
-            anchors.left: parent.left
-            anchors.topMargin: 8
-            anchors.leftMargin: 12
-            spacing: 8
-
-            Label {
-                text: page.osdTitle
-                color: Theme.textPrimary
-                font.pixelSize: 13
-                font.bold: true
-            }
-
-            Label {
-                text: page.osdValue
-                color: Theme.textSecondary
-                font.pixelSize: 13
-            }
-        }
-
-        Rectangle {
-            id: meter
-            visible: page.osdMeter >= 0
-            anchors.left: osdRow.left
-            anchors.top: osdRow.bottom
-            anchors.topMargin: 7
-            width: 210
-            height: 5
-            radius: height / 2
-            color: Theme.floatingStroke
-
-            Rectangle {
-                width: parent.width * Math.max(0, page.osdMeter)
-                height: parent.height
-                radius: parent.radius
-                color: Theme.accent
-            }
-        }
+        title: page.osdTitle
+        value: page.osdValue
+        meter: page.osdMeter
     }
 
     Rectangle {

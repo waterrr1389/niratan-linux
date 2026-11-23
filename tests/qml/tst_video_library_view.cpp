@@ -1075,10 +1075,13 @@ void VideoLibraryViewTest::main_window_pushes_the_player_with_the_video() {
     window->setProperty("sectionIndex", 2);
     QQuickItem* card = nullptr;
     QTRY_VERIFY((card = card_with_id(window->contentItem(), fixture.alpha)) != nullptr);
+    auto* video = window->findChild<QQuickWindow*>(QStringLiteral("videoWindow"));
+    QVERIFY2(video != nullptr, "the Video window is not declared");
     click(card);
+    QTRY_VERIFY(video->isVisible());
 
     QQuickItem* player = nullptr;
-    QTRY_VERIFY((player = item_named(window->contentItem(), QStringLiteral("videoPlayerPage"))) !=
+    QTRY_VERIFY((player = video->findChild<QQuickItem*>(QStringLiteral("videoPlayerPage"))) !=
                 nullptr);
     QCOMPARE(player->property("initialVideoUrl").toUrl().toString(), fixture.alpha);
     QCOMPARE(player->property("initialSubtitleUrl").toUrl().toString(), fixture.subtitle);
@@ -1088,7 +1091,8 @@ void VideoLibraryViewTest::main_window_pushes_the_player_with_the_video() {
     niratan::player::PlaybackHistory history(niratan::storage::data_root() /
                                              "video_playback_history.json");
     history.save(fixture.alpha, 50, 100);
-    QVERIFY(QMetaObject::invokeMethod(player, "backRequested"));
+    QVERIFY(QMetaObject::invokeMethod(video, "close"));
+    QTRY_VERIFY(!video->isVisible());
     QTRY_VERIFY(visual_texts(window->contentItem()).contains(QStringLiteral("0:50 left")));
 
     const QString warnings = warnings_after(QStringLiteral("MainWindow"));

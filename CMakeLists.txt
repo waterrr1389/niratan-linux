@@ -327,6 +327,7 @@ qt_add_qml_module(niratan_app
         src/views/icons/phosphor/regular/x.svg
         src/views/icons/phosphor/regular/video.svg
         src/views/shell/ReaderWindow.qml
+        src/views/shell/VideoWindow.qml
         src/views/shell/Sidebar.qml
         src/views/shell/niratan-sidebar-icon.png
         src/views/pages/AnkiFieldRow.qml
@@ -390,6 +391,9 @@ qt_add_qml_module(niratan_app
         src/views/reader/ReaderChrome.qml
         src/views/reader/ReaderLookupSurface.qml
         src/views/player/BarButton.qml
+        src/views/player/PlayerEmptyState.qml
+        src/views/player/PlayerLoadingOverlay.qml
+        src/views/player/PlayerOsd.qml
         src/views/player/VideoErrorDialog.qml
         src/views/player/StudySidebar.qml
         src/views/player/StudyLoopMarker.qml
