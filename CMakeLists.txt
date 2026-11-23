@@ -7,6 +7,14 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
+# Worktrees and branch switches rebuild the same sources; ccache shares the
+# objects between build directories when it is installed.
+find_program(CCACHE_PROGRAM ccache)
+if(CCACHE_PROGRAM)
+    set(CMAKE_C_COMPILER_LAUNCHER ${CCACHE_PROGRAM})
+    set(CMAKE_CXX_COMPILER_LAUNCHER ${CCACHE_PROGRAM})
+endif()
+
 # The dictionary library is consumed as-is. Its own warnings must not fail
 # this build, and its sources are never patched from here.
 set(HOSHI_WARNINGS ${CMAKE_CXX_FLAGS})
