@@ -751,6 +751,14 @@ target_link_libraries(tst_player_study_view_model PRIVATE niratan_app Qt6::Test)
 target_compile_options(tst_player_study_view_model PRIVATE -Wall -Wextra -Wpedantic -Werror)
 add_test(NAME player_study_view_model COMMAND tst_player_study_view_model)
 
+qt_add_executable(tst_player_inspector_view_model
+    viewmodels/tst_player_inspector_view_model.cpp
+)
+target_include_directories(tst_player_inspector_view_model PRIVATE ${CMAKE_SOURCE_DIR}/src)
+target_link_libraries(tst_player_inspector_view_model PRIVATE niratan_app Qt6::Test)
+target_compile_options(tst_player_inspector_view_model PRIVATE -Wall -Wextra -Wpedantic -Werror)
+add_test(NAME player_inspector_view_model COMMAND tst_player_inspector_view_model)
+
 qt_add_executable(tst_reader_mining_context
     viewmodels/tst_reader_mining_context.cpp
 )

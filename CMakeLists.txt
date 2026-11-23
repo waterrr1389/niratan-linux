@@ -133,6 +133,8 @@ qt_add_library(niratan_core STATIC
     src/services/video/thumbnail_scheduler.h
     src/services/video/thumbnail_store.cpp
     src/services/video/thumbnail_store.h
+    src/services/video/video_playlist.cpp
+    src/services/video/video_playlist.h
 )
 qt_add_resources(niratan_core "dictionary_popup_assets"
     PREFIX "/niratan/dictionary_popup"
@@ -194,6 +196,8 @@ qt_add_library(niratan_app STATIC
     src/viewmodels/video/video_library_rows.cpp
     src/viewmodels/video/video_library_rows.h
     src/viewmodels/video/video_library_sections.cpp
+    src/viewmodels/player/player_inspector_view_model.cpp
+    src/viewmodels/player/player_inspector_view_model.h
     src/viewmodels/player/player_lookup_policy.cpp
     src/viewmodels/player/player_lookup_policy.h
     src/viewmodels/player/player_lookup_view_model.cpp
