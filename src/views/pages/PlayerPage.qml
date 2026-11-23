@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
-// Floating chrome and timeline metrics follow VideoControlsView.swift.
+// The chrome is VideoControlBar, following VideoControlsView.swift; this page
+// supplies the playback snapshot, the chrome visibility rule and the actions.
 // VideoPlayerScreen+OSD.swift specifies the OSD; VideoPlayerScreen+Shortcuts.swift
 // and VideoShortcutActions.swift specify keys. VideoPlayerScreen+Chrome.swift
 // specifies auto-hide and pointer reveal. Playback goes through MpvItem only.
@@ -18,13 +19,9 @@ import Niratan
 Item {
     id: page
 
-    // VideoControlsView.swift: chromeSize and metrics(for: .floating).
-    readonly property int chromeMaxWidth: 760
+    // VideoControlsView.swift: the bar chooses its layout and metrics.
     readonly property bool compactChrome: mpv.videoSettings.videoControlBarLayout === "compactBottom"
-    readonly property int chromeHeight: page.compactChrome ? 84 : 90
-    readonly property int controlDensity: page.width >= 900 ? 0 : page.width >= 600 ? 1 : 2
     readonly property int seekInterval: Math.floor(mpv.videoSettings.videoSeekInterval)
-    readonly property int chromeSideInset: 16
     // playbackChromeEdgeInset (16) plus metrics.bottomInset (24).
     readonly property int chromeBottomInset: page.compactChrome ? 0 : 40
 
@@ -52,7 +49,8 @@ Item {
     // disappearing under the pointer or during a scrub.
     readonly property bool chromeShown: mpv.loaded
         && (page.chromeVisible || mpv.paused || page.barHovered
-            || page.scrubbing || page.speedPanelOpen || page.studyOpen)
+            || page.scrubbing || page.speedPanelOpen || page.studyOpen
+            || lookupLayer.hasPopup)
     readonly property bool fullScreen: page.Window.window
         ? page.Window.window.visibility === Window.FullScreen
         : false
@@ -154,39 +152,11 @@ Item {
 
     function handleHideTimeout() {
         if (page.barHovered || page.speedPanelHovered || page.scrubbing || mpv.paused
-                || (page.speedPanelOpen && speedInput.activeFocus))
+                || page.speedPanelOpen || lookupLayer.hasPopup)
             return
         if (page.speedPanelOpen)
             page.speedPanelOpen = false
         page.chromeVisible = false
-    }
-
-    function timeAt(x) {
-        if (mpv.duration <= 0 || timeline.width <= 0)
-            return 0
-        return Math.max(0, Math.min(mpv.duration, mpv.duration * x / timeline.width))
-    }
-
-    function beginScrub(x) {
-        if (!mpv.loaded || mpv.duration <= 0)
-            return
-        hideTimer.stop()
-        page.scrubbing = true
-        page.scrubTime = page.timeAt(x)
-        page.chromeVisible = true
-    }
-
-    function updateScrub(x) {
-        if (page.scrubbing)
-            page.scrubTime = page.timeAt(x)
-    }
-
-    function endScrub() {
-        if (!page.scrubbing)
-            return
-        page.scrubbing = false
-        mpv.seek(page.scrubTime)
-        page.notePointerMovement()
     }
 
     function togglePause() {
@@ -740,609 +710,47 @@ Item {
         meter: page.osdMeter
     }
 
-    Rectangle {
-        id: bar
+    VideoControlBar {
+        id: controlBar
+
+        objectName: "videoControlBar"
         anchors.horizontalCenter: stage.horizontalCenter
-        anchors.bottom: stage.bottom
-        anchors.bottomMargin: page.chromeBottomInset
-        width: page.compactChrome ? stage.width : Math.min(page.chromeMaxWidth,
-                        Math.max(0, stage.width - page.chromeSideInset * 2))
-        height: page.chromeHeight
-        radius: page.compactChrome ? 0 : 24
-        color: Theme.floatingBackground
-        border.width: Theme.cardBorderWidth
-        border.color: Theme.floatingStroke
-        opacity: page.chromeShown ? 1 : 0
-        visible: page.chromeShown || opacity > 0
+        y: page.compactChrome
+           ? Math.max(0, stage.height - controlBar.height)
+           : Math.max(16, stage.height - page.chromeBottomInset - controlBar.height)
+        availableWidth: stage.width
+        chapters: mpv.chapters
+        layoutMode: page.compactChrome ? "compactBottom" : "floating"
+        videoFileSet: page.videoFile.toString().length > 0
+        chromeShown: page.chromeShown
+        isPlaying: mpv.loaded && !mpv.paused
+        isPaused: mpv.paused
+        isMuted: mpv.muted
+        volume: mpv.volume
+        currentTime: page.displayTime
+        duration: mpv.duration
+        speed: mpv.speed
+        scrubbing: page.scrubbing
+        scrubTime: page.scrubTime
+        canMine: studyModel.canMine
+        studyOpen: page.studyOpen
+        isFullScreen: page.fullScreen
+        speedPanelOpen: page.speedPanelOpen
 
-        Behavior on opacity {
-            NumberAnimation {
-                duration: 180
-                easing.type: Easing.OutCubic
-            }
+        onTogglePlaybackRequested: page.togglePause()
+        onVolumeChangeRequested: function (value) {
+            page.setVolume(value)
         }
-
-        HoverHandler {
-            id: barHover
-            onHoveredChanged: {
-                page.barHovered = barHover.hovered
-                if (barHover.hovered)
-                    page.notePointerMovement()
-                else
-                    page.scheduleHide()
-            }
+        onToggleMuteRequested: page.toggleMute()
+        onSpeedChangeRequested: function (value) {
+            page.setSpeed(value)
         }
-
-        Column {
-            id: barColumn
-            anchors.fill: parent
-            anchors.margins: 12
-            spacing: 6
-
-            // Timeline: 4 pt resting track, 13 pt knob, scrub preview on
-            // drag, seek only on release (VideoTimelineTrack and
-            // scrub/endScrubbing in VideoControlsView.swift).
-            Item {
-                id: timeline
-                width: Math.max(0, barColumn.width - (remainingTime.visible
-                    ? remainingTime.width + Theme.spacingSm : 0))
-                height: 18
-
-                readonly property bool emphasized: barHover.hovered || page.scrubbing
-                readonly property int trackHeight: emphasized ? 7 : 4
-                readonly property var markers: {
-                    if (mpv.duration <= 0)
-                        return []
-                    const chapters = mpv.chapters.slice().sort((a, b) => a.start - b.start)
-                    const result = []
-                    let last = -Infinity
-                    for (const chapter of chapters) {
-                        if (chapter.start > 0 && chapter.start < mpv.duration
-                                && chapter.start - last >= 0.05) {
-                            result.push({ "id": chapter.id, "ratio": chapter.start / mpv.duration })
-                            last = chapter.start
-                        }
-                    }
-                    return result
-                }
-                readonly property var activeChapter: studyModel.currentChapter >= 0
-                    ? mpv.chapters[studyModel.currentChapter] : null
-
-                function markerAt(pointerX: real): int {
-                    let closest = -1
-                    let distance = 5
-                    for (const marker of timeline.markers) {
-                        const delta = Math.abs(pointerX - timeline.width * marker.ratio)
-                        if (delta <= distance) {
-                            closest = marker.id
-                            distance = delta
-                        }
-                    }
-                    return closest
-                }
-
-                Rectangle {
-                    anchors.verticalCenter: parent.verticalCenter
-                    width: parent.width
-                    height: timeline.trackHeight
-                    radius: Math.floor(height / 2)
-                    color: Theme.cardStroke
-                }
-
-                Rectangle {
-                    anchors.verticalCenter: parent.verticalCenter
-                    anchors.left: parent.left
-                    width: timeline.width * page.displayRatio
-                    height: timeline.trackHeight
-                    radius: Math.floor(height / 2)
-                    color: Theme.textPrimary
-                    opacity: 0.85
-                }
-
-                Rectangle {
-                    anchors.verticalCenter: parent.verticalCenter
-                    visible: !!timeline.activeChapter && mpv.duration > 0
-                    x: visible ? timeline.width * timeline.activeChapter.start / mpv.duration : 0
-                    width: visible ? Math.max(0, Math.min(timeline.width - x,
-                        timeline.width * (timeline.activeChapter.duration || 0) / mpv.duration)) : 0
-                    height: timeline.trackHeight
-                    radius: Math.floor(height / 2)
-                    color: Theme.accent
-                }
-
-                Repeater {
-                    model: timeline.markers
-                    delegate: Rectangle {
-                        id: chapterTick
-                        required property var modelData
-                        x: Math.max(0, Math.min(timeline.width - width,
-                            timeline.width * chapterTick.modelData.ratio - width / 2))
-                        anchors.verticalCenter: parent.verticalCenter
-                        width: 2
-                        height: 9
-                        radius: 1
-                        color: Theme.textSecondary
-                    }
-                }
-
-                Rectangle {
-                    id: knob
-                    x: Math.max(0, Math.min(timeline.width - width,
-                                            timeline.width * page.displayRatio - width / 2))
-                    anchors.verticalCenter: parent.verticalCenter
-                    width: 13
-                    height: 13
-                    radius: 6.5
-                    color: Theme.textPrimary
-                    visible: timelineMouse.containsMouse || page.scrubbing
-                }
-
-                Rectangle {
-                    id: scrubBubble
-                    x: Math.max(0, Math.min(timeline.width - width,
-                                            timeline.width * page.displayRatio - width / 2))
-                    y: -height - 6
-                    width: scrubBubbleText.implicitWidth + 16
-                    height: 22
-                    radius: 6
-                    color: Theme.popupBackground
-                    border.width: Theme.cardBorderWidth
-                    border.color: Theme.popupDivider
-                    visible: page.scrubbing
-
-                    Label {
-                        id: scrubBubbleText
-                        anchors.centerIn: parent
-                        text: page.formatTime(page.scrubTime)
-                        color: Theme.popupText
-                        font.pixelSize: 11
-                    }
-                }
-
-                MouseArea {
-                    id: timelineMouse
-                    anchors.fill: parent
-                    hoverEnabled: true
-                    cursorShape: Qt.PointingHandCursor
-                    property int pressedChapter: -1
-                    property real pressX: 0
-                    onPressed: function (mouse) {
-                        timelineMouse.pressX = mouse.x
-                        timelineMouse.pressedChapter = timeline.markerAt(mouse.x)
-                        if (timelineMouse.pressedChapter < 0)
-                            page.beginScrub(mouse.x)
-                    }
-                    onPositionChanged: function (mouse) {
-                        if (!timelineMouse.pressed)
-                            return
-                        if (timelineMouse.pressedChapter >= 0
-                                && Math.abs(mouse.x - timelineMouse.pressX) > 5) {
-                            timelineMouse.pressedChapter = -1
-                            page.beginScrub(mouse.x)
-                        } else if (timelineMouse.pressedChapter < 0) {
-                            page.updateScrub(mouse.x)
-                        }
-                    }
-                    onReleased: {
-                        if (timelineMouse.pressedChapter >= 0)
-                            mpv.seekToChapter(timelineMouse.pressedChapter)
-                        else
-                            page.endScrub()
-                        timelineMouse.pressedChapter = -1
-                    }
-                    onCanceled: {
-                        timelineMouse.pressedChapter = -1
-                        page.endScrub()
-                    }
-                }
-                Label {
-                    id: remainingTime
-                    x: timeline.width + Theme.spacingSm
-                    anchors.verticalCenter: parent.verticalCenter
-                    visible: !page.compactChrome
-                    width: remainingTimeMetrics.advanceWidth
-                    horizontalAlignment: Text.AlignRight
-                    color: Theme.textSecondary
-                    font.pixelSize: 11
-                    font.features: ({ "tnum": 1 })
-                    text: "-" + page.formatTime(mpv.duration - page.displayTime)
-                    TextMetrics {
-                        id: remainingTimeMetrics
-                        font: remainingTime.font
-                        text: "-" + page.formatTime(mpv.duration)
-                    }
-                }
-            }
-
-            RowLayout {
-                id: controlRow
-                anchors.horizontalCenter: parent.horizontalCenter
-                height: 42
-                spacing: 0
-                // Also fit the full and condensed rows when the sidebar narrows the stage.
-                readonly property int density: Math.max(page.controlDensity,
-                    barColumn.width >= 734 ? 0 : barColumn.width >= 502 ? 1 : 2)
-                BarButton {
-                    glyph: "\u2039"
-                    tip: qsTr("Close Player")
-                    glyphSize: 18
-                    buttonWidth: 30
-                    onClicked: page.closePlayer()
-                }
-
-                BarButton {
-                    glyph: mpv.paused ? "\u25B6" : "II"
-                    tip: mpv.paused ? qsTr("Play (Space)") : qsTr("Pause (Space)")
-                    glyphSize: 15
-                    buttonWidth: 42
-                    buttonHeight: 42
-                    onClicked: page.togglePause()
-                }
-
-                BarButton {
-                    visible: controlRow.density === 0 && mpv.resumeAvailable
-                    glyph: "\u21A4"
-                    tip: qsTr("Restart from Beginning")
-                    Accessible.name: tip
-                    onClicked: {
-                        mpv.restartFromBeginning()
-                        page.showOSD(qsTr("Restarted from beginning"), "")
-                    }
-                }
-
-                BarButton {
-                    glyph: "\u2212" + page.seekInterval
-                    tip: qsTr("Back %1 s (Left)").arg(page.seekInterval)
-                    buttonWidth: 30
-                    onClicked: page.skip(-page.seekInterval)
-                }
-
-                BarButton {
-                    glyph: "+" + page.seekInterval
-                    tip: qsTr("Forward %1 s (Right)").arg(page.seekInterval)
-                    buttonWidth: 30
-                    onClicked: page.skip(page.seekInterval)
-                }
-
-                Label {
-                    Layout.preferredWidth: 88
-                    Layout.alignment: Qt.AlignVCenter
-                    text: page.formatTime(page.displayTime) + " / " + page.formatTime(mpv.duration)
-                    color: Theme.textSecondary
-                    font.pixelSize: 11
-                    font.features: ({ "tnum": 1 })
-                    horizontalAlignment: Text.AlignHCenter
-                }
-
-                BarButton {
-                    visible: controlRow.density <= 1
-                    glyph: "M"
-                    tip: mpv.muted ? qsTr("Unmute (M)") : qsTr("Mute (M)")
-                    active: mpv.muted
-                    onClicked: page.toggleMute()
-                }
-
-                Slider {
-                    id: volumeSlider
-                    visible: controlRow.density === 0
-                    Layout.preferredWidth: 36
-                    Layout.preferredHeight: 24
-                    Layout.minimumHeight: 24
-                    Layout.maximumHeight: 24
-                    Layout.alignment: Qt.AlignVCenter
-                    from: 0
-                    to: 100
-                    stepSize: 1
-                    focusPolicy: Qt.NoFocus
-                    // The slider is pushed from the engine instead of bound,
-                    // so dragging it does not break the value binding and the
-                    // volume keys keep moving the handle afterwards.
-                    Component.onCompleted: volumeSlider.value = mpv.volume
-                    onMoved: page.setVolume(volumeSlider.value)
-
-                    Connections {
-                        target: mpv
-                        function onVolumeChanged() {
-                            volumeSlider.value = Math.max(0, Math.min(100, mpv.volume))
-                        }
-                    }
-                }
-
-                Button {
-                    id: speedPill
-                    visible: controlRow.density <= 1
-                    onVisibleChanged: {
-                        if (controlRow.density === 2)
-                            page.speedPanelOpen = false
-                    }
-                    Layout.alignment: Qt.AlignVCenter
-                    implicitWidth: 46
-                    implicitHeight: 24
-                    padding: 0
-                    focusPolicy: Qt.NoFocus
-                    text: page.formatSpeed(mpv.speed)
-                    onClicked: {
-                        page.speedPanelOpen = !page.speedPanelOpen
-                        page.notePointerMovement()
-                    }
-
-                    ToolTip.visible: speedPill.hovered
-                    ToolTip.text: qsTr("Playback Speed")
-
-                    contentItem: Text {
-                        text: speedPill.text
-                        color: Theme.textPrimary
-                        font.pixelSize: 11
-                        font.bold: true
-                        horizontalAlignment: Text.AlignHCenter
-                        verticalAlignment: Text.AlignVCenter
-                    }
-
-                    background: Rectangle {
-                        radius: 12
-                        color: page.speedPanelOpen ? Theme.cardStroke
-                                                   : Theme.floatingBackground
-                        border.width: Theme.cardBorderWidth
-                        border.color: Theme.cardStroke
-                    }
-                }
-
-                BarButton {
-                    glyph: "CC"
-                    tip: qsTr("Cycle Subtitle Track (S)")
-                    onClicked: page.cycleSubtitles()
-                }
-
-                BarButton {
-                    visible: controlRow.density === 0 && studyModel.canMine
-                    glyph: "\u2605"
-                    tip: qsTr("Mine Subtitle")
-                    Accessible.name: tip
-                    onClicked: studyModel.mineCurrentSubtitle()
-                }
-
-                BarButton {
-                    visible: controlRow.density === 0
-                    glyph: "S\u2212"
-                    tip: qsTr("Subtitle Delay -0.05 s (Alt+,)")
-                    buttonWidth: 28
-                    onClicked: page.adjustSubtitleDelay(-0.05)
-                }
-
-                BarButton {
-                    visible: controlRow.density === 0
-                    glyph: "S+"
-                    tip: qsTr("Subtitle Delay +0.05 s (Alt+.)")
-                    buttonWidth: 28
-                    onClicked: page.adjustSubtitleDelay(0.05)
-                }
-
-                BarButton {
-                    visible: controlRow.density === 0
-                    glyph: "a\u2212"
-                    tip: qsTr("Audio Delay -0.5 s (Alt+Shift+,)")
-                    buttonWidth: 28
-                    onClicked: page.adjustAudioDelay(-0.5)
-                }
-
-                BarButton {
-                    visible: controlRow.density === 0
-                    glyph: "a+"
-                    tip: qsTr("Audio Delay +0.5 s (Alt+Shift+.)")
-                    buttonWidth: 28
-                    onClicked: page.adjustAudioDelay(0.5)
-                }
-
-                BarButton {
-                    visible: controlRow.density <= 1
-                    glyph: "A"
-                    tip: qsTr("Set A-B Loop Start (Alt+A)")
-                    active: mpv.loopStart >= 0
-                    onClicked: page.setLoopA(mpv.position)
-                }
-
-                BarButton {
-                    visible: controlRow.density <= 1
-                    glyph: "B"
-                    tip: qsTr("Set A-B Loop End (Alt+B)")
-                    active: mpv.loopEnd >= 0
-                    onClicked: page.setLoopB(mpv.position)
-                }
-
-                BarButton {
-                    visible: controlRow.density <= 1
-                    glyph: "AB"
-                    tip: qsTr("Clear A-B Loop")
-                    buttonWidth: 30
-                    onClicked: page.clearABLoop()
-                }
-
-                BarButton {
-                    visible: controlRow.density === 0
-                    glyph: "\u21BB"
-                    tip: qsTr("Rotate Clockwise (R)")
-                    glyphSize: 14
-                    onClicked: page.rotateClockwise()
-                }
-
-                BarButton {
-                    glyph: page.fullScreen ? "][" : "[]"
-                    tip: page.fullScreen ? qsTr("Leave Full Screen (F)")
-                                        : qsTr("Full Screen (F)")
-                    onClicked: page.toggleFullScreen()
-                }
-
-                BarButton {
-                    visible: controlRow.density <= 1
-                    glyph: qsTr("Open")
-                    tip: qsTr("Open a Video")
-                    buttonWidth: 38
-                    onClicked: openMenu.popup()
-                }
-                BarButton {
-                    visible: controlRow.density <= 1
-                    glyph: "\u2699"
-                    tip: qsTr("Video Settings")
-                    Accessible.name: tip
-                    onClicked: videoSettings.open()
-                }
-            }
+        onSpeedPanelToggleRequested: {
+            page.speedPanelOpen = !page.speedPanelOpen
+            page.notePointerMovement()
         }
-
-        // VideoControlsView.speedControlPanel: 264 wide, 4 x 2 presets and the
-        // 0.25...5 slider. It is a popup surface, so it uses the popup tokens.
-        Rectangle {
-            id: speedPanel
-            anchors.right: parent.right
-            anchors.rightMargin: 8
-            anchors.bottom: parent.top
-            anchors.bottomMargin: 8
-            width: 264
-            height: speedColumn.implicitHeight + 28
-            visible: page.speedPanelOpen
-            onVisibleChanged: {
-                if (visible)
-                    speedInput.text = mpv.speedLabel(mpv.speed)
-            }
-            radius: 20
-            color: Theme.popupBackground
-            border.width: Theme.cardBorderWidth
-            border.color: Theme.popupDivider
-
-            HoverHandler {
-                id: speedPanelHover
-                onHoveredChanged: {
-                    page.speedPanelHovered = speedPanelHover.hovered
-                    if (!speedPanelHover.hovered)
-                        page.scheduleHide()
-                }
-            }
-
-            Column {
-                id: speedColumn
-                anchors.fill: parent
-                anchors.margins: 14
-                spacing: 10
-
-                RowLayout {
-                    width: parent.width
-                    spacing: 8
-
-                    Label {
-                        Layout.fillWidth: true
-                        text: qsTr("Playback Speed")
-                        color: Theme.popupText
-                        font.pixelSize: 13
-                        font.bold: true
-                    }
-
-                    Label {
-                        text: page.formatSpeed(mpv.speed)
-                        color: Theme.popupTextSecondary
-                        font.pixelSize: 13
-                    }
-                }
-
-                GridLayout {
-                    width: parent.width
-                    columns: 4
-                    columnSpacing: 6
-                    rowSpacing: 6
-
-                    Repeater {
-                        model: [0.25, 0.5, 1.0, 1.5, 2.0, 3.0, 4.0, 5.0]
-
-                        delegate: Button {
-                            id: speedPreset
-                            required property var modelData
-                            Layout.fillWidth: true
-                            Layout.preferredHeight: 26
-                            focusPolicy: Qt.NoFocus
-                            text: page.formatSpeed(speedPreset.modelData)
-                            onClicked: page.setSpeed(speedPreset.modelData)
-
-                            contentItem: Text {
-                                text: speedPreset.text
-                                color: page.speedIs(speedPreset.modelData)
-                                    ? Theme.windowBackground : Theme.popupText
-                                font.pixelSize: 11
-                                font.bold: true
-                                horizontalAlignment: Text.AlignHCenter
-                                verticalAlignment: Text.AlignVCenter
-                            }
-
-                            background: Rectangle {
-                                radius: 6
-                                color: page.speedIs(speedPreset.modelData)
-                                    ? Theme.accent : Theme.popupDivider
-                            }
-                        }
-                    }
-                }
-
-                RowLayout {
-                    width: parent.width
-                    spacing: 8
-
-                    Slider {
-                        id: speedSlider
-                        Layout.fillWidth: true
-                        focusPolicy: Qt.NoFocus
-                        from: 0.3
-                        to: 5.0
-                        stepSize: 0.1
-                        Component.onCompleted: speedSlider.value = mpv.speed
-                        onMoved: page.setSpeed(speedSlider.value)
-
-                        Connections {
-                            target: mpv
-                            function onSpeedChanged() {
-                                speedSlider.value = mpv.speed
-                            }
-                        }
-                    }
-
-                    TextField {
-                        id: speedInput
-                        Layout.preferredWidth: 62
-                        placeholderText: qsTr("Custom")
-                        Accessible.name: qsTr("Custom playback speed")
-                        color: Theme.popupTextSecondary
-                        font.pixelSize: 11
-                        horizontalAlignment: TextInput.AlignRight
-                        onAccepted: {
-                            if (mpv.acceptSpeedInput(text))
-                                page.showOSD(qsTr("Speed"), page.formatSpeed(mpv.speed))
-                            text = mpv.speedLabel(mpv.speed)
-                        }
-
-                        Connections {
-                            target: mpv
-                            function onSpeedChanged() {
-                                speedInput.text = mpv.speedLabel(mpv.speed)
-                            }
-                        }
-                    }
-
-                    Label {
-                        text: "x"
-                        color: Theme.popupTextSecondary
-                    }
-                }
-            }
-        }
-    }
-
-    BarButton {
-        anchors.top: stage.top
-        anchors.right: stage.right
-        anchors.margins: Theme.spacingMd
-        visible: mpv.loaded && (page.chromeShown || page.studyOpen)
-        glyph: qsTr("History")
-        tip: qsTr("Toggle Mining History")
-        active: page.studyOpen && studySidebar.selectedTab === 0
-        buttonWidth: 58
-        onClicked: {
+        onSpeedPanelCloseRequested: page.speedPanelOpen = false
+        onToggleStudyRequested: {
             if (page.studyOpen && studySidebar.selectedTab === 0) {
                 page.studyOpen = false
             } else {
@@ -1350,7 +758,49 @@ Item {
                 page.studyOpen = true
             }
             page.forceActiveFocus()
+        }
+        onOpenVideoRequested: openMenu.popup()
+        onMineSubtitleRequested: studyModel.mineCurrentSubtitle()
+        onCycleSubtitlesRequested: page.cycleSubtitles()
+        onOpenSettingsRequested: videoSettings.open()
+        onToggleFullScreenRequested: page.toggleFullScreen()
+        onScrubStarted: function (seconds) {
+            page.scrubbing = true
+            page.scrubTime = seconds
+            page.chromeVisible = true
+        }
+        onScrubUpdated: function (seconds) {
+            page.scrubTime = seconds
+        }
+        onScrubFinished: function (seconds) {
+            page.scrubbing = false
+            mpv.seek(seconds)
             page.notePointerMovement()
+        }
+        onBarHoverChanged: function (hovered) {
+            page.barHovered = hovered
+            if (hovered)
+                page.notePointerMovement()
+            else
+                page.scheduleHide()
+        }
+        onSpeedPanelHoverChanged: function (hovered) {
+            page.speedPanelHovered = hovered
+            if (!hovered)
+                page.scheduleHide()
+        }
+    }
+
+    Connections {
+        target: lookupLayer
+
+        function onHasPopupChanged() {
+            if (lookupLayer.hasPopup) {
+                page.chromeVisible = true
+                hideTimer.stop()
+            } else {
+                page.scheduleHide()
+            }
         }
     }
 
@@ -1358,8 +808,29 @@ Item {
         id: videoErrorDialog
     }
 
+    // Popups are not items, so the page exposes item handles that mirror their
+    // visibility and forward close(), for tests and for the bar wiring.
+    Item {
+        objectName: "videoSettingsPanel"
+        visible: videoSettings.visible
+
+        function close() {
+            videoSettings.close()
+        }
+    }
+
+    Item {
+        objectName: "videoOpenMenu"
+        visible: openMenu.visible
+
+        function close() {
+            openMenu.close()
+        }
+    }
+
     VideoSettingsPanel {
         id: videoSettings
+
         engine: mpv
         anchors.centerIn: parent
         width: Math.min(560, page.width)
@@ -1369,6 +840,7 @@ Item {
 
     VideoOpenMenu {
         id: openMenu
+
         extensionPattern: page.extensionPattern
         onVideoChosen: (file, fromBeginning) => page.openVideo(file, fromBeginning)
         onSelectionCanceled: page.forceActiveFocus()

@@ -254,12 +254,19 @@ qt_add_qml_module(niratan_app
         src/views/components/ToolbarGroup.qml
         src/views/dictionary/AnkiMiningToast.qml
         src/views/icons/icon_map.js
+        src/views/icons/phosphor/fill/skip-back-fill.svg
+        src/views/icons/phosphor/fill/skip-forward-fill.svg
+        src/views/icons/phosphor/fill/speaker-slash-fill.svg
+        src/views/icons/phosphor/fill/speaker-low-fill.svg
+        src/views/icons/phosphor/fill/speaker-high-fill.svg
         src/views/icons/phosphor/fill/eye-slash-fill.svg
         src/views/icons/phosphor/fill/fast-forward-fill.svg
         src/views/icons/phosphor/fill/pause-fill.svg
         src/views/icons/phosphor/fill/play-fill.svg
         src/views/icons/phosphor/fill/rewind-fill.svg
         src/views/icons/phosphor/fill/x-circle-fill.svg
+        src/views/icons/phosphor/regular/arrows-in.svg
+        src/views/icons/phosphor/regular/arrows-out.svg
         src/views/icons/phosphor/regular/arrow-clockwise.svg
         src/views/icons/phosphor/regular/arrow-line-right.svg
         src/views/icons/phosphor/regular/book.svg
@@ -401,6 +408,12 @@ qt_add_qml_module(niratan_app
         src/views/player/VideoOpenMenu.qml
         src/views/player/VideoSettingsPanel.qml
         src/views/player/PlayerEmptyState.qml
+        src/views/player/VideoControlBar.qml
+        src/views/player/VideoProgressStrip.qml
+        src/views/player/VideoTransportControls.qml
+        src/views/player/VideoUtilityControls.qml
+        src/views/player/VideoSpeedPanel.qml
+        src/views/player/VideoVolumeControl.qml
         src/views/player/VideoLookupLayer.qml
         src/views/player/VideoLookupSurface.qml
         src/views/player/VideoSubtitleOverlay.qml

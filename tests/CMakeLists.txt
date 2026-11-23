@@ -828,6 +828,21 @@ add_test(NAME video_window COMMAND tst_video_window)
 set_tests_properties(video_window PROPERTIES
     ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QTWEBENGINE_CHROMIUM_FLAGS=--disable-gpu")
 
+qt_add_executable(tst_player_controls
+    qml/tst_player_controls.cpp
+)
+target_include_directories(tst_player_controls PRIVATE
+    ${CMAKE_SOURCE_DIR}/src
+    ${CMAKE_CURRENT_SOURCE_DIR}/viewmodels
+)
+target_link_libraries(tst_player_controls PRIVATE niratan_app niratan_appplugin niratan_style
+    niratan_styleplugin Qt6::Test
+    Qt6::Quick Qt6::QuickControls2 Qt6::WebEngineQuick)
+target_compile_options(tst_player_controls PRIVATE -Wall -Wextra -Wpedantic -Werror)
+add_test(NAME player_controls COMMAND tst_player_controls)
+set_tests_properties(player_controls PROPERTIES
+    ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QTWEBENGINE_CHROMIUM_FLAGS=--disable-gpu")
+
 qt_add_executable(tst_video_library_view
     qml/tst_video_library_view.cpp
 )
