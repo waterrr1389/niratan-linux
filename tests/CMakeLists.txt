@@ -478,6 +478,14 @@ target_link_libraries(tst_library_catalog PRIVATE niratan_core Qt6::Test)
 target_compile_options(tst_library_catalog PRIVATE -Wall -Wextra -Wpedantic -Werror)
 add_test(NAME library_catalog COMMAND tst_library_catalog)
 
+qt_add_executable(tst_video_thumbnail_store
+    video/tst_video_thumbnail_store.cpp
+)
+target_include_directories(tst_video_thumbnail_store PRIVATE ${CMAKE_SOURCE_DIR}/src)
+target_link_libraries(tst_video_thumbnail_store PRIVATE niratan_core Qt6::Test)
+target_compile_options(tst_video_thumbnail_store PRIVATE -Wall -Wextra -Wpedantic -Werror)
+add_test(NAME video_thumbnail_store COMMAND tst_video_thumbnail_store)
+
 qt_add_executable(tst_library_view_model
     viewmodels/tst_library_view_model.cpp
 )

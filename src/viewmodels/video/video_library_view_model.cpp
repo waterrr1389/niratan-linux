@@ -8,6 +8,7 @@
 #include "viewmodels/video/video_library_view_model.h"
 
 #include "services/player/video_settings.h"
+#include "services/video/thumbnail_scheduler.h"
 
 #include <algorithm>
 #include <utility>
@@ -29,8 +30,15 @@ bool is_filtering(const QString& search_text, bool unfinished_only) {
 
 }  // namespace
 
-VideoLibraryViewModel::VideoLibraryViewModel(QObject* parent)
-    : QObject(parent), store_(), history_(player::PlaybackHistory::at_data_root()) {
+VideoLibraryViewModel::VideoLibraryViewModel(
+    std::shared_ptr<video::ThumbnailGenerator> thumbnail_generator, QObject* parent)
+    : QObject(parent), store_(), history_(player::PlaybackHistory::at_data_root()),
+      thumbnail_generator_(std::move(thumbnail_generator)) {
+    if (!thumbnail_generator_) {
+        thumbnail_generator_ = std::make_shared<video::FfmpegThumbnailGenerator>();
+    }
+    thumbnails_ = std::make_unique<video::ThumbnailScheduler>(
+        video::default_thumbnail_cache_directory(), thumbnail_generator_, this);
     const auto settings = player::load_video_library_settings();
     layout_mode_ = settings.value(QStringLiteral("videoLibraryLayoutMode")).toString();
     if (layout_mode_ != QStringLiteral("list")) {

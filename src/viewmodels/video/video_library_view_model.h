@@ -57,8 +57,15 @@
 #include <QVariantMap>
 #include <QtQml/qqmlregistration.h>
 
+#include <memory>
+
 #include "services/player/playback_history.h"
 #include "services/video/library_catalog.h"
+
+namespace niratan::video {
+class ThumbnailGenerator;
+class ThumbnailScheduler;
+}  // namespace niratan::video
 
 namespace niratan::viewmodels {
 
@@ -86,9 +93,16 @@ class VideoLibraryViewModel : public QObject {
     Q_PROPERTY(QVariantList sourceSummaries READ sourceSummaries NOTIFY sourceSummariesChanged)
     Q_PROPERTY(int playbackHistoryRevision READ playbackHistoryRevision NOTIFY
                    playbackHistoryRevisionChanged)
+    Q_PROPERTY(QVariantMap thumbnailUrls READ thumbnailUrls NOTIFY thumbnailUrlsChanged)
+    Q_PROPERTY(bool thumbnailsSuspended READ thumbnailsSuspended WRITE setThumbnailsSuspended NOTIFY
+                   thumbnailsSuspendedChanged)
 
    public:
-    explicit VideoLibraryViewModel(QObject* parent = nullptr);
+    // A null generator uses the ffmpeg generator; tests inject a stub so the
+    // view model never starts ffmpeg.
+    explicit VideoLibraryViewModel(
+        std::shared_ptr<video::ThumbnailGenerator> thumbnail_generator = {},
+        QObject* parent = nullptr);
     ~VideoLibraryViewModel() override;
 
     QString displayMode() const { return display_mode_; }
@@ -116,6 +130,13 @@ class VideoLibraryViewModel : public QObject {
     QVariantMap modeCounts() const;
     QVariantList sourceSummaries() const;
     int playbackHistoryRevision() const { return playback_history_revision_; }
+    QVariantMap thumbnailUrls() const { return thumbnail_urls_; }
+    bool thumbnailsSuspended() const { return thumbnails_suspended_; }
+    void setThumbnailsSuspended(bool suspended);
+
+    // Publishes the item's poster URL once generation finishes. An unknown
+    // path and a repeated request for a published or pending item are no-ops.
+    Q_INVOKABLE void requestThumbnail(const QString& path);
 
     Q_INVOKABLE void load();
     Q_INVOKABLE void refreshPlaybackHistory();
@@ -168,6 +189,8 @@ class VideoLibraryViewModel : public QObject {
     void modeCountsChanged();
     void sourceSummariesChanged();
     void playbackHistoryRevisionChanged();
+    void thumbnailUrlsChanged();
+    void thumbnailsSuspendedChanged();
 
    private:
     QVariantList sectionsData() const;
@@ -180,6 +203,15 @@ class VideoLibraryViewModel : public QObject {
     void notifyRows();
     void notifyEmptyState();
     void showError(const QString& message);
+
+    struct PublishedThumbnail {
+        QString cache_key;
+        QString url;
+    };
+    const video::LibraryItem* item_for_path(const QString& path) const;
+    void request_thumbnail_now(const QString& path);
+    void publish_thumbnail(const QString& path, const QString& url);
+    void resume_suspended_thumbnails();
 
     video::LibraryStore store_;
     player::PlaybackHistory history_;
@@ -196,6 +228,14 @@ class VideoLibraryViewModel : public QObject {
     int playback_history_revision_ = 0;
     QHash<QString, player::PlaybackState> playback_states_;
     QSet<QString> cached_playback_keys_;
+
+    std::shared_ptr<video::ThumbnailGenerator> thumbnail_generator_;
+    std::unique_ptr<video::ThumbnailScheduler> thumbnails_;
+    QVariantMap thumbnail_urls_;
+    QHash<QString, PublishedThumbnail> published_thumbnails_;
+    QHash<QString, quint64> pending_thumbnail_requests_;
+    QSet<QString> suspended_thumbnail_paths_;
+    bool thumbnails_suspended_ = false;
 };
 
 }  // namespace niratan::viewmodels

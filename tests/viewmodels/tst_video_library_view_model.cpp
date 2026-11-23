@@ -21,11 +21,13 @@
 // The two @AppStorage values of VideoLibraryView.swift live in settings.json
 // through player/video_settings.h.
 
+#include "data_root.h"
 #include "services/player/playback_history.h"
 #include "services/player/video_settings.h"
 #include "services/storage/app_paths.h"
 #include "services/storage/json_file.h"
 #include "services/video/library_catalog.h"
+#include "services/video/thumbnail_store.h"
 #include "viewmodels/video/video_library_view_model.h"
 
 #include <QDateTime>
@@ -33,8 +35,12 @@
 #include <QFile>
 #include <QFileInfo>
 #include <QJsonObject>
+#include <QMutex>
+#include <QSet>
+#include <QSignalSpy>
 #include <QTemporaryDir>
 #include <QTimeZone>
+#include <QUrl>
 #include <QtTest>
 
 #include <filesystem>
@@ -185,6 +191,72 @@ QVariantMap rule(const QString& field, const QString& match, const QString& valu
             {QStringLiteral("match"), match},
             {QStringLiteral("value"), value}};
 }
+
+bool write_bytes(const QString& path, const QByteArray& bytes, qint64 modified_seconds) {
+    QDir().mkpath(QFileInfo(path).absolutePath());
+    QFile file(path);
+    if (!file.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
+        return false;
+    }
+    file.write(bytes);
+    file.flush();
+    file.setFileTime(QDateTime::fromSecsSinceEpoch(modified_seconds, QTimeZone::UTC),
+                     QFileDevice::FileModificationTime);
+    return file.error() == QFileDevice::NoError;
+}
+
+niratan::video::ThumbnailRequest thumbnail_request_for(const QString& path) {
+    const QFileInfo info(path);
+    niratan::video::ThumbnailRequest request;
+    request.path = QString::fromStdString(info.filesystemAbsoluteFilePath().string());
+    request.file_size = info.size();
+    request.modified_at = info.lastModified().toUTC();
+    return request;
+}
+
+QString thumbnail_cache_path(const QString& item_path) {
+    const auto request = thumbnail_request_for(item_path);
+    const auto directory = niratan::video::default_thumbnail_cache_directory();
+    const auto key = niratan::video::thumbnail_cache_key(request).toStdString();
+    return QString::fromStdString((directory / (key + ".png")).string());
+}
+
+// The view model tests never start ffmpeg; each generation returns PNG bytes
+// that its store writes to the cache so a URL can be published.
+class StubThumbnailGenerator : public niratan::video::ThumbnailGenerator {
+   public:
+    QByteArray generate(const QString& path, int maximum_dimension,
+                        const niratan::video::ThumbnailCancelled& is_cancelled) override {
+        Q_UNUSED(maximum_dimension);
+        Q_UNUSED(is_cancelled);
+        QMutexLocker locker(&mutex_);
+        starts_.append(path);
+        if (fail_paths_.contains(path)) {
+            return {};
+        }
+        return QByteArrayLiteral("PNG-DATA");
+    }
+
+    void fail_for(const QString& path) {
+        QMutexLocker locker(&mutex_);
+        fail_paths_.insert(path);
+    }
+
+    int call_count() {
+        QMutexLocker locker(&mutex_);
+        return static_cast<int>(starts_.size());
+    }
+
+    QStringList starts() {
+        QMutexLocker locker(&mutex_);
+        return starts_;
+    }
+
+   private:
+    QMutex mutex_;
+    QStringList starts_;
+    QSet<QString> fail_paths_;
+};
 
 }  // namespace
 
@@ -1152,7 +1224,177 @@ class VideoLibraryViewModelTest : public QObject {
         QCOMPARE(titles(view_model),
                  QStringList({QStringLiteral("Episode 02"), QStringLiteral("Episode 01")}));
     }
+
+    void thumbnailMapStartsEmptyAndIgnoresUnknownPaths() {
+        niratan::test::TempDataRoot root;
+        QVERIFY(root.isValid());
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        build_simple_fixture(dir.path());
+        auto generator = std::make_shared<StubThumbnailGenerator>();
+        VideoLibraryViewModel view_model(generator);
+
+        QVERIFY(view_model.thumbnailUrls().isEmpty());
+        QVERIFY(!view_model.thumbnailsSuspended());
+        view_model.requestThumbnail(QStringLiteral("/videos/absent.mkv"));
+        QTest::qWait(50);
+        QVERIFY(view_model.thumbnailUrls().isEmpty());
+        QCOMPARE(generator->call_count(), 0);
+    }
+
+    void requestThumbnailPublishesTheGeneratedCacheUrl() {
+        niratan::test::TempDataRoot root;
+        QVERIFY(root.isValid());
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        const auto fixture = build_simple_fixture(dir.path());
+        auto generator = std::make_shared<StubThumbnailGenerator>();
+        VideoLibraryViewModel view_model(generator);
+        QSignalSpy changed(&view_model, &VideoLibraryViewModel::thumbnailUrlsChanged);
+
+        view_model.requestThumbnail(fixture.alpha);
+        QTRY_VERIFY_WITH_TIMEOUT(view_model.thumbnailUrls().contains(fixture.alpha), 5000);
+        const QString url = view_model.thumbnailUrls().value(fixture.alpha).toString();
+        QCOMPARE(url, QUrl::fromLocalFile(thumbnail_cache_path(fixture.alpha)).toString());
+        QVERIFY(QFileInfo::exists(thumbnail_cache_path(fixture.alpha)));
+        QCOMPARE(generator->call_count(), 1);
+        QCOMPARE(generator->starts(), QStringList({fixture.alpha}));
+        QVERIFY(changed.count() >= 1);
+    }
+
+    void repeatedThumbnailRequestsAreNoOps() {
+        niratan::test::TempDataRoot root;
+        QVERIFY(root.isValid());
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        const auto fixture = build_simple_fixture(dir.path());
+        auto generator = std::make_shared<StubThumbnailGenerator>();
+        VideoLibraryViewModel view_model(generator);
+
+        view_model.requestThumbnail(fixture.alpha);
+        view_model.requestThumbnail(fixture.alpha);
+        QTRY_VERIFY_WITH_TIMEOUT(view_model.thumbnailUrls().contains(fixture.alpha), 5000);
+        const QString url = view_model.thumbnailUrls().value(fixture.alpha).toString();
+        view_model.requestThumbnail(fixture.alpha);
+        QTest::qWait(100);
+        QCOMPARE(generator->call_count(), 1);
+        QCOMPARE(view_model.thumbnailUrls().value(fixture.alpha).toString(), url);
+    }
+
+    void cachedThumbnailIsPublishedWhileSuspended() {
+        niratan::test::TempDataRoot root;
+        QVERIFY(root.isValid());
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        const auto fixture = build_simple_fixture(dir.path());
+        QVERIFY(write_bytes(thumbnail_cache_path(fixture.alpha), "cached", 30));
+        auto generator = std::make_shared<StubThumbnailGenerator>();
+        VideoLibraryViewModel view_model(generator);
+
+        view_model.setThumbnailsSuspended(true);
+        QVERIFY(view_model.thumbnailsSuspended());
+        view_model.requestThumbnail(fixture.alpha);
+        QTRY_VERIFY_WITH_TIMEOUT(view_model.thumbnailUrls().contains(fixture.alpha), 5000);
+        QCOMPARE(view_model.thumbnailUrls().value(fixture.alpha).toString(),
+                 QUrl::fromLocalFile(thumbnail_cache_path(fixture.alpha)).toString());
+        QCOMPARE(generator->call_count(), 0);
+        view_model.setThumbnailsSuspended(false);
+    }
+
+    void suspendedRequestIsRetriedAfterResume() {
+        niratan::test::TempDataRoot root;
+        QVERIFY(root.isValid());
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        const auto fixture = build_simple_fixture(dir.path());
+        auto generator = std::make_shared<StubThumbnailGenerator>();
+        VideoLibraryViewModel view_model(generator);
+
+        view_model.setThumbnailsSuspended(true);
+        view_model.requestThumbnail(fixture.alpha);
+        view_model.requestThumbnail(fixture.alpha);
+        view_model.requestThumbnail(fixture.beta);
+        QTest::qWait(100);
+        QVERIFY(view_model.thumbnailUrls().isEmpty());
+        QCOMPARE(generator->call_count(), 0);
+
+        view_model.setThumbnailsSuspended(false);
+        QTRY_VERIFY_WITH_TIMEOUT(view_model.thumbnailUrls().contains(fixture.alpha), 5000);
+        QTRY_VERIFY_WITH_TIMEOUT(view_model.thumbnailUrls().contains(fixture.beta), 5000);
+        QCOMPARE(generator->starts().size(), 2);
+        QVERIFY(generator->starts().contains(fixture.alpha));
+        QVERIFY(generator->starts().contains(fixture.beta));
+    }
+
+    void suspendingKeepsPublishedThumbnails() {
+        niratan::test::TempDataRoot root;
+        QVERIFY(root.isValid());
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        const auto fixture = build_simple_fixture(dir.path());
+        auto generator = std::make_shared<StubThumbnailGenerator>();
+        VideoLibraryViewModel view_model(generator);
+
+        view_model.requestThumbnail(fixture.alpha);
+        QTRY_VERIFY_WITH_TIMEOUT(view_model.thumbnailUrls().contains(fixture.alpha), 5000);
+        const QString url = view_model.thumbnailUrls().value(fixture.alpha).toString();
+        view_model.setThumbnailsSuspended(true);
+        QCOMPARE(view_model.thumbnailUrls().value(fixture.alpha).toString(), url);
+        view_model.setThumbnailsSuspended(false);
+        QCOMPARE(view_model.thumbnailUrls().value(fixture.alpha).toString(), url);
+        QCOMPARE(generator->call_count(), 1);
+    }
+
+    void failedGenerationKeepsThePlaceholder() {
+        niratan::test::TempDataRoot root;
+        QVERIFY(root.isValid());
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        const auto fixture = build_simple_fixture(dir.path());
+        auto generator = std::make_shared<StubThumbnailGenerator>();
+        generator->fail_for(fixture.alpha);
+        VideoLibraryViewModel view_model(generator);
+
+        view_model.requestThumbnail(fixture.alpha);
+        QTRY_COMPARE_WITH_TIMEOUT(generator->call_count(), 1, 5000);
+        QTest::qWait(100);
+        QVERIFY(!view_model.thumbnailUrls().contains(fixture.alpha));
+        QVERIFY(!QFileInfo::exists(thumbnail_cache_path(fixture.alpha)));
+
+        view_model.requestThumbnail(fixture.beta);
+        QTRY_VERIFY_WITH_TIMEOUT(view_model.thumbnailUrls().contains(fixture.beta), 5000);
+        QVERIFY(!view_model.thumbnailUrls().contains(fixture.alpha));
+    }
+
+    void changedItemUsesANewCacheKey() {
+        niratan::test::TempDataRoot root;
+        QVERIFY(root.isValid());
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        const auto fixture = build_simple_fixture(dir.path());
+        auto generator = std::make_shared<StubThumbnailGenerator>();
+        VideoLibraryViewModel view_model(generator);
+
+        view_model.requestThumbnail(fixture.alpha);
+        QTRY_VERIFY_WITH_TIMEOUT(view_model.thumbnailUrls().contains(fixture.alpha), 5000);
+        const QString first_url = view_model.thumbnailUrls().value(fixture.alpha).toString();
+        const QString first_cache = thumbnail_cache_path(fixture.alpha);
+
+        QVERIFY(write_bytes(fixture.alpha, QByteArray(50, '2'), 2000));
+        view_model.requestThumbnail(fixture.alpha);
+        QTest::qWait(100);
+        QCOMPARE(generator->call_count(), 1);
+        QCOMPARE(view_model.thumbnailUrls().value(fixture.alpha).toString(), first_url);
+
+        view_model.refreshAllSources();
+        const QString second_cache = thumbnail_cache_path(fixture.alpha);
+        QVERIFY(first_cache != second_cache);
+        view_model.requestThumbnail(fixture.alpha);
+        QTRY_COMPARE_WITH_TIMEOUT(view_model.thumbnailUrls().value(fixture.alpha).toString(),
+                                  QUrl::fromLocalFile(second_cache).toString(), 5000);
+        QCOMPARE(generator->call_count(), 2);
+    }
 };
 
-QTEST_APPLESS_MAIN(VideoLibraryViewModelTest)
+QTEST_GUILESS_MAIN(VideoLibraryViewModelTest)
 #include "tst_video_library_view_model.moc"
