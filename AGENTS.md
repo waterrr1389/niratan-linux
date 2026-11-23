@@ -205,8 +205,7 @@ Unicode rules, do the same rather than assuming ASCII.
   characters and the same banned words.
 - Install the hooks once per clone: `git config core.hooksPath scripts/hooks`.
   `pre-commit` runs the gate and refuses a commit while unstaged or untracked
-  changes exist, because the gate builds the working tree. `pre-push` runs the
-  gate on every pushed commit in a separate worktree.
+  changes exist, because the gate builds the working tree.
 - Above the services, three layers of tests catch what unit tests cannot,
   without rendering or screenshots:
   - QML load test: each page loads offscreen with its view model; any QML

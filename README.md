@@ -29,9 +29,5 @@ git config core.hooksPath scripts/hooks
 
 `pre-commit` runs the check, and refuses the commit while the working tree
 holds changes that are not staged, because the check builds the working tree
-and would otherwise pass on something the commit does not contain. `pre-push`
-checks every commit being pushed, oldest first, in a worktree under the git
-directory, so each commit builds on its own. A failing commit prints the tail
-of its log and leaves the full log next to that worktree. `--no-verify` skips
-either hook. The worktree is reused between pushes and can be removed with
-`git worktree remove`.
+and would otherwise pass on something the commit does not contain.
+`--no-verify` skips it.
