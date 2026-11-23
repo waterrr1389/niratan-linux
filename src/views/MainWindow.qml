@@ -55,7 +55,7 @@ ApplicationWindow {
     readonly property int toolbarHeight: 52
     readonly property bool pageOwnsToolbar: window.sectionIndex === 3
                                             || window.sectionIndex === 2
-                                            || (window.sectionIndex === 0 && window.bookshelfDepth === 1)
+                                            || window.sectionIndex === 0
 
     readonly property var sectionTitles: [
         qsTr("Bookshelf"),
@@ -161,6 +161,7 @@ ApplicationWindow {
                 id: statisticsDetail
 
                 StatisticsPage {
+                    toolbarInset: window.sidebarVisible ? 0 : 44
                     onBackRequested: bookshelfStack.pop()
                 }
             }

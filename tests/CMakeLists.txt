@@ -858,6 +858,21 @@ add_test(NAME video_library_view COMMAND tst_video_library_view)
 set_tests_properties(video_library_view PROPERTIES
     ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QTWEBENGINE_CHROMIUM_FLAGS=--disable-gpu")
 
+qt_add_executable(tst_statistics_view
+    qml/tst_statistics_view.cpp
+)
+target_include_directories(tst_statistics_view PRIVATE
+    ${CMAKE_SOURCE_DIR}/src
+    ${CMAKE_CURRENT_SOURCE_DIR}/viewmodels
+)
+target_link_libraries(tst_statistics_view PRIVATE niratan_app niratan_appplugin niratan_style
+    niratan_styleplugin Qt6::Test
+    Qt6::Quick Qt6::QuickControls2 Qt6::WebEngineQuick)
+target_compile_options(tst_statistics_view PRIVATE -Wall -Wextra -Wpedantic -Werror)
+add_test(NAME statistics_view COMMAND tst_statistics_view)
+set_tests_properties(statistics_view PROPERTIES
+    ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QTWEBENGINE_CHROMIUM_FLAGS=--disable-gpu")
+
 qt_add_executable(tst_reader_presentation
     qml/tst_reader_presentation.cpp
 )

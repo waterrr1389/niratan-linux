@@ -358,7 +358,20 @@ qt_add_qml_module(niratan_app
         src/views/video/VideoLibrarySectionHeader.qml
         src/views/video/VideoLibrarySidebar.qml
         src/views/video/VideoLibraryToolbar.qml
+        src/views/statistics/StatisticsCalendarCard.qml
+        src/views/statistics/StatisticsCard.qml
         src/views/statistics/StatisticsDeleteDialog.qml
+        src/views/statistics/StatisticsGoalCard.qml
+        src/views/statistics/StatisticsMetricTile.qml
+        src/views/statistics/StatisticsRankingCard.qml
+        src/views/statistics/StatisticsSectionHeader.qml
+        src/views/statistics/StatisticsSegments.qml
+        src/views/statistics/StatisticsSelectedRangeCard.qml
+        src/views/statistics/StatisticsShelfCard.qml
+        src/views/statistics/StatisticsSpeedCard.qml
+        src/views/statistics/StatisticsTodayCard.qml
+        src/views/statistics/StatisticsTrendCard.qml
+        src/views/statistics/StatisticsWeekCard.qml
         src/views/pages/SettingsPage.qml
         src/views/pages/SettingsNote.qml
         src/views/pages/SettingsSectionRail.qml

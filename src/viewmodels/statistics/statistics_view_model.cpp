@@ -138,7 +138,7 @@ struct StatisticsViewModel::State {
 };
 
 StatisticsViewModel* StatisticsViewModel::instance() {
-    static StatisticsViewModel* model = new StatisticsViewModel();
+    static StatisticsViewModel* model = new StatisticsViewModel(nullptr);
     return model;
 }
 

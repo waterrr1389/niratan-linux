@@ -115,7 +115,7 @@ class StatisticsViewModel : public QObject {
     Q_PROPERTY(QString detailError READ detail_error NOTIFY detailChanged)
 
    public:
-    explicit StatisticsViewModel(QObject* parent = nullptr);
+    explicit StatisticsViewModel(QObject* parent);
     ~StatisticsViewModel() override;
 
     // The dashboard keeps its range selection across pages, so one instance

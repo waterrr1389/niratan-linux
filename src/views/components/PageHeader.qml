@@ -35,6 +35,9 @@ Item {
     property string subtitle
     property color subtitleColor: Theme.textSecondary
     property bool showBack: true
+    // Extra leading room for a floating control the page must not cover, such
+    // as the sidebar toggle while the shell sidebar is collapsed.
+    property real leadingInset: 0
     default property alias trailing: trailingRow.data
 
     implicitHeight: 48
@@ -56,7 +59,7 @@ Item {
 
     RowLayout {
         anchors.fill: parent
-        anchors.leftMargin: Theme.spacingMd
+        anchors.leftMargin: Theme.spacingMd + header.leadingInset
         anchors.rightMargin: Theme.spacingMd
         spacing: Theme.spacingSm
 
