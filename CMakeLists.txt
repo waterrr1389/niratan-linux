@@ -252,14 +252,35 @@ qt_add_qml_module(niratan_app
     URI Niratan
     QML_FILES
         src/views/MainWindow.qml
+        src/views/components/ColorWell.qml
+        src/views/components/FormButton.qml
+        src/views/components/FormButtonRow.qml
+        src/views/components/FormColorRow.qml
+        src/views/components/FormDivider.qml
+        src/views/components/FormLinkRow.qml
+        src/views/components/FormPickerRow.qml
+        src/views/components/FormRow.qml
+        src/views/components/FormSection.qml
+        src/views/components/FormSegmentedRow.qml
+        src/views/components/FormSliderRow.qml
+        src/views/components/FormStepperRow.qml
+        src/views/components/FormToggleRow.qml
         src/views/components/GlassCapsule.qml
         src/views/components/GlassSurface.qml
         src/views/components/Icon.qml
         src/views/components/IconButton.qml
+        src/views/components/LinkButton.qml
+        src/views/components/MenuPicker.qml
         src/views/components/PageHeader.qml
+        src/views/components/PanelHeader.qml
+        src/views/components/PanelScaffold.qml
         src/views/components/SearchBar.qml
         src/views/components/RoundedImage.qml
+        src/views/components/SegmentedPicker.qml
         src/views/components/SourceListRow.qml
+        src/views/components/StepperControl.qml
+        src/views/components/StyledLabel.qml
+        src/views/components/ToggleSwitch.qml
         src/views/components/ToolbarButton.qml
         src/views/components/ToolbarGroup.qml
         src/views/dictionary/AnkiMiningToast.qml
@@ -325,6 +346,7 @@ qt_add_qml_module(niratan_app
         src/views/icons/phosphor/fill/check-circle-fill.svg
         src/views/icons/phosphor/regular/caret-down.svg
         src/views/icons/phosphor/regular/caret-up.svg
+        src/views/icons/phosphor/bold/arrow-up-right-bold.svg
         src/views/icons/phosphor/bold/check-bold.svg
         src/views/icons/phosphor/regular/sidebar-simple.svg
         src/views/icons/phosphor/regular/caret-left.svg
@@ -442,6 +464,7 @@ qt_add_qml_module(niratan_app
         src/views/player/VideoSubtitleOverlay.qml
         src/views/player/VideoSubtitleText.qml
         src/views/pages/ReaderPage.qml
+        src/views/theme/ControlKitSheet.qml
         src/views/theme/Theme.qml
         src/views/theme/ThemePreview.qml
 )

@@ -43,6 +43,8 @@ var icons = {
     "chevron.down": { weight: "regular", name: "caret-down" },
     "chevron.up": { weight: "regular", name: "caret-up" },
     "checkmark": { weight: "bold", name: "check" },
+    // AboutView.linkRow draws it at footnote semibold.
+    "arrow.up.right": { weight: "bold", name: "arrow-up-right" },
     "sidebar.leading": { weight: "regular", name: "sidebar-simple" },
     "list.bullet": { weight: "regular", name: "list-bullets" },
     "paintpalette": { weight: "regular", name: "palette" },

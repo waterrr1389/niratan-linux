@@ -57,8 +57,7 @@ int main(int argc, char* argv[]) {
     // the choice only applies when a real windowing system is in use, and the
     // user may override it.
     const QByteArray platform = qgetenv("QT_QPA_PLATFORM");
-    const bool headless = platform == "offscreen" || platform == "minimal"
-        || platform == "vnc";
+    const bool headless = platform == "offscreen" || platform == "minimal" || platform == "vnc";
     if (!headless && !qEnvironmentVariableIsSet("QSG_RHI_BACKEND")) {
         qputenv("QSG_RHI_BACKEND", "opengl");
     }
@@ -88,11 +87,10 @@ int main(int argc, char* argv[]) {
     const bool theme_preview = qEnvironmentVariableIsSet("NIRATAN_THEME_PREVIEW");
 
     QWebEngineProfile* profile = QWebEngineProfile::defaultProfile();
-    profile->installUrlSchemeHandler(
-        QByteArrayLiteral("audio"),
-        new niratan::ui::AudioSchemeHandler(profile));
+    profile->installUrlSchemeHandler(QByteArrayLiteral("audio"),
+                                     new niratan::ui::AudioSchemeHandler(profile));
     profile->installUrlSchemeHandler(QByteArrayLiteral("dict"),
-                                    new niratan::ui::DictionaryMediaSchemeHandler(profile));
+                                     new niratan::ui::DictionaryMediaSchemeHandler(profile));
     auto* reader_model = niratan::viewmodels::ReaderViewModel::instance();
     auto* reader_handler = new niratan::ui::ReaderSchemeHandler(profile);
     reader_handler->set_view_model(reader_model);
@@ -102,7 +100,22 @@ int main(int argc, char* argv[]) {
     QObject::connect(
         &engine, &QQmlApplicationEngine::objectCreationFailed, &app,
         [] { QCoreApplication::exit(1); }, Qt::QueuedConnection);
-    engine.loadFromModule("Niratan", theme_preview ? "ThemePreview" : "MainWindow");
+    const QByteArray preview = qgetenv("NIRATAN_THEME_PREVIEW");
+    if (preview == "kit" || preview == "kit-end") {
+        // The control kit's sample sheet in a window of the default size;
+        // kit-end shows both of its panels scrolled to the end.
+        const QByteArray scrolled = preview == "kit-end" ? "true" : "false";
+        engine.loadData("import QtQuick\nimport QtQuick.Controls\nimport Niratan\n"
+                        "ApplicationWindow {\n"
+                        "    visible: true\n"
+                        "    width: 960\n"
+                        "    height: 640\n"
+                        "    title: \"Niratan control kit\"\n"
+                        "    ControlKitSheet { anchors.fill: parent; scrolledToEnd: " +
+                        scrolled + " }\n}\n");
+    } else {
+        engine.loadFromModule("Niratan", theme_preview ? "ThemePreview" : "MainWindow");
+    }
 
     return app.exec();
 }

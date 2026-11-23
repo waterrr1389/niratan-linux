@@ -18,10 +18,18 @@
 // composites the card tint over windowBackgroundColor. Glass is a solid
 // surface with a hairline: blur and gradients are not reproduced.
 //
-// Text sizes follow the macOS text styles in points, drawn as logical pixels:
-// largeTitle 26, title 22, title2 17, title3 15, body and headline 13, callout
-// 12, subheadline 11, caption 10. The interface font is Inter with Noto Sans
-// CJK JP for Japanese, the open stand-ins for SF Pro and Hiragino Sans.
+// The font* sizes follow the macOS text styles in points, drawn as logical
+// pixels: largeTitle 26, title 22, title2 17, title3 15, body and headline 13,
+// callout 12, subheadline 11, caption 10. The interface font is Inter with Noto
+// Sans CJK JP for Japanese, the open stand-ins for SF Pro and Hiragino Sans.
+//
+// The control kit (src/views/components) draws with the *Font text styles in
+// style C: macOS structure and hierarchy, with each SwiftUI text style about
+// 8% larger so it reads well with Linux font rendering. largeTitle 28, title1
+// 24, title2 19, title3 16, headline 14 semibold, body 14, callout 13,
+// subheadline 12, footnote 11, caption 11, caption2 11 medium; every other
+// style regular. Kit row heights are Swift's plus 2 and glyphs plus 1, while
+// paddings, insets, spacing between groups and radii stay the Swift values.
 //
 // The accent is the desktop's, as Mac Niratan takes the system accent. Text
 // on an accent fill is white while it keeps the 3:1 contrast macOS's white on
@@ -125,7 +133,9 @@ QtObject {
     readonly property int motionNormal: 180
     readonly property int motionSlow: 220
 
-    // Text sizes, in pixels.
+    // Text sizes, in pixels, at the macOS text style sizes. Pages drawn
+    // before the control kit use them; a page moves to the text style tokens
+    // below when it is next changed.
     readonly property int fontLargeTitle: 26
     readonly property int fontTitle1: 22
     readonly property int fontTitle2: 17
@@ -138,6 +148,128 @@ QtObject {
     readonly property int controlRadius: 8
     readonly property int controlHeight: 28
     readonly property int rowRadius: 8
+
+    // Font weights. Kit components and pages name weights only through these,
+    // so a weight that reads too heavy in Inter changes in one place.
+    readonly property int weightRegular: Font.Normal
+    readonly property int weightMedium: Font.Medium
+    readonly property int weightSemibold: Font.DemiBold
+    readonly property int weightBold: Font.Bold
+
+    // Text styles of the control kit, one per SwiftUI text style, each with
+    // its default weight. StyledLabel copies only size and weight, so the
+    // family stays the application font.
+    readonly property font largeTitleFont: Qt.font({ pixelSize: 28, weight: weightRegular })
+    readonly property font title1Font: Qt.font({ pixelSize: 24, weight: weightRegular })
+    readonly property font title2Font: Qt.font({ pixelSize: 19, weight: weightRegular })
+    readonly property font title3Font: Qt.font({ pixelSize: 16, weight: weightRegular })
+    readonly property font headlineFont: Qt.font({ pixelSize: 14, weight: weightSemibold })
+    readonly property font bodyFont: Qt.font({ pixelSize: 14, weight: weightRegular })
+    readonly property font calloutFont: Qt.font({ pixelSize: 13, weight: weightRegular })
+    readonly property font subheadlineFont: Qt.font({ pixelSize: 12, weight: weightRegular })
+    readonly property font footnoteFont: Qt.font({ pixelSize: 11, weight: weightRegular })
+    readonly property font captionFont: Qt.font({ pixelSize: 11, weight: weightRegular })
+    readonly property font caption2Font: Qt.font({ pixelSize: 11, weight: weightMedium })
+
+    // Form rows. Cards follow NativeSettingsRow and NativeSettingsSubtitledLabel;
+    // compact follows VideoInspectorView.labeledRow and rowLabel. Minimum
+    // heights are the Swift values plus 2, glyphs plus 1 in a 20 px column.
+    readonly property int rowMinHeight: 48
+    readonly property int rowPadding: 16
+    readonly property int rowSpacing: 12
+    readonly property int rowMinGap: 20
+    readonly property int rowWrappedPadding: 8
+    readonly property int rowSubtitleSpacing: 2
+    readonly property int compactRowMinHeight: 42
+    readonly property int compactRowPadding: 12
+    readonly property int compactRowSpacing: 10
+    readonly property int compactRowMinGap: 8
+    readonly property int compactLabelMaximumLines: 2
+    readonly property int glyphSize: 13
+    readonly property int glyphColumnWidth: 20
+    readonly property int glyphSpacing: 8
+    // A row whose control spans it, AppearanceView's Theme card picker.
+    readonly property int fillRowPaddingHorizontal: 12
+    readonly property int fillRowPaddingVertical: 10
+    readonly property real disabledOpacity: 0.45
+    readonly property real hairlineWidth: 1
+    readonly property real focusRingWidth: 2
+
+    // Sections: NativeSettingsSectionCard.cardsBody, and
+    // VideoInspectorView.inspectorSection with VideoInspectorSectionGlassSurface
+    // (white 6.5% over dark, white 70% over light, with a white 8% or black 6%
+    // hairline).
+    readonly property int sectionHeaderSpacing: 8
+    readonly property int compactSectionHeaderSpacing: 7
+    readonly property int sectionHeaderInset: 12
+    readonly property int compactSectionHeaderInset: 4
+    readonly property int sectionRadius: 18
+    readonly property int compactSectionRadius: 14
+    readonly property color compactSectionBackground: dark ? "#11FFFFFF" : "#B3FFFFFF"
+    readonly property color compactSectionStroke: dark ? "#14FFFFFF" : "#0F000000"
+
+    // Scrolling forms and panels: NativeSettingsForm and VideoInspectorView.body.
+    readonly property int formPaddingHorizontal: 24
+    readonly property int formPaddingVertical: 18
+    readonly property int formSpacing: 22
+    readonly property int formMaxContentWidth: 840
+    readonly property int panelPaddingHorizontal: 14
+    readonly property int panelPaddingTop: 14
+    readonly property int panelPaddingBottom: 18
+    readonly property int panelSpacing: 20
+
+    // NativeReaderInspectorHeader with its NativeGlassCircleButton close control.
+    readonly property int panelHeaderPaddingHorizontal: 18
+    readonly property int panelHeaderPaddingTop: 16
+    readonly property int panelHeaderPaddingBottom: 10
+    readonly property int panelHeaderSpacing: 8
+    readonly property int panelHeaderTitleSpacing: 2
+    readonly property int closeButtonDiameter: 28
+    readonly property int closeButtonGlyph: 11
+
+    // NativeSettingsSliderRow and VideoInspectorView.sliderContent.
+    readonly property int sliderRowPaddingVertical: 10
+    readonly property int sliderRowSpacing: 8
+    readonly property int compactSliderRowSpacing: 6
+
+    // Capsule controls: NativeGlassMenuPicker, NativeSettingsActionButtonStyle
+    // and NativeSettingsButtonRow, 2 px taller than Swift's 30 point minimum.
+    readonly property int capsuleHeight: 32
+    readonly property int capsuleSpacing: 8
+    readonly property int pickerPaddingHorizontal: 14
+    readonly property int pickerGlyphSize: 12
+    readonly property int pickerMinimumWidth: 96
+    readonly property int buttonPaddingHorizontal: 16
+    readonly property int buttonRowMinHeight: 48
+    readonly property int compactButtonRowMinHeight: 36
+    readonly property real buttonDisabledOpacity: 0.58
+    readonly property real buttonPressedScale: 0.97
+
+    // The toggle row's switch at the regular and small control sizes.
+    readonly property int switchWidth: 34
+    readonly property int switchHeight: 20
+    readonly property int smallSwitchWidth: 28
+    readonly property int smallSwitchHeight: 16
+    readonly property int switchKnobInset: 2
+
+    // NativeGlassSegmentedPicker.
+    readonly property int segmentMinimumWidth: 76
+    readonly property int segmentPaddingHorizontal: 10
+    readonly property int segmentPaddingVertical: 4
+    readonly property int segmentTrackPadding: 2
+    readonly property int segmentDividerHeight: 16
+    readonly property real segmentDividerOpacity: 0.42
+
+    // The stepper next to a value, and the colour well of a labels-hidden
+    // ColorPicker drawn over a checkerboard when the colour is translucent.
+    readonly property int stepperWidth: 20
+    readonly property int stepperGlyphSize: 10
+    readonly property int colorWellWidth: 44
+    readonly property int colorWellHeight: 24
+    readonly property int colorWellRadius: 6
+    readonly property int checkerboardCell: 6
+    readonly property color checkerboardLight: "#FFFFFF"
+    readonly property color checkerboardDark: "#C8C8C8"
 
     // WCAG relative luminance of an sRGB colour.
     function luminance(colour) {

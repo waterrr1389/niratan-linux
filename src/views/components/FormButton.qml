@@ -1,0 +1,50 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+//
+// A capsule action button. Follows NativeMac/NativeReuseViews.swift
+// NativeSettingsActionButtonStyle: body semibold on one line, padding 16,
+// 32 high, primary text or the danger colour for a destructive action, 0.58
+// opacity when disabled and scaled to 0.97 while pressed. Glass is the solid
+// control surface with a hairline; the pressed tint follows
+// NativeSettingsActionButtonGlassSurface.
+import QtQuick
+import QtQuick.Templates as T
+import Niratan
+
+T.AbstractButton {
+    id: control
+
+    property bool destructive: false
+
+    implicitWidth: implicitContentWidth + leftPadding + rightPadding
+    implicitHeight: Math.max(Theme.capsuleHeight, implicitContentHeight + topPadding + bottomPadding)
+    leftPadding: Theme.buttonPaddingHorizontal
+    rightPadding: Theme.buttonPaddingHorizontal
+    opacity: enabled ? 1 : Theme.buttonDisabledOpacity
+    scale: down ? Theme.buttonPressedScale : 1
+
+    Behavior on scale {
+        NumberAnimation { duration: Theme.motionFast }
+    }
+
+    contentItem: StyledLabel {
+        text: control.text
+        weight: Theme.weightSemibold
+        color: control.destructive ? Theme.popupDanger : Theme.textPrimary
+        horizontalAlignment: Text.AlignHCenter
+        verticalAlignment: Text.AlignVCenter
+        elide: Text.ElideRight
+    }
+
+    background: Rectangle {
+        radius: height / 2
+        color: Theme.controlBackground
+        border.width: control.visualFocus ? Theme.focusRingWidth : Theme.hairlineWidth
+        border.color: control.visualFocus ? Theme.accent : Theme.controlStroke
+
+        Rectangle {
+            anchors.fill: parent
+            radius: parent.radius
+            color: control.down ? Theme.pressTint : control.hovered ? Theme.hoverTint : "transparent"
+        }
+    }
+}

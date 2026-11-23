@@ -816,6 +816,17 @@ add_test(NAME control_style COMMAND tst_control_style)
 set_tests_properties(control_style PROPERTIES
     ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QTWEBENGINE_CHROMIUM_FLAGS=--disable-gpu")
 
+qt_add_executable(tst_control_kit
+    qml/tst_control_kit.cpp
+)
+target_include_directories(tst_control_kit PRIVATE ${CMAKE_SOURCE_DIR}/src)
+target_link_libraries(tst_control_kit PRIVATE niratan_app niratan_appplugin niratan_style
+    niratan_styleplugin Qt6::Test Qt6::Quick Qt6::QuickControls2)
+target_compile_options(tst_control_kit PRIVATE -Wall -Wextra -Wpedantic -Werror)
+add_test(NAME control_kit COMMAND tst_control_kit)
+set_tests_properties(control_kit PROPERTIES
+    ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QTWEBENGINE_CHROMIUM_FLAGS=--disable-gpu")
+
 qt_add_executable(tst_dictionary_view
     qml/tst_dictionary_view.cpp
 )
