@@ -201,6 +201,12 @@ Unicode rules, do the same rather than assuming ASCII.
   limit by splitting along a real seam, not by compressing code: one public
   header may have several `.cpp` files, sharing a module-private header such
   as `<module>_codec.h` that nothing outside the module includes.
+- `scripts/check-design.sh` counts literal font sizes, font weights and
+  spacing, margin and padding numbers per QML file under `src/`, except in
+  `src/views/theme/` and `src/views/components/`. Today's counts are frozen in
+  `scripts/design-baseline.txt` and may only shrink; a new file starts at
+  zero. Take the value from the kit or the theme instead of rewriting the
+  line to dodge the count.
 - `scripts/check-style.sh` enforces the SPDX line, no TODO markers or debug
   output, no tool or progress words, theme-only colours in QML and the
   include direction (models, then services, then view models, then views).

@@ -11,6 +11,7 @@ if [ -z "$NIRATAN_CHECK_LOCKED" ]; then
 fi
 scripts/check-layers.sh
 scripts/check-size.sh
+scripts/check-design.sh
 scripts/check-style.sh
 scripts/check-format.sh
 scripts/check-wired.sh
