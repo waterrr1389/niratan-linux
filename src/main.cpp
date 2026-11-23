@@ -75,9 +75,9 @@ int main(int argc, char* argv[]) {
     // and taskbar entry.
     QGuiApplication::setDesktopFileName("niratan");
     // Qt Quick flicks wheelScrollLines * 24 px per wheel notch, which reads as
-    // slow next to native lists; double the desktop's setting for every view.
+    // slow next to native lists; triple the desktop's setting for every view.
     QGuiApplication::styleHints()->setWheelScrollLines(
-        2 * QGuiApplication::styleHints()->wheelScrollLines());
+        3 * QGuiApplication::styleHints()->wheelScrollLines());
     apply_interface_font();
 
     // Controls are drawn by the Niratan style, after their macOS
