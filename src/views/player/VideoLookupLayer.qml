@@ -43,6 +43,9 @@ Item {
     property bool paused: false
     property bool shiftPressed: false
     property real bottomInset: 56
+    // Space the visible playback bar takes from the bottom of the picture;
+    // the subtitle overlay keeps its block above it.
+    property real subtitleBottomInset: 0
 
     readonly property bool hasPopup: playerLookup.hasPopup
     readonly property bool textDocumentLoaded: layer.externalText || layer.embeddedText
@@ -266,6 +269,7 @@ Item {
 
     VideoSubtitleOverlay {
         anchors.fill: parent
+        bottomObstruction: layer.subtitleBottomInset
         visible: layer.textDocumentLoaded && layer.engine.subtitlesVisible
         engine: layer.engine
         lookupModel: playerLookup

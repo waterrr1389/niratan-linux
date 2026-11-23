@@ -11,7 +11,8 @@
 // Rows: one VideoSubtitleText per current cue in cue order, 8 px between
 // rows and 24 px at both sides of the picture area. The block's top is
 // max(0, viewportHeight - blockHeight) * clamp(verticalPositionFraction,
-// 0, 1); a non-finite or negative height yields 0. With no cues the column is
+// 0, 1); a non-finite or negative height yields 0. While the playback bar
+// covers `bottomObstruction` at the bottom, the block is kept above it. With no cues the column is
 // empty and takes no clicks; the page hides the overlay when subtitles are
 // hidden or no text document is loaded.
 //
@@ -36,6 +37,11 @@ Item {
     required property MpvItem engine
     required property PlayerLookupViewModel lookupModel
     property bool paused: false
+    // Height at the bottom that the visible playback bar covers. A block that
+    // would reach into it is lifted just above it; one already clear stays
+    // put, so the subtitles do not jump each time the bar shows. Swift's
+    // translucent bar has no such rule; it hides on its own.
+    property real bottomObstruction: 0
     property bool shiftPressed: false
     property string highlightedCueId: ""
     // The lookupAt result: highlightStart and highlightLength, or null.
@@ -52,7 +58,10 @@ Item {
         id: column
         x: 24
         width: Math.max(0, overlay.width - 48)
-        y: Math.max(0, overlay.height - column.implicitHeight) * overlay.verticalPosition
+        readonly property real placedY: Math.max(0, overlay.height - column.implicitHeight)
+                                        * overlay.verticalPosition
+        y: Math.max(0, Math.min(placedY,
+                                overlay.height - overlay.bottomObstruction - column.implicitHeight))
         spacing: 8
 
         Repeater {

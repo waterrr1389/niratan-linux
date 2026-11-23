@@ -744,6 +744,9 @@ Item {
             videoFile: page.videoFile
             paused: mpv.paused
             bottomInset: page.compactChrome ? 28 : 56
+            subtitleBottomInset: page.chromeShown
+                ? Math.max(0, stage.y + stage.height - controlBar.y) + Theme.inspectorOverlayBarGap
+                : 0
         }
     }
 
