@@ -14,6 +14,9 @@ FormRow {
     property int currentIndex: -1
     property real minimumWidth: Theme.pickerMinimumWidth
 
+    // The object name of the picker, for tests that drive the control.
+    property alias controlName: picker.objectName
+
     signal activated(int index)
 
     accessoryItem: picker

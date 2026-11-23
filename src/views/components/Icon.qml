@@ -33,6 +33,8 @@ Item {
     property color color: Theme.textPrimary
 
     readonly property bool known: IconMap.icons[name] !== undefined
+    // The map marks glyphs macOS draws flipped (a trailing sidebar).
+    readonly property bool mirrored: icon.known && IconMap.icons[name].mirror === true
     readonly property url source: IconMap.source(name)
 
     implicitWidth: size
@@ -47,5 +49,10 @@ Item {
         sourceSize.height: icon.size
         fillMode: Image.PreserveAspectFit
         smooth: true
+
+        transform: Scale {
+            xScale: icon.mirrored ? -1 : 1
+            origin.x: icon.width / 2
+        }
     }
 }

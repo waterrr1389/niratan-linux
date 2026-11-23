@@ -13,6 +13,9 @@ FormRow {
 
     property color color: "transparent"
 
+    // The object name of the colour well, for tests that drive the control.
+    property alias controlName: well.objectName
+
     signal picked(color color)
 
     glyph: compact ? "paintpalette" : ""
@@ -22,6 +25,7 @@ FormRow {
         id: well
 
         color: row.color
+        dialogTitle: row.label
         Accessible.name: row.label
         onPicked: color => row.picked(color)
     }

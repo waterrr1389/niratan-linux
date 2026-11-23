@@ -494,6 +494,21 @@ target_link_libraries(tst_library_view_model PRIVATE niratan_app Qt6::Test)
 target_compile_options(tst_library_view_model PRIVATE -Wall -Wextra -Wpedantic -Werror)
 add_test(NAME library_view_model COMMAND tst_library_view_model)
 
+qt_add_executable(tst_video_inspector
+    qml/tst_video_inspector.cpp
+)
+target_include_directories(tst_video_inspector PRIVATE
+    ${CMAKE_SOURCE_DIR}/src
+    ${CMAKE_CURRENT_SOURCE_DIR}/viewmodels
+)
+target_link_libraries(tst_video_inspector PRIVATE niratan_app niratan_appplugin niratan_style
+    niratan_styleplugin Qt6::Test
+    Qt6::Quick Qt6::QuickControls2 Qt6::WebEngineQuick)
+target_compile_options(tst_video_inspector PRIVATE -Wall -Wextra -Wpedantic -Werror)
+add_test(NAME video_inspector COMMAND tst_video_inspector)
+set_tests_properties(video_inspector PROPERTIES
+    ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QTWEBENGINE_CHROMIUM_FLAGS=--disable-gpu")
+
 qt_add_executable(tst_video_library_view_model
     viewmodels/tst_video_library_view_model.cpp
 )

@@ -16,7 +16,12 @@ Item {
 
     property color color: "transparent"
 
+    // The colour dialog's title.
+    property string dialogTitle
+
     signal picked(color color)
+    // A click on the well; it opens the dialog.
+    signal clicked()
 
     implicitWidth: Theme.colorWellWidth
     implicitHeight: Theme.colorWellHeight
@@ -26,6 +31,8 @@ Item {
     Accessible.name: color.toString()
     Accessible.onPressAction: open()
     Keys.onSpacePressed: open()
+
+    onClicked: open()
 
     function open() {
         dialog.selectedColor = well.color
@@ -72,13 +79,14 @@ Item {
     }
 
     TapHandler {
-        onTapped: well.open()
+        onTapped: well.clicked()
     }
 
     ColorDialog {
         id: dialog
 
         objectName: "colorDialog"
+        title: well.dialogTitle
         options: ColorDialog.ShowAlphaChannel
         onAccepted: well.picked(selectedColor)
     }

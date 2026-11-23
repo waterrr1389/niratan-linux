@@ -68,6 +68,16 @@ QtObject {
 
     readonly property color floatingBackground: cardBackground
     readonly property color floatingStroke: cardStroke
+    // The video Inspector: a panel one tone below its grouped cards, as
+    // VideoInspectorGlassSurface and VideoInspectorSectionGlassSurface layer
+    // a white-0.7 (light) or white-0.065 (dark) card over the panel wash.
+    readonly property color inspectorBackground: dark ? "#242426" : "#F2F2F4"
+    readonly property color inspectorCardBackground: dark ? "#11FFFFFF" : "#FFFFFF"
+    // VideoInspectorChipButtonStyle and the filled icon buttons: primary at
+    // 6-9% opacity.
+    readonly property color inspectorChipBackground: dark ? "#17FFFFFF" : "#10000000"
+    // VideoInspectorFieldSurface: black at 25% (dark) or 5% (light).
+    readonly property color inspectorFieldBackground: dark ? "#40000000" : "#0D000000"
 
     readonly property color popupBackground: dark ? "#000000" : "#FFFFFF"
     readonly property color popupText: dark ? "#FFFFFF" : "#000000"
@@ -236,6 +246,60 @@ QtObject {
     // and NativeSettingsButtonRow, 2 px taller than Swift's 30 point minimum.
     readonly property int capsuleHeight: 32
     readonly property int capsuleSpacing: 8
+
+    // Inspector chips, round glyph buttons and the icon tab strip:
+    // VideoInspectorChipButtonStyle, VideoInspectorIconButtonStyle and
+    // VideoInspectorTabBar.
+    readonly property int chipHeight: 24
+    readonly property int chipPaddingHorizontal: 8
+    readonly property int chipRadius: 8
+    readonly property int chipGlyphSpacing: 5
+    readonly property int chipGlyphSize: 12
+    readonly property int chipSpacing: 6
+    readonly property int largeChipHeight: 28
+    // The inset of a single control that fills a compact card.
+    readonly property int compactSectionPadding: 10
+    readonly property int glyphButtonDiameter: 30
+    readonly property int smallGlyphButtonDiameter: 26
+    readonly property int tinyGlyphButtonDiameter: 20
+    readonly property int tinyGlyphSize: 10
+    readonly property int tabTrackRadius: 13
+    readonly property int tabTrackPadding: 3
+    readonly property int tabTrackSpacing: 2
+    readonly property int tabItemRadius: 10
+    readonly property int tabItemPaddingVertical: 6
+    readonly property int tabItemSpacing: 3
+    readonly property int tabGlyphBox: 17
+    readonly property int tabGlyphSize: 14
+    readonly property int tooltipDelay: 600
+    readonly property int inlineFieldWidth: 36
+    readonly property int wideInlineFieldWidth: 64
+    // An empty list's centred placeholder row.
+    readonly property int emptyRowHeight: 56
+    // VideoInspectorEpisodeRow's number badge and playing glyph.
+    readonly property int episodeBadgeMinWidth: 26
+    readonly property int episodeBadgeHeight: 22
+    readonly property int episodeBadgeRadius: 6
+    readonly property int episodeBadgePadding: 8
+    readonly property int episodeGlyphSize: 11
+    // VideoInspectorView.header and the panel shell.
+    readonly property int inspectorWidth: 340
+    // VideoPlayerScreen.inspectorOverlayTrailingInset and VerticalInset, the
+    // gap above the playback bar, and the floating bar's extra bottom inset.
+    readonly property int inspectorOverlayInset: 16
+    readonly property int inspectorOverlayBarGap: 8
+    readonly property int inspectorFloatingBarInset: 24
+    readonly property int inspectorRadius: 26
+    readonly property int inspectorHeaderPadding: 14
+    readonly property int inspectorHeaderPaddingBottom: 12
+    readonly property int inspectorHeaderSpacing: 11
+    readonly property int inspectorHeaderIconSize: 34
+    readonly property int inspectorHeaderIconRadius: 9
+    readonly property int inspectorHeaderGlyphSize: 15
+    readonly property int inspectorCloseDiameter: 24
+    readonly property int inspectorCloseGlyphSize: 11
+    readonly property int inspectorTabBarInset: 12
+    readonly property int inspectorTabBarPaddingBottom: 10
     // The reader's top title and progress capsule.
     readonly property int readerInfoCapsulePaddingHorizontal: 16
     readonly property int readerInfoCapsulePaddingVertical: 6

@@ -13,6 +13,9 @@ FormRow {
 
     property bool checked: false
 
+    // The object name of the switch, for tests that drive the control.
+    property alias controlName: control.objectName
+
     signal toggled(bool checked)
 
     accessoryItem: control.indicator
@@ -23,6 +26,11 @@ FormRow {
         small: row.compact
         checked: row.checked
         Accessible.name: row.label
-        onToggled: row.toggled(checked)
+        // The switch stays bound to `checked`, so a change the page does not
+        // store springs back.
+        onToggled: {
+            row.toggled(checked)
+            checked = Qt.binding(() => row.checked)
+        }
     }
 }

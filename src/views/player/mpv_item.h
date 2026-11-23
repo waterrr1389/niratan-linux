@@ -67,6 +67,10 @@ class MpvItem : public QQuickFramebufferObject {
                    subtitleDelayChanged)
     Q_PROPERTY(qreal audioDelay READ audioDelay WRITE setAudioDelay NOTIFY audioDelayChanged)
     Q_PROPERTY(bool looping READ looping WRITE setLooping NOTIFY loopingChanged)
+    // VideoAspectRatio.rawValue: "-1" automatic, otherwise "16:9", "4:3",
+    // "1:1" or "21:9". Written to mpv's video-aspect-override and kept across
+    // a file change.
+    Q_PROPERTY(QString aspectRatio READ aspectRatio WRITE setAspectRatio NOTIFY aspectRatioChanged)
     Q_PROPERTY(QString error READ error NOTIFY errorChanged)
     Q_PROPERTY(QVariantList chapters READ chapters NOTIFY chaptersChanged)
     Q_PROPERTY(QVariantList tracks READ tracks NOTIFY tracksChanged)
@@ -107,6 +111,8 @@ class MpvItem : public QQuickFramebufferObject {
     void setAudioDelay(qreal delay);
     bool looping() const;
     void setLooping(bool looping);
+    QString aspectRatio() const;
+    void setAspectRatio(const QString& aspectRatio);
     QString error() const;
     QVariantList chapters() const;
     QVariantList tracks() const;
@@ -132,6 +138,9 @@ class MpvItem : public QQuickFramebufferObject {
     Q_INVOKABLE void seekToChapter(int index);
     Q_INVOKABLE bool loadExternalSubtitle(const QUrl& file);
     Q_INVOKABLE void selectSubtitleTrack(int id);
+    // Audio and video track selection by mpv's type spelling; 0 turns the
+    // track off. Subtitle selection keeps its remembering call sites.
+    Q_INVOKABLE void selectTrack(const QString& type, int id);
     Q_INVOKABLE void extractTranscript();
     Q_INVOKABLE void disableSubtitles();
     // Reports whether mpv accepted the asynchronous request.
@@ -169,6 +178,7 @@ class MpvItem : public QQuickFramebufferObject {
     void subtitleDelayChanged();
     void audioDelayChanged();
     void loopingChanged();
+    void aspectRatioChanged();
     void errorChanged();
     void ended();
     void chapterChanged(int index);
@@ -226,6 +236,7 @@ class MpvItem : public QQuickFramebufferObject {
     qreal subtitle_delay_ = 0.0;
     qreal audio_delay_ = 0.0;
     bool looping_ = false;
+    QString aspect_ratio_ = QStringLiteral("-1");
     QString error_;
     niratan::player::ABLoop ab_loop_;
     int chapter_index_ = -1;

@@ -50,7 +50,7 @@ Item {
     readonly property bool chromeShown: mpv.loaded
         && (page.chromeVisible || mpv.paused || page.barHovered
             || page.scrubbing || page.speedPanelOpen || page.studyOpen
-            || lookupLayer.hasPopup)
+            || page.inspectorOpen || lookupLayer.hasPopup)
     readonly property bool fullScreen: page.Window.window
         ? page.Window.window.visibility === Window.FullScreen
         : false
@@ -62,6 +62,8 @@ Item {
     property bool speedPanelOpen: false
     property bool speedPanelHovered: false
     property bool studyOpen: false
+    // The Inspector panel: VideoPlayerScreen.isInspectorVisible.
+    property bool inspectorOpen: false
     property string osdTitle: ""
     property string osdValue: ""
     property real osdMeter: -1
@@ -147,7 +149,7 @@ Item {
     }
 
     function scheduleHide() {
-        if (!mpv.loaded || page.studyOpen) {
+        if (!mpv.loaded || page.studyOpen || page.inspectorOpen) {
             hideTimer.stop()
             return
         }
@@ -156,7 +158,7 @@ Item {
 
     function handleHideTimeout() {
         if (page.barHovered || page.speedPanelHovered || page.scrubbing || mpv.paused
-                || page.speedPanelOpen || lookupLayer.hasPopup)
+                || page.speedPanelOpen || page.inspectorOpen || lookupLayer.hasPopup)
             return
         if (page.speedPanelOpen)
             page.speedPanelOpen = false
@@ -236,6 +238,57 @@ Item {
 
     function adjustAudioDelay(delta) {
         page.setAudioDelay(mpv.audioDelay + delta)
+    }
+
+    // VideoPlayerScreen.setSubtitleDelayWithOSD: the Inspector changes the
+    // delay before a file is loaded, so these actions skip the loaded guard
+    // the shortcut actions keep (Decision).
+    function applySubtitleDelay(value) {
+        var delay = Math.max(-60, Math.min(60, value))
+        mpv.subtitleDelay = delay
+        page.showOSD(qsTr("Subtitle Delay"), page.formatDelay(delay))
+    }
+
+    function applyAudioDelay(value) {
+        var delay = Math.max(-30, Math.min(30, value))
+        mpv.audioDelay = delay
+        page.showOSD(qsTr("Audio Delay"), page.formatDelay(delay))
+    }
+
+    // PlayerInspectorPanel.selectTrackRequested: sub goes through the
+    // remembering subtitle calls, audio and video set vid/aid.
+    function applyTrackSelection(type, id) {
+        if (type === "sub") {
+            if (id > 0) {
+                mpv.selectSubtitleTrack(id)
+                mpv.subtitlesVisible = true
+            } else {
+                mpv.disableSubtitles()
+            }
+        } else if (type === "audio" || type === "video") {
+            mpv.selectTrack(type, id)
+        }
+    }
+
+    // The Inspector mirrors mpv's snapshot; the page pushes it on every
+    // signal the panel shows.
+    function syncInspectorState() {
+        inspectorModel.setPlaybackState(mpv.speed, mpv.subtitleDelay, mpv.audioDelay)
+    }
+
+    function toggleInspector() {
+        if (page.inspectorOpen) {
+            page.inspectorOpen = false
+            page.forceActiveFocus()
+            page.notePointerMovement()
+            return
+        }
+        inspectorModel.setVideo(page.videoFile, "")
+        inspectorModel.setTracks(mpv.tracks)
+        page.syncInspectorState()
+        page.inspectorOpen = true
+        page.chromeVisible = true
+        page.notePointerMovement()
     }
 
     function toggleSubtitles() {
@@ -324,6 +377,7 @@ Item {
     // never shows its title, panels or alert.
     function resetVideoState() {
         page.pendingSubtitleUrl = ""
+        page.inspectorOpen = false
         page.studyOpen = false
         page.speedPanelOpen = false
         page.speedPanelHovered = false
@@ -341,6 +395,7 @@ Item {
         page.exitFullScreen()
         mpv.unload()
         page.videoFile = ""
+        inspectorModel.setVideo("", "")
         page.resetVideoState()
     }
 
@@ -364,7 +419,11 @@ Item {
     function openVideo(url, fromBeginning) {
         if (!url || url.toString().length === 0)
             return
+        // VideoPlayerScreen+Opening.openPlaylistEpisode leaves the Inspector
+        // open; resetVideoState closes it for unloads and fresh opens.
+        const keepInspector = page.inspectorOpen
         page.resetVideoState()
+        page.inspectorOpen = keepInspector
         page.pendingSubtitleUrl = ""
         page.speedPanelOpen = false
         page.speedPanelHovered = false
@@ -374,6 +433,9 @@ Item {
         osdTimer.stop()
         page.videoFile = url
         studyModel.setVideo(url)
+        inspectorModel.setVideo(url, "")
+        inspectorModel.setTracks(mpv.tracks)
+        page.syncInspectorState()
         page.forceActiveFocus()
         mpv.open(url, fromBeginning === true)
         page.notePointerMovement()
@@ -517,6 +579,11 @@ Item {
         message: miningModel.toastMessage
     }
 
+    PlayerInspectorViewModel {
+        id: inspectorModel
+        objectName: "inspectorModel"
+    }
+
     PlayerStudyViewModel {
         id: studyModel
         chapters: mpv.chapters
@@ -536,6 +603,7 @@ Item {
 
     StudySidebar {
         id: studySidebar
+        objectName: "studySidebar"
         visible: page.studyOpen
         anchors.top: page.top
         anchors.right: page.right
@@ -605,12 +673,15 @@ Item {
 
         MpvItem {
             id: mpv
+            objectName: "mpvItem"
             anchors.fill: parent
 
             onErrorChanged: videoErrorDialog.showError(mpv.error)
             onSubtitleLoadFailed: page.showSubtitleLoadError()
             onLoadedChanged: {
                 studyModel.setPlaybackReady(mpv.loaded)
+                inspectorModel.setTracks(mpv.tracks)
+                page.syncInspectorState()
                 if (!mpv.loaded)
                     return
                 if (page.pendingSubtitleUrl.toString().length > 0) {
@@ -626,8 +697,16 @@ Item {
                 page.notePointerMovement()
             }
             onPositionChanged: studyModel.updatePlayback(mpv.position, mpv.subtitleDelay)
-            onSubtitleDelayChanged: studyModel.updatePlayback(mpv.position, mpv.subtitleDelay)
-            onTracksChanged: studyModel.setTracks(mpv.tracks)
+            onSubtitleDelayChanged: {
+                studyModel.updatePlayback(mpv.position, mpv.subtitleDelay)
+                page.syncInspectorState()
+            }
+            onTracksChanged: {
+                studyModel.setTracks(mpv.tracks)
+                inspectorModel.setTracks(mpv.tracks)
+            }
+            onSpeedChanged: page.syncInspectorState()
+            onAudioDelayChanged: page.syncInspectorState()
             onVideoSettingsChanged: studyModel.refreshHistory()
             onSubtitlesVisibleChanged: studyModel.setSubtitlesVisible(mpv.subtitlesVisible)
             onSubtitleCueChanged: studyModel.updateNativeCue(mpv.subtitleText, mpv.subtitleStart,
@@ -680,8 +759,19 @@ Item {
         parent: stage
         enabled: mpv.loaded
         exclusiveSignals: TapHandler.SingleTap | TapHandler.DoubleTap
-        onSingleTapped: page.togglePause()
-        onDoubleTapped: page.toggleFullScreen()
+        onSingleTapped: {
+            if (page.inspectorOpen) {
+                page.inspectorOpen = false
+                page.forceActiveFocus()
+                page.notePointerMovement()
+                return
+            }
+            page.togglePause()
+        }
+        onDoubleTapped: {
+            if (!page.inspectorOpen)
+                page.toggleFullScreen()
+        }
     }
 
     PlayerEmptyState {
@@ -709,6 +799,7 @@ Item {
         id: controlBar
 
         objectName: "videoControlBar"
+        z: 2
         anchors.horizontalCenter: stage.horizontalCenter
         y: page.compactChrome
            ? Math.max(0, stage.height - controlBar.height)
@@ -731,6 +822,7 @@ Item {
         studyOpen: page.studyOpen
         isFullScreen: page.fullScreen
         speedPanelOpen: page.speedPanelOpen
+        inspectorOpen: page.inspectorOpen
 
         onTogglePlaybackRequested: page.togglePause()
         onVolumeChangeRequested: function (value) {
@@ -756,8 +848,7 @@ Item {
         }
         onOpenVideoRequested: openMenu.popup()
         onMineSubtitleRequested: studyModel.mineCurrentSubtitle()
-        onCycleSubtitlesRequested: page.cycleSubtitles()
-        onOpenSettingsRequested: videoSettings.open()
+        onToggleInspectorRequested: page.toggleInspector()
         onToggleFullScreenRequested: page.toggleFullScreen()
         onScrubStarted: function (seconds) {
             page.scrubbing = true
@@ -806,15 +897,6 @@ Item {
     // Popups are not items, so the page exposes item handles that mirror their
     // visibility and forward close(), for tests and for the bar wiring.
     Item {
-        objectName: "videoSettingsPanel"
-        visible: videoSettings.visible
-
-        function close() {
-            videoSettings.close()
-        }
-    }
-
-    Item {
         objectName: "videoOpenMenu"
         visible: openMenu.visible
 
@@ -823,14 +905,42 @@ Item {
         }
     }
 
-    VideoSettingsPanel {
-        id: videoSettings
+    VideoInspectorPanel {
+        id: inspectorPanel
 
         engine: mpv
-        anchors.centerIn: parent
-        width: Math.min(560, page.width)
-        height: Math.min(690, page.height)
-        onClosed: page.forceActiveFocus()
+        model: inspectorModel
+        open: page.inspectorOpen
+        z: 1
+        anchors.top: stage.top
+        anchors.right: stage.right
+        anchors.topMargin: Theme.inspectorOverlayInset
+        anchors.rightMargin: Theme.inspectorOverlayInset
+        maximumWidth: stage.width - 2 * Theme.inspectorOverlayInset
+        // VideoPlayerScreen.inspectorOverlayBottomInset over the rendered bar
+        // (Decision D3); the panel follows its content up to that room.
+        maximumHeight: stage.height - Theme.inspectorOverlayInset - (page.compactChrome
+            ? controlBar.height + Theme.inspectorOverlayBarGap
+            : Theme.inspectorOverlayInset + Theme.inspectorFloatingBarInset
+              + controlBar.height + Theme.inspectorOverlayBarGap)
+
+        onCloseRequested: {
+            page.inspectorOpen = false
+            page.forceActiveFocus()
+            page.notePointerMovement()
+        }
+        onSelectEpisodeRequested: function (url) { page.openVideo(url, false) }
+        onSelectTrackRequested: function (type, id) { page.applyTrackSelection(type, id) }
+        onSpeedRequested: function (value) { page.setSpeed(value) }
+        onSubtitleDelayRequested: function (seconds) { page.applySubtitleDelay(seconds) }
+        onAudioDelayRequested: function (seconds) { page.applyAudioDelay(seconds) }
+        onOpenSubtitleFileRequested: function (file) { page.loadSubtitle(file) }
+        onOpenTranscriptRequested: {
+            studySidebar.selectedTab = 1
+            page.studyOpen = true
+            page.inspectorOpen = false
+            page.forceActiveFocus()
+        }
     }
 
     VideoOpenMenu {

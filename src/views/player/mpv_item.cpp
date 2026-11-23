@@ -260,6 +260,20 @@ void MpvItem::setLooping(bool looping) {
     emit loopingChanged();
 }
 
+QString MpvItem::aspectRatio() const {
+    return aspect_ratio_;
+}
+
+void MpvItem::setAspectRatio(const QString& aspectRatio) {
+    const QString value = aspectRatio.isEmpty() ? QStringLiteral("-1") : aspectRatio;
+    if (aspect_ratio_ == value) {
+        return;
+    }
+    aspect_ratio_ = value;
+    set_property("video-aspect-override", aspect_ratio_);
+    emit aspectRatioChanged();
+}
+
 QString MpvItem::error() const {
     return error_;
 }
@@ -354,6 +368,7 @@ void MpvItem::replace_file(const QUrl& file, bool from_beginning) {
     }
     set_subtitle_cue({}, -1.0, -1.0);
     set_property("video-rotate", 0);
+    set_property("video-aspect-override", aspect_ratio_);
     set_property("sid", QStringLiteral("no"));
     setSubtitlesVisible(true);
 
@@ -492,6 +507,17 @@ bool MpvItem::screenshot(const QUrl& file) {
     const char* args[] = {"screenshot-to-file", path.constData(), "video", nullptr};
     // A capture can wait for the render thread; do not block the GUI thread.
     return mpv_command_async(handle_, 0, args) >= 0;
+}
+
+void MpvItem::selectTrack(const QString& type, int id) {
+    // Subtitle selection keeps its remembering path; the page calls
+    // selectSubtitleTrack or disableSubtitles for it.
+    const QString value = id > 0 ? QString::number(id) : QStringLiteral("no");
+    if (type == QStringLiteral("video")) {
+        set_property("vid", value);
+    } else if (type == QStringLiteral("audio")) {
+        set_property("aid", value);
+    }
 }
 
 void MpvItem::toggleSubtitles() {

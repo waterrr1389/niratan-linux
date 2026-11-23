@@ -28,8 +28,8 @@
 //
 // The bar owns no playback state: the page supplies the snapshot through the
 // properties below and receives intents as signals. Swift's drag-to-move
-// surface and the screenshot, gap fast-forward and inspector controls are not
-// ported (Decisions).
+// surface and the screenshot and gap fast-forward controls are not ported
+// (Decisions); `inspectorOpen` marks the Inspector button active.
 //
 // `density` is "full", "condensed" or "minimal"; `interactive` is true only
 // while the bar accepts pointer input; `trackWidth` is the timeline's drawable
@@ -66,6 +66,7 @@ Item {
     property bool studyOpen: false
     property bool isFullScreen: false
     property bool speedPanelOpen: false
+    property bool inspectorOpen: false
     property var chapters: []
 
     readonly property bool compactLayout: bar.layoutMode === "compactBottom"
@@ -106,8 +107,7 @@ Item {
     signal toggleStudyRequested()
     signal openVideoRequested()
     signal mineSubtitleRequested()
-    signal cycleSubtitlesRequested()
-    signal openSettingsRequested()
+    signal toggleInspectorRequested()
     signal toggleFullScreenRequested()
     signal barHoverChanged(bool hovered)
     signal speedPanelHoverChanged(bool hovered)
@@ -317,11 +317,11 @@ Item {
                     studyOpen: bar.studyOpen
                     canMine: bar.canMine
                     isFullScreen: bar.isFullScreen
+                    inspectorOpen: bar.inspectorOpen
                     onToggleStudyRequested: bar.toggleStudyRequested()
                     onOpenVideoRequested: bar.openVideoRequested()
                     onMineSubtitleRequested: bar.mineSubtitleRequested()
-                    onCycleSubtitlesRequested: bar.cycleSubtitlesRequested()
-                    onOpenSettingsRequested: bar.openSettingsRequested()
+                    onToggleInspectorRequested: bar.toggleInspectorRequested()
                     onToggleFullScreenRequested: bar.toggleFullScreenRequested()
                 }
             }
@@ -390,11 +390,11 @@ Item {
                 studyOpen: bar.studyOpen
                 canMine: bar.canMine
                 isFullScreen: bar.isFullScreen
+                inspectorOpen: bar.inspectorOpen
                 onToggleStudyRequested: bar.toggleStudyRequested()
                 onOpenVideoRequested: bar.openVideoRequested()
                 onMineSubtitleRequested: bar.mineSubtitleRequested()
-                onCycleSubtitlesRequested: bar.cycleSubtitlesRequested()
-                onOpenSettingsRequested: bar.openSettingsRequested()
+                onToggleInspectorRequested: bar.toggleInspectorRequested()
                 onToggleFullScreenRequested: bar.toggleFullScreenRequested()
             }
         }

@@ -197,17 +197,16 @@ struct BarCase {
 
 const QStringList kUtilityButtons{
     QStringLiteral("miningHistoryButton"), QStringLiteral("openVideoButton"),
-    QStringLiteral("mineSubtitleButton"),  QStringLiteral("cycleSubtitlesButton"),
-    QStringLiteral("videoSettingsButton"), QStringLiteral("fullScreenButton"),
+    QStringLiteral("mineSubtitleButton"),  QStringLiteral("inspectorButton"),
+    QStringLiteral("fullScreenButton"),
 };
 
 const QStringList kFullDensityButtons{
     QStringLiteral("miningHistoryButton"), QStringLiteral("openVideoButton"),
-    QStringLiteral("mineSubtitleButton"),  QStringLiteral("cycleSubtitlesButton"),
-    QStringLiteral("videoSettingsButton"), QStringLiteral("fullScreenButton"),
-    QStringLiteral("volumeButton"),        QStringLiteral("previousButton"),
-    QStringLiteral("nextButton"),          QStringLiteral("playButton"),
-    QStringLiteral("speedButton"),
+    QStringLiteral("mineSubtitleButton"),  QStringLiteral("inspectorButton"),
+    QStringLiteral("fullScreenButton"),    QStringLiteral("volumeButton"),
+    QStringLiteral("previousButton"),      QStringLiteral("nextButton"),
+    QStringLiteral("playButton"),          QStringLiteral("speedButton"),
 };
 
 void verify_density_cases(QQmlApplicationEngine& engine, const QString& layout,
@@ -272,28 +271,25 @@ void PlayerControlsTest::floating_groups_follow_the_density() {
 
     QTRY_COMPARE(bar->property("density").toString(), QStringLiteral("full"));
     QVERIFY(shown(bar, QStringLiteral("videoProgressStrip")));
-    QVERIFY2(named_in_order(
-                 bar,
-                 {QStringLiteral("volumeButton"), QStringLiteral("previousButton"),
-                  QStringLiteral("playButton"), QStringLiteral("nextButton"),
-                  QStringLiteral("speedButton"), QStringLiteral("miningHistoryButton"),
-                  QStringLiteral("openVideoButton"), QStringLiteral("mineSubtitleButton"),
-                  QStringLiteral("cycleSubtitlesButton"), QStringLiteral("videoSettingsButton"),
-                  QStringLiteral("fullScreenButton")}) ==
-                 QStringList(
-                     {QStringLiteral("volumeButton"), QStringLiteral("previousButton"),
-                      QStringLiteral("playButton"), QStringLiteral("nextButton"),
-                      QStringLiteral("speedButton"), QStringLiteral("miningHistoryButton"),
-                      QStringLiteral("openVideoButton"), QStringLiteral("mineSubtitleButton"),
-                      QStringLiteral("cycleSubtitlesButton"), QStringLiteral("videoSettingsButton"),
-                      QStringLiteral("fullScreenButton")}),
-             "the lower row clusters are out of order");
+    QVERIFY2(
+        named_in_order(bar,
+                       {QStringLiteral("volumeButton"), QStringLiteral("previousButton"),
+                        QStringLiteral("playButton"), QStringLiteral("nextButton"),
+                        QStringLiteral("speedButton"), QStringLiteral("miningHistoryButton"),
+                        QStringLiteral("openVideoButton"), QStringLiteral("mineSubtitleButton"),
+                        QStringLiteral("inspectorButton"), QStringLiteral("fullScreenButton")}) ==
+            QStringList({QStringLiteral("volumeButton"), QStringLiteral("previousButton"),
+                         QStringLiteral("playButton"), QStringLiteral("nextButton"),
+                         QStringLiteral("speedButton"), QStringLiteral("miningHistoryButton"),
+                         QStringLiteral("openVideoButton"), QStringLiteral("mineSubtitleButton"),
+                         QStringLiteral("inspectorButton"), QStringLiteral("fullScreenButton")}),
+        "the lower row clusters are out of order");
     for (const QString& name : kFullDensityButtons) {
         QVERIFY2(shown(bar, name), qPrintable(name + QStringLiteral(" is missing at full")));
     }
     for (const QString& name :
-         {QStringLiteral("screenshotButton"), QStringLiteral("inspectorButton"),
-          QStringLiteral("gapFastForwardButton")}) {
+         {QStringLiteral("screenshotButton"), QStringLiteral("cycleSubtitlesButton"),
+          QStringLiteral("videoSettingsButton"), QStringLiteral("gapFastForwardButton")}) {
         QVERIFY2(item_named(bar, name) == nullptr, qPrintable(name + QStringLiteral(" is built")));
     }
 
@@ -302,8 +298,8 @@ void PlayerControlsTest::floating_groups_follow_the_density() {
     for (const QString& name :
          {QStringLiteral("previousButton"), QStringLiteral("playButton"),
           QStringLiteral("nextButton"), QStringLiteral("speedButton"),
-          QStringLiteral("openVideoButton"), QStringLiteral("cycleSubtitlesButton"),
-          QStringLiteral("videoSettingsButton"), QStringLiteral("fullScreenButton")}) {
+          QStringLiteral("openVideoButton"), QStringLiteral("inspectorButton"),
+          QStringLiteral("fullScreenButton")}) {
         QVERIFY2(shown(bar, name), qPrintable(name + QStringLiteral(" is missing condensed")));
     }
     for (const QString& name :
@@ -317,16 +313,14 @@ void PlayerControlsTest::floating_groups_follow_the_density() {
     bar->setProperty("availableWidth", 421.0);
     QTRY_COMPARE(bar->property("density").toString(), QStringLiteral("minimal"));
     QTRY_COMPARE(close_spy.count(), 1);
-    for (const QString& name :
-         {QStringLiteral("previousButton"), QStringLiteral("playButton"),
-          QStringLiteral("nextButton"), QStringLiteral("cycleSubtitlesButton"),
-          QStringLiteral("videoSettingsButton"), QStringLiteral("fullScreenButton")}) {
+    for (const QString& name : {QStringLiteral("previousButton"), QStringLiteral("playButton"),
+                                QStringLiteral("nextButton"), QStringLiteral("fullScreenButton")}) {
         QVERIFY2(shown(bar, name), qPrintable(name + QStringLiteral(" is missing minimal")));
     }
     for (const QString& name :
          {QStringLiteral("speedButton"), QStringLiteral("openVideoButton"),
           QStringLiteral("volumeButton"), QStringLiteral("miningHistoryButton"),
-          QStringLiteral("mineSubtitleButton")}) {
+          QStringLiteral("mineSubtitleButton"), QStringLiteral("inspectorButton")}) {
         QVERIFY2(!shown(bar, name), qPrintable(name + QStringLiteral(" stays minimal")));
     }
 }
@@ -353,8 +347,8 @@ void PlayerControlsTest::compact_groups_follow_the_density() {
         QStringLiteral("nextButton"),          QStringLiteral("volumeButton"),
         QStringLiteral("compactTime"),         QStringLiteral("speedButton"),
         QStringLiteral("miningHistoryButton"), QStringLiteral("openVideoButton"),
-        QStringLiteral("mineSubtitleButton"),  QStringLiteral("cycleSubtitlesButton"),
-        QStringLiteral("videoSettingsButton"), QStringLiteral("fullScreenButton"),
+        QStringLiteral("mineSubtitleButton"),  QStringLiteral("inspectorButton"),
+        QStringLiteral("fullScreenButton"),
     };
     QVERIFY2(named_in_order(bar, compact_row) == compact_row,
              "the compact full row is out of order");
@@ -371,8 +365,8 @@ void PlayerControlsTest::compact_groups_follow_the_density() {
     for (const QString& name :
          {QStringLiteral("previousButton"), QStringLiteral("playButton"),
           QStringLiteral("nextButton"), QStringLiteral("speedButton"),
-          QStringLiteral("openVideoButton"), QStringLiteral("cycleSubtitlesButton"),
-          QStringLiteral("videoSettingsButton"), QStringLiteral("fullScreenButton")}) {
+          QStringLiteral("openVideoButton"), QStringLiteral("inspectorButton"),
+          QStringLiteral("fullScreenButton")}) {
         QVERIFY2(shown(bar, name),
                  qPrintable(name + QStringLiteral(" is missing compact condensed")));
     }
@@ -381,15 +375,14 @@ void PlayerControlsTest::compact_groups_follow_the_density() {
 
     bar->setProperty("availableWidth", 389.0);
     QTRY_COMPARE(bar->property("density").toString(), QStringLiteral("minimal"));
-    for (const QString& name :
-         {QStringLiteral("previousButton"), QStringLiteral("playButton"),
-          QStringLiteral("nextButton"), QStringLiteral("cycleSubtitlesButton"),
-          QStringLiteral("videoSettingsButton"), QStringLiteral("fullScreenButton")}) {
+    for (const QString& name : {QStringLiteral("previousButton"), QStringLiteral("playButton"),
+                                QStringLiteral("nextButton"), QStringLiteral("fullScreenButton")}) {
         QVERIFY2(shown(bar, name),
                  qPrintable(name + QStringLiteral(" is missing compact minimal")));
     }
-    QVERIFY2(!shown(bar, QStringLiteral("speedButton")),
-             "the speed pill stays in the compact full and condensed groups");
+    for (const QString& name : {QStringLiteral("speedButton"), QStringLiteral("inspectorButton")}) {
+        QVERIFY2(!shown(bar, name), qPrintable(name + QStringLiteral(" stays in compact minimal")));
+    }
 }
 
 // B2: VideoTimeFormatter.string and remainingTimeText.
@@ -568,20 +561,24 @@ void PlayerControlsTest::utility_group_order_and_signals() {
     QSignalSpy study_spy(utility, SIGNAL(toggleStudyRequested()));
     QSignalSpy open_spy(utility, SIGNAL(openVideoRequested()));
     QSignalSpy mine_spy(utility, SIGNAL(mineSubtitleRequested()));
-    QSignalSpy subtitle_spy(utility, SIGNAL(cycleSubtitlesRequested()));
-    QSignalSpy settings_spy(utility, SIGNAL(openSettingsRequested()));
+    QSignalSpy inspector_spy(utility, SIGNAL(toggleInspectorRequested()));
     QSignalSpy full_screen_spy(utility, SIGNAL(toggleFullScreenRequested()));
 
     click(item_named(utility, QStringLiteral("miningHistoryButton")));
     click(item_named(utility, QStringLiteral("openVideoButton")));
     click(item_named(utility, QStringLiteral("mineSubtitleButton")));
-    click(item_named(utility, QStringLiteral("cycleSubtitlesButton")));
-    click(item_named(utility, QStringLiteral("videoSettingsButton")));
+    click(item_named(utility, QStringLiteral("inspectorButton")));
     QCOMPARE(study_spy.count(), 1);
     QCOMPARE(open_spy.count(), 1);
     QCOMPARE(mine_spy.count(), 1);
-    QCOMPARE(subtitle_spy.count(), 1);
-    QCOMPARE(settings_spy.count(), 1);
+    QCOMPARE(inspector_spy.count(), 1);
+
+    utility->setProperty("inspectorOpen", true);
+    QTRY_VERIFY(
+        item_named(utility, QStringLiteral("inspectorButton"))->property("active").toBool());
+    utility->setProperty("inspectorOpen", false);
+    QTRY_VERIFY(
+        !item_named(utility, QStringLiteral("inspectorButton"))->property("active").toBool());
 
     QQuickItem* full_screen = item_named(utility, QStringLiteral("fullScreenButton"));
     QVERIFY(full_screen != nullptr);
@@ -799,13 +796,10 @@ void PlayerControlsTest::page_hosts_the_bar_and_wires_the_actions() {
     QTRY_COMPARE(bar->property("videoFileSet").toBool(), true);
     QVERIFY2(!bar->isVisible(), "the bar shows before playback chrome is up");
 
-    QVERIFY(QMetaObject::invokeMethod(item_named(bar, QStringLiteral("videoSettingsButton")),
-                                      "clicked"));
-    QTRY_VERIFY(item_named(video_window->contentItem(), QStringLiteral("videoSettingsPanel"))
-                    ->property("visible")
-                    .toBool());
-    QVERIFY(QMetaObject::invokeMethod(
-        item_named(video_window->contentItem(), QStringLiteral("videoSettingsPanel")), "close"));
+    QVERIFY(item_named(bar, QStringLiteral("inspectorButton")) != nullptr);
+    QVERIFY2(item_named(video_window->contentItem(), QStringLiteral("videoInspectorPanel")) !=
+                 nullptr,
+             "the player does not host the Inspector panel");
 
     QVERIFY(
         QMetaObject::invokeMethod(item_named(bar, QStringLiteral("openVideoButton")), "clicked"));
@@ -828,9 +822,6 @@ void PlayerControlsTest::page_hosts_the_bar_and_wires_the_actions() {
     QVERIFY(
         QMetaObject::invokeMethod(item_named(bar, QStringLiteral("fullScreenButton")), "clicked"));
     QTRY_COMPARE(int(video_window->visibility()), int(QWindow::Windowed));
-
-    QVERIFY(QMetaObject::invokeMethod(item_named(bar, QStringLiteral("cycleSubtitlesButton")),
-                                      "clicked"));
 }
 
 // B7: the interim stack controls are gone; the keyboard shortcuts stay.
@@ -898,8 +889,8 @@ void PlayerControlsTest::bar_glyphs_keep_their_size() {
          {QStringLiteral("volumeButton"), QStringLiteral("previousButton"),
           QStringLiteral("playButton"), QStringLiteral("nextButton"),
           QStringLiteral("miningHistoryButton"), QStringLiteral("openVideoButton"),
-          QStringLiteral("mineSubtitleButton"), QStringLiteral("cycleSubtitlesButton"),
-          QStringLiteral("videoSettingsButton"), QStringLiteral("fullScreenButton")}) {
+          QStringLiteral("mineSubtitleButton"), QStringLiteral("inspectorButton"),
+          QStringLiteral("fullScreenButton")}) {
         QQuickItem* button = item_named(bar, name);
         QVERIFY2(button != nullptr, qPrintable(name));
         auto* content = qvariant_cast<QQuickItem*>(button->property("contentItem"));

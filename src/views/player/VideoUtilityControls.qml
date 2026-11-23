@@ -6,19 +6,19 @@
 // `minimalControlGroup`, with `VideoPlayerScreen.toggleFullScreen`.
 //
 // Order at full density: Mining History, Open Video, Mine Current Subtitle,
-// the subtitle cycle, Video Settings, Full Screen. Condensed keeps the episode
-// group (drawn by VideoTransportControls), the speed pill, Open Video, the
-// subtitle cycle, Video Settings and Full Screen; minimal drops the speed pill
-// and Open Video. Swift's screenshot, inspector and subtitle gap fast-forward
-// buttons are not built; the subtitle cycle and Video Settings take their place
-// until the inspector lands (Decision). Mining History is active while the
-// study sidebar is open; Mine Current Subtitle follows `canMine`. The
-// full-screen glyph enters from windowed and leaves from full screen.
+// Inspector, Full Screen. Condensed keeps the episode group (drawn by
+// VideoTransportControls), the speed pill, Open Video, Inspector and Full
+// Screen; minimal drops all but the episode group and Full Screen, so the
+// Inspector button is absent there, as in Swift's `minimalControlGroup`.
+// Swift's screenshot and subtitle gap fast-forward buttons are not built.
+// Mining History is active while the study sidebar is open; Mine Current
+// Subtitle follows `canMine`; Inspector is active while its panel is open.
+// The full-screen glyph enters from windowed and leaves from full screen.
 //
 // Object names: miningHistoryButton, openVideoButton, mineSubtitleButton,
-// cycleSubtitlesButton, videoSettingsButton, fullScreenButton; the full-screen
-// glyph is fullScreenIcon and switches between arrows-out and arrows-in. Every
-// button carries a `tip` string; Mining History exposes `active`.
+// inspectorButton, fullScreenButton; the full-screen glyph is fullScreenIcon
+// and switches between arrows-out and arrows-in. Every button carries a `tip`
+// string; Mining History and Inspector expose `active`.
 pragma ComponentBehavior: Bound
 
 import QtQuick
@@ -35,6 +35,7 @@ Item {
     property bool studyOpen: false
     property bool canMine: false
     property bool isFullScreen: false
+    property bool inspectorOpen: false
 
     implicitWidth: row.implicitWidth
     implicitHeight: row.implicitHeight
@@ -42,8 +43,7 @@ Item {
     signal toggleStudyRequested()
     signal openVideoRequested()
     signal mineSubtitleRequested()
-    signal cycleSubtitlesRequested()
-    signal openSettingsRequested()
+    signal toggleInspectorRequested()
     signal toggleFullScreenRequested()
 
     component UtilityButton: Button {
@@ -51,6 +51,7 @@ Item {
 
         property string tip
         property string symbol
+        property string glyphName
         property bool active: false
 
         implicitWidth: 32
@@ -65,6 +66,7 @@ Item {
         Accessible.name: button.tip
 
         contentItem: Icon {
+            objectName: button.glyphName
             name: button.symbol
             size: 18
             color: button.active ? Theme.accent : Theme.textPrimary
@@ -111,17 +113,13 @@ Item {
         }
 
         UtilityButton {
-            objectName: "cycleSubtitlesButton"
-            tip: qsTr("Cycle Subtitle Track (S)")
-            symbol: "exclamationmark.bubble"
-            onClicked: utility.cycleSubtitlesRequested()
-        }
-
-        UtilityButton {
-            objectName: "videoSettingsButton"
-            tip: qsTr("Video Settings")
-            symbol: "gearshape"
-            onClicked: utility.openSettingsRequested()
+            objectName: "inspectorButton"
+            tip: qsTr("Inspector")
+            symbol: "sidebar.trailing"
+            glyphName: "inspectorGlyph"
+            active: utility.inspectorOpen
+            visible: utility.density !== "minimal"
+            onClicked: utility.toggleInspectorRequested()
         }
 
         UtilityButton {

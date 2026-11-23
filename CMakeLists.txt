@@ -274,6 +274,12 @@ qt_add_qml_module(niratan_app
         src/views/components/FormSliderRow.qml
         src/views/components/FormStepperRow.qml
         src/views/components/FormToggleRow.qml
+        src/views/components/ChipButton.qml
+        src/views/components/FormChoiceRow.qml
+        src/views/components/GlyphButton.qml
+        src/views/components/IconTabBar.qml
+        src/views/components/InlineField.qml
+        src/views/components/StepperDisplay.qml
         src/views/components/GlassCapsule.qml
         src/views/components/GlassSurface.qml
         src/views/components/Icon.qml
@@ -461,18 +467,51 @@ qt_add_qml_module(niratan_app
         src/views/player/StudyLoopMarker.qml
         src/views/player/StudyTimelineRow.qml
         src/views/player/VideoOpenMenu.qml
-        src/views/player/VideoSettingsPanel.qml
         src/views/player/PlayerEmptyState.qml
         src/views/player/VideoControlBar.qml
         src/views/player/VideoProgressStrip.qml
         src/views/player/VideoTransportControls.qml
         src/views/player/VideoUtilityControls.qml
+        src/views/player/VideoInspectorPanel.qml
+        src/views/player/VideoInspectorSection.qml
+        src/views/player/VideoInspectorEpisodesTab.qml
+        src/views/player/VideoInspectorVideoTab.qml
+        src/views/player/VideoInspectorAudioTab.qml
+        src/views/player/VideoInspectorSubtitlesTab.qml
+        src/views/player/VideoInspectorSubtitleTiming.qml
+        src/views/player/VideoInspectorSubtitleAppearance.qml
+        src/views/player/VideoInspectorSpeedSection.qml
+        src/views/player/VideoInspectorTrackSection.qml
         src/views/player/VideoSpeedPanel.qml
         src/views/player/VideoVolumeControl.qml
         src/views/player/VideoLookupLayer.qml
         src/views/player/VideoLookupSurface.qml
         src/views/player/VideoSubtitleOverlay.qml
         src/views/player/VideoSubtitleText.qml
+        src/views/icons/phosphor/fill/video-fill.svg
+        src/views/icons/phosphor/regular/list-numbers.svg
+        src/views/icons/phosphor/regular/subtitles.svg
+        src/views/icons/phosphor/regular/picture-in-picture.svg
+        src/views/icons/phosphor/regular/repeat.svg
+        src/views/icons/phosphor/regular/arrows-left-right.svg
+        src/views/icons/phosphor/regular/cpu.svg
+        src/views/icons/phosphor/regular/sun-horizon.svg
+        src/views/icons/phosphor/regular/sun.svg
+        src/views/icons/phosphor/regular/circle-half.svg
+        src/views/icons/phosphor/regular/drop.svg
+        src/views/icons/phosphor/regular/faders.svg
+        src/views/icons/phosphor/regular/keyboard.svg
+        src/views/icons/phosphor/regular/text-b.svg
+        src/views/icons/phosphor/regular/textbox.svg
+        src/views/icons/phosphor/regular/rectangle-dashed.svg
+        src/views/icons/phosphor/regular/rectangle.svg
+        src/views/icons/phosphor/regular/text-align-left.svg
+        src/views/icons/phosphor/regular/minus.svg
+        src/views/icons/phosphor/regular/caret-double-left.svg
+        src/views/icons/phosphor/regular/caret-double-right.svg
+        src/views/icons/phosphor/regular/arrow-counter-clockwise.svg
+        src/views/icons/phosphor/regular/align-top-simple.svg
+        src/views/icons/phosphor/regular/align-bottom-simple.svg
         src/views/pages/ReaderPage.qml
         src/views/theme/ControlKitSheet.qml
         src/views/theme/Theme.qml

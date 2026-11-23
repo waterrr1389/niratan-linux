@@ -20,6 +20,9 @@ Item {
     id: scaffold
 
     property bool compact: false
+    // Keeps the scroll bar shown while the content overflows, for floating
+    // panels where it is the only sign that more lies below.
+    property bool persistentScrollBar: false
     // An item shown above the scroll area, compact panels only.
     property Item header: null
     default property alias content: columnItem.data
@@ -77,6 +80,7 @@ Item {
             id: bar
 
             visible: flick.contentHeight > flick.height
+            policy: scaffold.persistentScrollBar && visible ? ScrollBar.AlwaysOn : ScrollBar.AsNeeded
         }
 
         Column {

@@ -1,9 +1,10 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
-// Accent link text that opens `url` externally. Follows SwiftUI Link as in
+// Accent link text that opens `url` externally, or, without a url, a bare
+// action such as VideoInspectorView's VideoInspectorLinkButtonStyle Reset. Follows SwiftUI Link as in
 // Features/Settings/VideoSettingsView.swift (the Jimaku link in a row's label
 // position): the row label's font in the accent colour, underlined on hover,
-// with a pointing-hand cursor. The density follows the enclosing FormSection
+// with a pointing-hand cursor; secondary while disabled. The density follows the enclosing FormSection
 // unless set.
 import QtQuick
 import QtQuick.Templates as T
@@ -13,6 +14,8 @@ T.AbstractButton {
     id: control
 
     property url url
+    // Caption semibold, as VideoInspectorLinkButtonStyle draws a header action.
+    property bool small: false
     property bool compact: section ? (section as FormSection).compact : false
 
     readonly property Item section: {
@@ -29,7 +32,10 @@ T.AbstractButton {
 
     Accessible.role: Accessible.Link
 
-    onClicked: Qt.openUrlExternally(url)
+    onClicked: {
+        if (url.toString() !== "")
+            Qt.openUrlExternally(url)
+    }
 
     HoverHandler {
         cursorShape: Qt.PointingHandCursor
@@ -37,9 +43,9 @@ T.AbstractButton {
 
     contentItem: StyledLabel {
         text: control.text
-        textStyle: control.compact ? Theme.calloutFont : Theme.bodyFont
-        weight: control.compact ? Theme.weightRegular : Theme.weightMedium
-        color: Theme.accent
+        textStyle: control.small ? Theme.captionFont : control.compact ? Theme.calloutFont : Theme.bodyFont
+        weight: control.small ? Theme.weightSemibold : control.compact ? Theme.weightRegular : Theme.weightMedium
+        color: control.enabled ? Theme.accent : Theme.textSecondary
         font.underline: control.hovered || control.visualFocus
         elide: Text.ElideRight
     }
