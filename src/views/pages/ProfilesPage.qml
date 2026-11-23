@@ -8,9 +8,8 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
 import Niratan
-import "../icons/icon_map.js" as IconMap
 
-SettingsForm {
+PanelScaffold {
     id: page
 
     objectName: "settings-profiles"
@@ -42,90 +41,85 @@ SettingsForm {
         id: profilesModel
     }
 
-    SettingRow {
+    FormRow {
         visible: profilesModel.error.length > 0 && !editorDialog.opened
         label: profilesModel.error
 
-        Button {
+        FormButton {
             text: qsTr("Dismiss")
             onClicked: profilesModel.clearError()
         }
     }
 
-    SettingsCard {
+    FormSection {
         title: qsTr("Active Profile")
         footer: qsTr("Dictionary, reader appearance and Anki mining settings follow the active profile. Open pages keep the settings they already loaded until they load them again.")
 
         Repeater {
             model: profilesModel.profiles
 
-            delegate: ColumnLayout {
+            delegate: Column {
                 id: profileEntry
 
                 required property int index
                 required property var modelData
 
-                Layout.fillWidth: true
-                spacing: 0
+                width: parent ? parent.width : implicitWidth
 
-                SettingsSeparator { visible: profileEntry.index > 0 }
+                FormDivider { visible: profileEntry.index > 0 }
 
-                ItemDelegate {
-                    id: profileRow
-
-                    Layout.fillWidth: true
-                    Layout.leftMargin: 12
-                    Layout.rightMargin: 12
-                    leftPadding: 4
-                    rightPadding: 4
-                    implicitHeight: 46
-                    Accessible.name: profileEntry.modelData.name
-                    onClicked: profilesModel.activateProfile(profileEntry.modelData.id)
+                Item {
+                    width: profileEntry.width
+                    implicitHeight: profileRow.implicitHeight
 
                     TapHandler {
                         acceptedButtons: Qt.RightButton
                         onTapped: profileMenu.popup(profileRow)
                     }
 
-                    contentItem: RowLayout {
-                        spacing: Theme.spacingSm
+                    FormRow {
+                        id: profileRow
 
-                        Icon {
-                            size: 16
-                            name: profileEntry.modelData.active ? "checkmark.circle.fill" : "circle"
-                            color: profileEntry.modelData.active ? Theme.accent : Theme.textSecondary
-                        }
+                        label: profileEntry.modelData.name
+                        subtitle: profileEntry.modelData.language === "en" ? qsTr("English") : qsTr("Japanese")
+                        glyph: profileEntry.modelData.active ? "checkmark.circle.fill" : "circle"
+                        glyphColor: profileEntry.modelData.active ? Theme.accent : Theme.textSecondary
+                        clickable: true
+                        Accessible.role: Accessible.Button
+                        Accessible.name: profileEntry.modelData.name
+                        onTapped: profilesModel.activateProfile(profileEntry.modelData.id)
 
-                        ColumnLayout {
-                            Layout.fillWidth: true
-                            spacing: 2
+                        Row {
+                            spacing: Theme.capsuleSpacing
 
-                            Label {
-                                Layout.fillWidth: true
-                                text: profileEntry.modelData.name
-                                elide: Text.ElideRight
+                            StyledLabel {
+                                anchors.verticalCenter: parent.verticalCenter
+                                visible: profileEntry.modelData.builtIn
+                                text: qsTr("Built-in")
+                                textStyle: Theme.footnoteFont
+                                secondary: true
                             }
 
-                            SettingsNote {
-                                text: profileEntry.modelData.language === "en" ? qsTr("English") : qsTr("Japanese")
+                            // The menu button is a sibling so its tap does
+                            // not also activate the profile.
+                            Item {
+                                width: menuButton.width
+                                height: menuButton.height
                             }
                         }
+                    }
 
-                        SettingsNote {
-                            Layout.fillWidth: false
-                            visible: profileEntry.modelData.builtIn
-                            text: qsTr("Built-in")
-                        }
+                    GlyphButton {
+                        id: menuButton
 
-                        ToolButton {
-                            id: menuButton
-
-                            text: "\u22EF"
-                            Accessible.name: qsTr("Profile Actions")
-                            ToolTip.visible: hovered
-                            ToolTip.text: qsTr("Profile Actions")
-                            onClicked: profileMenu.popup(menuButton)
-                        }
+                        anchors.right: parent.right
+                        anchors.rightMargin: profileRow.padding
+                        anchors.verticalCenter: parent.verticalCenter
+                        glyph: "ellipsis"
+                        Accessible.name: qsTr("Profile Actions")
+                        ToolTip.visible: hovered
+                        ToolTip.text: qsTr("Profile Actions")
+                        onClicked: profileMenu.popup(menuButton)
                     }
 
                     Menu {
@@ -146,12 +140,12 @@ SettingsForm {
             }
         }
 
-        SettingsSeparator {}
-        SettingsActions {
-            Button {
+        FormDivider {}
+        FormButtonRow {
+            FormButton {
                 objectName: "createProfileButton"
                 text: qsTr("Create Profile")
-                icon.source: IconMap.source("plus")
+                glyph: "plus"
                 onClicked: page.openEditor(null)
             }
         }
@@ -167,7 +161,7 @@ SettingsForm {
         parent: Overlay.overlay
         anchors.centerIn: parent
         modal: true
-        width: 420
+        width: Math.min(page.width, Theme.dialogWidth)
         title: renaming ? qsTr("Rename Profile") : qsTr("New Profile")
 
         function confirm() {
@@ -198,26 +192,24 @@ SettingsForm {
                 onAccepted: editorDialog.confirm()
             }
 
-            RowLayout {
+            FormPickerRow {
+                id: languageBox
+
                 Layout.fillWidth: true
-
-                Label {
-                    Layout.fillWidth: true
-                    text: qsTr("Language")
-                }
-
-                ComboBox {
-                    id: languageBox
-
-                    Accessible.name: qsTr("Language")
-                    model: [qsTr("Japanese"), qsTr("English")]
-                    enabled: !editorDialog.renaming
-                }
+                label: qsTr("Language")
+                model: [qsTr("Japanese"), qsTr("English")]
+                placeholderText: label
+                constrainMenuHeight: true
+                enabled: !editorDialog.renaming
+                onActivated: index => currentIndex = index
             }
 
-            SettingsNote {
+            StyledLabel {
+                Layout.fillWidth: true
                 visible: profilesModel.error.length > 0
                 text: profilesModel.error
+                textStyle: Theme.footnoteFont
+                wrapMode: Text.Wrap
                 color: Theme.popupDanger
             }
         }
@@ -235,11 +227,11 @@ SettingsForm {
                 onRejected: editorDialog.reject()
                 onAccepted: editorDialog.confirm()
 
-                Button {
+                FormButton {
                     objectName: "saveProfileButton"
                     text: editorDialog.renaming ? qsTr("Save") : qsTr("Create")
-                    DialogButtonBox.buttonRole: DialogButtonBox.AcceptRole
                     prominent: true
+                    DialogButtonBox.buttonRole: DialogButtonBox.AcceptRole
                     enabled: nameField.text.trim().length > 0
                 }
             }
@@ -255,12 +247,12 @@ SettingsForm {
         parent: Overlay.overlay
         anchors.centerIn: parent
         modal: true
-        width: 400
+        width: editorDialog.width
         title: qsTr("Delete Profile")
         standardButtons: Dialog.Ok | Dialog.Cancel
         Component.onCompleted: standardButton(Dialog.Ok).text = qsTr("Delete")
 
-        contentItem: Label {
+        contentItem: StyledLabel {
             text: qsTr("Delete \"%1\"? This cannot be undone.").arg(deleteDialog.profileName)
             wrapMode: Text.WordWrap
         }

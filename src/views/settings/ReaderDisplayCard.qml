@@ -9,7 +9,7 @@ pragma ComponentBehavior: Bound
 import QtQuick
 import Niratan
 
-SettingsCard {
+FormSection {
     id: card
 
     required property SettingsViewModel settings
@@ -21,109 +21,95 @@ SettingsCard {
     title: qsTr("Display")
     footer: qsTr("Reader changes take effect the next time you open a book.")
 
-    SettingsToggle {
+    FormToggleRow {
         label: qsTr("Show Title")
         checked: card.settings.showTitle
-        onEdited: value => card.settings.showTitle = value
+        onToggled: value => card.settings.showTitle = value
     }
 
-    SettingsSeparator {}
-    SettingsToggle {
+    FormDivider {}
+    FormToggleRow {
         label: qsTr("Show Progress")
         checked: card.settings.showProgress
-        onEdited: value => card.settings.showProgress = value
+        onToggled: value => card.settings.showProgress = value
     }
 
-    SettingsSeparator {}
-    SettingsToggle {
+    FormDivider {}
+    FormToggleRow {
         label: qsTr("Show Chapter Progress")
         checked: card.settings.showChapterProgress
-        onEdited: value => card.settings.showChapterProgress = value
+        onToggled: value => card.settings.showChapterProgress = value
     }
 
-    SettingsSeparator { visible: card.showsProgress }
-    SettingRow {
-        id: countRow
-
+    FormDivider { visible: card.showsProgress }
+    FormSegmentedRow {
         visible: card.showsProgress
         label: qsTr("Count")
         subtitle: card.settings.progressCount === "Pages"
                   ? qsTr("Pages are counted for the current layout and window size, and are unavailable in continuous mode.") : ""
-
-        SettingsSegments {
-            Accessible.name: countRow.label
-            labels: [qsTr("Off"), qsTr("Characters"), qsTr("Pages")]
-            minimumSegmentWidth: 64
-            selectedIndex: card.counts.indexOf(card.settings.progressCount)
-            onEdited: index => card.settings.progressCount = card.counts[index]
-        }
+        model: [qsTr("Off"), qsTr("Characters"), qsTr("Pages")]
+        currentIndex: card.counts.indexOf(card.settings.progressCount)
+        onActivated: index => card.settings.progressCount = card.counts[index]
     }
 
-    SettingsSeparator { visible: card.showsProgress }
-    SettingsToggle {
+    FormDivider { visible: card.showsProgress }
+    FormToggleRow {
         visible: card.showsProgress
         label: qsTr("Show Percentage")
         checked: card.settings.showPercentage
-        onEdited: value => card.settings.showPercentage = value
+        onToggled: value => card.settings.showPercentage = value
     }
 
-    SettingsSeparator { visible: card.showsProgress }
-    SettingRow {
-        id: positionRow
-
+    FormDivider { visible: card.showsProgress }
+    FormSegmentedRow {
         visible: card.showsProgress
         label: qsTr("Progress Position")
-
-        SettingsSegments {
-            Accessible.name: positionRow.label
-            labels: [qsTr("Top"), qsTr("Bottom")]
-            minimumSegmentWidth: 54
-            selectedIndex: card.settings.showProgressTop ? 0 : 1
-            onEdited: index => card.settings.showProgressTop = index === 0
-        }
+        model: [qsTr("Top"), qsTr("Bottom")]
+        currentIndex: card.settings.showProgressTop ? 0 : 1
+        onActivated: index => card.settings.showProgressTop = index === 0
     }
 
-    SettingsSeparator {
+    FormDivider {
         objectName: "showStatisticsToggleSeparator"
         visible: card.settings.enableStatistics
     }
-    SettingsToggle {
+    FormToggleRow {
         objectName: "showStatisticsToggleRow"
         visible: card.settings.enableStatistics
         label: qsTr("Show Statistics Toggle")
         checked: card.settings.showStatisticsToggle
-        onEdited: value => card.settings.showStatisticsToggle = value
+        onToggled: value => card.settings.showStatisticsToggle = value
     }
 
-    SettingsSeparator {
+    FormDivider {
         objectName: "showReadingSpeedSeparator"
         visible: card.settings.enableStatistics
     }
-    SettingsToggle {
+    FormToggleRow {
         objectName: "showReadingSpeedRow"
         visible: card.settings.enableStatistics
         label: qsTr("Show Reading Speed")
         checked: card.settings.showReadingSpeed
-        onEdited: value => card.settings.showReadingSpeed = value
+        onToggled: value => card.settings.showReadingSpeed = value
     }
 
-    SettingsSeparator {
+    FormDivider {
         objectName: "showReadingTimeSeparator"
         visible: card.settings.enableStatistics
     }
-    SettingsToggle {
+    FormToggleRow {
         objectName: "showReadingTimeRow"
         visible: card.settings.enableStatistics
         label: qsTr("Show Reading Time")
         checked: card.settings.showReadingTime
-        onEdited: value => card.settings.showReadingTime = value
+        onToggled: value => card.settings.showReadingTime = value
     }
 
-    SettingsSeparator { visible: card.sasayaki.enable }
-    SettingsToggle {
+    FormDivider { visible: card.sasayaki.enable }
+    FormToggleRow {
         visible: card.sasayaki.enable
         label: qsTr("Show Sasayaki Toggle")
         checked: card.sasayaki.showSasayakiToggle
-        onEdited: value => card.sasayaki.showSasayakiToggle = value
+        onToggled: value => card.sasayaki.showSasayakiToggle = value
     }
 }

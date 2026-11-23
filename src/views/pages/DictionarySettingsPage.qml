@@ -19,9 +19,8 @@ import QtQuick.Controls
 import QtQuick.Dialogs
 import QtQuick.Layouts
 import Niratan
-import "../icons/icon_map.js" as IconMap
 
-SettingsForm {
+PanelScaffold {
     id: page
 
     objectName: "settings-dictionaries"
@@ -61,14 +60,14 @@ SettingsForm {
 
         parent: Overlay.overlay
         anchors.centerIn: parent
-        width: Math.min(580, parent ? parent.width : 580)
+        width: Math.min(Theme.wideDialogWidth, parent ? parent.width : Theme.wideDialogWidth)
         modal: true
         title: qsTr("Custom CSS")
         onAboutToShow: cssInput.text = preferences.customCSS
         onClosed: preferences.customCSS = cssInput.text
 
         contentItem: ScrollView {
-            implicitHeight: 240
+            implicitHeight: Theme.dialogEditorHeight
             contentWidth: availableWidth
             clip: true
 
@@ -102,14 +101,18 @@ SettingsForm {
 
         parent: Overlay.overlay
         anchors.centerIn: parent
-        width: Math.min(480, parent ? parent.width : 480)
+        width: Math.min(Theme.dialogWidth, parent ? parent.width : Theme.dialogWidth)
         modal: true
         title: qsTr("Recommended for this profile")
         standardButtons: Dialog.Close
 
         contentItem: ColumnLayout {
-            SettingsNote {
+            StyledLabel {
+                Layout.fillWidth: true
                 text: qsTr("Use Import to install a local .zip of one of these dictionaries.")
+                textStyle: Theme.footnoteFont
+                secondary: true
+                wrapMode: Text.Wrap
             }
 
             Repeater {
@@ -126,216 +129,193 @@ SettingsForm {
                         wrapMode: Text.Wrap
                     }
 
-                    SettingsNote {
-                        Layout.fillWidth: false
+                    StyledLabel {
                         text: recommendation.modelData.type
+                        textStyle: Theme.footnoteFont
+                        secondary: true
                     }
                 }
             }
         }
     }
 
-    SettingsNote {
+    StyledLabel {
         visible: library.error.length > 0 || preferences.error.length > 0
         text: [library.error, preferences.error].filter(message => message.length > 0).join("\n")
         color: Theme.popupDanger
+        wrapMode: Text.Wrap
     }
 
-    SettingsCard {
+    FormSection {
         title: qsTr("Dictionaries")
 
-        SettingsActions {
-            Button {
+        FormButtonRow {
+            FormButton {
                 objectName: "recommendedDictionariesButton"
                 text: qsTr("Recommended Dictionaries")
                 enabled: library.recommended.length > 0
                 onClicked: recommendedDialog.open()
             }
 
-            Button {
+            FormButton {
                 text: qsTr("Import")
-                icon.source: IconMap.source("plus")
+                glyph: "plus"
                 onClicked: importDialog.open()
             }
 
-            Button {
+            FormButton {
                 objectName: "dictionaryCssButton"
                 text: qsTr("Custom CSS")
-                icon.source: IconMap.source("curlybraces")
+                glyph: "curlybraces"
                 onClicked: cssDialog.open()
             }
         }
 
-        SettingsSeparator {}
-        SettingRow {
+        FormDivider {}
+        FormRow {
             label: qsTr("Supported Formats")
-
-            SettingsNote {
-                Layout.preferredWidth: 220
-                Layout.minimumWidth: 0
-                horizontalAlignment: Text.AlignRight
-                text: qsTr("Yomitan term, frequency, pitch and kanji dictionaries (.zip) are supported")
-            }
+            subtitle: qsTr("Yomitan term, frequency, pitch and kanji dictionaries (.zip) are supported")
         }
     }
 
-    SettingsCard {
+    FormSection {
         title: qsTr("Settings")
 
-        SettingsToggle {
+        FormToggleRow {
             label: qsTr("Default to Dictionary Tab")
             checked: preferences.dictionaryTabDefault
-            onEdited: value => preferences.dictionaryTabDefault = value
+            onToggled: value => preferences.dictionaryTabDefault = value
         }
     }
 
-    SettingsCard {
+    FormSection {
         title: qsTr("Lookup")
         footer: preferences.frequencySortOrder !== "Auto"
                 ? qsTr("Results with the same match are ranked by the selected frequency dictionary. Results without a value are listed last.") : ""
 
-        SettingsToggle {
+        FormToggleRow {
             label: qsTr("Scan Non-Japanese Text")
             checked: preferences.scanNonJapaneseText
-            onEdited: value => preferences.scanNonJapaneseText = value
+            onToggled: value => preferences.scanNonJapaneseText = value
         }
 
-        SettingsSeparator {}
-        SettingsInteger {
+        FormDivider {}
+        FormStepperRow {
             label: qsTr("Max Results")
             from: 1
             to: 50
             value: preferences.maxResults
-            onEdited: value => preferences.maxResults = value
+            valueText: String(value)
+            onStepped: value => preferences.maxResults = value
         }
 
-        SettingsSeparator {}
-        SettingsInteger {
+        FormDivider {}
+        FormStepperRow {
             label: qsTr("Scan Length")
             from: 1
             to: 64
             value: preferences.scanLength
-            onEdited: value => preferences.scanLength = value
+            valueText: String(value)
+            onStepped: value => preferences.scanLength = value
         }
 
-        SettingsSeparator {}
-        SettingRow {
-            id: frequencySortRow
+        FormDivider {}
+        FormPickerRow {
+            controlName: "frequencySortPicker"
             label: qsTr("Frequency Sorting")
-
-            ComboBox {
-                objectName: "frequencySortPicker"
-                Accessible.name: frequencySortRow.label
-                Layout.preferredWidth: 160
-                model: page.frequencySortLabels
-                currentIndex: Math.max(0, page.frequencySortOrders.indexOf(preferences.frequencySortOrder))
-                onActivated: index => preferences.frequencySortOrder = page.frequencySortOrders[index]
-            }
+            model: page.frequencySortLabels
+            currentIndex: Math.max(0, page.frequencySortOrders.indexOf(preferences.frequencySortOrder))
+            onActivated: index => preferences.frequencySortOrder = page.frequencySortOrders[index]
         }
 
         Loader {
-            Layout.fillWidth: true
+            width: parent ? parent.width : 0
             active: preferences.frequencySortOrder !== "Auto"
 
-            sourceComponent: ColumnLayout {
-                spacing: 0
-
-                SettingsSeparator {}
-                SettingRow {
-                    id: frequencyDictionaryRow
+            sourceComponent: Column {
+                FormDivider {}
+                FormPickerRow {
+                    controlName: "frequencyDictionaryPicker"
                     label: qsTr("Frequency Dictionary")
-
-                    ComboBox {
-                        objectName: "frequencyDictionaryPicker"
-                        Accessible.name: frequencyDictionaryRow.label
-                        Layout.preferredWidth: 200
-                        model: page.frequencyDictionaryLabels
-                        currentIndex: Math.max(0, page.frequencyDictionaryValues.indexOf(preferences.frequencySortDictionary))
-                        onActivated: index => preferences.frequencySortDictionary = page.frequencyDictionaryValues[index]
-                    }
+                    model: page.frequencyDictionaryLabels
+                    currentIndex: Math.max(0, page.frequencyDictionaryValues.indexOf(preferences.frequencySortDictionary))
+                    onActivated: index => preferences.frequencySortDictionary = page.frequencyDictionaryValues[index]
                 }
             }
         }
     }
 
-    SettingsCard {
+    FormSection {
         title: qsTr("Search Text")
 
-        SettingsInteger {
+        FormStepperRow {
             objectName: "searchTextSizeRow"
             label: qsTr("Text Size")
             from: 12
             to: 48
             value: preferences.searchTextSize
-            onEdited: value => preferences.searchTextSize = value
+            valueText: String(value)
+            onStepped: value => preferences.searchTextSize = value
         }
     }
 
-    SettingsCard {
+    FormSection {
         title: qsTr("Collapse Dictionaries")
 
-        SettingRow {
-            id: collapseRow
+        FormSegmentedRow {
             label: qsTr("Mode")
-
-            SettingsSegments {
-                Accessible.name: collapseRow.label
-                labels: [qsTr("Expand All"), qsTr("Collapse All"), qsTr("Custom")]
-                minimumSegmentWidth: 82
-                selectedIndex: page.collapseModes.indexOf(preferences.collapseMode)
-                onEdited: index => preferences.collapseMode = page.collapseModes[index]
-            }
+            model: [qsTr("Expand All"), qsTr("Collapse All"), qsTr("Custom")]
+            currentIndex: page.collapseModes.indexOf(preferences.collapseMode)
+            onActivated: index => preferences.collapseMode = page.collapseModes[index]
         }
     }
 
-    SettingsCard {
+    FormSection {
         title: qsTr("Behaviour")
         footer: qsTr("Two-column layout is recommended only on larger screens or when using full-width.")
 
-        SettingsToggle {
+        FormToggleRow {
             label: qsTr("Two-Column Layout")
             checked: preferences.twoColumnLayout
-            onEdited: value => preferences.twoColumnLayout = value
+            onToggled: value => preferences.twoColumnLayout = value
         }
 
-        SettingsSeparator {}
-        SettingsToggle {
+        FormDivider {}
+        FormToggleRow {
             label: qsTr("Compact Glossaries")
             checked: preferences.compactGlossaries
-            onEdited: value => preferences.compactGlossaries = value
+            onToggled: value => preferences.compactGlossaries = value
         }
     }
 
-    SettingsCard {
+    FormSection {
         title: qsTr("Dictionaries")
         footer: library.dictionaryType === "Term" && library.rows.length > 0
                 ? qsTr("Category for Anki definition fields") : ""
-        headerControls: SettingsSegments {
+        headerAccessory: SegmentedPicker {
             Accessible.name: qsTr("Dictionary Type")
-            labels: [qsTr("Term"), qsTr("Frequency"), qsTr("Pitch"), qsTr("Kanji")]
-            minimumSegmentWidth: 72
-            selectedIndex: page.types.indexOf(library.dictionaryType)
-            onEdited: index => library.selectType(page.types[index])
+            model: [qsTr("Term"), qsTr("Frequency"), qsTr("Pitch"), qsTr("Kanji")]
+            currentIndex: page.types.indexOf(library.dictionaryType)
+            onActivated: index => library.selectType(page.types[index])
         }
 
         Repeater {
             model: library.rows
 
-            delegate: ColumnLayout {
+            delegate: Column {
                 id: entry
 
                 required property var modelData
                 required property int index
 
-                Layout.fillWidth: true
-                spacing: 0
+                width: parent ? parent.width : 0
 
-                SettingsSeparator { visible: entry.index > 0 }
+                FormDivider { visible: entry.index > 0 }
 
-                SettingRow {
+                FormRow {
                     label: entry.modelData.title
 
-                    ComboBox {
+                    MenuPicker {
                         visible: library.dictionaryType === "Term"
                         Accessible.name: qsTr("Category")
                         model: [qsTr("No Category"), qsTr("Monolingual"), qsTr("Bilingual"), qsTr("Exclude")]
@@ -343,17 +323,20 @@ SettingsForm {
                         onActivated: index => library.setCategory(entry.modelData.title, page.categories[index])
                     }
 
-                    Switch {
+                    ToggleSwitch {
+                        anchors.verticalCenter: parent ? parent.verticalCenter : undefined
                         Accessible.name: entry.modelData.title
                         checked: entry.modelData.enabled
                         onToggled: library.setEnabled(entry.modelData.title, checked)
                     }
 
-                    ToolButton {
+                    GlyphButton {
                         id: actions
 
+                        glyph: "ellipsis"
+                        filled: false
+                        diameter: Theme.smallGlyphButtonDiameter
                         Accessible.name: qsTr("Dictionary Actions")
-                        text: "\u22EF"
                         onClicked: actionsMenu.popup(actions)
 
                         Menu {

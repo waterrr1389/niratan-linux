@@ -7,7 +7,7 @@ import QtQuick
 import QtQuick.Controls
 import Niratan
 
-SettingsForm {
+PanelScaffold {
     id: form
 
     objectName: "settings-statistics"
@@ -22,63 +22,68 @@ SettingsForm {
         textFromValue: (value, locale) => value.toLocaleString(locale, "f", 0).padStart(2, "0")
     }
 
-    SettingsNote {
+    StyledLabel {
         visible: settings.error.length > 0
         text: settings.error
+        textStyle: Theme.footnoteFont
+        wrapMode: Text.Wrap
         color: Theme.popupDanger
     }
 
-    SettingsCard {
+    FormSection {
         title: qsTr("Statistics")
         footer: qsTr("Statistics appears in Bookshelf when enabled.")
 
-        SettingsToggle {
+        FormToggleRow {
             label: qsTr("Enable")
             checked: settings.enableStatistics
-            onEdited: value => settings.enableStatistics = value
+            onToggled: value => settings.enableStatistics = value
         }
     }
 
-    SettingsCard {
+    FormSection {
         visible: settings.enableStatistics
         title: qsTr("Autostart")
 
-        SettingRow {
-            id: autostartRow
+        FormSegmentedRow {
             label: qsTr("Autostart")
-
-            SettingsSegments {
-                Accessible.name: autostartRow.label
-                labels: [qsTr("Off"), qsTr("Page Turn"), qsTr("On")]
-                minimumSegmentWidth: 72
-                selectedIndex: form.modes.indexOf(settings.statisticsAutostartMode)
-                onEdited: index => settings.statisticsAutostartMode = form.modes[index]
-            }
+            model: [qsTr("Off"), qsTr("Page Turn"), qsTr("On")]
+            currentIndex: form.modes.indexOf(settings.statisticsAutostartMode)
+            onActivated: index => settings.statisticsAutostartMode = form.modes[index]
         }
     }
 
-    SettingsCard {
+    FormSection {
         visible: settings.enableStatistics
         title: qsTr("Daily Reset")
         footer: qsTr("Reading statistics recorded before this time count toward the previous day.")
 
-        SettingRow {
+        FormRow {
             label: qsTr("Reset Time")
 
-            ResetTimePart {
-                Accessible.name: qsTr("Hour")
-                to: 23
-                value: Math.floor(settings.statisticsResetTime / 60)
-                onValueModified: settings.statisticsResetTime = value * 60 + settings.statisticsResetTime % 60
-            }
+            Row {
+                spacing: Theme.spacingXs
 
-            Label { text: ":" }
+                ResetTimePart {
+                    anchors.verticalCenter: parent.verticalCenter
+                    Accessible.name: qsTr("Hour")
+                    to: 23
+                    value: Math.floor(settings.statisticsResetTime / 60)
+                    onValueModified: settings.statisticsResetTime = value * 60 + settings.statisticsResetTime % 60
+                }
 
-            ResetTimePart {
-                Accessible.name: qsTr("Minute")
-                to: 59
-                value: settings.statisticsResetTime % 60
-                onValueModified: settings.statisticsResetTime = Math.floor(settings.statisticsResetTime / 60) * 60 + value
+                StyledLabel {
+                    anchors.verticalCenter: parent.verticalCenter
+                    text: ":"
+                }
+
+                ResetTimePart {
+                    anchors.verticalCenter: parent.verticalCenter
+                    Accessible.name: qsTr("Minute")
+                    to: 59
+                    value: settings.statisticsResetTime % 60
+                    onValueModified: settings.statisticsResetTime = Math.floor(settings.statisticsResetTime / 60) * 60 + value
+                }
             }
         }
     }

@@ -22,68 +22,31 @@
 pragma ComponentBehavior: Bound
 
 import QtQuick
-import QtQuick.Controls
-import QtQuick.Dialogs
-import QtQuick.Layouts
 import Niratan
 
-SettingsForm {
-    id: form
-
+PanelScaffold {
     objectName: "settings-sasayaki"
 
     SasayakiSettingsViewModel {
         id: settings
     }
 
-    // A row whose accessory is the colour swatch of a hidden-label
-    // ColorPicker. The store keeps #RRGGBBAA; the swatch needs #AARRGGBB.
-    component ColorRow: SettingRow {
-        id: colorRow
-
+    // The store keeps #RRGGBBAA; Qt parses #AARRGGBB.
+    component ColorRow: FormColorRow {
         required property string hex
-        signal picked(string color)
+        signal hexPicked(string hex)
 
-        readonly property color swatch: colorRow.hex.length === 9
-                                        ? "#" + colorRow.hex.slice(7) + colorRow.hex.slice(1, 7)
-                                        : colorRow.hex
-
-        ToolButton {
-            Layout.preferredWidth: 24
-            Layout.preferredHeight: 24
-            Accessible.name: colorRow.label
-            padding: 3
-
-            contentItem: Rectangle {
-                radius: 6
-                color: colorRow.swatch
-                border.width: 1
-                border.color: Theme.cardStroke
-            }
-
-            onClicked: {
-                picker.selectedColor = colorRow.swatch;
-                picker.open();
-            }
-        }
-
-        ColorDialog {
-            id: picker
-
-            title: colorRow.label
-            options: ColorDialog.ShowAlphaChannel
-            onAccepted: {
-                const rgba = [selectedColor.r, selectedColor.g, selectedColor.b, selectedColor.a];
-                colorRow.picked("#" + rgba.map(function(channel) {
-                    return Math.round(channel * 255).toString(16).padStart(2, "0");
-                }).join(""));
-            }
+        color: hex.length === 9 ? "#" + hex.slice(7) + hex.slice(1, 7) : hex
+        onPicked: color => {
+            const rgba = [color.r, color.g, color.b, color.a]
+            hexPicked("#" + rgba.map(channel => Math.round(channel * 255).toString(16).padStart(2, "0")).join(""))
         }
     }
 
-    SettingsCard {
+    FormSection {
+        id: enableSection
+
         title: qsTr("Sasayaki")
-        footerFormat: Text.StyledText
         footer: {
             const intro = qsTr("Listen to audiobooks and read along with highlighted text.")
             if (!settings.enable)
@@ -99,102 +62,98 @@ SettingsForm {
             ].join("<br>")
         }
 
-        SettingsToggle {
+        Binding {
+            target: enableSection.footerLabel
+            property: "textFormat"
+            value: Text.StyledText
+        }
+
+        FormToggleRow {
             label: qsTr("Enable")
             checked: settings.enable
-            onEdited: value => {
-                settings.enable = value;
-            }
+            onToggled: value => settings.enable = value
         }
     }
 
-    SettingsCard {
+    FormSection {
         visible: settings.enable
         title: qsTr("Settings")
 
-        SettingsToggle {
+        FormToggleRow {
             label: qsTr("Show Sasayaki Toggle")
             checked: settings.showSasayakiToggle
-            onEdited: value => {
-                settings.showSasayakiToggle = value;
-            }
+            onToggled: value => settings.showSasayakiToggle = value
         }
 
-        SettingsSeparator {}
-        SettingsToggle {
+        FormDivider {}
+        FormToggleRow {
             label: qsTr("Auto-Scroll")
             checked: settings.autoScroll
-            onEdited: value => {
-                settings.autoScroll = value;
-            }
+            onToggled: value => settings.autoScroll = value
         }
 
-        SettingsSeparator {}
-        SettingsToggle {
+        FormDivider {}
+        FormToggleRow {
             label: qsTr("Auto-Pause on Lookup")
             checked: settings.autoPause
-            onEdited: value => {
-                settings.autoPause = value;
-            }
+            onToggled: value => settings.autoPause = value
         }
     }
 
-    SettingsCard {
+    FormSection {
         visible: settings.enable
         title: qsTr("Command Center")
         footer: qsTr("Skip Controls will replace Next/Previous Cue controls as media controls.")
 
-        SettingsToggle {
+        FormToggleRow {
             label: qsTr("Show Skip (\u00b115s) Controls")
             checked: settings.skipControls
-            onEdited: value => {
-                settings.skipControls = value;
-            }
+            onToggled: value => settings.skipControls = value
         }
     }
 
-    SettingsCard {
+    FormSection {
         visible: settings.enable
         title: qsTr("Light Theme")
 
         ColorRow {
             label: qsTr("Text Color")
             hex: settings.textColor
-            onPicked: color => {
+            onHexPicked: color => {
                 settings.textColor = color;
                 ReaderViewModel.refreshSasayakiColors();
             }
         }
 
-        SettingsSeparator {}
+        FormDivider {}
         ColorRow {
             label: qsTr("Background Color")
             hex: settings.backgroundColor
-            onPicked: color => {
+            onHexPicked: color => {
                 settings.backgroundColor = color;
                 ReaderViewModel.refreshSasayakiColors();
             }
         }
     }
 
-    SettingsCard {
+    FormSection {
         visible: settings.enable
         title: qsTr("Dark Theme")
 
         ColorRow {
             label: qsTr("Text Color")
             hex: settings.darkTextColor
-            onPicked: color => {
+            onHexPicked: color => {
                 settings.darkTextColor = color;
                 ReaderViewModel.refreshSasayakiColors();
             }
         }
 
-        SettingsSeparator {}
+        FormDivider {}
         ColorRow {
             label: qsTr("Background Color")
             hex: settings.darkBackgroundColor
-            onPicked: color => {
+            onHexPicked: color => {
                 settings.darkBackgroundColor = color;
                 ReaderViewModel.refreshSasayakiColors();
             }

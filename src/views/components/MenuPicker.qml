@@ -20,13 +20,17 @@ T.AbstractButton {
     property var model: []
     property int currentIndex: -1
     property real minimumWidth: Theme.pickerMinimumWidth
+    // A placeholder is not a menu choice. An unavailable stored value can
+    // also be shown here until the user chooses a replacement.
+    property string placeholderText
+    property bool constrainMenuHeight: false
 
     readonly property Menu menu: popupMenu
 
     signal activated(int index)
 
     readonly property string currentText: currentIndex >= 0 && model && currentIndex < model.length
-                                          ? String(model[currentIndex]) : ""
+                                          ? String(model[currentIndex]) : placeholderText
 
     implicitWidth: Math.max(minimumWidth, currentLabel.implicitWidth + Theme.capsuleSpacing
                                           + Theme.pickerGlyphSize + leftPadding + rightPadding)
@@ -85,6 +89,15 @@ T.AbstractButton {
 
     Menu {
         id: popupMenu
+
+        Binding {
+            target: popupMenu
+            property: "height"
+            when: picker.constrainMenuHeight
+            value: Math.min(popupMenu.implicitHeight,
+                            (picker.Window.window?.height ?? popupMenu.implicitHeight)
+                            - popupMenu.topMargin - popupMenu.bottomMargin)
+        }
 
         Instantiator {
             model: picker.model

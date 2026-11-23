@@ -2,25 +2,48 @@
 // Features/Settings/AppearanceView.swift: AppearanceView.nativeAppearanceContent.
 // Deliberate Linux difference: keep the existing Invert Sepia in Dark Mode
 // setting; the pinned Swift Theme card does not show this row.
+//
+// Built from the control kit. Sliders show their value with the decimals and
+// suffix Swift's NativeSettingsSliderRow formats; integer settings are
+// steppers. Furigana's four segments move below their label when the form
+// is too narrow to hold them on one line (the reader's side panel).
 
 pragma ComponentBehavior: Bound
 
 import QtQuick
-import QtQuick.Controls
-import QtQuick.Layouts
 import Niratan
 
-SettingsForm {
+PanelScaffold {
     id: form
 
     objectName: "settings-appearance"
     readonly property list<string> themes: ["System", "Light", "Dark", "Sepia", "Custom"]
     readonly property list<string> themeLabels: [qsTr("System"), qsTr("Light"), qsTr("Dark"), qsTr("Sepia"), qsTr("Custom")]
     readonly property list<string> furiganaModes: ["Off", "Dimmed", "Toggle", "Hidden"]
+    readonly property list<string> furiganaLabels: [qsTr("Show"), qsTr("Dimmed"), qsTr("Tap to Reveal"), qsTr("Hidden")]
     readonly property list<string> fonts: Qt.fontFamilies()
     readonly property bool paginated: !settingsModel.continuousMode
     readonly property bool paragraph: paginated && settingsModel.paragraphMode
     readonly property bool spreadsAvailable: paginated && !settingsModel.verticalWriting && !settingsModel.paragraphMode
+    readonly property bool narrow: column.width < Theme.appearanceWideFormWidth
+
+    function formatted(value, decimals, suffix) {
+        return Number(value).toLocaleString(Qt.locale(), "f", decimals) + suffix
+    }
+
+    component ValueSlider: FormSliderRow {
+        property int decimals: 0
+        property string suffix
+
+        valueText: form.formatted(value, decimals, suffix)
+    }
+
+    component ValueStepper: FormStepperRow {
+        property string suffix
+
+        stepSize: 1
+        valueText: form.formatted(value, 0, suffix)
+    }
 
     SettingsViewModel {
         id: settingsModel
@@ -30,266 +53,245 @@ SettingsForm {
         id: sasayakiModel
     }
 
-    SettingsNote {
+    StyledLabel {
         visible: settingsModel.error.length > 0
         text: settingsModel.error
         color: Theme.popupDanger
+        wrapMode: Text.Wrap
     }
 
-    SettingsCard {
+    FormSection {
         title: qsTr("Theme")
 
-        SettingsSegments {
-            Layout.fillWidth: true
-            Layout.margins: 12
-            Accessible.name: qsTr("Reader Theme")
-            labels: form.themeLabels
-            minimumSegmentWidth: 44
-            selectedIndex: form.themes.indexOf(settingsModel.theme)
-            onEdited: index => settingsModel.theme = form.themes[index]
+        FormSegmentedRow {
+            fillsWidth: true
+            model: form.themeLabels
+            currentIndex: form.themes.indexOf(settingsModel.theme)
+            onActivated: index => settingsModel.theme = form.themes[index]
         }
 
-        SettingsSeparator { visible: lightSepia.visible }
-        SettingsToggle {
+        FormDivider { visible: lightSepia.visible }
+        FormToggleRow {
             id: lightSepia
             visible: settingsModel.theme === "System"
             label: qsTr("Use Sepia as Light Theme")
             checked: settingsModel.systemLightSepia
-            onEdited: value => settingsModel.systemLightSepia = value
+            onToggled: value => settingsModel.systemLightSepia = value
         }
 
-        SettingsSeparator { visible: sepiaInvert.visible }
-        SettingsToggle {
+        FormDivider { visible: sepiaInvert.visible }
+        FormToggleRow {
             id: sepiaInvert
             visible: settingsModel.theme === "Sepia"
             label: qsTr("Invert Sepia in Dark Mode")
             checked: settingsModel.sepiaInvertInDark
-            onEdited: value => settingsModel.sepiaInvertInDark = value
+            onToggled: value => settingsModel.sepiaInvertInDark = value
         }
 
-        SettingsSeparator { visible: interfaceRow.visible }
-        SettingRow {
+        FormDivider { visible: interfaceRow.visible }
+        FormSegmentedRow {
             id: interfaceRow
             visible: settingsModel.theme === "Custom"
             label: qsTr("Interface")
-
-            SettingsSegments {
-                Accessible.name: interfaceRow.label
-                labels: form.themeLabels.slice(0, 3)
-                minimumSegmentWidth: 58
-                selectedIndex: form.themes.indexOf(settingsModel.uiTheme)
-                onEdited: index => settingsModel.uiTheme = form.themes[index]
-            }
+            model: form.themeLabels.slice(0, 3)
+            currentIndex: form.themes.indexOf(settingsModel.uiTheme)
+            onActivated: index => settingsModel.uiTheme = form.themes[index]
         }
 
-        SettingsSeparator {
+        FormDivider {
             objectName: "customBackgroundColorSeparator"
             visible: settingsModel.theme === "Custom"
         }
-        SettingsColorRow {
+        FormColorRow {
             objectName: "customBackgroundColorRow"
+            controlName: "customBackgroundColorRowSwatch"
             visible: settingsModel.theme === "Custom"
             label: qsTr("Background Color")
-            value: settingsModel.customBackgroundColor
-            onEdited: value => settingsModel.customBackgroundColor = value
+            color: settingsModel.customBackgroundColor
+            onPicked: value => settingsModel.customBackgroundColor = value
         }
 
-        SettingsSeparator {
+        FormDivider {
             objectName: "customTextColorSeparator"
             visible: settingsModel.theme === "Custom"
         }
-        SettingsColorRow {
+        FormColorRow {
             objectName: "customTextColorRow"
+            controlName: "customTextColorRowSwatch"
             visible: settingsModel.theme === "Custom"
             label: qsTr("Text Color")
-            value: settingsModel.customTextColor
-            onEdited: value => settingsModel.customTextColor = value
+            color: settingsModel.customTextColor
+            onPicked: value => settingsModel.customTextColor = value
         }
 
-        SettingsSeparator {
+        FormDivider {
             objectName: "customInfoColorSeparator"
             visible: settingsModel.theme === "Custom"
         }
-        SettingsColorRow {
+        FormColorRow {
             objectName: "customInfoColorRow"
+            controlName: "customInfoColorRowSwatch"
             visible: settingsModel.theme === "Custom"
             label: qsTr("Info Color")
-            value: settingsModel.customInfoColor
-            onEdited: value => settingsModel.customInfoColor = value
+            color: settingsModel.customInfoColor
+            onPicked: value => settingsModel.customInfoColor = value
         }
     }
 
-    SettingsCard {
+    FormSection {
         title: qsTr("Text")
 
-        SettingRow {
-            id: orientationRow
+        FormSegmentedRow {
             label: qsTr("Text Orientation")
-
-            SettingsSegments {
-                Accessible.name: orientationRow.label
-                labels: [qsTr("Vertical"), qsTr("Horizontal")]
-                minimumSegmentWidth: 74
-                selectedIndex: settingsModel.verticalWriting ? 0 : 1
-                onEdited: index => settingsModel.verticalWriting = index === 0
-            }
+            model: [qsTr("Vertical"), qsTr("Horizontal")]
+            currentIndex: settingsModel.verticalWriting ? 0 : 1
+            onActivated: index => settingsModel.verticalWriting = index === 0
         }
 
-        SettingsSeparator {}
-        SettingRow {
-            id: fontRow
+        FormDivider {}
+        FormPickerRow {
             label: qsTr("Font")
-
-            ComboBox {
-                Accessible.name: fontRow.label
-                Layout.preferredWidth: 200
-                model: form.fonts.includes(settingsModel.selectedFont) ? form.fonts : [settingsModel.selectedFont].concat(form.fonts)
-                displayText: settingsModel.selectedFont
-                currentIndex: Math.max(0, form.fonts.indexOf(settingsModel.selectedFont))
-                onActivated: index => settingsModel.selectedFont = textAt(index)
-            }
+            model: form.fonts.includes(settingsModel.selectedFont)
+                   ? form.fonts : [settingsModel.selectedFont].concat(form.fonts)
+            currentIndex: Math.max(0, model.indexOf(settingsModel.selectedFont))
+            onActivated: index => settingsModel.selectedFont = model[index]
         }
 
-        SettingsSeparator {}
-        SettingsInteger {
+        FormDivider {}
+        ValueStepper {
             label: qsTr("Font Size")
             from: 16
             to: 40
             value: settingsModel.fontSize
-            onEdited: value => settingsModel.fontSize = value
+            onStepped: value => settingsModel.fontSize = value
         }
 
-        SettingsSeparator {}
-        SettingRow {
-            id: furiganaRow
+        FormDivider {}
+        FormSegmentedRow {
+            visible: !form.narrow
             label: qsTr("Furigana")
-            stacked: form.cardWidth < labelWidth + furiganaPicker.implicitWidth + 32 + Theme.spacingMd
-
-            SettingsSegments {
-                id: furiganaPicker
-
-                Accessible.name: furiganaRow.label
-                Layout.fillWidth: furiganaRow.stacked
-                labels: [qsTr("Show"), qsTr("Dimmed"), qsTr("Tap to Reveal"), qsTr("Hidden")]
-                minimumSegmentWidth: 64
-                selectedIndex: form.furiganaModes.indexOf(settingsModel.furiganaMode)
-                onEdited: index => settingsModel.furiganaMode = form.furiganaModes[index]
-            }
+            model: form.furiganaLabels
+            currentIndex: form.furiganaModes.indexOf(settingsModel.furiganaMode)
+            onActivated: index => settingsModel.furiganaMode = form.furiganaModes[index]
+        }
+        FormRow {
+            visible: form.narrow
+            label: qsTr("Furigana")
+        }
+        FormSegmentedRow {
+            visible: form.narrow
+            fillsWidth: true
+            model: form.furiganaLabels
+            currentIndex: form.furiganaModes.indexOf(settingsModel.furiganaMode)
+            onActivated: index => settingsModel.furiganaMode = form.furiganaModes[index]
         }
     }
 
-    SettingsCard {
+    FormSection {
         title: qsTr("Layout")
 
-        SettingRow {
-            id: modeRow
+        FormSegmentedRow {
             label: qsTr("Mode")
-
-            SettingsSegments {
-                Accessible.name: modeRow.label
-                labels: [qsTr("Paginated"), qsTr("Continuous")]
-                minimumSegmentWidth: 78
-                selectedIndex: settingsModel.continuousMode ? 1 : 0
-                onEdited: index => settingsModel.continuousMode = index === 1
-            }
+            model: [qsTr("Paginated"), qsTr("Continuous")]
+            currentIndex: settingsModel.continuousMode ? 1 : 0
+            onActivated: index => settingsModel.continuousMode = index === 1
         }
 
-        SettingsSeparator { visible: form.paginated }
-        SettingsToggle {
+        FormDivider { visible: form.paginated }
+        FormToggleRow {
             visible: form.paginated
             label: qsTr("Paragraph Mode")
             checked: settingsModel.paragraphMode
-            onEdited: value => settingsModel.paragraphMode = value
+            onToggled: value => settingsModel.paragraphMode = value
         }
 
-        SettingsSeparator { visible: form.paragraph }
-        SettingsToggle {
+        FormDivider { visible: form.paragraph }
+        FormToggleRow {
             visible: form.paragraph
             label: qsTr("Text Animation")
             checked: settingsModel.textAnimation
-            onEdited: value => settingsModel.textAnimation = value
+            onToggled: value => settingsModel.textAnimation = value
         }
 
-        SettingsSeparator { visible: speed.visible }
-        SettingsSliderRow {
+        FormDivider { visible: speed.visible }
+        ValueSlider {
             id: speed
             visible: form.paragraph && settingsModel.textAnimation
             label: qsTr("Text Speed")
             from: 25
             to: 100
             stepSize: 5
-            decimals: 0
             suffix: qsTr("/s")
             value: settingsModel.textSpeed
-            onEdited: value => settingsModel.textSpeed = value
+            onMoved: value => settingsModel.textSpeed = value
         }
 
-        SettingsSeparator { visible: form.spreadsAvailable }
-        SettingsToggle {
+        FormDivider { visible: form.spreadsAvailable }
+        FormToggleRow {
             visible: form.spreadsAvailable
             label: qsTr("Two-Column Horizontal Pages")
             checked: settingsModel.twoColumnHorizontalPages
-            onEdited: value => settingsModel.twoColumnHorizontalPages = value
+            onToggled: value => settingsModel.twoColumnHorizontalPages = value
         }
 
-        SettingsSeparator {}
-        SettingsToggle {
+        FormDivider {}
+        FormToggleRow {
             objectName: "wheelPageTurnRow"
             label: qsTr("Mouse Wheel Page Turn")
             checked: settingsModel.wheelPageTurnEnabled
-            onEdited: value => settingsModel.wheelPageTurnEnabled = value
+            onToggled: value => settingsModel.wheelPageTurnEnabled = value
         }
 
-        SettingsSeparator {}
-        SettingsInteger {
+        FormDivider {}
+        ValueStepper {
             label: qsTr("Horizontal Padding")
             from: 0
             to: 80
             suffix: "%"
             value: settingsModel.horizontalPadding
-            onEdited: value => settingsModel.horizontalPadding = value
+            onStepped: value => settingsModel.horizontalPadding = value
         }
 
-        SettingsSeparator {}
-        SettingsInteger {
+        FormDivider {}
+        ValueStepper {
             label: qsTr("Vertical Padding")
             from: 0
             to: 50
             suffix: "%"
             value: settingsModel.verticalPadding
-            onEdited: value => settingsModel.verticalPadding = value
+            onStepped: value => settingsModel.verticalPadding = value
         }
 
-        SettingsSeparator {}
-        SettingsToggle {
+        FormDivider {}
+        FormToggleRow {
             label: qsTr("Avoid Page Break")
             checked: settingsModel.avoidPageBreak
-            onEdited: value => settingsModel.avoidPageBreak = value
+            onToggled: value => settingsModel.avoidPageBreak = value
         }
 
-        SettingsSeparator {}
-        SettingsToggle {
+        FormDivider {}
+        FormToggleRow {
             label: qsTr("Justify Text")
             checked: settingsModel.justifyText
-            onEdited: value => settingsModel.justifyText = value
+            onToggled: value => settingsModel.justifyText = value
         }
 
-        SettingsSeparator {}
-        SettingsToggle {
+        FormDivider {}
+        FormToggleRow {
             label: qsTr("Blur Images")
             checked: settingsModel.blurImages
-            onEdited: value => settingsModel.blurImages = value
+            onToggled: value => settingsModel.blurImages = value
         }
 
-        SettingsSeparator {}
-        SettingsToggle {
+        FormDivider {}
+        FormToggleRow {
             label: qsTr("Advanced")
             checked: settingsModel.layoutAdvanced
-            onEdited: value => settingsModel.layoutAdvanced = value
+            onToggled: value => settingsModel.layoutAdvanced = value
         }
 
-        SettingsSeparator { visible: settingsModel.layoutAdvanced }
-        SettingsSliderRow {
+        FormDivider { visible: settingsModel.layoutAdvanced }
+        ValueSlider {
             visible: settingsModel.layoutAdvanced
             label: qsTr("Line Height")
             from: 1
@@ -297,24 +299,23 @@ SettingsForm {
             stepSize: 0.05
             decimals: 2
             value: settingsModel.lineHeight
-            onEdited: value => settingsModel.lineHeight = value
+            onMoved: value => settingsModel.lineHeight = value
         }
 
-        SettingsSeparator { visible: settingsModel.layoutAdvanced }
-        SettingsSliderRow {
+        FormDivider { visible: settingsModel.layoutAdvanced }
+        ValueSlider {
             visible: settingsModel.layoutAdvanced
             label: qsTr("Character Spacing")
             from: -10
             to: 10
             stepSize: 1
-            decimals: 0
             suffix: "%"
             value: settingsModel.characterSpacing
-            onEdited: value => settingsModel.characterSpacing = value
+            onMoved: value => settingsModel.characterSpacing = value
         }
 
-        SettingsSeparator { visible: settingsModel.layoutAdvanced }
-        SettingsSliderRow {
+        FormDivider { visible: settingsModel.layoutAdvanced }
+        ValueSlider {
             visible: settingsModel.layoutAdvanced
             label: qsTr("Paragraph Spacing")
             from: 0
@@ -323,7 +324,7 @@ SettingsForm {
             decimals: 1
             suffix: qsTr("em")
             value: settingsModel.paragraphSpacing
-            onEdited: value => settingsModel.paragraphSpacing = value
+            onMoved: value => settingsModel.paragraphSpacing = value
         }
     }
 
@@ -332,35 +333,33 @@ SettingsForm {
         sasayaki: sasayakiModel
     }
 
-    SettingsCard {
+    FormSection {
         objectName: "settings-popupCard"
         title: qsTr("Popup")
 
-        SettingsSliderRow {
+        ValueSlider {
             objectName: "popupWidthRow"
             label: qsTr("Width")
             from: 100
             to: 1400
             stepSize: 10
-            decimals: 0
             value: settingsModel.popupWidth
-            onEdited: value => settingsModel.popupWidth = value
+            onMoved: value => settingsModel.popupWidth = value
         }
 
-        SettingsSeparator { objectName: "popupSeparator" }
-        SettingsSliderRow {
+        FormDivider { objectName: "popupSeparator" }
+        ValueSlider {
             objectName: "popupHeightRow"
             label: qsTr("Height")
             from: 100
             to: 800
             stepSize: 10
-            decimals: 0
             value: settingsModel.popupHeight
-            onEdited: value => settingsModel.popupHeight = value
+            onMoved: value => settingsModel.popupHeight = value
         }
 
-        SettingsSeparator { objectName: "popupSeparator" }
-        SettingsSliderRow {
+        FormDivider { objectName: "popupSeparator" }
+        ValueSlider {
             objectName: "popupScaleRow"
             label: qsTr("Scale")
             from: 0.8
@@ -368,55 +367,54 @@ SettingsForm {
             stepSize: 0.05
             decimals: 2
             value: settingsModel.popupScale
-            onEdited: value => settingsModel.popupScale = value
+            onMoved: value => settingsModel.popupScale = value
         }
 
-        SettingsSeparator { objectName: "popupSeparator" }
-        SettingsToggle {
+        FormDivider { objectName: "popupSeparator" }
+        FormToggleRow {
             objectName: "popupActionBarRow"
             label: qsTr("Show Action Bar")
             checked: settingsModel.popupActionBar
-            onEdited: value => settingsModel.popupActionBar = value
+            onToggled: value => settingsModel.popupActionBar = value
         }
 
-        SettingsSeparator { objectName: "popupSeparator" }
-        SettingsToggle {
+        FormDivider { objectName: "popupSeparator" }
+        FormToggleRow {
             objectName: "popupDisableTransparencyRow"
             label: qsTr("Disable Transparency")
             checked: settingsModel.popupDisableTransparency
-            onEdited: value => settingsModel.popupDisableTransparency = value
+            onToggled: value => settingsModel.popupDisableTransparency = value
         }
 
-        SettingsSeparator { objectName: "popupSeparator" }
-        SettingsToggle {
+        FormDivider { objectName: "popupSeparator" }
+        FormToggleRow {
             objectName: "popupFullWidthRow"
             label: qsTr("Full-width")
             checked: settingsModel.popupFullWidth
-            onEdited: value => settingsModel.popupFullWidth = value
+            onToggled: value => settingsModel.popupFullWidth = value
         }
 
-        SettingsSeparator { objectName: "popupSeparator" }
-        SettingsToggle {
+        FormDivider { objectName: "popupSeparator" }
+        FormToggleRow {
             objectName: "popupSwipeToDismissRow"
             label: qsTr("Swipe to Dismiss")
             checked: settingsModel.popupSwipeToDismiss
-            onEdited: value => settingsModel.popupSwipeToDismiss = value
+            onToggled: value => settingsModel.popupSwipeToDismiss = value
         }
 
-        SettingsSeparator {
+        FormDivider {
             objectName: "popupSwipeThresholdSeparator"
             visible: settingsModel.popupSwipeToDismiss
         }
-        SettingsSliderRow {
+        ValueSlider {
             objectName: "popupSwipeThresholdRow"
             visible: settingsModel.popupSwipeToDismiss
             label: qsTr("Swipe Threshold")
             from: 20
             to: 80
             stepSize: 5
-            decimals: 0
             value: settingsModel.popupSwipeThreshold
-            onEdited: value => settingsModel.popupSwipeThreshold = value
+            onMoved: value => settingsModel.popupSwipeThreshold = value
         }
     }
 }

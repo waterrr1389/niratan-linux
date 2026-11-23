@@ -34,6 +34,17 @@ Item {
     Accessible.role: Accessible.SpinBox
     Accessible.description: valueText
 
+    // Tab focuses the stepper; Up and Down step it like its two halves.
+    activeFocusOnTab: true
+    Keys.onUpPressed: {
+        if (stepSize > 0 && value < to)
+            stepped(Math.min(to, value + stepSize))
+    }
+    Keys.onDownPressed: {
+        if (stepSize > 0 && value > from)
+            stepped(Math.max(from, value - stepSize))
+    }
+
     StyledLabel {
         id: valueLabel
 
@@ -55,8 +66,8 @@ Item {
         anchors.verticalCenter: parent.verticalCenter
         radius: Theme.controlRadius
         color: Theme.controlBackground
-        border.width: Theme.hairlineWidth
-        border.color: Theme.controlStroke
+        border.width: stepper.activeFocus ? Theme.focusRingWidth : Theme.hairlineWidth
+        border.color: stepper.activeFocus ? Theme.accent : Theme.controlStroke
 
         Item {
             id: upHalf

@@ -90,6 +90,14 @@ Item {
                 required property var modelData
 
                 readonly property bool selected: segment.index === picker.currentIndex
+                // The segment's title; tests and assistive tools find a
+                // segment by it and click it.
+                readonly property string text: String(segment.modelData)
+
+                signal clicked()
+
+                objectName: "segment"
+                onClicked: picker.choose(segment.index)
                 readonly property real naturalWidth: Math.max(
                     picker.minimumSegmentWidth,
                     segmentLabel.implicitWidth + 2 * Theme.segmentPaddingHorizontal)
@@ -120,7 +128,7 @@ Item {
                     width: segment.width - 2 * Theme.segmentPaddingHorizontal
                     anchors.verticalCenter: parent.verticalCenter
                     horizontalAlignment: Text.AlignHCenter
-                    text: String(segment.modelData)
+                    text: segment.text
                     textStyle: Theme.calloutFont
                     weight: Theme.weightSemibold
                     secondary: !segment.selected
@@ -129,7 +137,7 @@ Item {
 
                 TapHandler {
                     enabled: picker.segmentEnabled(segment.index)
-                    onTapped: picker.choose(segment.index)
+                    onTapped: segment.clicked()
                 }
             }
         }

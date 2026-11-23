@@ -646,8 +646,12 @@ void QmlLoadTest::dictionary_settings_page_shows_sort_and_text_rows() {
              "the Frequency Dictionary label is missing");
     QTRY_VERIFY(footer_shown());
 
+    // Rows lay out their trailing controls on polish, which needs a shown
+    // window.
+    window.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&window));
     const QRectF bounds(0, 0, window.width(), window.height());
-    QVERIFY(fits_settings_viewport(*sort, bounds));
+    QTRY_VERIFY(fits_settings_viewport(*sort, bounds));
     QVERIFY(fits_settings_viewport(*text_size, bounds));
     QVERIFY(fits_settings_viewport(*dictionary, bounds));
 
@@ -665,7 +669,7 @@ void QmlLoadTest::dictionary_settings_page_shows_sort_and_text_rows() {
     niratan::viewmodels::SettingsViewModel sorted;
     QCOMPARE(sorted.frequencySortOrder(), QStringLiteral("Descending"));
 
-    QVERIFY(QMetaObject::invokeMethod(text_size, "edited", Q_ARG(int, 30)));
+    QVERIFY(QMetaObject::invokeMethod(text_size, "stepped", Q_ARG(double, 30.0)));
     niratan::viewmodels::SettingsViewModel sized;
     QCOMPARE(sized.searchTextSize(), 30);
 

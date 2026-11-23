@@ -29,6 +29,7 @@ Item {
     property string subtitle
     // An SF Symbol name drawn by Icon.
     property string glyph
+    property color glyphColor: Theme.textSecondary
     property bool compact: section ? (section as FormSection).compact : false
     default property alias trailing: trailingColumn.data
 
@@ -113,7 +114,7 @@ Item {
             anchors.centerIn: parent
             name: row.glyph
             size: Theme.glyphSize
-            color: Theme.textSecondary
+            color: row.glyphColor
         }
     }
 

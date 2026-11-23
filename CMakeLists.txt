@@ -385,7 +385,6 @@ qt_add_qml_module(niratan_app
         src/views/shell/VideoWindow.qml
         src/views/shell/Sidebar.qml
         src/views/shell/niratan-sidebar-icon.png
-        src/views/pages/AnkiFieldRow.qml
         src/views/pages/AnkiSettingsAlerts.qml
         src/views/pages/AnkiSettingsPage.qml
         src/views/pages/DictionaryPage.qml
@@ -421,20 +420,9 @@ qt_add_qml_module(niratan_app
         src/views/statistics/StatisticsTrendCard.qml
         src/views/statistics/StatisticsWeekCard.qml
         src/views/pages/SettingsPage.qml
-        src/views/pages/SettingsNote.qml
         src/views/pages/SettingsSectionRail.qml
-        src/views/pages/SettingRow.qml
-        src/views/pages/SettingsSliderRow.qml
         src/views/settings/AppearanceSettings.qml
         src/views/settings/ReaderDisplayCard.qml
-        src/views/settings/SettingsActions.qml
-        src/views/settings/SettingsCard.qml
-        src/views/settings/SettingsColorRow.qml
-        src/views/settings/SettingsForm.qml
-        src/views/settings/SettingsInteger.qml
-        src/views/settings/SettingsSegments.qml
-        src/views/settings/SettingsSeparator.qml
-        src/views/settings/SettingsToggle.qml
         src/views/settings/StatisticsSettings.qml
         src/views/settings/WordAudioSettings.qml
         src/views/reader/SasayakiChaptersTab.qml

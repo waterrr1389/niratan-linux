@@ -271,6 +271,14 @@ QtObject {
     readonly property int tabItemSpacing: 3
     readonly property int tabGlyphBox: 17
     readonly property int tabGlyphSize: 14
+    // Settings dialogs: the standard width, a wider one for editors, and an
+    // editor's text area height.
+    readonly property int dialogWidth: 480
+    readonly property int wideDialogWidth: 580
+    readonly property int dialogEditorHeight: 240
+    // Below this form width the Appearance form's four Furigana segments
+    // move under their label.
+    readonly property int appearanceWideFormWidth: 520
     // VideoVolumeTrack: a 64 px VideoTimelineTrack, 3 px at rest and 5 px
     // emphasized in an 18 px hit area. Swift's 11 px knob reads too small
     // with Linux scaling, so it is drawn at 14.

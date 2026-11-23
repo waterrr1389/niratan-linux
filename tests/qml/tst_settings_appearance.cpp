@@ -137,7 +137,7 @@ QQuickItem* appearance_detail(QQuickWindow* window) {
 // segmented control carries its name only as an accessibility property.
 QQuickItem* theme_picker(QQuickItem* root) {
     for (QQuickItem* item : visual_items(root)) {
-        const QVariant labels = item->property("labels");
+        const QVariant labels = item->property("model");
         if (labels.isValid() && labels.toStringList().contains(QStringLiteral("Custom"))) {
             return item;
         }
@@ -153,7 +153,7 @@ QColor swatch_color(QQuickItem* root, const QString& row) {
 // A segmented control found by its exact Swift labels.
 QQuickItem* segments_with_labels(QQuickItem* root, const QStringList& labels) {
     for (QQuickItem* item : visual_items(root)) {
-        if (item->property("labels").toStringList() == labels) {
+        if (item->property("model").toStringList() == labels) {
             return item;
         }
     }
@@ -305,13 +305,13 @@ void SettingsAppearanceTest::popup_rows_write_their_setting() {
     QCOMPARE(scale->property("stepSize").toReal(), 0.05);
     QCOMPARE(scale->property("decimals").toInt(), 2);
 
-    QVERIFY(QMetaObject::invokeMethod(width, "edited", Q_ARG(double, 1390.0)));
-    QVERIFY(QMetaObject::invokeMethod(height, "edited", Q_ARG(double, 790.0)));
-    QVERIFY(QMetaObject::invokeMethod(scale, "edited", Q_ARG(double, 1.45)));
-    QVERIFY(QMetaObject::invokeMethod(actionBar, "edited", Q_ARG(bool, true)));
-    QVERIFY(QMetaObject::invokeMethod(transparency, "edited", Q_ARG(bool, true)));
-    QVERIFY(QMetaObject::invokeMethod(fullWidth, "edited", Q_ARG(bool, true)));
-    QVERIFY(QMetaObject::invokeMethod(swipe, "edited", Q_ARG(bool, true)));
+    QVERIFY(QMetaObject::invokeMethod(width, "moved", Q_ARG(double, 1390.0)));
+    QVERIFY(QMetaObject::invokeMethod(height, "moved", Q_ARG(double, 790.0)));
+    QVERIFY(QMetaObject::invokeMethod(scale, "moved", Q_ARG(double, 1.45)));
+    QVERIFY(QMetaObject::invokeMethod(actionBar, "toggled", Q_ARG(bool, true)));
+    QVERIFY(QMetaObject::invokeMethod(transparency, "toggled", Q_ARG(bool, true)));
+    QVERIFY(QMetaObject::invokeMethod(fullWidth, "toggled", Q_ARG(bool, true)));
+    QVERIFY(QMetaObject::invokeMethod(swipe, "toggled", Q_ARG(bool, true)));
 
     QCOMPARE(width->property("value").toReal(), 1390.0);
     QCOMPARE(height->property("value").toReal(), 790.0);
@@ -351,7 +351,7 @@ void SettingsAppearanceTest::popup_threshold_row_follows_swipe_toggle() {
     QVERIFY(!visible_item(appearance, QStringLiteral("popupSwipeThresholdRow")));
     QVERIFY(!visible_item(appearance, QStringLiteral("popupSwipeThresholdSeparator")));
 
-    QVERIFY(QMetaObject::invokeMethod(swipe, "edited", Q_ARG(bool, true)));
+    QVERIFY(QMetaObject::invokeMethod(swipe, "toggled", Q_ARG(bool, true)));
     QTRY_VERIFY(visible_item(appearance, QStringLiteral("popupSwipeThresholdRow")));
     QTRY_VERIFY(visible_item(appearance, QStringLiteral("popupSwipeThresholdSeparator")));
     auto* threshold = visible_item(appearance, QStringLiteral("popupSwipeThresholdRow"));
@@ -365,10 +365,10 @@ void SettingsAppearanceTest::popup_threshold_row_follows_swipe_toggle() {
     QCOMPARE(threshold->property("decimals").toInt(), 0);
     QCOMPARE(threshold->property("value").toReal(), 40.0);
 
-    QVERIFY(QMetaObject::invokeMethod(threshold, "edited", Q_ARG(double, 75.0)));
+    QVERIFY(QMetaObject::invokeMethod(threshold, "moved", Q_ARG(double, 75.0)));
     QTRY_COMPARE(threshold->property("value").toReal(), 75.0);
 
-    QVERIFY(QMetaObject::invokeMethod(swipe, "edited", Q_ARG(bool, false)));
+    QVERIFY(QMetaObject::invokeMethod(swipe, "toggled", Q_ARG(bool, false)));
     QTRY_VERIFY(!visible_item(appearance, QStringLiteral("popupSwipeThresholdRow")));
     QTRY_VERIFY(!visible_item(appearance, QStringLiteral("popupSwipeThresholdSeparator")));
     niratan::viewmodels::SettingsViewModel fresh;
@@ -446,7 +446,7 @@ void SettingsAppearanceTest::theme_custom_color_rows_follow_theme() {
 
     QQuickItem* picker = theme_picker(appearance);
     QVERIFY(picker);
-    QVERIFY(QMetaObject::invokeMethod(picker, "edited", Q_ARG(int, 4)));
+    QVERIFY(QMetaObject::invokeMethod(picker, "activated", Q_ARG(int, 4)));
     QTRY_VERIFY(visible_item(appearance, QStringLiteral("customBackgroundColorRow")));
 
     const QStringList rowObjects{
@@ -496,7 +496,7 @@ void SettingsAppearanceTest::theme_custom_color_rows_write_their_setting() {
 
     QQuickItem* picker = theme_picker(appearance);
     QVERIFY(picker);
-    QVERIFY(QMetaObject::invokeMethod(picker, "edited", Q_ARG(int, 4)));
+    QVERIFY(QMetaObject::invokeMethod(picker, "activated", Q_ARG(int, 4)));
     QTRY_VERIFY(visible_item(appearance, QStringLiteral("customBackgroundColorRow")));
 
     auto* background = find_item(appearance, QStringLiteral("customBackgroundColorRow"));
@@ -509,9 +509,9 @@ void SettingsAppearanceTest::theme_custom_color_rows_write_their_setting() {
     const QColor red(255, 0, 0);
     const QColor blue(0, 128, 255, 102);
     const QColor transparent(0, 0, 0, 0);
-    QVERIFY(QMetaObject::invokeMethod(background, "edited", Q_ARG(QColor, red)));
-    QVERIFY(QMetaObject::invokeMethod(text, "edited", Q_ARG(QColor, blue)));
-    QVERIFY(QMetaObject::invokeMethod(info, "edited", Q_ARG(QColor, transparent)));
+    QVERIFY(QMetaObject::invokeMethod(background, "picked", Q_ARG(QColor, red)));
+    QVERIFY(QMetaObject::invokeMethod(text, "picked", Q_ARG(QColor, blue)));
+    QVERIFY(QMetaObject::invokeMethod(info, "picked", Q_ARG(QColor, transparent)));
 
     QTRY_COMPARE(swatch_color(appearance, QStringLiteral("customBackgroundColorRow")), red);
     QTRY_COMPARE(swatch_color(appearance, QStringLiteral("customTextColorRow")), blue);
@@ -557,7 +557,7 @@ void SettingsAppearanceTest::layout_wheel_page_turn_follows_swift_order() {
                      text_top(appearance, paddingLabel) > text_top(appearance, wheelLabel),
                  "Mouse Wheel Page Turn is not between Two-Column and Horizontal Padding");
 
-    QVERIFY(QMetaObject::invokeMethod(wheel, "edited", Q_ARG(bool, false)));
+    QVERIFY(QMetaObject::invokeMethod(wheel, "toggled", Q_ARG(bool, false)));
     QTRY_COMPARE(wheel->property("checked").toBool(), false);
     {
         niratan::viewmodels::SettingsViewModel fresh;
@@ -567,7 +567,7 @@ void SettingsAppearanceTest::layout_wheel_page_turn_follows_swift_order() {
     QQuickItem* mode = segments_with_labels(
         appearance, {QStringLiteral("Paginated"), QStringLiteral("Continuous")});
     QVERIFY(mode);
-    QVERIFY(QMetaObject::invokeMethod(mode, "edited", Q_ARG(int, 1)));
+    QVERIFY(QMetaObject::invokeMethod(mode, "activated", Q_ARG(int, 1)));
     QTRY_VERIFY(visible_item(appearance, QStringLiteral("wheelPageTurnRow")));
     QCOMPARE(wheel->property("checked").toBool(), false);
 
@@ -624,7 +624,7 @@ void SettingsAppearanceTest::display_statistics_rows_follow_statistics() {
         QQuickItem* row = find_item(appearance, rows.at(index));
         QVERIFY(row);
         QCOMPARE(row->property("label").toString(), labels.at(index));
-        QVERIFY(QMetaObject::invokeMethod(row, "edited", Q_ARG(bool, true)));
+        QVERIFY(QMetaObject::invokeMethod(row, "toggled", Q_ARG(bool, true)));
         QTRY_COMPARE(row->property("checked").toBool(), true);
     }
     {

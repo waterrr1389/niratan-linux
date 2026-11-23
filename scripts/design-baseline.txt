@@ -4,22 +4,16 @@
 
 src/views/MainWindow.qml 0 0 0 5
 src/views/dictionary/AnkiMiningToast.qml 1 2 7 8
-src/views/pages/AnkiFieldRow.qml 0 0 4 0
 src/views/pages/AnkiSettingsAlerts.qml 0 0 0 3
-src/views/pages/AnkiSettingsPage.qml 0 0 1 1
+src/views/pages/AnkiSettingsPage.qml 0 0 0 1
 src/views/pages/DictionaryPage.qml 0 0 0 1
-src/views/pages/DictionarySettingsPage.qml 0 0 0 6
 src/views/pages/LibraryBookCard.qml 2 1 3 21
 src/views/pages/LibraryDialogs.qml 0 1 4 2
 src/views/pages/LibraryPage.qml 0 3 13 13
 src/views/pages/LibraryShelfSidebar.qml 0 2 5 7
 src/views/pages/PlayerPage.qml 0 0 0 1
-src/views/pages/ProfilesPage.qml 0 0 5 4
 src/views/pages/ReaderPage.qml 0 0 1 4
-src/views/pages/SasayakiSettingsForm.qml 0 0 1 3
-src/views/pages/SettingRow.qml 0 1 3 1
 src/views/pages/SettingsSectionRail.qml 0 2 4 2
-src/views/pages/SettingsSliderRow.qml 0 2 4 0
 src/views/pages/StatisticsPage.qml 2 2 0 14
 src/views/pages/VideoLibraryPage.qml 0 1 2 3
 src/views/player/PlayerEmptyState.qml 0 1 1 2
@@ -60,12 +54,6 @@ src/views/reader/SasayakiPanel.qml 0 0 4 0
 src/views/reader/SasayakiPlaybackHeader.qml 0 1 5 16
 src/views/reader/SasayakiResourcesTab.qml 9 4 23 6
 src/views/reader/SasayakiSettingsTab.qml 6 3 18 6
-src/views/settings/AppearanceSettings.qml 0 0 1 1
-src/views/settings/SettingsActions.qml 0 0 2 1
-src/views/settings/SettingsCard.qml 0 1 4 0
-src/views/settings/SettingsColorRow.qml 0 0 0 3
-src/views/settings/SettingsForm.qml 0 0 1 0
-src/views/settings/SettingsSeparator.qml 0 0 1 0
 src/views/settings/WordAudioSettings.qml 0 0 0 1
 src/views/shell/ReaderWindow.qml 0 0 0 4
 src/views/shell/Sidebar.qml 0 1 3 6

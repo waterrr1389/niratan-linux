@@ -320,6 +320,20 @@ QQuickItem* shown_control(QQuickItem* item, const char* type, const QString& tex
     return nullptr;
 }
 
+// A kit SegmentedPicker segment with the given title.
+QQuickItem* shown_segment(QQuickItem* item, const QString& text) {
+    if (item->objectName() == QStringLiteral("segment") &&
+        item->property("text").toString() == text && shown(item)) {
+        return item;
+    }
+    for (QQuickItem* child : item->childItems()) {
+        if (QQuickItem* found = shown_segment(child, text)) {
+            return found;
+        }
+    }
+    return nullptr;
+}
+
 bool contains_control(QQuickItem* item) {
     for (QQuickItem* child : item->childItems()) {
         if (child->inherits("QQuickControl") || child->inherits("QQuickTextInput") ||
@@ -1256,13 +1270,13 @@ void ReaderPresentationTest::appearance_panel_hosts_the_settings_form() {
                                     QStringLiteral("Dark"), QStringLiteral("Sepia"),
                                     QStringLiteral("Custom")};
     for (const QString& segment : themeSegments) {
-        QVERIFY2(shown_control(panel, "QQuickTabButton", segment),
+        QVERIFY2(shown_segment(panel, segment),
                  qPrintable(segment + QStringLiteral(" theme segment missing")));
     }
     const QStringList furiganaSegments{QStringLiteral("Show"), QStringLiteral("Dimmed"),
                                        QStringLiteral("Tap to Reveal"), QStringLiteral("Hidden")};
     for (const QString& segment : furiganaSegments) {
-        QVERIFY2(shown_control(panel, "QQuickTabButton", segment),
+        QVERIFY2(shown_segment(panel, segment),
                  qPrintable(segment + QStringLiteral(" furigana segment missing")));
     }
 
@@ -1277,7 +1291,7 @@ void ReaderPresentationTest::appearance_panel_hosts_the_settings_form() {
                  qPrintable(QString::fromLatin1(control->metaObject()->className())));
     }
 
-    QQuickItem* horizontal = shown_control(panel, "QQuickTabButton", "Horizontal");
+    QQuickItem* horizontal = shown_segment(panel, "Horizontal");
     QVERIFY(horizontal != nullptr);
     click(horizontal);
     QTRY_COMPARE(reader_->vertical_writing(), false);

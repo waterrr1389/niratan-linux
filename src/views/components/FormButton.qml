@@ -14,6 +14,11 @@ T.AbstractButton {
     id: control
 
     property bool destructive: false
+    // An SF Symbol name drawn before the text, as NativeSettingsActionButton
+    // labels Import and Create Profile.
+    property string glyph
+    // The default action of a dialog: accent fill with on-accent text.
+    property bool prominent: false
 
     implicitWidth: implicitContentWidth + leftPadding + rightPadding
     implicitHeight: Math.max(Theme.capsuleHeight, implicitContentHeight + topPadding + bottomPadding)
@@ -26,18 +31,42 @@ T.AbstractButton {
         NumberAnimation { duration: Theme.motionFast }
     }
 
-    contentItem: StyledLabel {
-        text: control.text
-        weight: Theme.weightSemibold
-        color: control.destructive ? Theme.popupDanger : Theme.textPrimary
-        horizontalAlignment: Text.AlignHCenter
-        verticalAlignment: Text.AlignVCenter
-        elide: Text.ElideRight
+    contentItem: Item {
+        implicitWidth: labelRow.implicitWidth
+        implicitHeight: labelRow.implicitHeight
+
+        Row {
+            id: labelRow
+
+            anchors.centerIn: parent
+            spacing: Theme.chipGlyphSpacing
+
+            Icon {
+                anchors.verticalCenter: parent.verticalCenter
+                visible: control.glyph !== ""
+                name: control.glyph
+                size: Theme.glyphSize
+                color: label.color
+            }
+
+            StyledLabel {
+                id: label
+
+                anchors.verticalCenter: parent.verticalCenter
+                width: Math.min(implicitWidth, control.availableWidth
+                                - (control.glyph !== "" ? Theme.glyphSize + Theme.chipGlyphSpacing : 0))
+                text: control.text
+                weight: Theme.weightSemibold
+                color: control.destructive ? Theme.popupDanger
+                       : control.prominent ? Theme.textOnAccent : Theme.textPrimary
+                elide: Text.ElideRight
+            }
+        }
     }
 
     background: Rectangle {
         radius: height / 2
-        color: Theme.controlBackground
+        color: control.prominent ? Theme.accent : Theme.controlBackground
         border.width: control.visualFocus ? Theme.focusRingWidth : Theme.hairlineWidth
         border.color: control.visualFocus ? Theme.accent : Theme.controlStroke
 
