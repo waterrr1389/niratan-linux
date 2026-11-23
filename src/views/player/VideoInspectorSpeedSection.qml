@@ -14,6 +14,7 @@ pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Controls
 import Niratan
+import NiratanStyle as Style
 
 VideoInspectorSection {
     id: section
@@ -106,7 +107,7 @@ VideoInspectorSection {
                 secondary: true
             }
 
-            Slider {
+            Style.Slider {
                 objectName: "inspectorSpeedSlider"
                 anchors.verticalCenter: parent.verticalCenter
                 width: sliderRow.width - slow.width - fast.width - field.width - 3 * sliderRow.spacing

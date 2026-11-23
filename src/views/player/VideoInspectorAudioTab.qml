@@ -35,7 +35,7 @@ Column {
     }
 
     VideoInspectorTrackSection {
-        title: qsTr("Audio Track")
+        sectionTitle: qsTr("Audio Track")
         type: "audio"
         emptyAfterOff: true
         tracks: tab.model.audioTracks

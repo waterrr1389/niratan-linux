@@ -125,7 +125,7 @@ Column {
     }
 
     VideoInspectorTrackSection {
-        title: qsTr("Video Track")
+        sectionTitle: qsTr("Video Track")
         type: "video"
         tracks: tab.model.videoTracks
         onSelectTrackRequested: (type, id) => tab.selectTrackRequested(type, id)

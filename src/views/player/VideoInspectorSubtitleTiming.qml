@@ -14,6 +14,7 @@
 import QtQuick
 import QtQuick.Controls
 import Niratan
+import NiratanStyle as Style
 
 VideoInspectorSection {
     id: section
@@ -42,7 +43,7 @@ VideoInspectorSection {
             onStepped: step => section.model.stepSubtitleMilliseconds(step)
         }
 
-        Slider {
+        Style.Slider {
             objectName: "inspectorSubtitleSlider"
             x: Theme.compactRowPadding
             width: parent.width - 2 * Theme.compactRowPadding

@@ -16,7 +16,6 @@ import Niratan
 VideoInspectorSection {
     id: card
 
-    property string title
     property string type
     property var tracks: []
     // The model adds Off first for audio and subtitles; only Off means no
@@ -27,8 +26,6 @@ VideoInspectorSection {
     property bool emptyAfterOff: false
 
     signal selectTrackRequested(string type, int id)
-
-    sectionTitle: title
 
     Repeater {
         model: card.tracks

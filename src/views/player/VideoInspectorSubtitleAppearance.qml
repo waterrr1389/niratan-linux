@@ -21,7 +21,7 @@ import QtQuick.Controls
 import Niratan
 
 VideoInspectorSection {
-    id: section
+    id: appearance
 
     required property var engine
     readonly property var settings: engine.videoSettings
@@ -51,17 +51,17 @@ VideoInspectorSection {
 
         required property string settingKey
 
-        checked: Boolean(section.settings[settingKey])
-        onToggled: value => section.write(settingKey, value)
+        checked: Boolean(appearance.settings[settingKey])
+        onToggled: value => appearance.write(settingKey, value)
     }
 
     component SettingSlider: FormSliderRow {
         id: slider
 
-        readonly property real current: Number(section.settings[settingKey])
+        readonly property real current: Number(appearance.settings[settingKey])
 
         value: current
-        onMoved: value => section.write(settingKey, value)
+        onMoved: value => appearance.write(settingKey, value)
     }
 
     component SettingColor: FormColorRow {
@@ -69,8 +69,8 @@ VideoInspectorSection {
 
         required property string settingKey
 
-        color: section.storedColor(settingKey)
-        onPicked: value => section.write(settingKey, section.hexColor(value))
+        color: appearance.storedColor(settingKey)
+        onPicked: value => appearance.write(settingKey, appearance.hexColor(value))
     }
 
     sectionTitle: qsTr("Subtitle Appearance")
@@ -78,7 +78,7 @@ VideoInspectorSection {
         objectName: "inspectorRestoreDefaults"
         small: true
         text: qsTr("Restore Defaults")
-        onClicked: section.engine.resetSubtitleAppearance()
+        onClicked: appearance.engine.resetSubtitleAppearance()
     }
 
     SettingToggle {
@@ -94,11 +94,11 @@ VideoInspectorSection {
         controlName: "inspectorFontFamily"
         glyph: "textformat"
         label: qsTr("Subtitle Font")
-        model: [qsTr("System Default")].concat(section.families)
-        currentIndex: Math.max(0, section.families.indexOf(
-            String(section.settings.videoSubtitleFontFamily)) + 1)
-        onActivated: index => section.write("videoSubtitleFontFamily",
-                                            index === 0 ? "" : section.families[index - 1])
+        model: [qsTr("System Default")].concat(appearance.families)
+        currentIndex: Math.max(0, appearance.families.indexOf(
+            String(appearance.settings.videoSubtitleFontFamily)) + 1)
+        onActivated: index => appearance.write("videoSubtitleFontFamily",
+                                            index === 0 ? "" : appearance.families[index - 1])
     }
 
     FormDivider {}
@@ -130,11 +130,11 @@ VideoInspectorSection {
             editable: false
             font.pixelSize: Theme.calloutFont.pixelSize
             font.features: { "tnum": 1 }
-            value: Number(section.settings.videoSubtitleFontWeight)
+            value: Number(appearance.settings.videoSubtitleFontWeight)
             Accessible.name: qsTr("Subtitle Weight")
             onValueModified: {
-                section.write("videoSubtitleFontWeight", value)
-                value = Qt.binding(() => Number(section.settings.videoSubtitleFontWeight))
+                appearance.write("videoSubtitleFontWeight", value)
+                value = Qt.binding(() => Number(appearance.settings.videoSubtitleFontWeight))
             }
         }
     }
@@ -146,8 +146,8 @@ VideoInspectorSection {
         glyph: "character.textbox"
         label: qsTr("Edge Style")
         model: [qsTr("Off"), qsTr("Soft Shadow"), qsTr("Clear Outline"), qsTr("High Contrast")]
-        currentIndex: Math.max(0, section.edgeKeys.indexOf(String(section.settings.videoSubtitleEdgeStyle)))
-        onActivated: index => section.write("videoSubtitleEdgeStyle", section.edgeKeys[index])
+        currentIndex: Math.max(0, appearance.edgeKeys.indexOf(String(appearance.settings.videoSubtitleEdgeStyle)))
+        onActivated: index => appearance.write("videoSubtitleEdgeStyle", appearance.edgeKeys[index])
     }
 
     FormDivider {}
@@ -163,7 +163,7 @@ VideoInspectorSection {
         from: 0
         to: 1
         stepSize: 0.05
-        enabled: String(section.settings.videoSubtitleEdgeStyle) !== "off"
+        enabled: String(appearance.settings.videoSubtitleEdgeStyle) !== "off"
     }
 
     FormDivider {}
@@ -188,7 +188,7 @@ VideoInspectorSection {
         from: 0
         to: 1
         stepSize: 0.05
-        enabled: !Boolean(section.settings.videoSubtitleBackgroundDisabled)
+        enabled: !Boolean(appearance.settings.videoSubtitleBackgroundDisabled)
     }
 
     FormDivider {}
