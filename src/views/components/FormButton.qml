@@ -20,6 +20,7 @@ T.AbstractButton {
     property string glyph
     // The default action of a dialog: accent fill with on-accent text.
     property bool prominent: false
+    // Every button sizes to its label; kept so existing callers still bind.
     property bool sizeToLabel: false
     // controlSize(.small): caption semibold on a chip-high capsule, as
     // ReaderGoToView.bookSummary draws Jump to.
@@ -39,9 +40,10 @@ T.AbstractButton {
     }
 
     contentItem: Item {
-        implicitWidth: control.sizeToLabel
-            ? label.implicitWidth + control.leadingWidth
-            : labelRow.implicitWidth
+        // Measured from the label's own text, never from the row: the label's
+        // width follows the button's, so measuring the row would feed the
+        // button's width back into itself and collapse the label to nothing.
+        implicitWidth: label.implicitWidth + control.leadingWidth
         implicitHeight: labelRow.implicitHeight
 
         Row {

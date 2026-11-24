@@ -211,10 +211,10 @@ Item {
             }
         }
 
-        Text {
+        StyledLabel {
             anchors.centerIn: parent
             visible: !model.hasResults && model.error.length > 0
-            width: parent.width - 48
+            width: parent.width - 2 * Theme.spacingXl
             text: model.error
             color: Theme.popupDanger
             wrapMode: Text.WordWrap

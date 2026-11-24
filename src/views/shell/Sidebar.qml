@@ -26,7 +26,7 @@ Rectangle {
     id: sidebar
 
     property int selected: 0
-    readonly property int toolbarHeight: 52
+    readonly property int toolbarHeight: Theme.sourceListToolbarHeight
 
     signal sectionSelected(int index)
     signal toggleRequested()
@@ -72,7 +72,7 @@ Rectangle {
 
     ToolbarButton {
         anchors.right: parent.right
-        anchors.rightMargin: 12
+        anchors.rightMargin: Theme.sourceListTitleTrailing
         y: (sidebar.toolbarHeight - height) / 2
         symbol: "sidebar.leading"
         help: qsTr("Toggle Sidebar")
@@ -82,49 +82,49 @@ Rectangle {
     Row {
         id: brand
 
-        x: 18
-        y: sidebar.toolbarHeight + 12
-        spacing: 12
+        x: Theme.shellBrandInset
+        y: sidebar.toolbarHeight + Theme.spacingMd
+        spacing: Theme.spacingMd
 
         Item {
-            width: 58
-            height: 58
+            width: Theme.shellBrandIconSize
+            height: Theme.shellBrandIconSize
 
             RoundedImage {
                 anchors.fill: parent
-                radius: 13
+                radius: Theme.shellBrandIconRadius
                 maskColor: sidebar.color
                 source: "qrc:/qt/qml/Niratan/src/views/shell/niratan-sidebar-icon.png"
                 fillMode: Image.PreserveAspectCrop
-                sourceSize.width: 116
-                sourceSize.height: 116
+                // Twice the drawn size, for HiDPI screens.
+                sourceSize.width: 2 * Theme.shellBrandIconSize
+                sourceSize.height: 2 * Theme.shellBrandIconSize
             }
 
             Rectangle {
                 anchors.fill: parent
-                radius: 13
+                radius: Theme.shellBrandIconRadius
                 color: "transparent"
-                border.width: 0.5
+                border.width: Theme.shellBrandIconStroke
                 border.color: Theme.cardStroke
             }
         }
 
-        Text {
+        StyledLabel {
             anchors.verticalCenter: parent.verticalCenter
             text: qsTr("Niratan")
-            color: Theme.textPrimary
-            font.pixelSize: Theme.fontTitle2
-            font.weight: Font.DemiBold
+            textStyle: Theme.title2Font
+            weight: Theme.weightSemibold
         }
     }
 
     Column {
         id: sectionList
 
-        x: 16
-        y: brand.y + brand.height + 12
-        width: sidebar.width - 26
-        spacing: 2
+        x: Theme.sourceListTitleInset
+        y: brand.y + brand.height + Theme.spacingMd
+        width: sidebar.width - x - Theme.shellSectionTrailing
+        spacing: Theme.sourceListRowSpacing
 
         Repeater {
             model: sidebar.sections
@@ -150,7 +150,7 @@ Rectangle {
 
     Rectangle {
         anchors.right: parent.right
-        width: 1
+        width: Theme.hairlineWidth
         height: parent.height
         color: Theme.separator
     }

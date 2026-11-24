@@ -12,7 +12,7 @@ Rectangle {
 
     property int selected: 1
     property real toolbarInset: 0
-    readonly property int toolbarHeight: 52
+    readonly property int toolbarHeight: Theme.sourceListToolbarHeight
     readonly property var sections: [
         { key: "profiles", title: qsTr("Profiles"), symbol: "person.crop.circle.badge.checkmark" },
         { key: "appearance", title: qsTr("Appearance"), symbol: "paintpalette" },
@@ -32,17 +32,10 @@ Rectangle {
     Keys.onUpPressed: selected = Math.max(0, selected - 1)
     Keys.onDownPressed: selected = Math.min(lastSection, selected + 1)
 
-    Text {
+    SourceListTitle {
         objectName: "settingsTitle"
-        x: 16 + sidebar.toolbarInset
-        width: sidebar.width - x - 12
-        height: sidebar.toolbarHeight
-        verticalAlignment: Text.AlignVCenter
+        leadingInset: sidebar.toolbarInset
         text: sidebar.sections[sidebar.selected].title
-        color: Theme.textPrimary
-        font.pixelSize: Theme.fontTitle
-        font.weight: Font.Bold
-        elide: Text.ElideRight
     }
 
     Flickable {
@@ -50,7 +43,7 @@ Rectangle {
 
         anchors.fill: parent
         anchors.topMargin: sidebar.toolbarHeight
-        contentHeight: rows.implicitHeight + 8
+        contentHeight: rows.implicitHeight + Theme.spacingSm
         clip: true
         boundsBehavior: Flickable.StopAtBounds
         ScrollBar.vertical: ScrollBar {}
@@ -58,9 +51,9 @@ Rectangle {
         Column {
             id: rows
 
-            x: 6
-            width: list.width - 12
-            spacing: 2
+            x: Theme.sourceListInset
+            width: list.width - 2 * Theme.sourceListInset
+            spacing: Theme.sourceListRowSpacing
 
             Repeater {
                 model: sidebar.sections
@@ -72,16 +65,10 @@ Rectangle {
                     required property var modelData
                     width: rows.width
 
-                    Text {
+                    SourceListCaption {
                         visible: entry.index === 0 || entry.index === 4 || entry.modelData.key === "sync"
-                        leftPadding: 6
-                        topPadding: 14
-                        bottomPadding: 4
                         text: entry.index === 0 ? qsTr("Library")
                             : entry.index === 4 ? qsTr("Reader") : qsTr("Sync & Data")
-                        color: Theme.textSecondary
-                        font.pixelSize: Theme.fontSubheadline
-                        font.weight: Font.DemiBold
                     }
 
                     Item {

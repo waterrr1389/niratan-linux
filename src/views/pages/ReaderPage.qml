@@ -437,23 +437,24 @@ Item {
 
     ColumnLayout {
         anchors.centerIn: parent
-        spacing: 12
+        spacing: Theme.spacingMd
         visible: !ReaderViewModel.hasBook
-        Label {
+        StyledLabel {
             Layout.alignment: Qt.AlignHCenter
             text: qsTr("Open an EPUB to start reading")
-            color: Theme.textSecondary
+            secondary: true
         }
-        Button {
+        FormButton {
             Layout.alignment: Qt.AlignHCenter
             text: qsTr("Open EPUB")
+            sizeToLabel: true
             onClicked: openDialog.open()
         }
-        Label {
+        StyledLabel {
             Layout.alignment: Qt.AlignHCenter
             visible: ReaderViewModel.error.length > 0
             text: ReaderViewModel.error
-            color: Theme.textSecondary
+            secondary: true
             wrapMode: Text.WordWrap
         }
     }
@@ -487,10 +488,11 @@ Item {
         id: leadingPanel
         objectName: "readerLeadingPanel"
         edge: Qt.LeftEdge
-        width: 440
-        height: page.height - 24
-        y: 12
-        x: page.leadingPanelRequested ? 12 : -452
+        width: Theme.readerGoToPanelWidth
+        height: page.height - 2 * Theme.readerPanelInset
+        y: Theme.readerPanelInset
+        x: page.leadingPanelRequested ? Theme.readerPanelInset
+                                        : -(width + Theme.readerPanelInset)
         opacity: page.leadingPanelRequested ? 1 : 0
         visible: page.leadingPanelRequested || opacity > 0
 
@@ -509,9 +511,10 @@ Item {
         objectName: "readerTrailingPanel"
         edge: Qt.RightEdge
         width: Theme.readerSidePanelWidth(page.width)
-        height: page.height - 24
-        y: 12
-        x: page.trailingPanelRequested ? page.width - 12 - width : page.width + 12
+        height: page.height - 2 * Theme.readerPanelInset
+        y: Theme.readerPanelInset
+        x: page.trailingPanelRequested ? page.width - Theme.readerPanelInset - width
+                                         : page.width + Theme.readerPanelInset
         opacity: page.trailingPanelRequested ? 1 : 0
         visible: page.trailingPanelRequested || opacity > 0
 

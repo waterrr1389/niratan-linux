@@ -3,7 +3,8 @@
 // A row of leading action buttons, 8 apart. Follows
 // NativeMac/NativeReuseViews.swift NativeSettingsButtonRow: at least 48 high
 // with padding 16 in cards, 36 high without padding in the compact density,
-// which follows the enclosing FormSection unless set.
+// which follows the enclosing FormSection unless set. Buttons that do not
+// fit the row's width wrap onto another line rather than leave the card.
 import QtQuick
 import Niratan
 
@@ -24,13 +25,14 @@ Item {
     width: parent ? parent.width : implicitWidth
     implicitWidth: content.implicitWidth + 2 * content.x
     implicitHeight: Math.max(compact ? Theme.compactButtonRowMinHeight : Theme.buttonRowMinHeight,
-                             content.implicitHeight)
+                             content.implicitHeight + (compact ? 0 : 2 * Theme.capsuleSpacing))
     opacity: enabled ? 1 : Theme.disabledOpacity
 
-    Row {
+    Flow {
         id: content
 
         x: row.compact ? 0 : Theme.rowPadding
+        width: row.width - 2 * x
         anchors.verticalCenter: parent.verticalCenter
         spacing: Theme.capsuleSpacing
     }

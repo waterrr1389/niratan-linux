@@ -36,7 +36,7 @@ Item {
 
         modal: true
         anchors.centerIn: parent
-        width: 420
+        width: Theme.messageDialogWidth
         padding: Theme.spacingXl
         title: qsTr("Fetch from Anki?")
 
@@ -65,7 +65,7 @@ Item {
 
         modal: true
         anchors.centerIn: parent
-        width: 420
+        width: Theme.messageDialogWidth
         padding: Theme.spacingXl
         title: qsTr("Apply defaults?")
 
@@ -94,7 +94,7 @@ Item {
 
         modal: true
         anchors.centerIn: parent
-        width: 420
+        width: Theme.messageDialogWidth
         padding: Theme.spacingXl
         title: qsTr("Error")
         visible: alerts.errorText.length > 0

@@ -24,10 +24,10 @@ Item {
 
     readonly property bool showsProgress: ReaderViewModel.showProgressTop
                                           && ReaderViewModel.progressText.length > 0
-    readonly property real maximumWidth: parent.width - 2 * 96
+    readonly property real maximumWidth: parent.width - 2 * Theme.readerInfoSideInset
 
     anchors.top: parent.top
-    anchors.topMargin: 10
+    anchors.topMargin: Theme.readerInfoTopInset
     anchors.horizontalCenter: parent.horizontalCenter
     readonly property real naturalWidth: Math.max(title.visible ? title.implicitWidth : 0,
                                                   progress.visible ? progress.implicitWidth : 0)
@@ -46,9 +46,9 @@ Item {
 
         anchors.centerIn: parent
         width: topInfo.width - 2 * Theme.readerInfoCapsulePaddingHorizontal
-        spacing: 2
+        spacing: Theme.sourceListRowSpacing
 
-        Text {
+        StyledLabel {
             id: title
 
             objectName: "readerTopTitle"
@@ -60,11 +60,10 @@ Item {
             maximumLineCount: 1
             color: ReaderViewModel.usesCustomInfoColor ? ReaderViewModel.infoColor
                                                        : Theme.textPrimary
-            font.pixelSize: Theme.fontTitle
-            font.bold: true
+            textStyle: Theme.headlineFont
         }
 
-        Text {
+        StyledLabel {
             id: progress
 
             objectName: "readerTopProgress"
@@ -74,8 +73,8 @@ Item {
             horizontalAlignment: Text.AlignHCenter
             color: ReaderViewModel.usesCustomInfoColor ? ReaderViewModel.infoColor
                                                        : Theme.textSecondary
-            font.pixelSize: 12
-            font.features: ({ "tnum": 1 })
+            textStyle: Theme.subheadlineFont
+            monospacedDigits: true
         }
     }
 }

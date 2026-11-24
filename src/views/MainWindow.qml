@@ -52,7 +52,7 @@ ApplicationWindow {
     // way Swift's readerWindowProgressDidChange makes it call loadBooks().
     property int readerCloses: 0
 
-    readonly property int toolbarHeight: 52
+    readonly property int toolbarHeight: Theme.sourceListToolbarHeight
     readonly property bool pageOwnsToolbar: window.sectionIndex === 3
                                             || window.sectionIndex === 2
                                             || window.sectionIndex === 1
@@ -89,7 +89,7 @@ ApplicationWindow {
         Sidebar {
             id: sidebar
 
-            Layout.preferredWidth: window.sidebarVisible ? 240 : 0
+            Layout.preferredWidth: window.sidebarVisible ? Theme.shellSidebarWidth : 0
             Layout.fillHeight: true
             visible: window.sidebarVisible
             selected: window.sectionIndex
@@ -116,7 +116,7 @@ ApplicationWindow {
             }
 
             ToolbarButton {
-                x: 12
+                x: Theme.sourceListTitleTrailing
                 y: (window.toolbarHeight - height) / 2
                 visible: !window.sidebarVisible
                 symbol: "sidebar.leading"

@@ -126,6 +126,16 @@ int main(int argc, char* argv[]) {
                         "    height: 1000\n"
                         "    title: \"Niratan player chrome\"\n"
                         "    PlayerChromeSheet { anchors.fill: parent }\n}\n");
+    } else if (preview == "lookup") {
+        // The lookup surface and the mining toast with demo states, for renders
+        // without a live reader selection or AnkiConnect.
+        engine.loadData("import QtQuick\nimport QtQuick.Controls\nimport Niratan\n"
+                        "ApplicationWindow {\n"
+                        "    visible: true\n"
+                        "    width: 960\n"
+                        "    height: 640\n"
+                        "    title: \"Niratan lookup and toast\"\n"
+                        "    LookupToastSheet { anchors.fill: parent }\n}\n");
     } else {
         engine.loadFromModule("Niratan", theme_preview ? "ThemePreview" : "MainWindow");
     }

@@ -539,6 +539,7 @@ qt_add_qml_module(niratan_app
         src/views/icons/phosphor/regular/align-bottom-simple.svg
         src/views/pages/ReaderPage.qml
         src/views/theme/ControlKitSheet.qml
+        src/views/theme/LookupToastSheet.qml
         src/views/theme/PlayerChromeSheet.qml
         src/views/theme/Theme.qml
         src/views/theme/ThemeMetrics.qml

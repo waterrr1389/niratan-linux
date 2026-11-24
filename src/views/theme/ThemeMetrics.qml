@@ -298,4 +298,49 @@ QtObject {
     readonly property int shelfHeaderHeight: 36
     readonly property int shelfEmptyMinimumHeight: 280
     readonly property int checkBadgeKnob: 16
+
+    // The app shell (NativeMacSidebarView): the sidebar width, its brand
+    // row of the 58 px app icon and name, and the section list's trailing
+    // inset.
+    readonly property int shellSidebarWidth: 240
+    readonly property int shellBrandInset: 18
+    readonly property int shellBrandIconSize: 58
+    readonly property int shellBrandIconRadius: 13
+    readonly property real shellBrandIconStroke: 0.5
+    readonly property int shellSectionTrailing: 10
+
+    // nativeTopInfoOverlay: 96 clear of each side, 10 below the top.
+    readonly property int readerInfoSideInset: 96
+    readonly property int readerInfoTopInset: 10
+
+    // The reader's lookup surface: its corner, the 48 high control bar and
+    // its 52x32 controls with 16 pt glyphs.
+    readonly property int lookupRadius: 8
+    readonly property int lookupControlBarHeight: 48
+    readonly property int lookupControlWidth: 52
+    readonly property int lookupControlHeight: 32
+    readonly property int lookupControlGlyph: 16
+    readonly property int lookupControlSpacing: 20
+    readonly property int lookupCloseInset: 16
+
+    // AnkiMiningToastView: 18 from the edges and the leading side, 14
+    // vertical, a 42 tinted badge with a 24 glyph, 13 to the text, 3 between
+    // its lines, a 420 cap and the 28 corner.
+    readonly property int toastInset: 18
+    readonly property int toastPaddingTrailing: 22
+    readonly property int toastPaddingVertical: 14
+    readonly property int toastSpacing: 13
+    readonly property int toastLineSpacing: 3
+    readonly property int toastBadgeDiameter: 42
+    readonly property int toastGlyph: 24
+    readonly property int toastMaximumWidth: 420
+    readonly property int toastRadius: 28
+
+    // The reader's floating side panels: 12 from the window edges, the Go To
+    // panel at a fixed 440.
+    readonly property int readerPanelInset: 12
+    readonly property int readerGoToPanelWidth: 440
+
+    // A titled message dialog with a button bar (the Anki settings alerts).
+    readonly property int messageDialogWidth: 420
 }

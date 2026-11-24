@@ -68,9 +68,9 @@ Item {
 
     anchors.top: parent.top
     anchors.horizontalCenter: parent.horizontalCenter
-    anchors.topMargin: Math.max(18, topInset + 18)
-    width: Math.max(0, Math.min(420, parent.width - 36))
-    height: content.implicitHeight + 28
+    anchors.topMargin: Math.max(Theme.toastInset, topInset + Theme.toastInset)
+    width: Math.max(0, Math.min(Theme.toastMaximumWidth, parent.width - 2 * Theme.toastInset))
+    height: content.implicitHeight + 2 * Theme.toastPaddingVertical
     z: 1000
     enabled: false
     visible: opacity > 0
@@ -88,7 +88,7 @@ Item {
 
     Rectangle {
         anchors.fill: parent
-        radius: 28
+        radius: Theme.toastRadius
         color: Qt.tint(Theme.floatingBackground, Qt.alpha(toast.tint, 0.16))
         border.width: Theme.cardBorderWidth
         border.color: Qt.alpha(toast.tint, 0.32)
@@ -97,57 +97,54 @@ Item {
     RowLayout {
         id: content
         anchors.fill: parent
-        anchors.leftMargin: 18
-        anchors.rightMargin: 22
-        anchors.topMargin: 14
-        anchors.bottomMargin: 14
-        spacing: 13
+        anchors.leftMargin: Theme.toastInset
+        anchors.rightMargin: Theme.toastPaddingTrailing
+        anchors.topMargin: Theme.toastPaddingVertical
+        anchors.bottomMargin: Theme.toastPaddingVertical
+        spacing: Theme.toastSpacing
 
         Rectangle {
-            Layout.preferredWidth: 42
-            Layout.preferredHeight: 42
+            Layout.preferredWidth: Theme.toastBadgeDiameter
+            Layout.preferredHeight: Theme.toastBadgeDiameter
             radius: width / 2
             color: Qt.alpha(toast.tint, 0.16)
 
             IconImage {
                 id: icon
                 anchors.centerIn: parent
-                width: 24
-                height: 24
-                sourceSize.width: 24
-                sourceSize.height: 24
+                width: Theme.toastGlyph
+                height: Theme.toastGlyph
+                sourceSize.width: Theme.toastGlyph
+                sourceSize.height: Theme.toastGlyph
                 name: toast.iconName
                 color: toast.tint
             }
-            Text {
+            StyledLabel {
                 anchors.centerIn: parent
                 visible: icon.status !== Image.Ready
                 text: toast.fallbackIcon
                 color: toast.tint
-                font.pixelSize: 24
-                font.weight: Font.DemiBold
+                textStyle: Theme.toastGlyphFont
             }
         }
 
         ColumnLayout {
             Layout.fillWidth: true
-            spacing: 3
+            spacing: Theme.toastLineSpacing
 
-            Text {
+            StyledLabel {
                 Layout.fillWidth: true
                 text: toast.title
                 textFormat: Text.PlainText
-                color: Theme.textPrimary
-                font.pixelSize: Theme.fontTitle
-                font.weight: Font.DemiBold
+                textStyle: Theme.headlineFont
                 elide: Text.ElideRight
             }
-            Text {
+            StyledLabel {
                 Layout.fillWidth: true
                 text: toast.displayedMessage
                 textFormat: Text.PlainText
-                color: Theme.textSecondary
-                font.pixelSize: Theme.fontBody
+                textStyle: Theme.calloutFont
+                secondary: true
                 maximumLineCount: 2
                 wrapMode: Text.Wrap
                 elide: Text.ElideRight

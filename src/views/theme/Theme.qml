@@ -190,6 +190,7 @@ ThemeMetrics {
     readonly property font captionFont: Qt.font({ pixelSize: 11, weight: weightRegular })
     readonly property font caption2Font: Qt.font({ pixelSize: 11, weight: weightMedium })
     readonly property font bookPercentFont: Qt.font({ pixelSize: 9, weight: weightMedium })
+    readonly property font toastGlyphFont: Qt.font({ pixelSize: 24, weight: weightSemibold })
 
     // Form rows. Cards follow NativeSettingsRow and NativeSettingsSubtitledLabel;
     // compact follows VideoInspectorView.labeledRow and rowLabel. Minimum

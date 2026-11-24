@@ -30,8 +30,8 @@ Rectangle {
     id: surface
 
     color: Theme.popupBackground
-    radius: 8
-    border.width: 1
+    radius: Theme.lookupRadius
+    border.width: Theme.hairlineWidth
     border.color: Qt.rgba(Theme.textPrimary.r, Theme.textPrimary.g, Theme.textPrimary.b, 0.2)
     clip: true
 
@@ -226,7 +226,7 @@ Rectangle {
 
         anchors.top: parent.top
         width: parent.width
-        height: surface.showsControls ? 48 : 0
+        height: surface.showsControls ? Theme.lookupControlBarHeight : 0
 
         Item {
             id: actionBar
@@ -234,28 +234,17 @@ Rectangle {
             anchors.fill: parent
             visible: surface.showsActionBar
 
-            Item {
+            LookupControl {
                 id: closeButton
                 objectName: "lookupCloseButton"
                 anchors.right: parent.right
-                anchors.rightMargin: 16
+                anchors.rightMargin: Theme.lookupCloseInset
                 anchors.verticalCenter: parent.verticalCenter
-                width: 52
-                height: 32
                 Accessible.role: Accessible.Button
                 Accessible.name: qsTr("Close lookup")
                 Accessible.onPressAction: surface.dismissRequested(true)
-
-                Icon {
-                    anchors.centerIn: parent
-                    name: "xmark"
-                    size: 16
-                    color: Theme.textSecondary
-                }
-
-                TapHandler {
-                    onTapped: surface.dismissRequested(true)
-                }
+                symbol: "xmark"
+                onActivated: surface.dismissRequested(true)
             }
         }
 
@@ -267,68 +256,35 @@ Rectangle {
 
             Row {
                 anchors.centerIn: parent
-                spacing: 20
+                spacing: Theme.lookupControlSpacing
 
-                Item {
+                LookupControl {
                     objectName: "lookupSasayakiReplay"
-                    width: 52
-                    height: 32
                     Accessible.role: Accessible.Button
                     Accessible.name: qsTr("Replay cue")
                     Accessible.onPressAction: surface.replayCue()
-
-                    Icon {
-                        anchors.centerIn: parent
-                        name: "arrow.clockwise"
-                        size: 16
-                        color: Theme.textSecondary
-                    }
-
-                    TapHandler {
-                        onTapped: surface.replayCue()
-                    }
+                    symbol: "arrow.clockwise"
+                    onActivated: surface.replayCue()
                 }
 
-                Item {
+                LookupControl {
                     objectName: "lookupSasayakiPlayback"
-                    width: 52
-                    height: 32
                     Accessible.role: Accessible.Button
                     Accessible.name: surface.player.playing || surface.wasPaused
                                      ? qsTr("Pause Sasayaki") : qsTr("Play Sasayaki")
                     Accessible.onPressAction: surface.toggleCuePlayback()
-
-                    Icon {
-                        anchors.centerIn: parent
-                        name: surface.player.playing || surface.wasPaused
+                    symbol: surface.player.playing || surface.wasPaused
                               ? "pause.fill" : "play.fill"
-                        size: 16
-                        color: Theme.textSecondary
-                    }
-
-                    TapHandler {
-                        onTapped: surface.toggleCuePlayback()
-                    }
+                    onActivated: surface.toggleCuePlayback()
                 }
 
-                Item {
+                LookupControl {
                     objectName: "lookupSasayakiJump"
-                    width: 52
-                    height: 32
                     Accessible.role: Accessible.Button
                     Accessible.name: qsTr("Jump to cue")
                     Accessible.onPressAction: surface.jumpToCue()
-
-                    Icon {
-                        anchors.centerIn: parent
-                        name: "forward.fill"
-                        size: 16
-                        color: Theme.textSecondary
-                    }
-
-                    TapHandler {
-                        onTapped: surface.jumpToCue()
-                    }
+                    symbol: "forward.fill"
+                    onActivated: surface.jumpToCue()
                 }
             }
         }
@@ -339,7 +295,7 @@ Rectangle {
 
         anchors.top: controlsRow.bottom
         width: parent.width
-        height: surface.showsControls ? 1 : 0
+        height: surface.showsControls ? Theme.hairlineWidth : 0
         visible: surface.showsControls
         color: Theme.separator
     }
@@ -393,6 +349,29 @@ Rectangle {
                     surface.dismissRequested(true)
                 }
             }
+        }
+    }
+
+    // One lookup control: a 52x32 hit area with a secondary 16 pt glyph.
+    component LookupControl: Item {
+        id: control
+
+        property string symbol
+
+        signal activated()
+
+        width: Theme.lookupControlWidth
+        height: Theme.lookupControlHeight
+
+        Icon {
+            anchors.centerIn: parent
+            name: control.symbol
+            size: Theme.lookupControlGlyph
+            color: Theme.textSecondary
+        }
+
+        TapHandler {
+            onTapped: control.activated()
         }
     }
 }
