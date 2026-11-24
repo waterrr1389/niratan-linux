@@ -15,10 +15,12 @@
 // Tint: the bundled SVGs paint with `fill="currentColor"`, which the Qt SVG
 // renderer resolves to black. MultiEffect needs a shader, and the software
 // scene graph (the VNC renderer reviews use, and any machine without a GPU
-// context) does not draw shader effects. IconImage from Qt's own control
+// context) does not draw shader effects. ColorImage from Qt's own control
 // implementation colourises the loaded pixmap on the CPU with source-in
 // compositing, so the glyph is exactly `color`, its alpha and antialiasing are
 // the SVG's own, and the same code draws in hardware and software renderers.
+// IconImage would do the same but first searches the desktop icon theme on
+// every load, which with a large theme costs seconds when a page opens.
 
 import QtQuick
 import QtQuick.Controls.impl
@@ -40,7 +42,7 @@ Item {
     implicitWidth: size
     implicitHeight: size
 
-    IconImage {
+    ColorImage {
         anchors.fill: parent
         visible: icon.known
         source: icon.source
