@@ -103,6 +103,11 @@ qt_add_library(niratan_core STATIC
     src/services/sync/drive_error.cpp
     src/services/sync/drive_files.cpp
     src/services/sync/drive_client.cpp
+    src/services/sync/oauth_policy.cpp
+    src/services/sync/oauth_credentials.cpp
+    src/services/sync/oauth_loopback.cpp
+    src/services/sync/sync_config.cpp
+    src/services/sync/oauth_client.cpp
     src/services/sasayaki/srt_parser.cpp
     src/services/sasayaki/cue_timeline.cpp
     src/services/sasayaki/cue_audio.cpp

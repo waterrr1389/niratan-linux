@@ -23,7 +23,7 @@ FakeDriveServer::FakeDriveServer() {
                         return;
                     }
                     const auto target = QUrl::fromEncoded(start_line[1]);
-                    Request request{start_line[0], target.path(), QUrlQuery(target), {}, {}};
+                    Request request{start_line[0], target.path(), QUrlQuery(target), {}, {}, {}};
                     for (qsizetype i = 1; i < lines.size(); ++i) {
                         const auto colon = lines[i].indexOf(':');
                         if (colon > 0) {
@@ -36,14 +36,20 @@ FakeDriveServer::FakeDriveServer() {
                         return;
                     }
                     request.body = buffer.sliced(split + 4, size);
+                    if (request.method == "POST" && request.path == QStringLiteral("/token")) {
+                        auto form = request.body;
+                        form.replace("+", "%20");
+                        request.form.setQuery(QString::fromUtf8(form));
+                    }
                     requests_.append(std::move(request));
                     const auto reply =
                         replies_.isEmpty() ? Reply{500, "Unexpected request"} : replies_.dequeue();
-                    socket->write("HTTP/1.1 " + QByteArray::number(reply.status) +
-                                  " Fake Drive\r\nContent-Type: " + reply.content_type +
-                                  "\r\nContent-Length: " + QByteArray::number(reply.body.size()) +
-                                  "\r\nConnection: close\r\n\r\n" + reply.body);
-                    socket->disconnectFromHost();
+                    if (reply.hold) {
+                        held_socket_ = socket;
+                        held_reply_ = reply;
+                    } else {
+                        respond(socket, reply);
+                    }
                 });
         }
     });
@@ -59,6 +65,21 @@ QUrl FakeDriveServer::base_url() const {
 
 void FakeDriveServer::enqueue(Reply reply) {
     replies_.enqueue(std::move(reply));
+}
+
+void FakeDriveServer::release() {
+    if (held_socket_) {
+        respond(held_socket_, held_reply_);
+        held_socket_.clear();
+    }
+}
+
+void FakeDriveServer::respond(QTcpSocket* socket, const Reply& reply) {
+    socket->write("HTTP/1.1 " + QByteArray::number(reply.status) +
+                  " Fake Drive\r\nContent-Type: " + reply.content_type +
+                  "\r\nContent-Length: " + QByteArray::number(reply.body.size()) +
+                  "\r\nConnection: close\r\n\r\n" + reply.body);
+    socket->disconnectFromHost();
 }
 
 const QList<FakeDriveServer::Request>& FakeDriveServer::requests() const {
