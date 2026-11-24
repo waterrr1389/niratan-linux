@@ -6,12 +6,14 @@
 #include "fakes/fake_drive_server.h"
 #include "fakes/oauth_fixture.h"
 #include "fakes/ttu_fixture.h"
+#include "fakes/ttu_converter_fixture.h"
 #include "services/statistics/statistics_storage.h"
 #include "services/sync/drive_client.h"
 #include "services/sync/drive_files.h"
 #include "services/sync/oauth_client.h"
 #include "services/sync/oauth_credentials.h"
 #include "services/sync/ttu_naming.h"
+#include "services/sync/ttu_convert.h"
 #include "services/sync/ttu_sync.h"
 
 #include <QJsonDocument>
@@ -21,6 +23,36 @@ class SyncFlowTest : public QObject {
     Q_OBJECT
 
    private slots:
+    void imports_drive_book_through_the_converter() {
+        using namespace niratan::sync;
+        ttu_fixture::Library library;
+        QVERIFY(library.root.isValid());
+        const auto source = library.root.filePath("fixture.zip");
+        QVERIFY(ttu_converter_fixture::make_ttu(source.toStdString()));
+        QFile archive(source);
+        QVERIFY(archive.open(QIODevice::ReadOnly));
+        FakeDriveServer server;
+        QVERIFY(server.start());
+        server.enable_tree();
+        server.put_file("zip", "bookdata_1_6_fixture.zip", "book-id", archive.readAll());
+        auto transport = ttu_fixture::transport_for(server);
+        TtuDrive drive(*transport);
+        TtuConverter converter(library.storage);
+        TtuSync sync(
+            drive, library.storage,
+            {.export_zip = {},
+             .import_zip = [&](const auto& zip,
+                               const auto& dest) { return converter.import_zip(zip, dest); }},
+            0, QTimeZone::utc());
+        ttu_fixture::Result<std::filesystem::path> result;
+        sync.import_google_drive_book(DriveSyncFiles({{"zip", "bookdata_1_6_fixture.zip", {}, {}}}),
+                                      false, false, {}, result.receive());
+        QTRY_VERIFY(result.done);
+        QVERIFY(!result.error);
+        QCOMPARE(result.value, std::optional{library.storage.books_directory() / "A & B_ 猫"});
+        QVERIFY(library.storage.load_book_info("A & B_ 猫"));
+    }
+
     void imports_ttu_sidecars_then_exports_a_newer_bookmark() {
         using namespace niratan;
         using namespace niratan::sync;

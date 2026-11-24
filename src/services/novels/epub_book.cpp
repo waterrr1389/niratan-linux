@@ -67,6 +67,7 @@ struct SpineReference {
 // private and therefore cannot be named by these helpers.
 struct Package {
     EpubMetadata metadata;
+    std::vector<EpubManifestItem> manifest;
     std::vector<EpubSpineItem> spine;
     std::vector<EpubTocEntry> toc;
     std::vector<EpubGuideReference> guide;
@@ -93,59 +94,6 @@ bool has_property(std::string_view properties, std::string_view token) {
 
 }  // namespace
 
-namespace detail {
-
-// Turns an href from the package into a container path: percent-decoded once,
-// resolved against the package directory and normalized. A path that would
-// leave the container is unusable, as is an href that names no document.
-std::optional<std::string> resolve_href(std::string_view href, std::string_view package_dir) {
-    const std::size_t fragment_at = href.find('#');
-    const std::string_view path = href.substr(0, fragment_at);
-    const std::string_view fragment = fragment_at == std::string_view::npos
-                                          ? std::string_view{}
-                                          : href.substr(fragment_at);
-    if (path.empty()) {
-        return std::nullopt;
-    }
-
-    const QString decoded = QUrl::fromPercentEncoding(
-        QByteArray(path.data(), static_cast<qsizetype>(path.size())));
-    std::string relative = decoded.toStdString();
-
-    std::size_t start = 0;
-    while (start < relative.size()) {
-        if (relative[start] == '/') {
-            ++start;
-        } else if (relative.compare(start, 2, "./") == 0) {
-            start += 2;
-        } else {
-            break;
-        }
-    }
-    relative.erase(0, start);
-    if (relative.empty()) {
-        return std::nullopt;
-    }
-
-    std::filesystem::path combined(relative);
-    if (!package_dir.empty()) {
-        combined = std::filesystem::path(std::string(package_dir)) / combined;
-    }
-    combined = combined.lexically_normal();
-    if (combined.empty()) {
-        return std::nullopt;
-    }
-    if (*combined.begin() == "..") {
-        return std::nullopt;
-    }
-
-    std::string result = combined.generic_string();
-    result.append(fragment);
-    return result;
-}
-
-}  // namespace detail
-
 namespace {
 
 bool read_entry(zip_t* zip, const std::string& name, std::string* data) {
@@ -161,8 +109,7 @@ bool read_entry(zip_t* zip, const std::string& name, std::string* data) {
     std::string buffer(static_cast<std::size_t>(stat.size), '\0');
     zip_uint64_t offset = 0;
     while (offset < stat.size) {
-        const zip_int64_t read =
-            zip_fread(file, buffer.data() + offset, stat.size - offset);
+        const zip_int64_t read = zip_fread(file, buffer.data() + offset, stat.size - offset);
         if (read <= 0) {
             break;
         }
@@ -186,8 +133,7 @@ bool parse_container(const std::string& xml, std::string* rootfile, std::string*
         if (reader.name() != QLatin1String("rootfile")) {
             continue;
         }
-        const QString full_path =
-            attribute_value(reader.attributes(), QStringLiteral("full-path"));
+        const QString full_path = attribute_value(reader.attributes(), QStringLiteral("full-path"));
         if (full_path.isEmpty()) {
             set_error(error, "META-INF/container.xml has a rootfile without a full-path");
             return false;
@@ -204,8 +150,8 @@ bool parse_container(const std::string& xml, std::string* rootfile, std::string*
     return false;
 }
 
-bool parse_opf(zip_t* zip, const std::string& xml, const std::string& package_dir,
-               Package* package, std::string* error) {
+bool parse_opf(zip_t* zip, const std::string& xml, const std::string& package_dir, Package* package,
+               std::string* error) {
     std::vector<ManifestItem> manifest;
     std::unordered_map<std::string, std::size_t> manifest_index;
     std::vector<SpineReference> spine_references;
@@ -222,9 +168,9 @@ bool parse_opf(zip_t* zip, const std::string& xml, const std::string& package_di
                 const bool in_metadata =
                     !stack.isEmpty() && stack.last() == QLatin1String("metadata");
 
-                if (in_metadata && (name == QLatin1String("title") ||
-                                    name == QLatin1String("creator") ||
-                                    name == QLatin1String("language"))) {
+                if (in_metadata &&
+                    (name == QLatin1String("title") || name == QLatin1String("creator") ||
+                     name == QLatin1String("language"))) {
                     const QString text =
                         reader.readElementText(QXmlStreamReader::IncludeChildElements);
                     if (name == QLatin1String("title")) {
@@ -241,8 +187,7 @@ bool parse_opf(zip_t* zip, const std::string& xml, const std::string& package_di
                     continue;
                 }
                 if (in_metadata && name == QLatin1String("meta") &&
-                    attribute_value(attributes, QStringLiteral("name")) ==
-                        QLatin1String("cover")) {
+                    attribute_value(attributes, QStringLiteral("name")) == QLatin1String("cover")) {
                     const QString content = attribute_value(attributes, QStringLiteral("content"));
                     if (cover_id.empty() && !content.isEmpty()) {
                         cover_id = content.toStdString();
@@ -258,7 +203,17 @@ bool parse_opf(zip_t* zip, const std::string& xml, const std::string& package_di
                     item.properties =
                         attribute_value(attributes, QStringLiteral("properties")).toStdString();
                     if (!item.id.empty() && !item.href.empty()) {
-                        manifest_index.emplace(item.id, manifest.size());
+                        if (manifest_index.emplace(item.id, manifest.size()).second) {
+                            if (const auto href = resolve_href(item.href, package_dir)) {
+                                const auto prefix = package_dir.empty() ? "" : package_dir + "/";
+                                const auto clean = href->substr(0, href->find('#'));
+                                package->manifest.push_back({item.id, clean,
+                                                             clean.starts_with(prefix)
+                                                                 ? clean.substr(prefix.size())
+                                                                 : clean,
+                                                             item.media_type, item.properties});
+                            }
+                        }
                         manifest.push_back(std::move(item));
                     }
                 }
@@ -300,8 +255,8 @@ bool parse_opf(zip_t* zip, const std::string& xml, const std::string& package_di
     }
 
     if (reader.hasError()) {
-        set_error(error, "cannot parse the package document: " +
-                             reader.errorString().toStdString());
+        set_error(error,
+                  "cannot parse the package document: " + reader.errorString().toStdString());
         return false;
     }
 
@@ -381,6 +336,7 @@ bool parse_opf(zip_t* zip, const std::string& xml, const std::string& package_di
 struct EpubBook::Impl {
     zip_t* zip = nullptr;
     EpubMetadata metadata;
+    std::vector<EpubManifestItem> manifest;
     std::vector<EpubSpineItem> spine;
     std::vector<EpubTocEntry> toc;
     std::vector<EpubGuideReference> guide;
@@ -434,14 +390,14 @@ std::optional<EpubBook> EpubBook::open(const std::filesystem::path& path, std::s
         return std::nullopt;
     }
 
-    const std::string package_dir =
-        std::filesystem::path(rootfile).parent_path().generic_string();
+    const std::string package_dir = std::filesystem::path(rootfile).parent_path().generic_string();
     Package package;
     if (!parse_opf(impl->zip, package_xml, package_dir, &package, error)) {
         return std::nullopt;
     }
 
     impl->metadata = std::move(package.metadata);
+    impl->manifest = std::move(package.manifest);
     impl->spine = std::move(package.spine);
     impl->toc = std::move(package.toc);
     impl->guide = std::move(package.guide);
@@ -450,6 +406,10 @@ std::optional<EpubBook> EpubBook::open(const std::filesystem::path& path, std::s
 
 const EpubMetadata& EpubBook::metadata() const {
     return impl_->metadata;
+}
+
+const std::vector<EpubManifestItem>& EpubBook::manifest() const {
+    return impl_->manifest;
 }
 
 const std::vector<EpubSpineItem>& EpubBook::spine() const {

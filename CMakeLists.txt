@@ -112,6 +112,8 @@ qt_add_library(niratan_core STATIC
     src/services/sync/ttu_drive.cpp
     src/services/sync/ttu_sync.cpp
     src/services/sync/ttu_sync_sidecars.cpp
+    src/services/sync/ttu_convert.cpp
+    src/services/sync/ttu_convert_xhtml.cpp
     src/services/sasayaki/srt_parser.cpp
     src/services/sasayaki/cue_timeline.cpp
     src/services/sasayaki/cue_audio.cpp
@@ -120,6 +122,7 @@ qt_add_library(niratan_core STATIC
     src/services/statistics/statistics_storage.cpp
     src/services/statistics/statistics_storage_codec.cpp
     src/services/novels/epub_book.cpp
+    src/services/novels/epub_book_path.cpp
     src/services/novels/epub_book_toc.cpp
     src/services/player/audio_clip.cpp
     src/services/player/mining_history.cpp

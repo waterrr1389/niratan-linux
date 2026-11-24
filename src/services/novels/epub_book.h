@@ -52,6 +52,16 @@ struct EpubMetadata {
     bool operator==(const EpubMetadata&) const = default;
 };
 
+struct EpubManifestItem {
+    std::string id;
+    std::string href;
+    std::string path;
+    std::string media_type;
+    std::string properties;
+
+    bool operator==(const EpubManifestItem&) const = default;
+};
+
 struct EpubSpineItem {
     std::string idref;
     std::string href;
@@ -100,6 +110,7 @@ class EpubBook {
     EpubBook& operator=(const EpubBook&) = delete;
 
     const EpubMetadata& metadata() const;
+    const std::vector<EpubManifestItem>& manifest() const;
     const std::vector<EpubSpineItem>& spine() const;
     const std::vector<EpubTocEntry>& toc() const;
     // Direct <guide><reference> children of the package document, in document
