@@ -48,7 +48,8 @@ class SyncSettingsViewModel : public QObject {
         QTimeZone zone;
     };
 
-    explicit SyncSettingsViewModel(QObject* parent = nullptr);
+    // No default constructor: QML would build its own singleton with it instead of
+    // calling create(), and that copy would lack the browser opener from main().
     explicit SyncSettingsViewModel(Config config, QObject* parent = nullptr);
     ~SyncSettingsViewModel() override;
     static SyncSettingsViewModel* instance(sync::LoopbackAuthorization::BrowserOpener opener = {});

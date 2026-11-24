@@ -108,9 +108,6 @@ struct SyncSettingsViewModel::State {
     }
 };
 
-SyncSettingsViewModel::SyncSettingsViewModel(QObject* parent)
-    : SyncSettingsViewModel({storage::data_root().string(), {}, {}, {}}, parent) {}
-
 SyncSettingsViewModel::SyncSettingsViewModel(Config config, QObject* parent)
     : QObject(parent), state_(std::make_unique<State>(std::move(config))) {}
 

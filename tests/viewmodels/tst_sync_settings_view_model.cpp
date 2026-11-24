@@ -42,6 +42,12 @@ class SyncSettingsViewModelTest : public QObject {
     Q_OBJECT
 
    private slots:
+    void qml_uses_the_process_instance() {
+        // QML builds a default-constructible singleton itself and skips create(),
+        // which would leave the page without the browser opener main() installs.
+        QVERIFY(!std::is_default_constructible_v<SyncSettingsViewModel>);
+    }
+
     void preferences_and_options() {
         oauth_fixture::AuthFixture fixture;
         QVERIFY(fixture.start());
