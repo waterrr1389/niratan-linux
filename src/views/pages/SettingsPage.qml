@@ -35,13 +35,25 @@ RowLayout {
         }
     }
 
+    // False between leave() and enter(), while another section shows.
+    property bool shown: true
+
     objectName: "settingsPage"
     spacing: 0
+
+    // The kept Appearance form re-reads the active profile whenever it
+    // appears again, as a profile switch may have happened meanwhile.
+    onOtherFormChanged: {
+        if (page.shown && page.otherForm === null)
+            appearanceForm.settingsModel.reload()
+    }
 
     Component.onCompleted: sidebar.forceActiveFocus()
 
     function enter() {
+        page.shown = true
         sidebar.selected = 1
+        appearanceForm.settingsModel.reload()
         const flick = appearanceForm.flickable
         flick.contentY = flick.originY
         sidebar.forceActiveFocus()
@@ -50,6 +62,7 @@ RowLayout {
     // Selecting Appearance also ends the lifetime of any other open form, as
     // leaving Settings did when the whole page was destroyed.
     function leave() {
+        page.shown = false
         page.closeTransient(page)
         sidebar.selected = 1
     }

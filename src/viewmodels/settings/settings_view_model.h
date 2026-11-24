@@ -3,8 +3,15 @@
 // Follows AppearanceView.nativeAppearanceContent, DictionaryBehaviorSettingsSections
 // and StatisticsSettingsView.resetTimeBinding in Features/Settings, and
 // UserConfig.init/apply/profile snapshots in Core/UserConfig.swift. Reader and
-// dictionary settings belong to the profile active when the page opens; the
-// three statistics keys are global. Older optional reader fields use Swift's
+// dictionary settings belong to the active profile; the three statistics keys
+// are global. The model uses SettingsStore::shared(), the store the Sasayaki
+// settings model also uses (ProfileSettingsStore.shared). A reader edit writes
+// only the edited field over the file's current contents, so it never restores
+// a value another consumer changed; edits always target the profile active
+// at the time of the edit. reload() re-reads the active profile's reader and
+// dictionary settings, emits readerChanged and dictionaryChanged, and asks the
+// store to refresh its other consumers; the Settings page calls it whenever
+// the kept Appearance form appears. Older optional reader fields use Swift's
 // legacy furigana and count flags or the corresponding defaults. Enum values
 // are the untranslated Swift raw strings; only the UI labels are translated.
 // The text reveal speed defaults to 35. Bounded reader setters clamp to the
@@ -70,6 +77,10 @@
 #include <memory>
 
 #include "services/settings/settings_status.h"
+
+namespace niratan::settings {
+class SettingsStore;
+}
 
 namespace niratan::viewmodels {
 
@@ -181,6 +192,12 @@ class SettingsViewModel : public QObject {
     // A wheel notch is 120 angle units; shortcuts do not spend the remainder.
     Q_INVOKABLE void adjustFontSizeFromWheel(int angleDelta);
     Q_INVOKABLE void stepFontSize(bool increase);
+
+    Q_INVOKABLE void reload();
+
+    // The store this model reads and writes; null when the data root is
+    // unusable.
+    const settings::SettingsStore* store() const;
     QString furiganaMode() const;
     void setFuriganaMode(const QString& value);
     bool continuousMode() const;

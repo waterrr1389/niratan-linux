@@ -3,9 +3,11 @@
 #include "services/profiles/profile_repository.h"
 
 #include <QFile>
+#include <QJsonDocument>
 #include <QTemporaryDir>
 #include <QtTest>
 
+#include <chrono>
 #include <filesystem>
 #include <fstream>
 #include <set>
@@ -70,6 +72,8 @@ class ProfileRepositoryTest : public QObject {
    private slots:
     void construction_creates_the_directory_and_index();
     void a_persisted_index_is_reloaded();
+    void a_normalized_index_is_left_untouched();
+    void a_changed_normalization_is_saved();
     void create_generates_a_safe_id_and_directory();
     void create_copies_the_profile_owned_files();
     void create_rejects_a_blank_name_without_a_directory();
@@ -110,6 +114,59 @@ void ProfileRepositoryTest::a_persisted_index_is_reloaded() {
     ProfileRepository reopened(app_dir(directory));
     QCOMPARE(reopened.index().profiles.size(), 2u);
     QCOMPARE(reopened.index().global_active_profile_id, reopened.index().profiles.back().id);
+}
+
+// ProfileRepository.init loads and normalizes the index; following the
+// Decision, a decodable index that normalization leaves unchanged is not
+// rewritten, so its bytes and modification time stay as they were.
+void ProfileRepositoryTest::a_normalized_index_is_left_untouched() {
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    {
+        ProfileRepository repository(app_dir(directory));
+        const auto result =
+            repository.create_profile("English", ContentLanguage::english, std::nullopt);
+        QVERIFY(result.profile.has_value());
+    }
+
+    // The same index in a formatting the writer never produces.
+    QFile file(QString::fromStdString(index_file(directory).string()));
+    QVERIFY(file.open(QIODevice::ReadOnly));
+    const QByteArray compact =
+        QJsonDocument::fromJson(file.readAll()).toJson(QJsonDocument::Compact) + "\n\n";
+    file.close();
+    write_text(index_file(directory), compact.toStdString());
+    const auto sentinel = std::filesystem::file_time_type::clock::now() - std::chrono::hours(48);
+    std::filesystem::last_write_time(index_file(directory), sentinel);
+
+    ProfileRepository reopened(app_dir(directory));
+
+    QCOMPARE(reopened.index().profiles.size(), 2u);
+    QCOMPARE(read_text(index_file(directory)), compact.toStdString());
+    QVERIFY(std::filesystem::last_write_time(index_file(directory)) == sentinel);
+}
+
+// ProfileRepository.init with persistIndex: an index that normalization
+// changes (the legacy built-in name "Japanese EPUB") is saved normalized.
+void ProfileRepositoryTest::a_changed_normalization_is_saved() {
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    std::filesystem::create_directories(app_dir(directory) / "Profiles");
+    ProfileIndex legacy = ProfileIndex::initial();
+    QVERIFY(!legacy.profiles.empty());
+    legacy.profiles.front().name = "Japanese EPUB";
+    QFile file(QString::fromStdString(index_file(directory).string()));
+    QVERIFY(file.open(QIODevice::WriteOnly));
+    file.write(niratan::profiles::profile_index_to_json(legacy).toJson());
+    file.close();
+    const auto sentinel = std::filesystem::file_time_type::clock::now() - std::chrono::hours(48);
+    std::filesystem::last_write_time(index_file(directory), sentinel);
+
+    ProfileRepository repository(app_dir(directory));
+
+    QCOMPARE(repository.index(), ProfileIndex::initial());
+    QCOMPARE(persisted_index(directory), std::optional<ProfileIndex>{ProfileIndex::initial()});
+    QVERIFY(std::filesystem::last_write_time(index_file(directory)) != sentinel);
 }
 
 void ProfileRepositoryTest::create_generates_a_safe_id_and_directory() {

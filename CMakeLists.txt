@@ -232,6 +232,7 @@ qt_add_library(niratan_app STATIC
     src/viewmodels/settings/settings_popup_settings.cpp
     src/viewmodels/settings/settings_reader_colors.cpp
     src/viewmodels/settings/settings_reader_display.cpp
+    src/viewmodels/settings/settings_storage.cpp
     src/viewmodels/settings/settings_view_model.cpp
     src/viewmodels/settings/settings_audio.cpp
     src/viewmodels/settings/settings_view_model.h

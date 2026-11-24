@@ -3,12 +3,17 @@
 #include "settings_store.h"
 
 #include <filesystem>
+#include <functional>
+#include <map>
+#include <memory>
 #include <optional>
 #include <string>
 #include <string_view>
 #include <vector>
 
 #include "models/profiles/dictionary_settings.h"
+#include "models/profiles/profile_index.h"
+#include "models/profiles/profile_index_json.h"
 #include "models/profiles/profile_ops.h"
 #include "models/profiles/reader_settings.h"
 #include "services/profiles/profile_repository.h"
@@ -23,6 +28,7 @@ using profiles::ReaderProfileSettings;
 static constexpr std::string_view kProfilesDir = "Profiles";
 static constexpr std::string_view kReaderFile = "reader_settings.json";
 static constexpr std::string_view kDictionaryFile = "dictionary_settings.json";
+static constexpr std::string_view kIndexFile = "profiles.json";
 
 // ---------------------------------------------------------------------------
 // Construction
@@ -36,6 +42,22 @@ std::optional<SettingsStore> SettingsStore::create() {
     return SettingsStore(root);
 }
 
+std::shared_ptr<SettingsStore> SettingsStore::shared() {
+    // One store per data root, alive while a consumer holds it.
+    static std::map<std::filesystem::path, std::weak_ptr<SettingsStore>> stores;
+    const auto root = storage::data_root();
+    if (root.empty()) {
+        return nullptr;
+    }
+    std::erase_if(stores, [](const auto& entry) { return entry.second.expired(); });
+    if (auto existing = stores[root].lock()) {
+        return existing;
+    }
+    auto store = std::make_shared<SettingsStore>(root);
+    stores[root] = store;
+    return store;
+}
+
 SettingsStore::SettingsStore(std::filesystem::path data_root)
     : data_root_(std::move(data_root)),
       profiles_directory_(data_root_ / kProfilesDir) {
@@ -43,7 +65,17 @@ SettingsStore::SettingsStore(std::filesystem::path data_root)
     active_profile_id_ = repository.active_profile().id;
 }
 
-std::string_view SettingsStore::active_profile_id() const {
+// ProfileSettingsStore.activate follows the repository's active profile; the
+// index is read on each call so a switch made by another repository instance
+// is seen. An index that cannot be read resolves like the repository does for
+// a damaged file: to the id resolved at construction.
+std::string SettingsStore::active_profile_id() const {
+    const auto read = storage::read_json_file(profiles_directory_ / kIndexFile);
+    if (read.status == storage::JsonReadStatus::success) {
+        if (const auto decoded = profiles::profile_index_from_json(read.document)) {
+            return profiles::resolve_profile(profiles::normalize_profile_index(*decoded)).id;
+        }
+    }
     return active_profile_id_;
 }
 
@@ -82,7 +114,7 @@ static std::optional<DictionaryProfileSettings> load_dictionary_from(
 // ---------------------------------------------------------------------------
 
 ReaderLoad SettingsStore::active_reader() const {
-    const auto dir = profile_directory(active_profile_id_);
+    const auto dir = profile_directory(active_profile_id());
     if (!dir) {
         return {};  // missing: defaults
     }
@@ -106,7 +138,7 @@ ReaderLoad SettingsStore::active_reader() const {
 }
 
 DictionaryLoad SettingsStore::active_dictionary() const {
-    const auto dir = profile_directory(active_profile_id_);
+    const auto dir = profile_directory(active_profile_id());
     if (!dir) {
         return {};  // missing: defaults
     }
@@ -130,11 +162,52 @@ DictionaryLoad SettingsStore::active_dictionary() const {
 }
 
 StoreError SettingsStore::save_active_reader(const ReaderProfileSettings& settings) {
-    return save_reader(active_profile_id_, settings);
+    return save_reader(active_profile_id(), settings);
 }
 
 StoreError SettingsStore::save_active_dictionary(const DictionaryProfileSettings& settings) {
-    return save_dictionary(active_profile_id_, settings);
+    return save_dictionary(active_profile_id(), settings);
+}
+
+StoreError
+SettingsStore::update_active_reader(const std::function<void(ReaderProfileSettings&)>& edit) {
+    const std::string profile_id = active_profile_id();
+    const auto dir = profile_directory(profile_id);
+    if (!dir) {
+        return StoreError::unsafe_profile_id;
+    }
+    // Start from the file's current contents so fields other consumers wrote
+    // since they last read are kept. A damaged file is never replaced.
+    ReaderProfileSettings settings = profiles::default_reader_settings();
+    const auto read = storage::read_json_file(*dir / kReaderFile);
+    if (read.status == storage::JsonReadStatus::success) {
+        auto decoded = profiles::reader_settings_from_json(read.document);
+        if (!decoded) {
+            return StoreError::io_error;
+        }
+        settings = std::move(*decoded);
+    } else if (read.status != storage::JsonReadStatus::missing) {
+        return StoreError::io_error;
+    }
+    edit(settings);
+    return save_reader(profile_id, settings);
+}
+
+std::size_t SettingsStore::subscribe(std::function<void()> listener) {
+    listeners_.emplace(next_token_, std::move(listener));
+    return next_token_++;
+}
+
+void SettingsStore::unsubscribe(std::size_t token) {
+    listeners_.erase(token);
+}
+
+void SettingsStore::refresh() {
+    // A listener may unsubscribe while running; iterate over a copy.
+    const auto listeners = listeners_;
+    for (const auto& [token, listener] : listeners) {
+        listener();
+    }
 }
 
 // ---------------------------------------------------------------------------

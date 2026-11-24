@@ -65,52 +65,6 @@ double snap(double value, double minimum, double maximum, int increments_per_uni
 
 }  // namespace
 
-SettingsViewModel::SettingsViewModel(QObject* parent)
-    : QObject(parent), state_(std::make_unique<State>()) {
-    auto store = SettingsStore::create();
-    if (!store) {
-        state_->profile_error = tr("The Niratan data folder could not be located.");
-        return;
-    }
-
-    {
-        const auto result = store->active_reader();
-        if (result.status == settings::LoadStatus::invalid) {
-            state_->reader_error =
-                tr("Could not load reader_settings.json: %1.")
-                    .arg(QString::fromStdString(result.error));
-        } else {
-            state_->reader = result.settings;
-            state_->reader_writable = true;
-        }
-    }
-
-    {
-        const auto result = store->active_dictionary();
-        if (result.status == settings::LoadStatus::invalid) {
-            state_->dictionary_error =
-                tr("Could not load dictionary_settings.json: %1.")
-                    .arg(QString::fromStdString(result.error));
-        } else {
-            state_->dictionary = result.settings;
-            state_->dictionary_writable = true;
-        }
-    }
-
-    {
-        GlobalSettings global = GlobalSettings::at_data_root();
-        const auto load = global.statistics_preferences();
-        if (load.status == settings::LoadStatus::invalid) {
-            state_->statistics_error = tr("Could not load settings.json: %1.")
-                                           .arg(QString::fromStdString(load.error));
-        }
-        state_->statistics = load.preferences;
-        state_->global = std::move(global);
-    }
-
-    state_->store = std::move(store);
-}
-
 SettingsViewModel::~SettingsViewModel() = default;
 
 int SettingsViewModel::section() const { return section_; }
@@ -131,15 +85,6 @@ QString SettingsViewModel::error() const {
         }
     }
     return errors.join(u'\n');
-}
-
-template <typename Field, typename Value>
-void SettingsViewModel::update_dictionary(Field& field, Value value) {
-    if (field != value) {
-        field = std::move(value);
-        save_dictionary();
-        emit dictionaryChanged();
-    }
 }
 
 QString SettingsViewModel::theme() const {
@@ -413,11 +358,7 @@ bool SettingsViewModel::twoColumnLayout() const {
 }
 
 void SettingsViewModel::setTwoColumnLayout(bool value) {
-    if (state_->dictionary.two_column_layout != value) {
-        state_->dictionary.two_column_layout = value;
-        save_dictionary();
-        emit dictionaryChanged();
-    }
+    update_dictionary(state_->dictionary.two_column_layout, std::optional<bool>(value));
 }
 
 bool SettingsViewModel::compactGlossaries() const {
@@ -473,36 +414,6 @@ void SettingsViewModel::setStatisticsResetTime(int value) {
             report_statistics_save(state_->global->save_statistics_reset_minutes(clamped));
         }
         emit statisticsChanged();
-    }
-}
-
-void SettingsViewModel::save_reader() {
-    if (!state_->reader_writable || !state_->store) return;
-    const auto err = state_->store->save_active_reader(state_->reader);
-    if (err != StoreError::none)
-        set_error(state_->reader_error, tr("Could not save reader_settings.json."));
-    else
-        set_error(state_->reader_error, {});
-}
-
-void SettingsViewModel::save_dictionary() {
-    if (!state_->dictionary_writable || !state_->store) return;
-    const auto err = state_->store->save_active_dictionary(state_->dictionary);
-    if (err != StoreError::none)
-        set_error(state_->dictionary_error, tr("Could not save dictionary_settings.json."));
-    else
-        set_error(state_->dictionary_error, {});
-}
-
-void SettingsViewModel::report_statistics_save(StoreError error) {
-    set_error(state_->statistics_error,
-              error == StoreError::none ? QString() : tr("Could not save settings.json."));
-}
-
-void SettingsViewModel::set_error(QString& slot, QString error) {
-    if (slot != error) {
-        slot = std::move(error);
-        emit errorChanged();
     }
 }
 

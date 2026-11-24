@@ -16,6 +16,7 @@
 #include "models/profiles/dictionary_settings.h"
 #include "services/dictionary/dictionary_store.h"
 #include "services/profiles/profile_repository.h"
+#include "services/settings/settings_store.h"
 #include "services/storage/app_paths.h"
 #include "viewmodels/anki/mining_view_model.h"
 #include "viewmodels/dictionary/dictionary_popup_model.h"
@@ -183,6 +184,7 @@ class QmlLoadTest : public QObject {
     void font_pickers_create_rows_only_in_view();
     void inspector_font_picker_stores_the_chosen_family();
     void settings_page_is_kept_after_the_first_visit();
+    void kept_appearance_form_rereads_the_active_profile();
 
    private:
     // Empty when the component loaded without a QML warning.
@@ -1273,6 +1275,58 @@ void QmlLoadTest::settings_page_is_kept_after_the_first_visit() {
     window->setProperty("sectionIndex", 3);
     QTRY_VERIFY(appearance->isVisible());
     QCOMPARE(flick->property("contentY").toReal(), flick->property("originY").toReal());
+}
+
+// ProfileSettingsStore.activate: the kept Appearance form shows the active
+// profile's current reader settings each time it appears, whether Settings is
+// re-entered or Appearance is selected again inside Settings.
+void QmlLoadTest::kept_appearance_form_rereads_the_active_profile() {
+    QQmlComponent component(&engine_);
+    component.loadFromModule(QStringLiteral("Niratan"), QStringLiteral("MainWindow"));
+    std::unique_ptr<QObject> object(
+        component.createWithInitialProperties({{QStringLiteral("sectionIndex"), 3}}));
+    QVERIFY2(object != nullptr, qPrintable(error_text(component)));
+    auto* window = qobject_cast<QQuickWindow*>(object.get());
+    QVERIFY(window);
+    window->resize(960, 640);
+    QVERIFY(QTest::qWaitForWindowExposed(window));
+    QQuickItem* appearance = window->findChild<QQuickItem*>(QStringLiteral("settings-appearance"));
+    QTRY_VERIFY(appearance);
+    auto* model = qvariant_cast<QObject*>(appearance->property("settingsModel"));
+    QVERIFY(model);
+
+    const auto write_font_size = [](int size) {
+        auto store = niratan::settings::SettingsStore::create();
+        if (!store) {
+            return false;
+        }
+        auto reader = store->active_reader().settings;
+        reader.font_size = size;
+        return store->save_active_reader(reader) == niratan::settings::StoreError::none;
+    };
+    const int original = model->property("fontSize").toInt();
+    const int changed = original == 30 ? 31 : 30;
+
+    window->setProperty("sectionIndex", 0);
+    QVERIFY(write_font_size(changed));
+    window->setProperty("sectionIndex", 3);
+    QTRY_VERIFY(appearance->isVisible());
+    QCOMPARE(model->property("fontSize").toInt(), changed);
+
+    QQuickItem* row = nullptr;
+    for (QQuickItem* item : visual_items(window->contentItem())) {
+        if (item->objectName() == QStringLiteral("settingsRow-profiles")) {
+            row = item;
+        }
+    }
+    QVERIFY(row);
+    QTest::mouseClick(window, Qt::LeftButton, Qt::NoModifier,
+                      row->mapToScene(row->boundingRect().center()).toPoint());
+    QTRY_VERIFY(!appearance->isVisible());
+    QVERIFY(write_font_size(original));
+    QTest::keyClick(window, Qt::Key_Down);
+    QTRY_VERIFY(appearance->isVisible());
+    QCOMPARE(model->property("fontSize").toInt(), original);
 }
 
 int main(int argc, char* argv[]) {

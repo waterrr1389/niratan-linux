@@ -48,11 +48,7 @@ void SettingsViewModel::setFrequencySortOrder(const QString& value) {
         return;
     }
     const std::optional<std::string> next = raw;
-    if (state_->dictionary.frequency_sort_order != next) {
-        state_->dictionary.frequency_sort_order = next;
-        save_dictionary();
-        emit dictionaryChanged();
-    }
+    update_dictionary(state_->dictionary.frequency_sort_order, next);
 }
 
 QString SettingsViewModel::frequencySortDictionary() const {
@@ -62,11 +58,7 @@ QString SettingsViewModel::frequencySortDictionary() const {
 
 void SettingsViewModel::setFrequencySortDictionary(const QString& value) {
     const std::optional<std::string> next = value.toStdString();
-    if (state_->dictionary.frequency_sort_dictionary != next) {
-        state_->dictionary.frequency_sort_dictionary = next;
-        save_dictionary();
-        emit dictionaryChanged();
-    }
+    update_dictionary(state_->dictionary.frequency_sort_dictionary, next);
 }
 
 int SettingsViewModel::searchTextSize() const {
@@ -75,11 +67,7 @@ int SettingsViewModel::searchTextSize() const {
 
 void SettingsViewModel::setSearchTextSize(int value) {
     const std::optional<int> next = std::clamp(value, 12, 48);
-    if (state_->dictionary.search_text_size != next) {
-        state_->dictionary.search_text_size = next;
-        save_dictionary();
-        emit dictionaryChanged();
-    }
+    update_dictionary(state_->dictionary.search_text_size, next);
 }
 
 }  // namespace niratan::viewmodels

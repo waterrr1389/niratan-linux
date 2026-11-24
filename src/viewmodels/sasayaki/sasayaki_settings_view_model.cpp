@@ -4,6 +4,8 @@
 
 #include <QString>
 
+#include <cstddef>
+#include <memory>
 #include <optional>
 
 #include "models/profiles/reader_settings.h"
@@ -22,7 +24,8 @@ using niratan::settings::StoreError;
 
 struct SasayakiSettingsViewModel::State {
     GlobalSettings global = GlobalSettings::at_data_root();
-    std::optional<SettingsStore> store;
+    std::shared_ptr<SettingsStore> store;
+    std::size_t store_token = 0;
 
     bool enable = false;
     bool skip_controls = false;
@@ -37,10 +40,20 @@ struct SasayakiSettingsViewModel::State {
 
 SasayakiSettingsViewModel::SasayakiSettingsViewModel(QObject* parent)
     : QObject(parent), state_(std::make_unique<State>()) {
+    state_->store = SettingsStore::shared();
+    if (state_->store) {
+        // Re-read when another consumer of the store reports that the active
+        // profile may have changed.
+        state_->store_token = state_->store->subscribe([this] { reload(); });
+    }
     reload();
 }
 
-SasayakiSettingsViewModel::~SasayakiSettingsViewModel() = default;
+SasayakiSettingsViewModel::~SasayakiSettingsViewModel() {
+    if (state_->store) {
+        state_->store->unsubscribe(state_->store_token);
+    }
+}
 
 bool SasayakiSettingsViewModel::enable() const {
     return state_->enable;
@@ -79,10 +92,8 @@ QString SasayakiSettingsViewModel::dark_background_color() const {
 }
 
 void SasayakiSettingsViewModel::reload() {
-    state_->store = SettingsStore::create();
-    const bool show = state_->store.has_value()
-        ? state_->store->active_reader().settings.show_sasayaki_toggle
-        : false;
+    const bool show =
+        state_->store ? state_->store->active_reader().settings.show_sasayaki_toggle : false;
     if (show != state_->show_sasayaki_toggle) {
         state_->show_sasayaki_toggle = show;
         emit showSasayakiToggleChanged();
@@ -150,7 +161,7 @@ void SasayakiSettingsViewModel::setSkipControls(bool enabled) {
 }
 
 void SasayakiSettingsViewModel::setShowSasayakiToggle(bool show) {
-    if (!state_->store.has_value()) {
+    if (!state_->store) {
         return;
     }
     // A document that is valid JSON but does not decode must not be replaced
@@ -239,6 +250,10 @@ void SasayakiSettingsViewModel::setDarkBackgroundColor(const QString& color) {
         state_->dark_background_color = stored;
         emit darkBackgroundColorChanged();
     }
+}
+
+const settings::SettingsStore* SasayakiSettingsViewModel::store() const {
+    return state_->store.get();
 }
 
 }  // namespace niratan::viewmodels

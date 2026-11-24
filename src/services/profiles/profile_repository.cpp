@@ -64,8 +64,13 @@ ProfileRepository::ProfileRepository(std::filesystem::path app_directory)
             // damaged file: the bytes stay untouched for recovery.
             if (const std::optional<ProfileIndex> decoded =
                     profile_index_from_json(read.document)) {
+                // Swift's init always calls persistIndex; an index that
+                // normalization leaves unchanged is not rewritten here, so
+                // opening a view does not touch profiles.json.
                 index_ = normalize_profile_index(*decoded);
-                persist(index_);
+                if (index_ != *decoded) {
+                    persist(index_);
+                }
             } else {
                 index_ = ProfileIndex::initial();
             }

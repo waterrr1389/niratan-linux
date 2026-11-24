@@ -21,6 +21,11 @@
 //   darkTextColor       #FFFFFF
 //   darkBackgroundColor #87CFFA66
 //
+// The reader settings go through SettingsStore::shared(), the store the
+// Settings model also uses; the toggle writes only showSasayakiToggle over the
+// active profile's current reader_settings.json. The model re-reads when the
+// store refreshes after a possible profile switch.
+//
 // Construction and reload() read both stores. Each setter writes only its own
 // key and then exposes the stored value, so a colour reads back normalized; a
 // save that fails writes nothing and leaves the exposed value unchanged. A
@@ -37,6 +42,10 @@
 #include <QtQml/qqmlregistration.h>
 
 #include <memory>
+
+namespace niratan::settings {
+class SettingsStore;
+}
 
 namespace niratan::viewmodels {
 
@@ -84,6 +93,10 @@ class SasayakiSettingsViewModel : public QObject {
 
     // Re-reads the active profile's reader settings and the global settings.
     Q_INVOKABLE void reload();
+
+    // The store the toggle reads and writes; null when the data root is
+    // unusable.
+    const settings::SettingsStore* store() const;
 
    signals:
     void enableChanged();

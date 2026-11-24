@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
 // Tests for SettingsStore, following Core/ProfileSettingsStore.swift
-// (bootstrap, activate, persistCurrent, dictionarySettings(for:fallback:)).
+// (shared, bootstrap, activate, persistCurrent, persistReaderSettings,
+// dictionarySettings(for:fallback:)) and ProfileRepository.setGlobalActiveProfile.
 
 #include "services/settings/settings_store.h"
 
@@ -12,11 +13,13 @@
 #include <QTest>
 
 #include <filesystem>
+#include <memory>
 #include <fstream>
 #include <string>
 
 #include "models/profiles/dictionary_settings.h"
 #include "models/profiles/reader_settings.h"
+#include "services/profiles/profile_repository.h"
 #include "services/storage/json_file.h"
 
 using niratan::profiles::default_dictionary_settings;
@@ -37,6 +40,29 @@ void write_text(const std::filesystem::path& path, const std::string& text) {
     std::ofstream f(path, std::ios::binary | std::ios::trunc);
     f << text;
 }
+
+// Points XDG_DATA_HOME at a directory for one scope.
+class DataHome {
+   public:
+    explicit DataHome(const QTemporaryDir& dir)
+        : previous_(qgetenv("XDG_DATA_HOME")),
+          was_set_(qEnvironmentVariableIsSet("XDG_DATA_HOME")) {
+        qputenv("XDG_DATA_HOME", dir.path().toUtf8());
+    }
+    DataHome(const DataHome&) = delete;
+    DataHome& operator=(const DataHome&) = delete;
+    ~DataHome() {
+        if (was_set_) {
+            qputenv("XDG_DATA_HOME", previous_);
+        } else {
+            qunsetenv("XDG_DATA_HOME");
+        }
+    }
+
+   private:
+    QByteArray previous_;
+    bool was_set_;
+};
 
 }  // namespace
 
@@ -177,7 +203,7 @@ class SettingsStoreTest : public QObject {
         QTemporaryDir dir;
         QVERIFY(dir.isValid());
         SettingsStore store(make_root(dir));
-        QCOMPARE(store.active_profile_id(), std::string_view("default-ja"));
+        QCOMPARE(store.active_profile_id(), std::string("default-ja"));
     }
 
     void activeReader_missingFile_returnsDefaults() {
@@ -235,6 +261,121 @@ class SettingsStoreTest : public QObject {
         const auto result = store.active_dictionary();
         QCOMPARE(result.status, niratan::settings::LoadStatus::success);
         QCOMPARE(result.settings.max_results, 10);
+    }
+
+    // --- shared store (ProfileSettingsStore.shared) ---
+
+    void shared_sameRoot_returnsOneStore() {
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        const DataHome home(dir);
+        const auto first = SettingsStore::shared();
+        const auto second = SettingsStore::shared();
+        QVERIFY(first != nullptr);
+        QCOMPARE(first.get(), second.get());
+    }
+
+    void shared_otherRoot_returnsAnotherStore() {
+        QTemporaryDir one;
+        QTemporaryDir two;
+        QVERIFY(one.isValid() && two.isValid());
+        std::shared_ptr<SettingsStore> first;
+        {
+            const DataHome home(one);
+            first = SettingsStore::shared();
+        }
+        const DataHome home(two);
+        const auto second = SettingsStore::shared();
+        QVERIFY(first != nullptr && second != nullptr);
+        QVERIFY(first.get() != second.get());
+
+        ReaderProfileSettings s = default_reader_settings();
+        s.font_size = 31;
+        QCOMPARE(second->save_active_reader(s), StoreError::none);
+        QCOMPARE(first->active_reader().status, niratan::settings::LoadStatus::missing);
+    }
+
+    // --- active profile follows the index (activate) ---
+
+    void activeProfileId_followsASwitch() {
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        const auto root = make_root(dir);
+        SettingsStore store(root);
+        niratan::profiles::ProfileRepository repository(root);
+        const auto created = repository.create_profile(
+            "English", niratan::profiles::ContentLanguage::english, std::nullopt);
+        QVERIFY(created.profile.has_value());
+        QVERIFY(!repository.set_active_profile(created.profile->id).has_value());
+
+        QCOMPARE(store.active_profile_id(), created.profile->id);
+
+        ReaderProfileSettings s = default_reader_settings();
+        s.font_size = 27;
+        QCOMPARE(store.save_active_reader(s), StoreError::none);
+        QCOMPARE(store.load_reader(created.profile->id)->font_size, 27);
+        QVERIFY(!store.load_reader("default-ja").has_value());
+    }
+
+    // --- update_active_reader (persistReaderSettings for one edit) ---
+
+    void updateActiveReader_keepsFieldsWrittenElsewhere() {
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        const auto root = make_root(dir);
+        SettingsStore store(root);
+        SettingsStore other(root);
+
+        ReaderProfileSettings stale = default_reader_settings();
+        QCOMPARE(store.save_active_reader(stale), StoreError::none);
+        ReaderProfileSettings changed = stale;
+        changed.show_sasayaki_toggle = !stale.show_sasayaki_toggle;
+        QCOMPARE(other.save_active_reader(changed), StoreError::none);
+
+        QCOMPARE(store.update_active_reader([](ReaderProfileSettings& r) { r.font_size = 33; }),
+                 StoreError::none);
+
+        const auto result = store.active_reader();
+        QCOMPARE(result.settings.font_size, 33);
+        QCOMPARE(result.settings.show_sasayaki_toggle, changed.show_sasayaki_toggle);
+    }
+
+    void updateActiveReader_damagedFile_isLeftUntouched() {
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        const auto root = make_root(dir);
+        SettingsStore store(root);
+        const auto path = root / "Profiles" / store.active_profile_id() / "reader_settings.json";
+        write_text(path, "{bad json");
+
+        QCOMPARE(store.update_active_reader([](ReaderProfileSettings& r) { r.font_size = 33; }),
+                 StoreError::io_error);
+
+        std::ifstream f(path, std::ios::binary);
+        const std::string text((std::istreambuf_iterator<char>(f)),
+                               std::istreambuf_iterator<char>());
+        QCOMPARE(text, std::string("{bad json"));
+    }
+
+    // --- refresh notifies the other consumers ---
+
+    void refresh_runsSubscribedListenersUntilUnsubscribed() {
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        SettingsStore store(make_root(dir));
+        int first = 0;
+        int second = 0;
+        const auto token = store.subscribe([&first] { ++first; });
+        store.subscribe([&second] { ++second; });
+
+        store.refresh();
+        QCOMPARE(first, 1);
+        QCOMPARE(second, 1);
+
+        store.unsubscribe(token);
+        store.refresh();
+        QCOMPARE(first, 1);
+        QCOMPARE(second, 2);
     }
 };
 

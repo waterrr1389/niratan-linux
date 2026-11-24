@@ -78,6 +78,7 @@ class SasayakiSettingsViewModelTest : public QObject {
     void showToggleKeepsTheOtherReaderSettings();
     void changesEmitTheirSignals();
     void reloadReadsBothStores();
+    void toggleFollowsTheActiveProfileAndPreferencesStayGlobal();
     void failedSaveLeavesValueAndBytesAlone();
 };
 
@@ -302,6 +303,44 @@ void SasayakiSettingsViewModelTest::failedSaveLeavesValueAndBytesAlone() {
     QCOMPARE(model.show_sasayaki_toggle(), false);
     QCOMPARE(read_text(global_path), std::string("{bad json"));
     QCOMPARE(read_text(reader_path), std::string("{bad reader"));
+}
+
+// UserConfig.readerShowSasayakiToggle is profile-owned through
+// readerProfileSettings; the other Sasayaki preferences stay in the global
+// settings document. After a profile switch the toggle lands in the active
+// profile's reader_settings.json, keeping that file's other fields.
+void SasayakiSettingsViewModelTest::toggleFollowsTheActiveProfileAndPreferencesStayGlobal() {
+    TempDataRoot data;
+    QVERIFY(data.isValid());
+    std::string second_id;
+    {
+        niratan::profiles::ProfileRepository repository(niratan::storage::data_root());
+        const auto created = repository.create_profile(
+            "English", niratan::profiles::ContentLanguage::english, std::nullopt);
+        QVERIFY(created.profile.has_value());
+        second_id = created.profile->id;
+    }
+    SettingsStore seed(niratan::storage::data_root());
+    auto second = niratan::profiles::default_reader_settings();
+    second.font_size = 26;
+    QCOMPARE(seed.save_reader(second_id, second), StoreError::none);
+
+    SasayakiSettingsViewModel model;
+    {
+        niratan::profiles::ProfileRepository repository(niratan::storage::data_root());
+        QVERIFY(!repository.set_active_profile(second_id).has_value());
+    }
+
+    model.setShowSasayakiToggle(true);
+    model.setAutoScroll(false);
+
+    const auto stored = seed.load_reader(second_id);
+    QVERIFY(stored.has_value());
+    QCOMPARE(stored->show_sasayaki_toggle, true);
+    QCOMPARE(stored->font_size, 26);
+    const auto first = seed.load_reader("default-ja");
+    QVERIFY(!first.has_value() || !first->show_sasayaki_toggle);
+    QCOMPARE(GlobalSettings(settings_file()).sasayaki_settings().auto_scroll, false);
 }
 
 QTEST_APPLESS_MAIN(SasayakiSettingsViewModelTest)

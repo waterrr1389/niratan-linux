@@ -36,11 +36,14 @@
 
 #include "viewmodels/settings/settings_view_model.h"
 
+#include "viewmodels/sasayaki/sasayaki_settings_view_model.h"
+
 #include "data_root.h"
 
 #include <QFile>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QSignalSpy>
 #include <QtTest>
 
 #include <filesystem>
@@ -48,6 +51,7 @@
 
 #include "models/profiles/reader_settings.h"
 #include "services/profiles/profile_repository.h"
+#include "services/settings/settings_store.h"
 #include "services/storage/app_paths.h"
 
 using niratan::profiles::ProfileRepository;
@@ -132,6 +136,10 @@ class SettingsViewModelTest : public QObject {
     void frequency_sort_order_defaults_and_rejects_unknown();
     void frequency_sort_dictionary_round_trips_and_clears();
     void search_text_size_clamps_and_keeps_the_other_dictionary_settings();
+    void settings_and_sasayaki_models_share_one_store();
+    void interleaved_edits_after_a_profile_switch_target_the_active_profile();
+    void reload_reads_the_switched_profile_and_refreshes_sasayaki();
+    void dictionary_edit_after_a_profile_switch_keeps_the_other_fields();
 };
 
 // B1: the Font Size Stepper is 16...40 with no off-step values.
@@ -669,6 +677,151 @@ void SettingsViewModelTest::search_text_size_clamps_and_keeps_the_other_dictiona
     QVERIFY(object.has_value());
     QCOMPARE(object->value(QStringLiteral("searchTextSize")).toInt(), 30);
     QCOMPARE(object->value(QStringLiteral("maxResults")).toInt(), 20);
+}
+
+// ProfileSettingsStore.shared: the Appearance form's settings model and its
+// Sasayaki model use one store.
+void SettingsViewModelTest::settings_and_sasayaki_models_share_one_store() {
+    TempDataRoot data;
+    QVERIFY(data.isValid());
+    SettingsViewModel settings;
+    niratan::viewmodels::SasayakiSettingsViewModel sasayaki;
+    QVERIFY(settings.store() != nullptr);
+    QCOMPARE(settings.store(), sasayaki.store());
+}
+
+namespace {
+
+// Two profiles with distinct reader settings; the second is made active after
+// the models are built, as ProfileRepository.setGlobalActiveProfile does
+// while the Settings page is kept.
+struct SwitchedProfiles {
+    std::string first;
+    std::string second;
+};
+
+std::optional<SwitchedProfiles> seed_two_profiles() {
+    ProfileRepository repository(niratan::storage::data_root());
+    const auto created = repository.create_profile(
+        "English", niratan::profiles::ContentLanguage::english, std::nullopt);
+    if (!created.profile.has_value()) {
+        return std::nullopt;
+    }
+    niratan::settings::SettingsStore store(niratan::storage::data_root());
+    auto first = niratan::profiles::default_reader_settings();
+    first.font_size = 20;
+    first.horizontal_padding = 10;
+    first.show_sasayaki_toggle = false;
+    auto second = niratan::profiles::default_reader_settings();
+    second.font_size = 24;
+    second.horizontal_padding = 40;
+    second.show_sasayaki_toggle = false;
+    if (store.save_reader("default-ja", first) != niratan::settings::StoreError::none ||
+        store.save_reader(created.profile->id, second) != niratan::settings::StoreError::none) {
+        return std::nullopt;
+    }
+    return SwitchedProfiles{"default-ja", created.profile->id};
+}
+
+bool activate(const std::string& id) {
+    ProfileRepository repository(niratan::storage::data_root());
+    return !repository.set_active_profile(id).has_value();
+}
+
+}  // namespace
+
+// ProfileSettingsStore.activate and persistReaderSettings: after a switch,
+// a Sasayaki toggle edit and an Appearance edit both land in the active
+// profile, neither restores the other's field or the old profile's values,
+// and the previous profile's file is unchanged.
+void SettingsViewModelTest::interleaved_edits_after_a_profile_switch_target_the_active_profile() {
+    TempDataRoot data;
+    QVERIFY(data.isValid());
+    const auto profiles = seed_two_profiles();
+    QVERIFY(profiles.has_value());
+    SettingsViewModel settings;
+    niratan::viewmodels::SasayakiSettingsViewModel sasayaki;
+    QCOMPARE(settings.fontSize(), 20);
+    QVERIFY(activate(profiles->second));
+
+    sasayaki.setShowSasayakiToggle(true);
+    settings.setFontSize(30);
+    sasayaki.setShowSasayakiToggle(false);
+    sasayaki.setShowSasayakiToggle(true);
+
+    niratan::settings::SettingsStore store(niratan::storage::data_root());
+    const auto second = store.load_reader(profiles->second);
+    QVERIFY(second.has_value());
+    QCOMPARE(second->font_size, 30);
+    QCOMPARE(second->horizontal_padding, 40);
+    QCOMPARE(second->show_sasayaki_toggle, true);
+    const auto first = store.load_reader(profiles->first);
+    QVERIFY(first.has_value());
+    QCOMPARE(first->font_size, 20);
+    QCOMPARE(first->horizontal_padding, 10);
+    QCOMPARE(first->show_sasayaki_toggle, false);
+}
+
+// A kept Appearance form shows the newly active profile after reload(), and
+// the Sasayaki model sharing the store re-reads with it.
+void SettingsViewModelTest::reload_reads_the_switched_profile_and_refreshes_sasayaki() {
+    TempDataRoot data;
+    QVERIFY(data.isValid());
+    const auto profiles = seed_two_profiles();
+    QVERIFY(profiles.has_value());
+    SettingsViewModel settings;
+    niratan::viewmodels::SasayakiSettingsViewModel sasayaki;
+    QCOMPARE(sasayaki.show_sasayaki_toggle(), false);
+
+    niratan::settings::SettingsStore store(niratan::storage::data_root());
+    auto second = *store.load_reader(profiles->second);
+    second.show_sasayaki_toggle = true;
+    QCOMPARE(store.save_reader(profiles->second, second), niratan::settings::StoreError::none);
+    QVERIFY(activate(profiles->second));
+
+    QSignalSpy reader_spy(&settings, &SettingsViewModel::readerChanged);
+    QSignalSpy toggle_spy(
+        &sasayaki, &niratan::viewmodels::SasayakiSettingsViewModel::showSasayakiToggleChanged);
+    settings.reload();
+
+    QVERIFY(reader_spy.count() >= 1);
+    QCOMPARE(settings.fontSize(), 24);
+    QCOMPARE(settings.horizontalPadding(), 40);
+    QCOMPARE(toggle_spy.count(), 1);
+    QCOMPARE(sasayaki.show_sasayaki_toggle(), true);
+}
+
+// ProfileSettingsStore.activate loads the new profile's settings and
+// UserConfig keeps each dictionary field independent: after a switch without
+// reload, a Max Results edit (DictionaryView) changes only maxResults in the
+// active profile and leaves the previous profile's file alone.
+void SettingsViewModelTest::dictionary_edit_after_a_profile_switch_keeps_the_other_fields() {
+    TempDataRoot data;
+    QVERIFY(data.isValid());
+    const auto profiles = seed_two_profiles();
+    QVERIFY(profiles.has_value());
+    niratan::settings::SettingsStore store(niratan::storage::data_root());
+    auto first = niratan::profiles::default_dictionary_settings();
+    first.max_results = 10;
+    first.scan_length = 12;
+    auto second = niratan::profiles::default_dictionary_settings();
+    second.max_results = 20;
+    second.scan_length = 24;
+    QCOMPARE(store.save_dictionary(profiles->first, first), niratan::settings::StoreError::none);
+    QCOMPARE(store.save_dictionary(profiles->second, second), niratan::settings::StoreError::none);
+    QVERIFY(activate(profiles->first));
+
+    SettingsViewModel settings;
+    QVERIFY(activate(profiles->second));
+    settings.setMaxResults(30);
+
+    const auto stored_first = store.load_dictionary(profiles->first);
+    const auto stored_second = store.load_dictionary(profiles->second);
+    QVERIFY(stored_first.has_value() && stored_second.has_value());
+    QCOMPARE(stored_first->max_results, 10);
+    QCOMPARE(stored_first->scan_length, 12);
+    QCOMPARE(stored_second->max_results, 30);
+    QCOMPARE(stored_second->scan_length, 24);
 }
 
 QTEST_APPLESS_MAIN(SettingsViewModelTest)
