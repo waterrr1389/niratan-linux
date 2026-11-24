@@ -285,7 +285,6 @@ QtObject {
     readonly property int fieldPaddingHorizontal: 8
     // Below this form width the Appearance form's four Furigana segments
     // move under their label.
-    readonly property int appearanceWideFormWidth: 520
     // VideoVolumeTrack: a 64 px VideoTimelineTrack, 3 px at rest and 5 px
     // emphasized in an 18 px hit area. Swift's 11 px knob reads too small
     // with Linux scaling, so it is drawn at 14.
@@ -424,6 +423,23 @@ QtObject {
     readonly property int readerInspectorTimeSpacing: 2
     readonly property int readerChapterMarkerHeight: 17
     readonly property int readerChapterMarkerGlyph: 11
+    // StatisticsView.swift minimumScaleFactor: the session count, the hero
+    // metrics and the history cells shrink to fit before they would be cut.
+    readonly property real statisticsHeroMinimumScale: 0.6
+    readonly property real metricMinimumScale: 0.7
+    readonly property real statisticsHistoryMinimumScale: 0.75
+    // The trailing reader inspector scales with the window, after the
+    // playerPanelWidth clamp of NativeReaderView.swift, so it stays usable in
+    // ordinary Linux window sizes; NativeReaderSidePanel's fixed 440 is the cap.
+    readonly property real readerSidePanelWidthFraction: 0.32
+    readonly property int readerSidePanelMinWidth: 320
+    readonly property int readerSidePanelMaxWidth: 440
+
+    function readerSidePanelWidth(windowWidth) {
+        return Math.round(Math.min(Math.max(windowWidth * readerSidePanelWidthFraction,
+                                            readerSidePanelMinWidth),
+                                   readerSidePanelMaxWidth));
+    }
     readonly property int audiobookCoverSize: 64
     readonly property int audiobookCoverRadius: 10
     readonly property int audiobookCoverGlyphSize: 22

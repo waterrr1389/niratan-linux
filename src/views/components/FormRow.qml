@@ -18,7 +18,8 @@
 //
 // Kit rows built on this one set `accessoryItem` to the visible control the
 // row aligns; `fillsRow` lets the trailing items span the row instead, for a
-// segmented picker that fills its card.
+// segmented picker that fills its card; `stacked` keeps the label on its own
+// line above trailing items that span the row.
 import QtQuick
 import Niratan
 
@@ -41,6 +42,9 @@ Item {
     property Item accessoryItem: null
     // The trailing items span the row with the fill-row padding, with no label.
     property bool fillsRow: false
+    // The label keeps its own line and the trailing items span the row below
+    // it with the fill-row padding, for a control too wide to share the line.
+    property bool stacked: false
     // The whole row is clickable; tapped is emitted on a click anywhere.
     property bool clickable: false
 
@@ -59,12 +63,18 @@ Item {
     readonly property real minimumGap: compact ? Theme.compactRowMinGap : Theme.rowMinGap
     readonly property real minimumHeight: compact ? Theme.compactRowMinHeight : Theme.rowMinHeight
     readonly property real labelX: padding + (glyph !== "" ? Theme.glyphColumnWidth + Theme.glyphSpacing : 0)
-    readonly property real trailingWidth: trailingColumn.children.length > 0 ? trailingColumn.width : 0
+    readonly property real trailingWidth: trailingColumn.children.length > 0 && !stacked
+                                          ? trailingColumn.width : 0
+    readonly property real stackedLabelHeight: Math.max(minimumHeight,
+                                                        labelBlock.implicitHeight
+                                                        + 2 * Theme.rowWrappedPadding)
 
     width: parent ? parent.width : implicitWidth
     implicitWidth: labelX + labelText.implicitWidth + spacing + minimumGap + trailingWidth + padding
     implicitHeight: fillsRow
         ? trailingColumn.implicitHeight + 2 * Theme.fillRowPaddingVertical
+        : stacked
+        ? stackedLabelHeight + trailingColumn.implicitHeight + Theme.fillRowPaddingVertical
         : Math.max(minimumHeight, labelBlock.implicitHeight + 2 * Theme.rowWrappedPadding,
                    trailingColumn.implicitHeight)
     opacity: enabled ? 1 : Theme.disabledOpacity
@@ -123,7 +133,7 @@ Item {
 
         visible: !row.fillsRow && row.label !== ""
         x: row.labelX
-        y: (row.height - height) / 2
+        y: ((row.stacked ? row.stackedLabelHeight : row.height) - height) / 2
         width: Math.max(0, (row.trailingWidth > 0 ? trailingColumn.x - row.spacing - row.minimumGap
                                                   : row.width - row.padding) - x)
         spacing: Theme.rowSubtitleSpacing
@@ -153,8 +163,9 @@ Item {
     Row {
         id: trailingColumn
 
-        x: row.fillsRow ? Theme.fillRowPaddingHorizontal : row.width - row.padding - width
-        y: (row.height - height) / 2
+        x: row.fillsRow || row.stacked ? Theme.fillRowPaddingHorizontal
+                                       : row.width - row.padding - width
+        y: row.stacked ? row.stackedLabelHeight : (row.height - height) / 2
         spacing: row.spacing
     }
 }

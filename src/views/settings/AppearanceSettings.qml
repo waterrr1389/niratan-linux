@@ -5,8 +5,8 @@
 //
 // Built from the control kit. Sliders show their value with the decimals and
 // suffix Swift's NativeSettingsSliderRow formats; integer settings are
-// steppers. Furigana's four segments move below their label when the form
-// is too narrow to hold them on one line (the reader's side panel).
+// steppers. A segmented row too narrow for its label and segments (the
+// reader's side panel) stacks the segments below the label, as the kit does.
 
 pragma ComponentBehavior: Bound
 
@@ -26,7 +26,6 @@ PanelScaffold {
     readonly property bool paginated: !form.settingsModel.continuousMode
     readonly property bool paragraph: paginated && form.settingsModel.paragraphMode
     readonly property bool spreadsAvailable: paginated && !form.settingsModel.verticalWriting && !form.settingsModel.paragraphMode
-    readonly property bool narrow: column.width < Theme.appearanceWideFormWidth
 
     function formatted(value, decimals, suffix) {
         return Number(value).toLocaleString(Qt.locale(), "f", decimals) + suffix
@@ -166,19 +165,7 @@ PanelScaffold {
 
         FormDivider {}
         FormSegmentedRow {
-            visible: !form.narrow
             label: qsTr("Furigana")
-            model: form.furiganaLabels
-            currentIndex: form.furiganaModes.indexOf(form.settingsModel.furiganaMode)
-            onActivated: index => form.settingsModel.furiganaMode = form.furiganaModes[index]
-        }
-        FormRow {
-            visible: form.narrow
-            label: qsTr("Furigana")
-        }
-        FormSegmentedRow {
-            visible: form.narrow
-            fillsWidth: true
             model: form.furiganaLabels
             currentIndex: form.furiganaModes.indexOf(form.settingsModel.furiganaMode)
             onActivated: index => form.settingsModel.furiganaMode = form.furiganaModes[index]

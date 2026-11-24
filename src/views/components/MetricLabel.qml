@@ -2,7 +2,8 @@
 //
 // A value over its caption, following Features/Reader/StatisticsView.swift
 // `heroMetric`: the value in headline with tabular digits on one line, the
-// label in caption2 secondary, 1 apart and leading-aligned.
+// label in caption2 secondary, 1 apart and leading-aligned. The value shrinks
+// to fit its width rather than eliding.
 
 import QtQuick
 import Niratan
@@ -20,8 +21,11 @@ Column {
         text: metric.value
         textStyle: Theme.headlineFont
         monospacedDigits: true
-        elide: Text.ElideRight
         maximumLineCount: 1
+        // Shrinks to fit, as heroMetric's minimumScaleFactor(0.7), so a
+        // number is never cut.
+        fontSizeMode: Text.HorizontalFit
+        minimumPixelSize: Math.round(Theme.headlineFont.pixelSize * Theme.metricMinimumScale)
     }
 
     StyledLabel {

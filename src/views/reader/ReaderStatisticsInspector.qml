@@ -22,7 +22,8 @@
 // remaining-time rows are omitted because the row labels carry the meaning.
 // The content scrolls in a PanelScaffold inset 18 at the sides and bottom,
 // stops at its bounds and shows a scroll bar while it overflows. The hero
-// count keeps one line by eliding rather than SwiftUI's minimumScaleFactor.
+// count, the session metrics and the history values keep one line and shrink
+// to Swift's minimumScaleFactor before they would be cut.
 
 pragma ComponentBehavior: Bound
 
@@ -45,11 +46,21 @@ ColumnLayout {
                                                 : qsTr("Characters Read")
 
     // historyRow's value cells: callout tabular digits, trailing.
-    component HistoryValue: StyledLabel {
-        Layout.alignment: Qt.AlignRight
+    // The four history columns share the table width equally so the table
+    // never runs past the panel inset; headers wrap between words instead.
+    component HistoryCell: StyledLabel {
+        Layout.fillWidth: true
+        Layout.preferredWidth: 0
+    }
+
+    component HistoryValue: HistoryCell {
+        horizontalAlignment: Text.AlignRight
         textStyle: Theme.calloutFont
         monospacedDigits: true
-        elide: Text.ElideRight
+        maximumLineCount: 1
+        fontSizeMode: Text.HorizontalFit
+        minimumPixelSize: Math.round(Theme.calloutFont.pixelSize
+                                     * Theme.statisticsHistoryMinimumScale)
     }
 
     function text(value) {
@@ -129,8 +140,10 @@ ColumnLayout {
                     text: inspector.text(inspector.sessionPeriod.characters)
                     textStyle: Theme.heroCountFont
                     monospacedDigits: true
-                    elide: Text.ElideRight
                     maximumLineCount: 1
+                    fontSizeMode: Text.HorizontalFit
+                    minimumPixelSize: Math.round(Theme.heroCountFont.pixelSize
+                                                 * Theme.statisticsHeroMinimumScale)
                 }
 
                 StyledLabel {
@@ -141,26 +154,33 @@ ColumnLayout {
                 }
             }
 
-            RowLayout {
-                spacing: 0
+            // Two equal halves split by a hairline, as heroMetric pairs them;
+            // explicit widths keep either metric from collapsing.
+            Row {
+                id: metrics
+
+                readonly property real half: (width - Theme.hairlineWidth - Theme.metricLeading) / 2
 
                 MetricLabel {
-                    Layout.fillWidth: true
-                    Layout.preferredWidth: 0
+                    width: metrics.half
                     value: inspector.text(inspector.sessionPeriod.speed)
                     label: qsTr("Reading Speed")
                 }
 
                 Rectangle {
-                    Layout.preferredWidth: Theme.hairlineWidth
-                    Layout.preferredHeight: Theme.metricDividerHeight
+                    anchors.verticalCenter: parent.verticalCenter
+                    width: Theme.hairlineWidth
+                    height: Theme.metricDividerHeight
                     color: Theme.separator
                 }
 
+                Item {
+                    width: Theme.metricLeading
+                    height: Theme.hairlineWidth
+                }
+
                 MetricLabel {
-                    Layout.fillWidth: true
-                    Layout.preferredWidth: 0
-                    Layout.leftMargin: Theme.metricLeading
+                    width: metrics.half
                     value: inspector.text(inspector.sessionPeriod.duration)
                     label: qsTr("Reading Time")
                 }
@@ -228,19 +248,21 @@ ColumnLayout {
 
                 Item {
                     Layout.fillWidth: true
+                    Layout.preferredWidth: 0
                 }
 
                 Repeater {
                     model: [inspector.countLabel, qsTr("Reading Speed"), qsTr("Reading Time")]
 
-                    delegate: StyledLabel {
+                    delegate: HistoryCell {
                         required property string modelData
 
-                        Layout.alignment: Qt.AlignRight
+                        Layout.alignment: Qt.AlignBottom
+                        horizontalAlignment: Text.AlignRight
                         text: modelData
                         textStyle: Theme.caption2Font
                         secondary: true
-                        elide: Text.ElideRight
+                        wrapMode: Text.WordWrap
                     }
                 }
 
@@ -251,7 +273,7 @@ ColumnLayout {
                     color: Theme.separator
                 }
 
-                StyledLabel {
+                HistoryCell {
                     text: qsTr("Today")
                     textStyle: Theme.calloutFont
                     weight: Theme.weightMedium
@@ -259,7 +281,7 @@ ColumnLayout {
                 HistoryValue { text: inspector.text(inspector.todayPeriod.characters) }
                 HistoryValue { text: inspector.text(inspector.todayPeriod.speed) }
                 HistoryValue { text: inspector.text(inspector.todayPeriod.duration) }
-                StyledLabel {
+                HistoryCell {
                     text: qsTr("All Time")
                     textStyle: Theme.calloutFont
                     weight: Theme.weightMedium

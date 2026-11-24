@@ -508,10 +508,10 @@ Item {
         id: trailingPanel
         objectName: "readerTrailingPanel"
         edge: Qt.RightEdge
-        width: 440
+        width: Theme.readerSidePanelWidth(page.width)
         height: page.height - 24
         y: 12
-        x: page.trailingPanelRequested ? page.width - 12 - 440 : page.width + 12
+        x: page.trailingPanelRequested ? page.width - 12 - width : page.width + 12
         opacity: page.trailingPanelRequested ? 1 : 0
         visible: page.trailingPanelRequested || opacity > 0
 

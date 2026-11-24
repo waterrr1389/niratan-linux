@@ -632,7 +632,8 @@ void ReaderPresentationTest::web_view_fills_the_minimum_window() {
     QQuickItem* panel = open_panel("readerTrailingPanel");
     QVERIFY(panel != nullptr);
     const QRectF frame = panel->mapRectToItem(page_, QRectF(0, 0, panel->width(), panel->height()));
-    QCOMPARE(frame, QRectF(720 - 12 - 440, 12, 440, 520 - 24));
+    // 720 * 0.32 falls below the 320 floor of the trailing inspector width.
+    QCOMPARE(frame, QRectF(720 - 12 - 320, 12, 320, 520 - 24));
     QCOMPARE(web->mapRectToItem(page_, QRectF(0, 0, web->width(), web->height())),
              QRectF(0, 0, 720, 520));
 
@@ -971,7 +972,8 @@ void ReaderPresentationTest::tracking_button_toggles_tracking() {
 }
 
 // toggleSidePanel: one active tool; Go to on the leading edge, the others on
-// the trailing edge; the panel floats 440 wide inside a 12 px inset with
+// the trailing edge; Go to floats 440 wide and the trailing inspector at
+// clamp(0.32 * width, 320, 440), both inside a 12 px inset with
 // radius 20 and a 0.7 px border, and the chapter keeps its size. Swift lays
 // the panels over nativeBottomControls, so an open trailing panel covers the
 // bottom-trailing buttons and closes through its own xmark or Escape.
@@ -998,7 +1000,7 @@ void ReaderPresentationTest::one_tool_at_a_time() {
     QQuickItem* trailing = open_panel("readerTrailingPanel");
     QVERIFY(trailing != nullptr);
     QCOMPARE(trailing->mapRectToItem(page_, QRectF(0, 0, trailing->width(), trailing->height())),
-             QRectF(1100 - 12 - 440, 12, 440, 760 - 24));
+             QRectF(1100 - 12 - 352, 12, 352, 760 - 24));
     QCOMPARE(web->mapRectToItem(page_, QRectF(0, 0, web->width(), web->height())),
              QRectF(0, 0, 1100, 760));
 
