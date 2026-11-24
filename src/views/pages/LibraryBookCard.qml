@@ -25,16 +25,17 @@ Item {
     property string percent
     property bool finished: false
     property bool chosen: false
-    property real coverWidth: 160
+    property real coverWidth: Theme.bookCoverDefaultWidth
 
     signal clicked()
     signal contextMenuRequested()
 
-    readonly property real coverImageWidth: card.coverWidth - 6
-    readonly property real coverImageHeight: Math.round(card.coverImageWidth / 0.709)
+    readonly property real coverImageWidth: card.coverWidth - 2 * Theme.bookFrameInset
+    readonly property real coverImageHeight: Math.round(card.coverImageWidth / Theme.bookCoverAspect)
+    readonly property bool compact: card.coverWidth < Theme.bookCompactWidth
 
     width: card.coverWidth
-    height: frame.height + 6 + 40
+    height: frame.height + Theme.bookTitleSpacing + Theme.bookTitleHeight
 
     Accessible.role: Accessible.Button
     Accessible.name: card.title
@@ -42,29 +43,29 @@ Item {
     // The frame's drop shadow, black at 12% blurred by 3 and lowered by 2 in
     // Swift, drawn as two offset fills so the software renderer shows it too.
     Rectangle {
-        x: frame.x - 1
-        y: frame.y + 1
-        width: frame.width + 2
-        height: frame.height + 3
-        radius: 8
+        x: frame.x - Theme.hairlineWidth
+        y: frame.y + Theme.hairlineWidth
+        width: frame.width + 2 * Theme.hairlineWidth
+        height: frame.height + Theme.bookFrameInset
+        radius: Theme.bookFrameRadius + Theme.hairlineWidth
         color: Theme.shadow
-        opacity: 0.3
+        opacity: Theme.bookShadowOpacity
     }
 
     Rectangle {
         id: frame
 
         width: card.coverWidth
-        height: 3 + card.coverImageHeight + 3 + 10 + 3
-        radius: 7
+        height: card.coverImageHeight + Theme.bookStripHeight + 3 * Theme.bookFrameInset
+        radius: Theme.bookFrameRadius
         color: Theme.cardBackground
 
         Rectangle {
-            x: 3
-            y: 3
+            x: Theme.bookFrameInset
+            y: Theme.bookFrameInset
             width: card.coverImageWidth
             height: card.coverImageHeight
-            radius: 6
+            radius: Theme.bookCoverRadius
             color: Theme.trackBackground
             visible: coverImage.status !== Image.Ready
         }
@@ -72,13 +73,13 @@ Item {
         RoundedImage {
             id: coverImage
 
-            x: 3
-            y: 3
+            x: Theme.bookFrameInset
+            y: Theme.bookFrameInset
             width: card.coverImageWidth
             height: card.coverImageHeight
-            radius: 6
-            // The mask stops at the frame's edge, 3 px out.
-            maskWidth: 3
+            radius: Theme.bookCoverRadius
+            // The mask stops at the frame's edge.
+            maskWidth: Theme.bookFrameInset
             maskColor: frame.color
             source: card.cover
             fillMode: Image.PreserveAspectCrop
@@ -90,7 +91,7 @@ Item {
         CheckBadge {
             anchors.right: coverImage.right
             anchors.bottom: coverImage.bottom
-            anchors.margins: 6
+            anchors.margins: Theme.bookBadgeInset
             visible: card.finished && !card.chosen
             tint: Theme.systemGray
         }
@@ -98,45 +99,35 @@ Item {
         CheckBadge {
             anchors.right: coverImage.right
             anchors.top: coverImage.top
-            anchors.margins: 6
+            anchors.margins: Theme.bookBadgeInset
             visible: card.chosen
             tint: Theme.accent
         }
 
         Row {
-            x: 5
-            y: 3 + card.coverImageHeight + 3
-            width: card.coverImageWidth - 4
-            height: 10
-            spacing: 5
+            x: Theme.bookStripInset
+            y: card.coverImageHeight + 2 * Theme.bookFrameInset
+            width: card.coverImageWidth - 2 * (Theme.bookStripInset - Theme.bookFrameInset)
+            height: Theme.bookStripHeight
+            spacing: Theme.videoMetaSpacing
 
-            Item {
+            ProgressTrack {
                 width: parent.width - percentText.width - parent.spacing
-                height: 3
+                height: Theme.bookStripTrackHeight
                 anchors.verticalCenter: parent.verticalCenter
-
-                Rectangle {
-                    anchors.fill: parent
-                    radius: height / 2
-                    color: Theme.shelfProgressTrack
-                }
-                Rectangle {
-                    width: parent.width * Math.min(Math.max(card.progress, 0), 1)
-                    height: parent.height
-                    radius: height / 2
-                    color: Theme.shelfProgressFill
-                }
+                value: card.progress
+                trackColor: Theme.shelfProgressTrack
+                fillColor: Theme.shelfProgressFill
             }
 
-            Text {
+            StyledLabel {
                 id: percentText
 
                 anchors.verticalCenter: parent.verticalCenter
                 text: card.percent + "%"
-                color: Theme.textSecondary
-                font.pixelSize: 9
-                font.weight: Font.Medium
-                font.features: { "tnum": 1 }
+                textStyle: Theme.bookPercentFont
+                secondary: true
+                monospacedDigits: true
             }
         }
 
@@ -145,21 +136,20 @@ Item {
             anchors.fill: parent
             radius: parent.radius
             color: "transparent"
-            border.width: 1
+            border.width: Theme.hairlineWidth
             border.color: Theme.cardStroke
         }
     }
 
-    Text {
-        y: frame.height + 6
+    StyledLabel {
+        y: frame.height + Theme.bookTitleSpacing
         width: card.coverWidth
-        height: 40
+        height: Theme.bookTitleHeight
         text: card.title
-        color: Theme.textPrimary
-        font.pixelSize: card.coverWidth < 140 ? 13 : 16
-        // SF's line height, so two lines fit the 40 px box as in Swift.
+        textStyle: card.compact ? Theme.calloutFont : Theme.title3Font
+        // SF's line height, so two lines fit the title box as in Swift.
         lineHeightMode: Text.FixedHeight
-        lineHeight: card.coverWidth < 140 ? 16 : 19
+        lineHeight: card.compact ? Theme.bookCompactTitleLineHeight : Theme.bookTitleLineHeight
         maximumLineCount: 2
         wrapMode: Text.Wrap
         elide: Text.ElideRight
@@ -173,27 +163,5 @@ Item {
     TapHandler {
         acceptedButtons: Qt.RightButton
         onTapped: card.contextMenuRequested()
-    }
-
-    // checkmark.circle.fill at 22 pt: a white check on a filled circle.
-    component CheckBadge: Item {
-        property color tint
-
-        width: 22
-        height: 22
-
-        Rectangle {
-            anchors.centerIn: parent
-            width: 16
-            height: 16
-            radius: 8
-            color: Theme.knob
-        }
-        Icon {
-            anchors.fill: parent
-            size: 22
-            name: "checkmark.circle.fill"
-            color: parent.tint
-        }
     }
 }

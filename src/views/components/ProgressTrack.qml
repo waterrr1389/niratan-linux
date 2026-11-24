@@ -15,6 +15,10 @@ Item {
 
     property real value: 0
     property bool onMedia: false
+    // ShelfProgressStrip's quieter track and fill on a book card.
+    property color trackColor: onMedia ? Qt.alpha(Theme.overlayForeground, Theme.mediaTrackOpacity)
+                                       : Theme.trackBackground
+    property color fillColor: Theme.accent
 
     readonly property real clampedValue: Math.min(Math.max(value, 0), 1)
 
@@ -25,15 +29,14 @@ Item {
     Rectangle {
         anchors.fill: parent
         radius: height / 2
-        color: track.onMedia ? Qt.alpha(Theme.overlayForeground, Theme.mediaTrackOpacity)
-                             : Theme.trackBackground
+        color: track.trackColor
     }
 
     Rectangle {
         width: track.width * track.clampedValue
         height: track.height
         radius: height / 2
-        color: Theme.accent
+        color: track.fillColor
         visible: track.clampedValue > 0
     }
 }

@@ -185,6 +185,7 @@ class ControlKitTest : public QObject {
     void controls_emit_on_user_action();
     void editable_stepper_accepts_integers();
     void colour_well_opens_dialog();
+    void alert_field_selects_on_open();
     void links_open_their_url();
     void panel_header_closes();
     void segment_dividers();
@@ -1235,6 +1236,33 @@ void ControlKitTest::sheet_fits() {
         sheet.reset();
     }
     qunsetenv("NIRATAN_THEME");
+}
+
+// An alert with selectFieldOnOpen focuses its field and selects the seeded
+// text, so typing replaces it; without it typing appends.
+void ControlKitTest::alert_field_selects_on_open() {
+    for (const bool select : {true, false}) {
+        std::unique_ptr<QQuickWindow> window = make_window();
+        QVERIFY(window != nullptr);
+        std::unique_ptr<QObject> scene = create(
+            QStringLiteral("Item { width: 600; height: 400\n"
+                           "  AlertDialog { objectName: \"alert\"; title: \"Name\"\n"
+                           "    hasField: true; fieldName: \"field\"; fieldText: \"New Shelf\"\n"
+                           "    selectFieldOnOpen: %1 }\n"
+                           "}")
+                .arg(select ? QStringLiteral("true") : QStringLiteral("false"))
+                .toUtf8(),
+            *window);
+        QVERIFY(scene != nullptr);
+        QObject* alert = scene->findChild<QObject*>(QStringLiteral("alert"));
+        QVERIFY(alert != nullptr);
+        QVERIFY(QMetaObject::invokeMethod(alert, "open"));
+        QTRY_VERIFY(alert->property("opened").toBool());
+        QTest::sendKeyEvent(QTest::KeyAction::Click, window.get(), Qt::Key_unknown,
+                            QStringLiteral("Replacement"), Qt::NoModifier);
+        QCOMPARE(alert->property("fieldText").toString(),
+                 select ? QStringLiteral("Replacement") : QStringLiteral("New ShelfReplacement"));
+    }
 }
 
 QTEST_MAIN(ControlKitTest)

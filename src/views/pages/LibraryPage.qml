@@ -38,7 +38,7 @@ Item {
     // Room the window asks for at the toolbar row's leading edge, where its
     // sidebar toggle floats while the sidebar is collapsed.
     property real toolbarInset: 0
-    readonly property int toolbarHeight: 52
+    readonly property int toolbarHeight: Theme.sourceListToolbarHeight
     // Raised by the window each time the reader closes; the shelf then
     // reloads the progress the reader saved.
     property int readerCloses: 0
@@ -119,22 +119,11 @@ Item {
         onBulkDeleted: page.clearSelection()
     }
 
-    Dialog {
+    AlertDialog {
         id: errorDialog
 
-        parent: Overlay.overlay
-        anchors.centerIn: parent
-        width: Math.min(400, page.width - 32)
         title: library.importError ? qsTr("Import Failed") : qsTr("Error")
-        modal: true
-        standardButtons: Dialog.Ok
-
-        contentItem: Label {
-            text: library.error
-            textFormat: Text.PlainText
-            wrapMode: Text.Wrap
-            color: Theme.textSecondary
-        }
+        message: library.error
 
         onClosed: library.clearError()
     }
@@ -142,7 +131,8 @@ Item {
     LibraryShelfSidebar {
         id: shelfColumn
 
-        width: Math.min(230, Math.max(176, page.width * 0.24))
+        width: Math.min(Theme.shelfColumnMaximumWidth,
+                       Math.max(Theme.shelfColumnMinimumWidth, page.width * Theme.shelfColumnShare))
         height: parent.height
         model: library
         title: qsTr("Bookshelf")
@@ -151,7 +141,7 @@ Item {
 
     Rectangle {
         x: shelfColumn.width
-        width: 1
+        width: Theme.hairlineWidth
         height: parent.height
         color: Theme.separator
     }
@@ -159,7 +149,7 @@ Item {
     Item {
         id: detail
 
-        x: shelfColumn.width + 1
+        x: shelfColumn.width + Theme.hairlineWidth
         width: page.width - x
         height: page.height
 
@@ -170,18 +160,19 @@ Item {
             width: parent.width
             height: page.toolbarHeight
 
-            Button {
-                x: 16
+            FormButton {
+                x: Theme.spacingLg
                 anchors.verticalCenter: parent.verticalCenter
                 visible: page.selecting
                 text: qsTr("Done")
-                font.weight: Font.DemiBold
+                small: true
+                sizeToLabel: true
                 onClicked: page.clearSelection()
             }
 
             ToolbarGroup {
                 anchors.right: parent.right
-                anchors.rightMargin: 12
+                anchors.rightMargin: Theme.libraryToolbarInset
                 anchors.verticalCenter: parent.verticalCenter
                 visible: !page.selecting
 
@@ -190,7 +181,7 @@ Item {
 
                     symbol: "arrow.up.arrow.down"
                     help: qsTr("Sort Books")
-                    onClicked: sortMenu.popup(sortButton, 0, sortButton.height + 4)
+                    onClicked: sortMenu.popup(sortButton, 0, sortButton.height + Theme.spacingXs)
                 }
                 ToolbarButton {
                     symbol: "checklist"
@@ -219,7 +210,7 @@ Item {
 
             ToolbarGroup {
                 anchors.right: parent.right
-                anchors.rightMargin: 12
+                anchors.rightMargin: Theme.libraryToolbarInset
                 anchors.verticalCenter: parent.verticalCenter
                 visible: page.selecting
 
@@ -229,7 +220,7 @@ Item {
                     symbol: "folder"
                     help: qsTr("Move to Shelf")
                     enabled: page.selectedCount > 0
-                    onClicked: moveMenu.popup(moveButton, 0, moveButton.height + 4)
+                    onClicked: moveMenu.popup(moveButton, 0, moveButton.height + Theme.spacingXs)
                 }
                 ToolbarButton {
                     symbol: "trash"
@@ -292,62 +283,43 @@ Item {
             }
         }
 
-        // LibraryCoverSizeButton's popover: a small and a large photo glyph
-        // around a 180 px slider.
+        // LibraryCoverSizeButton's popover, the kit's CoverSizeSlider.
         Popup {
             id: coverSizePopup
 
             parent: coverSizeButton
             x: (coverSizeButton.width - width) / 2
-            y: coverSizeButton.height + 6
+            y: coverSizeButton.height + Theme.popoverOffset
             // Kept inside the window, as a popover shifts away from the edge.
-            margins: 8
-            padding: 16
+            margins: Theme.spacingSm
+            padding: Theme.popoverPadding
 
-            contentItem: Row {
-                spacing: 10
-
-                Icon {
-                    anchors.verticalCenter: parent.verticalCenter
-                    name: "photo"
-                    size: 11
-                    color: Theme.textSecondary
-                }
-                Slider {
-                    width: 180
-                    anchors.verticalCenter: parent.verticalCenter
-                    from: 110
-                    to: 240
-                    stepSize: 10
-                    value: library.coverWidth
-                    onMoved: library.coverWidth = Math.round(value)
-                }
-                Icon {
-                    anchors.verticalCenter: parent.verticalCenter
-                    name: "photo"
-                    size: 17
-                    color: Theme.textSecondary
-                }
+            contentItem: CoverSizeSlider {
+                value: library.coverWidth
+                onMoved: function (value) { library.coverWidth = value }
             }
         }
 
         GridView {
             id: grid
 
-            readonly property int columnSpacing: 20
-            readonly property int rowSpacing: 20
+            readonly property int columnSpacing: Theme.shelfGridSpacing
+            readonly property int rowSpacing: Theme.shelfGridSpacing
 
             anchors.top: toolbar.bottom
             anchors.bottom: parent.bottom
             width: parent.width
             visible: (library.smartCounts["all"] ?? 0) > 0
             clip: true
-            leftMargin: 16
-            rightMargin: 16
-            topMargin: 14
-            bottomMargin: 14
+            leftMargin: Theme.spacingLg
+            rightMargin: Theme.spacingLg
+            topMargin: Theme.shelfHeaderTopInset
+            bottomMargin: Theme.shelfHeaderTopInset
             cellWidth: library.coverWidth + grid.columnSpacing
-            cellHeight: Math.round((library.coverWidth - 6) / 0.709) + 19 + 46 + grid.rowSpacing
+            // The card: the framed cover, its progress strip and the title box.
+            cellHeight: Math.round((library.coverWidth - 2 * Theme.bookFrameInset) / Theme.bookCoverAspect)
+                        + Theme.bookStripHeight + 3 * Theme.bookFrameInset
+                        + Theme.bookTitleSpacing + Theme.bookTitleHeight + grid.rowSpacing
             boundsBehavior: Flickable.StopAtBounds
             model: library.books
 
@@ -357,41 +329,42 @@ Item {
             // LibraryShelfEmptyView, at least 280 tall, when the selection
             // has no books.
             header: Column {
-                width: grid.width - 32
+                width: grid.width - 2 * Theme.spacingLg
 
+                // LibraryShelfDetailHeader, styled as the video library's
+                // content header: title2 semibold and the secondary count.
                 Row {
                     width: parent.width
-                    height: 22 + 14
-                    spacing: 8
+                    height: Theme.shelfHeaderHeight
+                    spacing: Theme.spacingSm
 
-                    Text {
+                    StyledLabel {
                         anchors.baseline: countText.baseline
-                        width: Math.min(implicitWidth, parent.width - countText.width - 8)
+                        width: Math.min(implicitWidth, parent.width - countText.width - parent.spacing)
                         text: page.selectionTitle
-                        color: Theme.textPrimary
-                        font.pixelSize: Theme.fontTitle2
-                        font.weight: Font.DemiBold
+                        textStyle: Theme.title2Font
+                        weight: Theme.weightSemibold
                         elide: Text.ElideRight
                     }
-                    Text {
+                    StyledLabel {
                         id: countText
 
-                        y: 4
+                        anchors.verticalCenter: parent.verticalCenter
                         text: library.bookCount
-                        color: Theme.textSecondary
-                        font.pixelSize: Theme.fontTitle
-                        font.features: { "tnum": 1 }
+                        textStyle: Theme.title3Font
+                        secondary: true
+                        monospacedDigits: true
                     }
                 }
 
                 Item {
                     width: parent.width
-                    height: 280
+                    height: Theme.shelfEmptyMinimumHeight
                     visible: library.bookCount === 0
 
-                    EmptyMessage {
+                    UnavailableView {
                         anchors.centerIn: parent
-                        width: Math.min(360, parent.width - 16)
+                        width: Math.min(Theme.unavailableWidth, parent.width - 2 * Theme.spacingSm)
                         symbol: library.selectedShelf === "reading" ? "book"
                             : library.selectedShelf === "unshelved" ? "tray" : "folder"
                         title: qsTr("This Shelf Is Empty")
@@ -434,45 +407,13 @@ Item {
             }
         }
 
-        EmptyMessage {
+        UnavailableView {
             anchors.centerIn: grid
-            width: Math.min(360, detail.width - 48)
+            width: Math.min(Theme.unavailableWidth, detail.width - 2 * Theme.spacingXl)
             visible: !grid.visible
             symbol: "books.vertical"
             title: qsTr("No Books")
             message: qsTr("Import an EPUB using the toolbar button to start reading.")
-        }
-    }
-
-    // ContentUnavailableView: a large secondary glyph, a bold title and the
-    // description, centred.
-    component EmptyMessage: Column {
-        property string symbol
-        property string title
-        property string message
-
-        spacing: 8
-
-        Icon {
-            anchors.horizontalCenter: parent.horizontalCenter
-            size: 40
-            name: parent.symbol
-            color: Theme.textSecondary
-        }
-        Text {
-            width: parent.width
-            horizontalAlignment: Text.AlignHCenter
-            text: parent.title
-            color: Theme.textPrimary
-            font.pixelSize: Theme.fontTitle2
-            font.weight: Font.Bold
-        }
-        Text {
-            width: parent.width
-            horizontalAlignment: Text.AlignHCenter
-            wrapMode: Text.Wrap
-            text: parent.message
-            color: Theme.textSecondary
         }
     }
 }

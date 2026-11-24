@@ -26,97 +26,55 @@ Rectangle {
     required property LibraryViewModel model
     property string title
     property real toolbarInset: 0
-    readonly property int toolbarHeight: 52
+    readonly property int toolbarHeight: Theme.sourceListToolbarHeight
 
     color: Theme.columnBackground
     activeFocusOnTab: true
 
-    Dialog {
+    AlertDialog {
         id: shelfDialog
 
-        parent: Overlay.overlay
-        anchors.centerIn: parent
         title: qsTr("New Shelf")
-        modal: true
-        standardButtons: Dialog.Ok | Dialog.Cancel
+        hasField: true
+        selectFieldOnOpen: true
+        fieldPlaceholder: qsTr("Shelf name")
+        rejectText: qsTr("Cancel")
 
-        TextField {
-            id: shelfField
-
-            implicitWidth: 260
-            placeholderText: qsTr("Shelf name")
-            onAccepted: shelfDialog.accept()
-        }
-
-        onAboutToShow: shelfField.text = qsTr("New Shelf")
-        onOpened: {
-            shelfField.forceActiveFocus()
-            shelfField.selectAll()
-        }
+        onAboutToShow: shelfDialog.fieldText = qsTr("New Shelf")
         onAccepted: {
-            const created = column.model.createShelf(shelfField.text)
+            const created = column.model.createShelf(shelfDialog.fieldText)
             if (created.length > 0)
                 column.model.selectedShelf = "shelf:" + created
         }
     }
 
-    Dialog {
+    AlertDialog {
         id: renameShelfDialog
 
         property string fromName
 
-        parent: Overlay.overlay
-        anchors.centerIn: parent
         title: qsTr("Rename Shelf")
-        modal: true
-        standardButtons: Dialog.Ok | Dialog.Cancel
+        hasField: true
+        selectFieldOnOpen: true
+        fieldPlaceholder: qsTr("Shelf name")
+        rejectText: qsTr("Cancel")
 
-        TextField {
-            id: renameShelfField
-
-            implicitWidth: 260
-            placeholderText: qsTr("Shelf name")
-            onAccepted: renameShelfDialog.accept()
-        }
-
-        onAboutToShow: renameShelfField.text = renameShelfDialog.fromName
-        onOpened: {
-            renameShelfField.forceActiveFocus()
-            renameShelfField.selectAll()
-        }
-        onAccepted: column.model.renameShelf(renameShelfDialog.fromName, renameShelfField.text)
+        onAboutToShow: renameShelfDialog.fieldText = renameShelfDialog.fromName
+        onAccepted: column.model.renameShelf(renameShelfDialog.fromName, renameShelfDialog.fieldText)
     }
 
-    Dialog {
+    // LibraryShelfSidebar's confirmationDialog: a destructive Delete Shelf.
+    AlertDialog {
         id: deleteShelfDialog
 
         property string shelfName
 
-        parent: Overlay.overlay
-        anchors.centerIn: parent
         title: qsTr("Delete shelf “%1”?").arg(deleteShelfDialog.shelfName)
-        modal: true
+        message: qsTr("Everything on this shelf stays in the library.")
+        acceptText: qsTr("Delete Shelf")
+        acceptDestructive: true
+        rejectText: qsTr("Cancel")
 
-        // The message wraps at a fixed 340 px inside a holder that reports
-        // that width, so the dialog's size never feeds back into the text's;
-        // the window is never narrower than 900.
-        contentItem: Item {
-            implicitWidth: 340
-            implicitHeight: deleteMessage.implicitHeight
-
-            Label {
-                id: deleteMessage
-
-                width: 340
-                text: qsTr("Everything on this shelf stays in the library.")
-                color: Theme.textSecondary
-                wrapMode: Text.Wrap
-            }
-        }
-
-        standardButtons: Dialog.Ok | Dialog.Cancel
-
-        Component.onCompleted: deleteShelfDialog.standardButton(Dialog.Ok).text = qsTr("Delete Shelf")
         onAccepted: column.model.deleteShelf(deleteShelfDialog.shelfName)
     }
 
@@ -144,16 +102,9 @@ Rectangle {
         }
     }
 
-    Text {
-        x: 16 + column.toolbarInset
-        width: column.width - x - 12
-        height: column.toolbarHeight
-        verticalAlignment: Text.AlignVCenter
+    SourceListTitle {
+        leadingInset: column.toolbarInset
         text: column.title
-        color: Theme.textPrimary
-        font.pixelSize: Theme.fontTitle
-        font.weight: Font.Bold
-        elide: Text.ElideRight
     }
 
     Flickable {
@@ -163,7 +114,7 @@ Rectangle {
         anchors.topMargin: column.toolbarHeight
         anchors.bottom: footer.top
         width: parent.width
-        contentHeight: rows.implicitHeight + 8
+        contentHeight: rows.implicitHeight + Theme.spacingSm
         clip: true
         boundsBehavior: Flickable.StopAtBounds
 
@@ -172,9 +123,9 @@ Rectangle {
         Column {
             id: rows
 
-            x: 6
-            width: list.width - 12
-            spacing: 2
+            x: Theme.sourceListInset
+            width: list.width - 2 * Theme.sourceListInset
+            spacing: Theme.sourceListRowSpacing
 
             Repeater {
                 model: [
@@ -199,14 +150,8 @@ Rectangle {
                 }
             }
 
-            Text {
-                leftPadding: 6
-                topPadding: 14
-                bottomPadding: 4
+            SourceListCaption {
                 text: qsTr("Shelves")
-                color: Theme.textSecondary
-                font.pixelSize: Theme.fontSubheadline
-                font.weight: Font.DemiBold
             }
 
             Repeater {
@@ -239,20 +184,20 @@ Rectangle {
 
         anchors.bottom: parent.bottom
         width: parent.width
-        height: newShelf.implicitHeight + 20
+        height: newShelf.implicitHeight + 2 * Theme.sourceListFooterPadding
 
         Button {
             id: newShelf
 
-            x: 10
+            x: Theme.sourceListFooterPadding
             anchors.verticalCenter: parent.verticalCenter
             flat: true
-            leftPadding: 8
+            leftPadding: Theme.spacingSm
             text: qsTr("New Shelf")
             icon.source: IconMap.source("plus")
             ToolTip.visible: hovered
             ToolTip.text: qsTr("New Shelf")
-            ToolTip.delay: 700
+            ToolTip.delay: Theme.tooltipDelay
             onClicked: shelfDialog.open()
         }
     }

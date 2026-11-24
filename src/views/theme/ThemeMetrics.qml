@@ -249,6 +249,7 @@ QtObject {
     readonly property int sourceListInset: 6
     readonly property int sourceListRowSpacing: 2
     readonly property int sourceListSectionGap: 14
+    readonly property int sourceListFooterPadding: 10
 
     // LibraryCoverSizeButton's popover and the library toolbar it hangs from.
     readonly property int coverSizeSpacing: 10
@@ -267,4 +268,34 @@ QtObject {
     readonly property int librarySearchMinimumWidth: 140
     readonly property int librarySearchMaximumWidth: 260
     readonly property real librarySearchShare: 0.32
+
+    // The bookshelf card (BookView.swift ShelfBookCard, ShelfCoverFrame,
+    // ShelfProgressStrip): a 3 px frame around the portrait cover, the
+    // progress strip under it and a two-line title box.
+    readonly property int bookCoverDefaultWidth: 160
+    readonly property int bookFrameInset: 3
+    readonly property real bookCoverAspect: 0.709
+    readonly property int bookFrameRadius: 7
+    readonly property int bookCoverRadius: 6
+    readonly property int bookStripHeight: 10
+    readonly property int bookStripInset: 5
+    readonly property int bookStripTrackHeight: 3
+    readonly property int bookTitleSpacing: 6
+    readonly property int bookTitleHeight: 40
+    readonly property int bookBadgeInset: 6
+    readonly property real bookShadowOpacity: 0.3
+    // Covers narrower than this use the small title style.
+    readonly property int bookCompactWidth: 140
+    readonly property int bookTitleLineHeight: 19
+    readonly property int bookCompactTitleLineHeight: 16
+    readonly property int checkBadgeSize: 22
+    // NativeBookshelfReuseView's shelf column and ShelfView's grid.
+    readonly property int shelfColumnMinimumWidth: 176
+    readonly property int shelfColumnMaximumWidth: 230
+    readonly property real shelfColumnShare: 0.24
+    readonly property int shelfGridSpacing: 20
+    readonly property int shelfHeaderTopInset: 14
+    readonly property int shelfHeaderHeight: 36
+    readonly property int shelfEmptyMinimumHeight: 280
+    readonly property int checkBadgeKnob: 16
 }

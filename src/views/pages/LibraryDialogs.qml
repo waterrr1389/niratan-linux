@@ -76,116 +76,54 @@ Item {
         }
     }
 
-    // BookRenameSheet: a title2 bold heading, the title field and Cancel and
-    // Save, 420 wide with 24 of padding.
-    Dialog {
+    // BookRenameSheet: the title field with Cancel and Save, as a kit alert.
+    AlertDialog {
         id: renameDialog
 
-        parent: Overlay.overlay
-        anchors.centerIn: parent
-        width: Math.min(420, parent ? parent.width - 32 : 420)
-        modal: true
-        padding: 24
-        topPadding: 24
+        title: qsTr("Rename")
+        hasField: true
+        selectFieldOnOpen: true
+        fieldPlaceholder: qsTr("Title")
+        acceptText: qsTr("Save")
+        rejectText: qsTr("Cancel")
 
-        header: null
-
-        contentItem: Column {
-            spacing: 18
-
-            Label {
-                text: qsTr("Rename")
-                font.pixelSize: Theme.fontTitle2
-                font.weight: Font.Bold
-            }
-            TextField {
-                id: renameField
-
-                width: parent.width
-                placeholderText: qsTr("Title")
-                onAccepted: renameDialog.accept()
-            }
-        }
-
-        footer: DialogButtonBox {
-            topPadding: 0
-            padding: 24
-
-            Button {
-                text: qsTr("Cancel")
-                DialogButtonBox.buttonRole: DialogButtonBox.RejectRole
-            }
-            Button {
-                text: qsTr("Save")
-                prominent: true
-                DialogButtonBox.buttonRole: DialogButtonBox.AcceptRole
-            }
-        }
-
-        onAboutToShow: renameField.text = dialogs.bookTitle
-        onOpened: {
-            renameField.forceActiveFocus()
-            renameField.selectAll()
-        }
-        onAccepted: dialogs.model.renameBook(dialogs.folder, renameField.text.trim())
+        onAboutToShow: renameDialog.fieldText = dialogs.bookTitle
+        onAccepted: dialogs.model.renameBook(dialogs.folder, renameDialog.fieldText.trim())
     }
 
-    ConfirmDialog {
+    // BookCell's confirmationDialogs: Delete is destructive, Confirm is not.
+    AlertDialog {
         id: deleteDialog
 
         title: qsTr("Delete \"%1\"?").arg(dialogs.bookTitle)
-        confirmText: qsTr("Delete")
+        acceptText: qsTr("Delete")
+        acceptDestructive: true
+        rejectText: qsTr("Cancel")
         onAccepted: dialogs.model.deleteBook(dialogs.folder)
     }
 
-    ConfirmDialog {
+    AlertDialog {
         id: markReadDialog
 
         title: qsTr("Mark \"%1\" as read?").arg(dialogs.bookTitle)
-        confirmText: qsTr("Confirm")
+        acceptText: qsTr("Confirm")
+        rejectText: qsTr("Cancel")
         onAccepted: dialogs.model.markRead(dialogs.folder)
     }
 
-    ConfirmDialog {
+    AlertDialog {
         id: bulkDeleteDialog
 
         property var folders: []
 
         title: qsTr("Delete %n book(s)?", "", bulkDeleteDialog.folders.length)
-        confirmText: qsTr("Delete")
+        acceptText: qsTr("Delete")
+        acceptDestructive: true
+        rejectText: qsTr("Cancel")
         onAccepted: {
             for (const folder of bulkDeleteDialog.folders)
                 dialogs.model.deleteBook(folder)
             dialogs.bulkDeleted()
-        }
-    }
-
-    // A confirmation: the question as the title, Cancel, and the action as
-    // the default button.
-    component ConfirmDialog: Dialog {
-        id: confirm
-
-        property string confirmText
-
-        parent: Overlay.overlay
-        anchors.centerIn: parent
-        width: Math.min(360, parent ? parent.width - 32 : 360)
-        modal: true
-
-        contentItem: Item {
-            implicitHeight: 0
-        }
-
-        footer: DialogButtonBox {
-            Button {
-                text: qsTr("Cancel")
-                DialogButtonBox.buttonRole: DialogButtonBox.RejectRole
-            }
-            Button {
-                text: confirm.confirmText
-                prominent: true
-                DialogButtonBox.buttonRole: DialogButtonBox.AcceptRole
-            }
         }
     }
 }

@@ -8,7 +8,8 @@
 // `acceptText` names the default button, which calls accept(); a non-empty
 // `rejectText` adds a cancel button that calls reject(). With `hasField` a
 // text field is shown; `fieldName` is its object name and `fieldText` its
-// text. Return accepts, Escape rejects (or closes an alert without cancel).
+// text; `selectFieldOnOpen` selects it on open, so typing replaces it.
+// Return accepts, Escape rejects (or closes an alert without cancel).
 
 import QtQuick
 import QtQuick.Controls
@@ -22,6 +23,8 @@ Dialog {
     property string rejectText
     property bool acceptDestructive: false
     property bool hasField: false
+    // Select the field's text once it is focused, so typing replaces it.
+    property bool selectFieldOnOpen: false
     property alias fieldText: field.text
     property alias fieldName: field.objectName
     property alias fieldPlaceholder: field.placeholderText
@@ -36,8 +39,11 @@ Dialog {
     focus: true
 
     onOpened: {
-        if (alert.hasField)
+        if (alert.hasField) {
             field.forceActiveFocus()
+            if (alert.selectFieldOnOpen)
+                field.selectAll()
+        }
     }
 
     background: Rectangle {
@@ -100,11 +106,13 @@ Dialog {
             FormButton {
                 visible: alert.rejectText !== ""
                 text: alert.rejectText
+                sizeToLabel: true
                 onClicked: alert.reject()
             }
 
             FormButton {
                 text: alert.acceptText
+                sizeToLabel: true
                 prominent: !alert.acceptDestructive
                 destructive: alert.acceptDestructive
                 onClicked: alert.accept()
