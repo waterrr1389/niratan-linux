@@ -295,6 +295,7 @@ qt_add_qml_module(niratan_app
         src/views/components/FormStepperRow.qml
         src/views/components/FormToggleRow.qml
         src/views/components/ChipButton.qml
+        src/views/components/ChromeButton.qml
         src/views/components/FormChoiceRow.qml
         src/views/components/GlyphButton.qml
         src/views/components/IconTabBar.qml
@@ -532,6 +533,7 @@ qt_add_qml_module(niratan_app
         src/views/icons/phosphor/regular/align-bottom-simple.svg
         src/views/pages/ReaderPage.qml
         src/views/theme/ControlKitSheet.qml
+        src/views/theme/PlayerChromeSheet.qml
         src/views/theme/Theme.qml
         src/views/theme/ThemeMetrics.qml
         src/views/theme/ThemePreview.qml

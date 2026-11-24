@@ -116,6 +116,16 @@ int main(int argc, char* argv[]) {
                         "    title: \"Niratan control kit\"\n"
                         "    ControlKitSheet { anchors.fill: parent; scrolledToEnd: " +
                         scrolled + " }\n}\n");
+    } else if (preview == "player") {
+        // The playback chrome sheet: the real player components with demo
+        // values, for renders on platforms without OpenGL for libmpv.
+        engine.loadData("import QtQuick\nimport QtQuick.Controls\nimport Niratan\n"
+                        "ApplicationWindow {\n"
+                        "    visible: true\n"
+                        "    width: 1600\n"
+                        "    height: 1000\n"
+                        "    title: \"Niratan player chrome\"\n"
+                        "    PlayerChromeSheet { anchors.fill: parent }\n}\n");
     } else {
         engine.loadFromModule("Niratan", theme_preview ? "ThemePreview" : "MainWindow");
     }

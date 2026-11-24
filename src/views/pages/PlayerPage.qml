@@ -895,6 +895,8 @@ Item {
 
     VideoErrorDialog {
         id: videoErrorDialog
+
+        focusTarget: page
     }
 
     // Popups are not items, so the page exposes item handles that mirror their

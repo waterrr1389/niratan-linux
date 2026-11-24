@@ -11,7 +11,9 @@
 // Content taller than the viewport scrolls, and scrolled to the end the last
 // section keeps the bottom padding. Content never scrolls sideways: the
 // column is as wide as the padding leaves and its sections fill it. The
-// scroll bar shows only while the content is taller than the viewport.
+// scroll bar shows only while the content is taller than the viewport. A
+// persistent scroll bar gets its own gutter: the column narrows by the bar's
+// width plus a small gap so trailing controls never sit under it.
 import QtQuick
 import QtQuick.Controls
 import Niratan
@@ -39,6 +41,8 @@ Item {
                                              : Theme.formPaddingHorizontal
     property real spacing: compact ? Theme.panelSpacing : Theme.formSpacing
     readonly property bool showsHeader: compact && header !== null
+    readonly property real scrollBarGutter: persistentScrollBar && bar.visible
+                                            ? bar.width + Theme.spacingXs : 0
 
     function attachHeader() {
         if (header) {
@@ -91,10 +95,12 @@ Item {
             id: columnItem
 
             width: scaffold.compact
-                   ? Math.max(0, flick.width - 2 * scaffold.horizontalPadding)
-                   : Math.min(Math.max(0, flick.width - 2 * scaffold.horizontalPadding),
+                   ? Math.max(0, flick.width - scaffold.scrollBarGutter
+                                 - 2 * scaffold.horizontalPadding)
+                   : Math.min(Math.max(0, flick.width - scaffold.scrollBarGutter
+                                          - 2 * scaffold.horizontalPadding),
                               Theme.formMaxContentWidth)
-            x: (flick.width - width) / 2
+            x: (flick.width - scaffold.scrollBarGutter - width) / 2
             y: scaffold.topPadding
             spacing: scaffold.spacing
 

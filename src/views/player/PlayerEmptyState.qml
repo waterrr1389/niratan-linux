@@ -9,10 +9,8 @@
 pragma ComponentBehavior: Bound
 
 import QtQuick
-import QtQuick.Controls
 import QtQuick.Dialogs
 import Niratan
-import "../icons/icon_map.js" as IconMap
 
 Item {
     id: emptyState
@@ -21,40 +19,41 @@ Item {
 
     Column {
         anchors.centerIn: parent
-        width: Math.min(440, Math.max(0, emptyState.width - 64))
-        spacing: 12
+        width: Math.min(Theme.emptyStateWidth, Math.max(0, emptyState.width - Theme.emptyStateInset))
+        spacing: Theme.spacingMd
 
         Icon {
             anchors.horizontalCenter: parent.horizontalCenter
             name: "play.rectangle"
-            size: 40
+            size: Theme.emptyStateGlyphSize
             color: Theme.overlayForeground
         }
 
-        Label {
+        StyledLabel {
             width: parent.width
             text: qsTr("No Video Open")
+            textStyle: Theme.title2Font
+            weight: Theme.weightSemibold
             color: Theme.overlayForeground
-            font.pixelSize: Theme.fontTitle2
-            font.bold: true
             horizontalAlignment: Text.AlignHCenter
         }
 
-        Label {
+        StyledLabel {
             width: parent.width
             text: qsTr("Open a local video file to start watching.")
             color: Theme.overlayForeground
-            opacity: 0.86
-            font.pixelSize: Theme.fontBody
+            opacity: Theme.chromeOverlayTextOpacity
             wrapMode: Text.WordWrap
             horizontalAlignment: Text.AlignHCenter
         }
 
-        Button {
+        FormButton {
             objectName: "openVideoButton"
             anchors.horizontalCenter: parent.horizontalCenter
+            sizeToLabel: true
+            prominent: true
+            glyph: "play.rectangle"
             text: qsTr("Open Video")
-            icon.source: IconMap.source("play.rectangle")
             onClicked: openVideoDialog.open()
         }
     }

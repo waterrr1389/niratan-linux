@@ -4,16 +4,14 @@
 // "Video Error" alert. The page's load, subtitle and playback failures all
 // reach this one alert; it stays closed until showError receives a non-empty
 // message, and closing returns focus to the page so the player's shortcuts
-// keep working.
+// keep working. It is the kit's alert with a single OK button.
 pragma ComponentBehavior: Bound
 
 import QtQuick
-import QtQuick.Controls
+import Niratan
 
-Dialog {
+AlertDialog {
     id: dialog
-
-    property string message
 
     function showError(error: string) {
         if (error.length > 0) {
@@ -22,20 +20,12 @@ Dialog {
         }
     }
 
-    anchors.centerIn: parent
-    width: parent ? Math.min(440, parent.width) : 440
-    modal: true
-    focus: true
-    title: qsTr("Video Error")
-    standardButtons: Dialog.Ok
-    onClosed: {
-        if (dialog.parent)
-            dialog.parent.forceActiveFocus()
-    }
+    // The item that regains focus when the alert closes: the player page.
+    property Item focusTarget
 
-    contentItem: Label {
-        text: dialog.message
-        textFormat: Text.PlainText
-        wrapMode: Text.Wrap
+    title: qsTr("Video Error")
+    onClosed: {
+        if (dialog.focusTarget)
+            dialog.focusTarget.forceActiveFocus()
     }
 }

@@ -53,17 +53,15 @@ Column {
 
         FormDivider {}
 
-        Item {
+        Column {
             width: parent ? parent.width : 0
-            implicitHeight: openButton.implicitHeight + 2 * Theme.compactSectionPadding
+            padding: Theme.compactSectionPadding
 
             ChipButton {
                 id: openButton
 
                 objectName: "inspectorOpenSubtitles"
-                x: Theme.compactSectionPadding
-                width: parent.width - 2 * Theme.compactSectionPadding
-                anchors.verticalCenter: parent.verticalCenter
+                width: parent.width - parent.leftPadding - parent.rightPadding
                 implicitHeight: Theme.largeChipHeight
                 glyph: "plus"
                 text: qsTr("Open Subtitles")

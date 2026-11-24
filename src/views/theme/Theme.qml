@@ -61,6 +61,13 @@ ThemeMetrics {
     // Glyphs drawn over a dark media overlay stay white in both themes; the
     // scrim is black at 45% for the unread-image cue and thumbnail badge.
     readonly property color overlayForeground: "#FFFFFF"
+    // VideoControlsView.compactBottomScrim: black fading from 62% at the bottom
+    // through 38% to clear, and the compact speed pill's 20% black fill.
+    readonly property color chromeScrimClear: "#00000000"
+    readonly property color chromeScrimMid: "#61000000"
+    readonly property color chromeScrimEdge: "#9E000000"
+    readonly property color chromeScrimControl: "#33000000"
+    readonly property color chromeOverlayTrack: "#4DFFFFFF"
     readonly property color mediaOverlayScrim: "#73000000"
 
     readonly property color cardBackground: dark ? "#2C2C2E" : "#FFFFFF"
@@ -437,18 +444,6 @@ ThemeMetrics {
     readonly property int readerInspectorTimeSpacing: 2
     readonly property int readerChapterMarkerHeight: 17
     readonly property int readerChapterMarkerGlyph: 11
-    // The trailing reader inspector scales with the window, after the
-    // playerPanelWidth clamp of NativeReaderView.swift, so it stays usable in
-    // ordinary Linux window sizes; NativeReaderSidePanel's fixed 440 is the cap.
-    readonly property real readerSidePanelWidthFraction: 0.32
-    readonly property int readerSidePanelMinWidth: 320
-    readonly property int readerSidePanelMaxWidth: 440
-
-    function readerSidePanelWidth(windowWidth) {
-        return Math.round(Math.min(Math.max(windowWidth * readerSidePanelWidthFraction,
-                                            readerSidePanelMinWidth),
-                                   readerSidePanelMaxWidth));
-    }
     readonly property int audiobookCoverSize: 64
     readonly property int audiobookCoverRadius: 10
     readonly property int audiobookCoverGlyphSize: 22

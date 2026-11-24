@@ -20,7 +20,6 @@
 pragma ComponentBehavior: Bound
 
 import QtQuick
-import QtQuick.Controls
 import Niratan
 
 Item {
@@ -34,6 +33,10 @@ Item {
     property real scrubTime: 0
     property bool emphasized: false
     property bool showLabels: true
+    // Drawn on the compact layout's dark scrim: the track, fill, ticks and
+    // knob use the overlay foreground so they read over the video in both
+    // themes.
+    property bool onOverlay: false
     property var chapters: []
 
     readonly property real activeTime: strip.scrubbing ? strip.scrubTime : strip.currentTime
@@ -70,9 +73,7 @@ Item {
     signal scrubUpdated(real seconds)
     signal scrubFinished(real seconds)
 
-    implicitHeight: 18
-
-
+    implicitHeight: Theme.timelineHitHeight
 
     function formatTime(seconds) {
         if (!isFinite(seconds) || seconds <= 0)
@@ -102,20 +103,20 @@ Item {
 
         anchors.fill: parent
 
-        readonly property real spacing: strip.showLabels ? 10 : 0
+        readonly property real spacing: strip.showLabels ? Theme.chromeClusterSpacing : 0
 
-        Label {
+        StyledLabel {
             id: currentTimeLabel
 
             objectName: "currentTimeLabel"
             visible: strip.showLabels
             anchors.verticalCenter: parent.verticalCenter
             x: 0
-            width: strip.showLabels ? 44 : 0
+            width: strip.showLabels ? Theme.timelineLabelWidth : 0
             text: strip.currentText
-            color: Theme.textSecondary
-            font.pixelSize: 11
-            font.features: ({ "tnum": 1 })
+            textStyle: Theme.captionFont
+            secondary: true
+            monospacedDigits: true
             horizontalAlignment: Text.AlignLeft
         }
 
@@ -127,17 +128,18 @@ Item {
             x: currentTimeLabel.width + stripRow.spacing
             width: Math.max(0, stripRow.width - stripRow.spacing * (strip.showLabels ? 2 : 0)
                             - currentTimeLabel.width - remainingTimeLabel.width)
-            height: 18
+            height: Theme.timelineHitHeight
 
             readonly property int trackHeight: strip.emphasized || timelineMouse.containsMouse
-                                               || strip.scrubbing ? 7 : 4
+                                               || strip.scrubbing ? Theme.timelineEmphasizedHeight
+                                                                  : Theme.timelineHeight
 
             Rectangle {
                 anchors.verticalCenter: parent.verticalCenter
                 width: parent.width
                 height: timeline.trackHeight
                 radius: Math.floor(height / 2)
-                color: Theme.cardStroke
+                color: strip.onOverlay ? Theme.chromeOverlayTrack : Theme.trackBackground
             }
 
             Rectangle {
@@ -146,8 +148,8 @@ Item {
                 width: timeline.width * strip.progress
                 height: timeline.trackHeight
                 radius: Math.floor(height / 2)
-                color: Theme.textPrimary
-                opacity: 0.85
+                color: strip.onOverlay ? Theme.overlayForeground : Theme.textPrimary
+                opacity: Theme.trackSliderFillOpacity
             }
 
             Repeater {
@@ -161,10 +163,10 @@ Item {
                                             timeline.width * modelData
                                             / Math.max(1, strip.duration) - width / 2))
                     anchors.verticalCenter: parent.verticalCenter
-                    width: 2
-                    height: 9
-                    radius: 1
-                    color: Theme.textSecondary
+                    width: Theme.timelineMarkerWidth
+                    height: Theme.timelineMarkerHeight
+                    radius: width / 2
+                    color: strip.onOverlay ? Theme.overlayForeground : Theme.textSecondary
                 }
             }
 
@@ -175,35 +177,35 @@ Item {
                 x: Math.max(0, Math.min(timeline.width - width,
                                         timeline.width * strip.progress - width / 2))
                 anchors.verticalCenter: parent.verticalCenter
-                width: 13
-                height: 13
-                radius: 6.5
-                color: Theme.textPrimary
+                width: Theme.timelineKnob
+                height: Theme.timelineKnob
+                radius: width / 2
+                color: strip.onOverlay ? Theme.overlayForeground : Theme.textPrimary
                 visible: timelineMouse.containsMouse || strip.scrubbing
             }
 
-            Rectangle {
+            StyledLabel {
                 id: scrubBubble
 
                 objectName: "scrubBubble"
                 x: Math.max(0, Math.min(timeline.width - width,
                                         timeline.width * strip.progress - width / 2))
-                y: -height - 6
-                width: scrubBubbleText.implicitWidth + 16
-                height: 22
-                radius: 6
-                color: Theme.popupBackground
-                border.width: Theme.cardBorderWidth
-                border.color: Theme.popupDivider
+                y: -height - Theme.spacingXs
+                height: Theme.chipHeight
+                leftPadding: Theme.chipPaddingHorizontal
+                rightPadding: Theme.chipPaddingHorizontal
+                verticalAlignment: Text.AlignVCenter
                 visible: strip.scrubbing
+                text: strip.formatTime(strip.scrubTime)
+                textStyle: Theme.captionFont
+                weight: Theme.weightSemibold
+                monospacedDigits: true
 
-                Label {
-                    id: scrubBubbleText
-
-                    anchors.centerIn: parent
-                    text: strip.formatTime(strip.scrubTime)
-                    color: Theme.popupText
-                    font.pixelSize: 11
+                background: Rectangle {
+                    radius: Theme.chipRadius
+                    color: Theme.floatingBackground
+                    border.width: Theme.cardBorderWidth
+                    border.color: Theme.floatingStroke
                 }
             }
 
@@ -230,18 +232,18 @@ Item {
             }
         }
 
-        Label {
+        StyledLabel {
             id: remainingTimeLabel
 
             objectName: "remainingTimeLabel"
             visible: strip.showLabels
             anchors.verticalCenter: parent.verticalCenter
             x: timeline.x + timeline.width + stripRow.spacing
-            width: strip.showLabels ? 44 : 0
+            width: strip.showLabels ? Theme.timelineLabelWidth : 0
             text: strip.remainingText
-            color: Theme.textSecondary
-            font.pixelSize: 11
-            font.features: ({ "tnum": 1 })
+            textStyle: Theme.captionFont
+            secondary: true
+            monospacedDigits: true
             horizontalAlignment: Text.AlignRight
         }
     }

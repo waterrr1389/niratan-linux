@@ -7,7 +7,10 @@
 // overhang the track's ends. A press anywhere on the track jumps there.
 //
 // It is a Slider underneath, so `value`, `from`, `to`, `stepSize` and moved()
-// keep their usual meaning.
+// keep their usual meaning. `onOverlay` is the compact layout's control
+// treatment: the track and fill take the overlay foreground so they read over
+// the video's dark scrim in both themes, as VideoVolumeTrack passes
+// controlTreatment through to VideoTimelineTrack.
 
 import QtQuick
 import QtQuick.Templates as T
@@ -17,6 +20,7 @@ T.Slider {
     id: control
 
     readonly property bool emphasized: hovered || pressed
+    property bool onOverlay: false
 
     implicitWidth: Theme.trackSliderWidth
     implicitHeight: Theme.trackSliderHitHeight
@@ -31,7 +35,7 @@ T.Slider {
             width: parent.width
             height: control.emphasized ? Theme.trackSliderEmphasizedHeight : Theme.trackSliderHeight
             radius: height / 2
-            color: Theme.cardStroke
+            color: control.onOverlay ? Theme.chromeOverlayTrack : Theme.cardStroke
         }
 
         Rectangle {
@@ -39,7 +43,7 @@ T.Slider {
             width: Math.max(track.height, control.visualPosition * parent.width)
             height: track.height
             radius: height / 2
-            color: Theme.textPrimary
+            color: control.onOverlay ? Theme.overlayForeground : Theme.textPrimary
             opacity: Theme.trackSliderFillOpacity
         }
     }

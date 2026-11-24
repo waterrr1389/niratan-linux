@@ -7,17 +7,17 @@ import Niratan
 Button {
     id: loopMarker
     property bool selected: false
-    implicitWidth: 20
-    implicitHeight: 20
+    implicitWidth: Theme.studyLoopMarkerSize
+    implicitHeight: Theme.studyLoopMarkerSize
     padding: 0
     horizontalPadding: 0
     focusPolicy: Qt.TabFocus
     ToolTip.visible: hovered
-    contentItem: Text {
+    contentItem: StyledLabel {
         text: loopMarker.text
-        color: loopMarker.selected ? Theme.windowBackground : Theme.textSecondary
-        font.pixelSize: Theme.fontCaption
-        font.bold: true
+        textStyle: Theme.captionFont
+        weight: Theme.weightSemibold
+        color: loopMarker.selected ? Theme.textOnAccent : Theme.textSecondary
         horizontalAlignment: Text.AlignHCenter
         verticalAlignment: Text.AlignVCenter
     }

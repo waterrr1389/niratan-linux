@@ -43,18 +43,27 @@ VideoInspectorSection {
             onStepped: step => section.model.stepSubtitleMilliseconds(step)
         }
 
-        Style.Slider {
-            objectName: "inspectorSubtitleSlider"
-            x: Theme.compactRowPadding
-            width: parent.width - 2 * Theme.compactRowPadding
-            small: true
-            from: -10000
-            to: 10000
-            stepSize: 50
-            snapMode: Slider.SnapAlways
-            value: section.model.subtitleSliderMilliseconds
-            Accessible.name: qsTr("Subtitle Timing")
-            onMoved: section.model.setSubtitleSliderMilliseconds(value)
+        Item {
+            width: parent ? parent.width : 0
+            implicitHeight: subtitleSlider.implicitHeight
+
+            Style.Slider {
+                id: subtitleSlider
+
+                objectName: "inspectorSubtitleSlider"
+                anchors.left: parent.left
+                anchors.right: parent.right
+                anchors.leftMargin: Theme.compactRowPadding
+                anchors.rightMargin: Theme.compactRowPadding
+                small: true
+                from: -10000
+                to: 10000
+                stepSize: 50
+                snapMode: Slider.SnapAlways
+                value: section.model.subtitleSliderMilliseconds
+                Accessible.name: qsTr("Subtitle Timing")
+                onMoved: section.model.setSubtitleSliderMilliseconds(value)
+            }
         }
     }
 

@@ -13,6 +13,7 @@ pragma ComponentBehavior: Bound
 
 import QtQuick
 import QtQuick.Controls
+import QtQuick.Layouts
 import Niratan
 import NiratanStyle as Style
 
@@ -54,13 +55,14 @@ VideoInspectorSection {
         spacing: Theme.compactRowSpacing
 
         Column {
-            width: parent.width - 2 * parent.padding
+            width: parent.width - parent.leftPadding - parent.rightPadding
             spacing: Theme.chipSpacing
 
             Repeater {
                 model: section.model.speedRows
 
-                delegate: Row {
+                // The presets of a row share its width equally.
+                delegate: RowLayout {
                     id: speedRow
 
                     required property var modelData
@@ -78,8 +80,8 @@ VideoInspectorSection {
                             property real speedValue: modelData
 
                             objectName: "inspectorSpeedPreset"
-                            width: (speedRow.width - (speedRow.modelData.length - 1) * speedRow.spacing)
-                                   / speedRow.modelData.length
+                            Layout.fillWidth: true
+                            Layout.preferredWidth: 0
                             implicitHeight: Theme.largeChipHeight
                             text: section.presetText(speedValue)
                             font.features: { "tnum": 1 }
@@ -92,16 +94,15 @@ VideoInspectorSection {
             }
         }
 
-        Row {
+        RowLayout {
             id: sliderRow
 
-            width: parent.width - 2 * parent.padding
+            width: parent.width - parent.leftPadding - parent.rightPadding
             spacing: Theme.compactRowSpacing
 
             StyledLabel {
                 id: slow
 
-                anchors.verticalCenter: parent.verticalCenter
                 text: "0.3×"
                 textStyle: Theme.captionFont
                 secondary: true
@@ -109,8 +110,7 @@ VideoInspectorSection {
 
             Style.Slider {
                 objectName: "inspectorSpeedSlider"
-                anchors.verticalCenter: parent.verticalCenter
-                width: sliderRow.width - slow.width - fast.width - field.width - 3 * sliderRow.spacing
+                Layout.fillWidth: true
                 small: true
                 from: 0.3
                 to: 5.0
@@ -124,7 +124,6 @@ VideoInspectorSection {
             StyledLabel {
                 id: fast
 
-                anchors.verticalCenter: parent.verticalCenter
                 text: "5×"
                 textStyle: Theme.captionFont
                 secondary: true
@@ -133,7 +132,6 @@ VideoInspectorSection {
             InlineField {
                 id: field
 
-                anchors.verticalCenter: parent.verticalCenter
                 fieldName: "inspectorSpeedField"
                 suffix: "x"
                 text: section.model.speedInputText

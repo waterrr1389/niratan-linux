@@ -19,19 +19,19 @@ Rectangle {
 
     Column {
         anchors.centerIn: parent
-        spacing: 12
+        spacing: Theme.spacingMd
 
         BusyIndicator {
             anchors.horizontalCenter: parent.horizontalCenter
             running: overlay.visible
         }
 
-        Label {
+        StyledLabel {
             text: qsTr("Loading Video...")
+            textStyle: Theme.calloutFont
+            weight: Theme.weightMedium
             color: Theme.overlayForeground
-            opacity: 0.86
-            font.pixelSize: Theme.fontCallout
-            font.weight: Font.Medium
+            opacity: Theme.chromeOverlayTextOpacity
         }
     }
 }

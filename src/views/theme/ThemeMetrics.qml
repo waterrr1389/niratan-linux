@@ -1,6 +1,10 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
-// Plain geometry tokens of the statistics surfaces that Theme extends: the
+// Plain geometry tokens that Theme extends. The reader's trailing inspector
+// width rule; the video playback chrome of
+// Features/Video/VideoControlsView.swift (floating and compact bar, round
+// buttons, timeline, speed pill and panel), the OSD of
+// VideoPlayerScreen+OSD.swift and the player's empty state; the statistics
 // dashboard of Features/Bookshelf/StatisticsDashboardView.swift (breakpoints,
 // goal ring, week chips, ranking rows, shelf table, reading calendar, trend
 // chart and the book details editor) and the minimumScaleFactor values of
@@ -81,4 +85,103 @@ QtObject {
     readonly property real statisticsHeroMinimumScale: 0.6
     readonly property real metricMinimumScale: 0.7
     readonly property real statisticsHistoryMinimumScale: 0.75
+
+    // Video playback chrome: the floating bar's width cap, side inset and
+    // density thresholds, both layouts' heights, insets and row spacing, the
+    // round buttons and their glyphs, the speed pill and the compact scrim.
+    readonly property int chromeFloatingMaxWidth: 840
+    readonly property int chromeFloatingSideInset: 32
+    readonly property int chromeFloatingFullWidth: 680
+    readonly property int chromeCompactFullWidth: 720
+    readonly property int chromeCondensedWidth: 390
+    readonly property int chromeFloatingHeight: 94
+    readonly property int chromeCompactHeight: 88
+    readonly property int chromeFloatingRadius: 24
+    readonly property int chromeFloatingInset: 16
+    readonly property int chromeFloatingTopInset: 12
+    readonly property int chromeFloatingBottomInset: 8
+    readonly property int chromeFloatingRowSpacing: 6
+    readonly property int chromeCompactInset: 22
+    readonly property int chromeCompactBottomInset: 12
+    readonly property int chromeCompactRowSpacing: 8
+    readonly property int chromeScrimOverhang: 48
+    readonly property real chromeScrimMidStop: 0.55
+    readonly property real chromeOverlayTextOpacity: 0.9
+    readonly property int chromeButtonDiameter: 34
+    readonly property int chromeToolDiameter: 32
+    readonly property int chromePlayDiameter: 46
+    readonly property int chromeGlyphSize: 18
+    readonly property int chromeVolumeGlyphSize: 17
+    readonly property int chromePlayGlyphSize: 25
+    readonly property int chromeToolSpacing: 6
+    readonly property int chromeVolumeSpacing: 2
+    readonly property int chromeClusterSpacing: 10
+    readonly property int speedPillWidth: 52
+    readonly property int speedPillHeight: 28
+
+    // The timeline: hit height, resting and emphasized track, chapter ticks,
+    // the hover knob and the time label column.
+    readonly property int timelineHitHeight: 18
+    readonly property int timelineHeight: 4
+    readonly property int timelineEmphasizedHeight: 7
+    readonly property int timelineMarkerWidth: 2
+    readonly property int timelineMarkerHeight: 9
+    readonly property int timelineKnob: 13
+    readonly property int timelineLabelWidth: 44
+
+    // The playback-speed panel.
+    readonly property int speedPanelWidth: 264
+    readonly property int speedPanelPadding: 14
+    readonly property int speedPanelSpacing: 10
+    readonly property int speedPanelRadius: 20
+    readonly property int speedPresetSpacing: 6
+
+    // The OSD card and the player's empty state.
+    readonly property int osdTopInset: 30
+    readonly property int osdLeadingInset: 28
+    readonly property int osdPadding: 10
+    readonly property int osdSpacing: 7
+    readonly property int osdRadius: 10
+    readonly property int osdMeterWidth: 210
+    readonly property int emptyStateWidth: 440
+    readonly property int emptyStateInset: 64
+    readonly property int emptyStateGlyphSize: 40
+
+    // The study sidebar's width range, resize handle, search field floor,
+    // timeline marker column and A-B loop markers, and the Video window's
+    // minimum size.
+    readonly property int studySidebarMinimumWidth: 320
+    readonly property int studySidebarMaximumWidth: 560
+    readonly property int studySearchMinimumWidth: 80
+    readonly property int studyResizeActiveWidth: 2
+    readonly property int studyResizeHitWidth: 10
+    readonly property int studyMarkerColumnWidth: 48
+    readonly property int studyLoopMarkerSize: 20
+    readonly property int videoWindowMinimumWidth: 285
+    readonly property int videoWindowMinimumHeight: 120
+
+    // The trailing reader inspector scales with the window, after the
+    // playerPanelWidth clamp of NativeReaderView.swift, so it stays usable in
+    // ordinary Linux window sizes; NativeReaderSidePanel's fixed 440 is the cap.
+    readonly property real readerSidePanelWidthFraction: 0.32
+    readonly property int readerSidePanelMinWidth: 320
+    readonly property int readerSidePanelMaxWidth: 440
+
+    function readerSidePanelWidth(windowWidth) {
+        return Math.round(Math.min(Math.max(windowWidth * readerSidePanelWidthFraction,
+                                            readerSidePanelMinWidth),
+                                   readerSidePanelMaxWidth));
+    }
+
+    // The subtitle overlay: side inset and gap between cues, the background
+    // band's radius and the hit area's slop around the glyphs.
+    readonly property int subtitleOverlayInset: 24
+    readonly property int subtitleCueSpacing: 8
+    readonly property int subtitleBandRadius: 8
+    readonly property int subtitleHitSlopX: 10
+    readonly property int subtitleHitSlopY: 8
+
+    // The video Inspector's scroll area inset under the tab bar and above the
+    // panel's rounded bottom edge.
+    readonly property int inspectorScrollInset: 10
 }

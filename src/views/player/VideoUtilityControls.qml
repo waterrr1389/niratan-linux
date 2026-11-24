@@ -22,7 +22,6 @@
 pragma ComponentBehavior: Bound
 
 import QtQuick
-import QtQuick.Controls
 import Niratan
 
 Item {
@@ -46,45 +45,14 @@ Item {
     signal toggleInspectorRequested()
     signal toggleFullScreenRequested()
 
-    component UtilityButton: Button {
-        id: button
-
-        property string tip
-        property string symbol
-        property string glyphName
-        property bool active: false
-
-        implicitWidth: 32
-        implicitHeight: 32
-        padding: 0
-        horizontalPadding: 0
-        focusPolicy: Qt.NoFocus
-
-        ToolTip.visible: button.hovered && button.tip.length > 0
-        ToolTip.text: button.tip
-        ToolTip.delay: 700
-        Accessible.name: button.tip
-
-        contentItem: Icon {
-            objectName: button.glyphName
-            name: button.symbol
-            size: 18
-            color: button.active ? Theme.accent : Theme.textPrimary
-        }
-
-        background: Rectangle {
-            radius: button.height / 2
-            color: button.active || button.down || button.hovered
-                ? Theme.cardStroke : Theme.floatingBackground
-            border.width: button.active ? Theme.cardBorderWidth : 0
-            border.color: Theme.cardStroke
-        }
+    component UtilityButton: ChromeButton {
+        diameter: Theme.chromeToolDiameter
     }
 
     Row {
         id: row
 
-        spacing: 6
+        spacing: Theme.chromeToolSpacing
 
         UtilityButton {
             objectName: "miningHistoryButton"
@@ -126,14 +94,8 @@ Item {
             objectName: "fullScreenButton"
             tip: qsTr("Toggle Full Screen")
             symbol: utility.isFullScreen ? "arrows-in" : "arrows-out"
+            glyphName: "fullScreenIcon"
             onClicked: utility.toggleFullScreenRequested()
-
-            contentItem: Icon {
-                objectName: "fullScreenIcon"
-                name: utility.isFullScreen ? "arrows-in" : "arrows-out"
-                size: 18
-                color: Theme.textPrimary
-            }
         }
     }
 }

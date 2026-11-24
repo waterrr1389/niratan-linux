@@ -177,8 +177,8 @@ Item {
         width: row.bandWidth
         height: row.bandHeight
         visible: row.backgroundOpacity > 0
-        radius: 8
-        color: "black"
+        radius: Theme.subtitleBandRadius
+        color: Theme.videoBackground
         opacity: row.backgroundOpacity
     }
 
@@ -255,10 +255,10 @@ Item {
 
     MouseArea {
         id: mouseArea
-        x: row.usedLeft - 10
-        y: row.bandInsetY - 8
-        width: row.usedWidth + 20
-        height: textItem.height + 16
+        x: row.usedLeft - Theme.subtitleHitSlopX
+        y: row.bandInsetY - Theme.subtitleHitSlopY
+        width: row.usedWidth + 2 * Theme.subtitleHitSlopX
+        height: textItem.height + 2 * Theme.subtitleHitSlopY
         hoverEnabled: true
         acceptedButtons: Qt.LeftButton
 

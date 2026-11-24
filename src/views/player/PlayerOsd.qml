@@ -1,14 +1,15 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
 // The player's on-screen display, following
-// Features/Video/VideoPlayerScreen+OSD.swift: 30 from the top and 28 from the
-// leading edge of the video stage, a title with an optional value and a meter
-// under them, fading out with the page's OSD timer. The panel behind it is a
-// floating theme surface so the text stays readable in both themes.
+// Features/Video/VideoPlayerScreen+OSD.swift: inset from the top and leading
+// edge of the video stage, a title with an optional value and a meter under
+// them, fading out with the page's OSD timer. The panel behind it is the
+// floating theme surface so the text stays readable over any frame; the text
+// uses the kit's headline and callout roles and the meter is the kit's
+// progress track.
 pragma ComponentBehavior: Bound
 
 import QtQuick
-import QtQuick.Controls
 import Niratan
 
 Rectangle {
@@ -18,11 +19,11 @@ Rectangle {
     property string value
     property real meter: -1
 
-    anchors.topMargin: 30
-    anchors.leftMargin: 28
-    width: Math.max(osdRow.implicitWidth, meterBar.visible ? meterBar.width : 0) + 24
-    height: meterBar.visible ? 46 : 34
-    radius: 10
+    anchors.topMargin: Theme.osdTopInset
+    anchors.leftMargin: Theme.osdLeadingInset
+    width: content.implicitWidth
+    height: content.implicitHeight
+    radius: Theme.osdRadius
     color: Theme.floatingBackground
     border.width: Theme.cardBorderWidth
     border.color: Theme.floatingStroke
@@ -35,46 +36,34 @@ Rectangle {
         }
     }
 
-    Row {
-        id: osdRow
+    Column {
+        id: content
 
-        anchors.top: parent.top
-        anchors.left: parent.left
-        anchors.topMargin: 8
-        anchors.leftMargin: 12
-        spacing: 8
+        padding: Theme.osdPadding
+        spacing: Theme.osdSpacing
 
-        Label {
-            text: osd.title
-            color: Theme.textPrimary
-            font.pixelSize: 13
-            font.bold: true
+        Row {
+            spacing: Theme.spacingSm
+
+            StyledLabel {
+                text: osd.title
+                textStyle: Theme.headlineFont
+            }
+
+            StyledLabel {
+                text: osd.value
+                textStyle: Theme.calloutFont
+                secondary: true
+                monospacedDigits: true
+            }
         }
 
-        Label {
-            text: osd.value
-            color: Theme.textSecondary
-            font.pixelSize: 13
-        }
-    }
+        ProgressTrack {
+            id: meterBar
 
-    Rectangle {
-        id: meterBar
-
-        visible: osd.meter >= 0
-        anchors.left: osdRow.left
-        anchors.top: osdRow.bottom
-        anchors.topMargin: 7
-        width: 210
-        height: 5
-        radius: height / 2
-        color: Theme.floatingStroke
-
-        Rectangle {
-            width: parent.width * Math.max(0, osd.meter)
-            height: parent.height
-            radius: parent.radius
-            color: Theme.accent
+            visible: osd.meter >= 0
+            width: Theme.osdMeterWidth
+            value: osd.meter
         }
     }
 }

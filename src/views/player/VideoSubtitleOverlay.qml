@@ -56,13 +56,13 @@ Item {
 
     Column {
         id: column
-        x: 24
-        width: Math.max(0, overlay.width - 48)
+        x: Theme.subtitleOverlayInset
+        width: Math.max(0, overlay.width - column.x - Theme.subtitleOverlayInset)
         readonly property real placedY: Math.max(0, overlay.height - column.implicitHeight)
                                         * overlay.verticalPosition
         y: Math.max(0, Math.min(placedY,
                                 overlay.height - overlay.bottomObstruction - column.implicitHeight))
-        spacing: 8
+        spacing: Theme.subtitleCueSpacing
 
         Repeater {
             model: overlay.cues

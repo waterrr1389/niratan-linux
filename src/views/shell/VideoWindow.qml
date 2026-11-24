@@ -34,8 +34,8 @@ ApplicationWindow {
 
     objectName: "videoWindow"
     title: qsTr("Video")
-    minimumWidth: 285
-    minimumHeight: 120
+    minimumWidth: Theme.videoWindowMinimumWidth
+    minimumHeight: Theme.videoWindowMinimumHeight
     visible: false
     color: Theme.videoBackground
 

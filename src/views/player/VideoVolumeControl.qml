@@ -21,6 +21,8 @@ Row {
 
     property bool isMuted: false
     property real volume: 100
+    // The compact layout's overlay treatment for the volume track.
+    property bool onOverlay: false
 
     readonly property string volumeSymbol: {
         if (volumeControl.isMuted || volumeControl.volume <= 0)
@@ -35,44 +37,24 @@ Row {
     signal toggleMuteRequested()
     signal volumeChangeRequested(real value)
 
-    spacing: 2
+    spacing: Theme.chromeVolumeSpacing
 
-    Button {
+    ChromeButton {
         id: muteButton
 
         objectName: "volumeButton"
-        property string tip: volumeControl.isMuted ? qsTr("Unmute") : qsTr("Mute")
-        implicitWidth: 34
-        implicitHeight: 34
-        padding: 0
-        horizontalPadding: 0
-        focusPolicy: Qt.NoFocus
+        tip: volumeControl.isMuted ? qsTr("Unmute") : qsTr("Mute")
+        symbol: volumeControl.volumeSymbol
+        symbolSize: Theme.chromeVolumeGlyphSize
+        bordered: true
         onClicked: volumeControl.toggleMuteRequested()
-
-        ToolTip.visible: muteButton.hovered
-        ToolTip.text: muteButton.tip
-        ToolTip.delay: 700
-        Accessible.name: muteButton.tip
-
-        contentItem: Icon {
-            name: volumeControl.volumeSymbol
-            size: 17
-            color: Theme.textPrimary
-        }
-
-        background: Rectangle {
-            radius: muteButton.height / 2
-            color: muteButton.down || muteButton.hovered
-                ? Theme.cardStroke : Theme.floatingBackground
-            border.width: Theme.cardBorderWidth
-            border.color: Theme.cardStroke
-        }
     }
 
     TrackSlider {
         id: volumeTrack
 
         objectName: "volumeTrack"
+        onOverlay: volumeControl.onOverlay
         anchors.verticalCenter: parent.verticalCenter
         from: 0
         to: 100

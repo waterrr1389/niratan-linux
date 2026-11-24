@@ -23,8 +23,8 @@ Rectangle {
     required property int preferredWidth
     property int selectedTab: 0
     property bool followingTranscript: true
-    readonly property int minimumWidth: 320
-    readonly property int maximumWidth: 560
+    readonly property int minimumWidth: Theme.studySidebarMinimumWidth
+    readonly property int maximumWidth: Theme.studySidebarMaximumWidth
 
     signal closeRequested()
     signal widthSaveRequested(int width)
@@ -82,22 +82,20 @@ Rectangle {
             Layout.fillWidth: true
             spacing: Theme.spacingXs
 
-            Repeater {
+            SegmentedPicker {
+                objectName: "studyTabs"
+                Layout.fillWidth: true
+                fillsWidth: true
                 model: [qsTr("History"), qsTr("Transcript"), qsTr("Chapters")]
-                delegate: SidebarButton {
-                    id: tab
-                    required property int index
-                    required property string modelData
-                    Layout.fillWidth: true
-                    text: tab.modelData
-                    selected: sidebar.selectedTab === tab.index
-                    onClicked: sidebar.selectedTab = tab.index
-                }
+                currentIndex: sidebar.selectedTab
+                onActivated: index => sidebar.selectedTab = index
             }
 
-            SidebarButton {
-                text: "\u00D7"
-                Accessible.name: qsTr("Close study sidebar")
+            IconButton {
+                icon: "xmark"
+                diameter: Theme.closeButtonDiameter
+                iconSize: Theme.closeButtonGlyph
+                accessibleName: qsTr("Close study sidebar")
                 onClicked: sidebar.closeRequested()
             }
         }
@@ -168,28 +166,27 @@ Rectangle {
                             anchors.leftMargin: Theme.spacingSm
                             spacing: Theme.spacingXs
 
-                            Label {
+                            StyledLabel {
                                 Layout.fillWidth: true
-                                color: Theme.textSecondary
-                                font.pixelSize: Theme.fontCaption
+                                secondary: true
+                                textStyle: Theme.captionFont
                                 textFormat: Text.PlainText
                                 elide: Text.ElideRight
                                 text: record.modelData.videoTitle
                             }
-                            Label {
+                            StyledLabel {
                                 Layout.fillWidth: true
-                                color: Theme.textPrimary
-                                font.pixelSize: Theme.fontBody
+                                textStyle: Theme.bodyFont
                                 textFormat: Text.PlainText
                                 wrapMode: Text.Wrap
                                 maximumLineCount: 3
                                 elide: Text.ElideRight
                                 text: record.modelData.text
                             }
-                            Label {
+                            StyledLabel {
                                 Layout.fillWidth: true
-                                color: Theme.textSecondary
-                                font.pixelSize: Theme.fontCaption
+                                secondary: true
+                                textStyle: Theme.captionFont
                                 text: qsTr("%1, %2").arg(sidebar.timeLabel(record.modelData.start))
                                                     .arg(record.modelData.relativeDate)
                             }
@@ -259,7 +256,7 @@ Rectangle {
                 RowLayout {
                     TextField {
                         Layout.fillWidth: true
-                        Layout.minimumWidth: 80
+                        Layout.minimumWidth: Theme.studySearchMinimumWidth
                         placeholderText: qsTr("Search transcript")
                         text: sidebar.study.search
                         color: Theme.textPrimary
@@ -299,8 +296,8 @@ Rectangle {
                         }
                         EmptyLabel {
                             visible: text.length > 0
-                            font.bold: true
-                            color: Theme.textPrimary
+                            weight: Theme.weightSemibold
+                            secondary: false
                             text: sidebar.extractingTranscript ? qsTr("Loading Transcript")
                                 : sidebar.study.transcriptError.length > 0 ? qsTr("Transcript Unavailable") : ""
                         }
@@ -449,23 +446,23 @@ Rectangle {
                         onClicked: sidebar.study.playChapter(chapter.index)
                     }
                 }
-                Label {
+                StyledLabel {
                     anchors.centerIn: parent
                     width: parent.width
                     visible: chapterList.count === 0
                     horizontalAlignment: Text.AlignHCenter
                     wrapMode: Text.Wrap
-                    color: Theme.textSecondary
+                    secondary: true
                     text: qsTr("This video has no chapter markers.")
                 }
             }
         }
 
-        Label {
+        StyledLabel {
             Layout.fillWidth: true
             visible: text.length > 0
-            color: Theme.textSecondary
-            font.pixelSize: Theme.fontCaption
+            secondary: true
+            textStyle: Theme.captionFont
             wrapMode: Text.Wrap
             text: sidebar.study.lastMiningNotice
         }
@@ -488,7 +485,8 @@ Rectangle {
     Rectangle {
         anchors.left: parent.left
         height: parent.height
-        width: resize.pressed || resize.containsMouse ? 2 : Theme.cardBorderWidth
+        width: resize.pressed || resize.containsMouse ? Theme.studyResizeActiveWidth
+                                                      : Theme.cardBorderWidth
         color: resize.pressed || resize.containsMouse ? Theme.accent : Theme.cardStroke
     }
 
@@ -496,7 +494,7 @@ Rectangle {
         id: resize
         anchors.left: parent.left
         height: parent.height
-        width: 10
+        width: Theme.studyResizeHitWidth
         hoverEnabled: true
         cursorShape: Qt.SizeHorCursor
         property real pointerStart: 0
@@ -535,35 +533,20 @@ Rectangle {
         onAccepted: sidebar.study.clearHistory()
     }
 
-    component EmptyLabel: Label {
+    component EmptyLabel: StyledLabel {
         Layout.fillWidth: true
         Layout.fillHeight: true
         horizontalAlignment: Text.AlignHCenter
         verticalAlignment: Text.AlignVCenter
         wrapMode: Text.Wrap
-        color: Theme.textSecondary
+        textStyle: Theme.calloutFont
+        secondary: true
     }
 
-    component SidebarButton: Button {
-        id: button
-        property bool selected: false
+    // The sidebar's actions are the kit's small capsule buttons.
+    component SidebarButton: FormButton {
+        small: true
+        sizeToLabel: true
         focusPolicy: Qt.TabFocus
-        leftPadding: Theme.spacingSm
-        rightPadding: Theme.spacingSm
-        contentItem: Label {
-            text: button.text
-            color: button.enabled ? Theme.textPrimary : Theme.textSecondary
-            font.pixelSize: Theme.fontCaption
-            font.bold: button.selected
-            horizontalAlignment: Text.AlignHCenter
-            verticalAlignment: Text.AlignVCenter
-        }
-        background: Rectangle {
-            radius: Theme.controlRadius
-            color: button.selected || button.hovered || button.down
-                ? Theme.cardBackground : Theme.windowBackground
-            border.width: Theme.cardBorderWidth
-            border.color: button.selected || button.activeFocus ? Theme.accent : Theme.cardStroke
-        }
     }
 }

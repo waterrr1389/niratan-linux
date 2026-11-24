@@ -17,7 +17,6 @@
 pragma ComponentBehavior: Bound
 
 import QtQuick
-import QtQuick.Controls
 import Niratan
 
 Item {
@@ -33,6 +32,8 @@ Item {
     property bool nextEnabled: false
     property bool volumeLeads: true
     property bool showVolume: true
+    // The compact layout's overlay treatment for the volume track.
+    property bool onOverlay: false
 
     readonly property string volumeSymbol: {
         if (transport.isMuted || transport.volume <= 0)
@@ -44,49 +45,16 @@ Item {
         return "speaker.wave.3.fill"
     }
 
-    implicitWidth: transport.showVolume ? volumeLoader.width + episodeCluster.width + 10
-                                        : episodeCluster.width
-    implicitHeight: 46
+    implicitWidth: transport.showVolume
+        ? volumeLoader.width + episodeCluster.width + Theme.chromeClusterSpacing
+        : episodeCluster.width
+    implicitHeight: Theme.chromePlayDiameter
 
     signal togglePlaybackRequested()
     signal previousRequested()
     signal nextRequested()
     signal toggleMuteRequested()
     signal volumeChangeRequested(real value)
-
-    component TransportButton: Button {
-        id: button
-
-        property string tip
-        property string symbol
-        property double symbolSize: 18
-        property bool active: false
-
-        implicitWidth: 34
-        implicitHeight: 34
-        padding: 0
-        horizontalPadding: 0
-        focusPolicy: Qt.NoFocus
-
-        ToolTip.visible: button.hovered && button.tip.length > 0
-        ToolTip.text: button.tip
-        ToolTip.delay: 700
-        Accessible.name: button.tip
-
-        contentItem: Icon {
-            name: button.symbol
-            size: button.symbolSize
-            color: button.active ? Theme.accent : Theme.textPrimary
-        }
-
-        background: Rectangle {
-            radius: button.height / 2
-            color: button.active || button.down || button.hovered
-                ? Theme.cardStroke : Theme.floatingBackground
-            border.width: button.active ? Theme.cardBorderWidth : 0
-            border.color: Theme.cardStroke
-        }
-    }
 
     Component {
         id: volumeComponent
@@ -100,13 +68,13 @@ Item {
         Row {
             id: volumeRow
 
-            spacing: 2
+            spacing: Theme.chromeVolumeSpacing
 
-            TransportButton {
+            ChromeButton {
                 objectName: "volumeButton"
                 tip: transport.isMuted ? qsTr("Unmute") : qsTr("Mute")
                 symbol: transport.volumeSymbol
-                symbolSize: 17
+                symbolSize: Theme.chromeVolumeGlyphSize
                 onClicked: transport.toggleMuteRequested()
             }
 
@@ -114,6 +82,7 @@ Item {
                 id: volumeTrack
 
                 objectName: "volumeTrack"
+                onOverlay: transport.onOverlay
                 anchors.verticalCenter: parent.verticalCenter
                 from: 0
                 to: 100
@@ -131,14 +100,15 @@ Item {
 
         active: transport.showVolume
         sourceComponent: volumeComponent
-        x: transport.volumeLeads ? 0 : episodeCluster.width + 10
+        x: transport.volumeLeads ? 0 : episodeCluster.width + Theme.chromeClusterSpacing
         anchors.verticalCenter: parent.verticalCenter
     }
 
     Item {
         id: episodeCluster
 
-        x: transport.volumeLeads && transport.showVolume ? volumeLoader.width + 10 : 0
+        x: transport.volumeLeads && transport.showVolume
+            ? volumeLoader.width + Theme.chromeClusterSpacing : 0
         anchors.verticalCenter: parent.verticalCenter
         width: episodeRow.implicitWidth
         height: episodeRow.implicitHeight
@@ -146,9 +116,9 @@ Item {
         Row {
             id: episodeRow
 
-            spacing: transport.volumeLeads ? 10 : 4
+            spacing: transport.volumeLeads ? Theme.chromeClusterSpacing : Theme.spacingXs
 
-            TransportButton {
+            ChromeButton {
                 objectName: "previousButton"
                 anchors.verticalCenter: parent.verticalCenter
                 tip: qsTr("Previous Episode")
@@ -157,41 +127,20 @@ Item {
                 onClicked: transport.previousRequested()
             }
 
-            Button {
+            ChromeButton {
                 id: playButton
 
                 objectName: "playButton"
-                property string tip: transport.isPlaying ? qsTr("Pause") : qsTr("Play")
-                implicitWidth: 46
-                implicitHeight: 46
-                padding: 0
-                horizontalPadding: 0
-                focusPolicy: Qt.NoFocus
-
-                ToolTip.visible: playButton.hovered
-                ToolTip.text: playButton.tip
-                ToolTip.delay: 700
-                Accessible.name: playButton.tip
-
+                tip: transport.isPlaying ? qsTr("Pause") : qsTr("Play")
+                symbol: transport.isPlaying ? "pause.fill" : "play.fill"
+                symbolSize: Theme.chromePlayGlyphSize
+                diameter: Theme.chromePlayDiameter
+                glyphName: "playIcon"
+                bordered: true
                 onClicked: transport.togglePlaybackRequested()
-
-                contentItem: Icon {
-                    objectName: "playIcon"
-                    name: transport.isPlaying ? "pause.fill" : "play.fill"
-                    size: 25
-                    color: Theme.textPrimary
-                }
-
-                background: Rectangle {
-                    radius: playButton.height / 2
-                    color: playButton.down || playButton.hovered
-                        ? Theme.cardStroke : Theme.floatingBackground
-                    border.width: Theme.cardBorderWidth
-                    border.color: Theme.cardStroke
-                }
             }
 
-            TransportButton {
+            ChromeButton {
                 objectName: "nextButton"
                 anchors.verticalCenter: parent.verticalCenter
                 tip: qsTr("Next Episode")

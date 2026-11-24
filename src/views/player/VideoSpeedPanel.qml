@@ -5,7 +5,7 @@
 // and `commitSpeedInput`, and Features/Video/Playback/PlaybackEngine.swift
 // `VideoPlaybackSpeed`.
 //
-// 264 wide, header "Playback Speed" with the current label, the eight presets
+// A floating card in the kit's roles: header "Playback Speed" with the current label, the eight presets
 // 0.25, 0.5, 1, 1.5, 2, 3, 4, 5 in two rows of four, the 0.3...5 slider in 0.1
 // steps and a custom field. The field is trimmed, a comma becomes a dot, and a
 // value that is not a number resets to the current label; otherwise
@@ -35,12 +35,12 @@ Rectangle {
     readonly property var presets: [0.25, 0.5, 1.0, 1.5, 2.0, 3.0, 4.0, 5.0]
     readonly property real sliderValue: Math.min(5, Math.max(0.3, panel.normalized(panel.speed)))
 
-    implicitWidth: 264
-    implicitHeight: column.implicitHeight + 28
-    color: Theme.popupBackground
-    radius: 20
+    implicitWidth: Theme.speedPanelWidth
+    implicitHeight: column.implicitHeight
+    color: Theme.floatingBackground
+    radius: Theme.speedPanelRadius
     border.width: Theme.cardBorderWidth
-    border.color: Theme.popupDivider
+    border.color: Theme.floatingStroke
 
     signal speedChangeRequested(real value)
 
@@ -99,73 +99,58 @@ Rectangle {
         anchors.left: parent.left
         anchors.right: parent.right
         anchors.top: parent.top
-        anchors.margins: 14
-        spacing: 10
+        padding: Theme.speedPanelPadding
+        spacing: Theme.speedPanelSpacing
+
+        readonly property real contentWidth: width - leftPadding - rightPadding
 
         RowLayout {
-            width: parent.width
-            spacing: 8
+            width: column.contentWidth
+            spacing: Theme.spacingSm
 
-            Label {
+            StyledLabel {
                 Layout.fillWidth: true
                 text: qsTr("Playback Speed")
-                color: Theme.popupText
-                font.pixelSize: 13
-                font.bold: true
+                textStyle: Theme.headlineFont
             }
 
-            Label {
+            StyledLabel {
                 text: panel.currentLabel
-                color: Theme.popupTextSecondary
-                font.pixelSize: 13
-                font.features: ({ "tnum": 1 })
+                textStyle: Theme.calloutFont
+                secondary: true
+                monospacedDigits: true
             }
         }
 
         GridLayout {
-            width: parent.width
+            width: column.contentWidth
             columns: 4
-            columnSpacing: 6
-            rowSpacing: 6
+            columnSpacing: Theme.speedPresetSpacing
+            rowSpacing: Theme.speedPresetSpacing
 
             Repeater {
                 model: panel.presets
 
-                delegate: Button {
+                delegate: ChipButton {
                     id: preset
 
                     required property var modelData
 
                     objectName: "speedPreset"
                     readonly property real speedValue: preset.modelData
-                    readonly property bool selected: panel.isPresetSelected(preset.modelData)
 
                     Layout.fillWidth: true
-                    Layout.preferredHeight: 26
                     focusPolicy: Qt.NoFocus
+                    selected: panel.isPresetSelected(preset.modelData)
                     text: panel.label(preset.modelData) + "x"
                     onClicked: panel.setSpeed(preset.modelData)
-
-                    contentItem: Text {
-                        text: preset.text
-                        color: preset.selected ? Theme.windowBackground : Theme.popupText
-                        font.pixelSize: 11
-                        font.bold: true
-                        horizontalAlignment: Text.AlignHCenter
-                        verticalAlignment: Text.AlignVCenter
-                    }
-
-                    background: Rectangle {
-                        radius: 6
-                        color: preset.selected ? Theme.accent : Theme.popupDivider
-                    }
                 }
             }
         }
 
         RowLayout {
-            width: parent.width
-            spacing: 8
+            width: column.contentWidth
+            spacing: Theme.spacingSm
 
             Slider {
                 id: speedSlider
@@ -180,24 +165,13 @@ Rectangle {
                 onMoved: panel.setSpeed(speedSlider.value)
             }
 
-            TextField {
-                id: speedInput
-
-                Layout.preferredWidth: 62
-                objectName: "speedInput"
+            InlineField {
+                fieldName: "speedInput"
                 text: panel.inputText
-                placeholderText: qsTr("Custom")
+                suffix: "x"
                 Accessible.name: qsTr("Custom playback speed")
-                color: Theme.popupTextSecondary
-                font.pixelSize: 11
-                horizontalAlignment: TextInput.AlignRight
-                onTextChanged: panel.inputText = speedInput.text
+                onEdited: value => panel.inputText = value
                 onAccepted: panel.commitInput()
-            }
-
-            Label {
-                text: "x"
-                color: Theme.popupTextSecondary
             }
         }
     }

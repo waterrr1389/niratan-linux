@@ -55,7 +55,7 @@ Rectangle {
     property real maximumWidth: Theme.inspectorWidth
 
     width: Math.min(Theme.inspectorWidth, maximumWidth)
-    implicitHeight: chrome.height + Theme.hairlineWidth + scaffold.flickable.contentHeight
+    implicitHeight: scaffold.y + scaffold.flickable.contentHeight + Theme.inspectorScrollInset
                     + 2 * border.width
     height: Math.min(implicitHeight, maximumHeight)
     radius: Theme.inspectorRadius
@@ -66,7 +66,10 @@ Rectangle {
     Column {
         id: chrome
 
-        width: panel.width - 2 * panel.border.width
+        anchors.left: parent.left
+        anchors.right: parent.right
+        anchors.leftMargin: panel.border.width
+        anchors.rightMargin: panel.border.width
 
         Item {
             width: parent.width
@@ -76,9 +79,11 @@ Rectangle {
             Row {
                 id: header
 
-                x: Theme.inspectorHeaderPadding
+                anchors.left: parent.left
+                anchors.right: parent.right
+                anchors.leftMargin: Theme.inspectorHeaderPadding
+                anchors.rightMargin: Theme.inspectorHeaderPadding
                 y: Theme.inspectorHeaderPadding
-                width: parent.width - 2 * Theme.inspectorHeaderPadding
                 spacing: Theme.inspectorHeaderSpacing
 
                 Rectangle {
@@ -140,8 +145,10 @@ Rectangle {
             IconTabBar {
                 id: tabBar
 
-                x: Theme.inspectorTabBarInset
-                width: parent.width - 2 * Theme.inspectorTabBarInset
+                anchors.left: parent.left
+                anchors.right: parent.right
+                anchors.leftMargin: Theme.inspectorTabBarInset
+                anchors.rightMargin: Theme.inspectorTabBarInset
                 height: implicitHeight
                 itemName: "inspectorTab"
                 tabs: [
@@ -159,10 +166,17 @@ Rectangle {
     PanelScaffold {
         id: scaffold
 
-        x: panel.border.width
-        y: chrome.height
-        width: chrome.width
-        height: panel.height - y - panel.border.width
+        // The scroll viewport keeps the same inset under the tab bar, above the
+        // rounded bottom edge and at both sides, so its rectangular clip and
+        // its corners stay inside the panel's rounded shape. The side inset is
+        // taken out of the content padding, so rows keep their position.
+        anchors.left: parent.left
+        anchors.right: parent.right
+        anchors.leftMargin: Theme.inspectorScrollInset
+        anchors.rightMargin: Theme.inspectorScrollInset
+        y: chrome.height + Theme.inspectorScrollInset
+        height: panel.height - y - Theme.inspectorScrollInset
+        horizontalPadding: Theme.panelPaddingHorizontal - Theme.inspectorScrollInset
         compact: true
         persistentScrollBar: true
         header: Item {}

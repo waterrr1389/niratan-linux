@@ -56,16 +56,17 @@ Column {
 
         FormDivider {}
 
-        Item {
+        Column {
             width: parent ? parent.width : 0
-            implicitHeight: reset.implicitHeight + 2 * Theme.spacingSm
+            topPadding: Theme.spacingSm
+            bottomPadding: Theme.spacingSm
 
             LinkButton {
                 id: reset
 
                 objectName: "inspectorAudioReset"
                 small: true
-                anchors.centerIn: parent
+                anchors.horizontalCenter: parent.horizontalCenter
                 text: qsTr("Reset")
                 enabled: !tab.model.audioNeutral
                 onClicked: tab.model.setAudioDelay(0)

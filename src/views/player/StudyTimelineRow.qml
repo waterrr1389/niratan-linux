@@ -18,29 +18,29 @@ Button {
     padding: Theme.spacingSm
     contentItem: RowLayout {
         spacing: Theme.spacingSm
-        Label {
-            Layout.minimumWidth: 48
+        StyledLabel {
+            Layout.minimumWidth: Theme.studyMarkerColumnWidth
             Layout.alignment: Qt.AlignTop
-            color: Theme.textSecondary
-            font.pixelSize: Theme.fontCaption
+            secondary: true
+            textStyle: Theme.captionFont
             text: row.marker
         }
         ColumnLayout {
             Layout.fillWidth: true
             spacing: Theme.spacingXs
-            Label {
+            StyledLabel {
                 Layout.fillWidth: true
-                font.pixelSize: Theme.fontBody
-                font.bold: row.selected
+                textStyle: Theme.bodyFont
+                weight: row.selected ? Theme.weightSemibold : Theme.weightRegular
                 color: Theme.textPrimary
                 wrapMode: Text.Wrap
                 textFormat: Text.PlainText
                 text: row.title
             }
-            Label {
+            StyledLabel {
                 visible: row.detail.length > 0
-                color: Theme.textSecondary
-                font.pixelSize: Theme.fontCaption
+                secondary: true
+                textStyle: Theme.captionFont
                 text: row.detail
             }
         }
@@ -51,7 +51,7 @@ Button {
         border.color: Theme.accent
         Rectangle {
             height: parent.height
-            width: 2
+            width: Theme.studyResizeActiveWidth
             visible: row.selected
             color: Theme.accent
         }

@@ -72,12 +72,14 @@ Item {
     readonly property bool compactLayout: bar.layoutMode === "compactBottom"
     readonly property real chromeWidth: bar.compactLayout
         ? Math.max(0, bar.availableWidth)
-        : Math.min(840, Math.max(1, bar.availableWidth - 32))
+        : Math.min(Theme.chromeFloatingMaxWidth,
+                   Math.max(1, bar.availableWidth - Theme.chromeFloatingSideInset))
     readonly property string density: {
-        const fullThreshold = bar.compactLayout ? 720 : 680
+        const fullThreshold = bar.compactLayout ? Theme.chromeCompactFullWidth
+                                                : Theme.chromeFloatingFullWidth
         if (bar.chromeWidth >= fullThreshold)
             return "full"
-        if (bar.chromeWidth >= 390)
+        if (bar.chromeWidth >= Theme.chromeCondensedWidth)
             return "condensed"
         return "minimal"
     }
@@ -88,7 +90,7 @@ Item {
         + " / " + bar.formatTime(bar.duration)
 
     width: chromeWidth
-    height: bar.compactLayout ? 88 : 94
+    height: bar.compactLayout ? Theme.chromeCompactHeight : Theme.chromeFloatingHeight
     opacity: bar.interactive ? 1 : 0
     visible: bar.interactive || bar.opacity > 0
 
@@ -173,7 +175,7 @@ Item {
     Rectangle {
         anchors.fill: parent
         visible: !bar.compactLayout
-        radius: 24
+        radius: Theme.chromeFloatingRadius
         color: Theme.floatingBackground
         border.width: Theme.cardBorderWidth
         border.color: Theme.floatingStroke
@@ -185,20 +187,20 @@ Item {
         anchors.left: parent.left
         anchors.right: parent.right
         anchors.bottom: parent.bottom
-        height: parent.height + 48
+        height: parent.height + Theme.chromeScrimOverhang
         visible: bar.compactLayout
         gradient: Gradient {
             GradientStop {
                 position: 0.0
-                color: Qt.rgba(0, 0, 0, 0)
+                color: Theme.chromeScrimClear
             }
             GradientStop {
-                position: 0.55
-                color: Qt.rgba(0, 0, 0, 0.38)
+                position: Theme.chromeScrimMidStop
+                color: Theme.chromeScrimMid
             }
             GradientStop {
                 position: 1.0
-                color: Qt.rgba(0, 0, 0, 0.62)
+                color: Theme.chromeScrimEdge
             }
         }
     }
@@ -207,18 +209,20 @@ Item {
         id: layoutColumn
 
         anchors.fill: parent
-        anchors.leftMargin: bar.compactLayout ? 22 : 16
-        anchors.rightMargin: bar.compactLayout ? 22 : 16
-        anchors.topMargin: bar.compactLayout ? 0 : 12
-        anchors.bottomMargin: bar.compactLayout ? 12 : 8
-        spacing: bar.compactLayout ? 8 : 6
+        anchors.leftMargin: bar.compactLayout ? Theme.chromeCompactInset : Theme.chromeFloatingInset
+        anchors.rightMargin: bar.compactLayout ? Theme.chromeCompactInset : Theme.chromeFloatingInset
+        anchors.topMargin: bar.compactLayout ? 0 : Theme.chromeFloatingTopInset
+        anchors.bottomMargin: bar.compactLayout ? Theme.chromeCompactBottomInset
+                                                : Theme.chromeFloatingBottomInset
+        spacing: bar.compactLayout ? Theme.chromeCompactRowSpacing : Theme.chromeFloatingRowSpacing
 
         VideoProgressStrip {
             id: progress
 
             width: layoutColumn.width
-            height: 18
+            height: Theme.timelineHitHeight
             showLabels: !bar.compactLayout
+            onOverlay: bar.compactLayout
             currentTime: bar.currentTime
             duration: bar.duration
             scrubbing: bar.scrubbing
@@ -241,7 +245,7 @@ Item {
 
         Loader {
             width: layoutColumn.width
-            height: 46
+            height: Theme.chromePlayDiameter
             sourceComponent: bar.compactLayout ? compactRowComponent : floatingRowComponent
         }
     }
@@ -277,8 +281,8 @@ Item {
 
             VideoTransportControls {
                 readonly property real leadingEdge: floatingVolume.visible
-                    ? floatingVolume.width + 8 : 0
-                readonly property real trailingEdge: floatingTrailing.x - 8
+                    ? floatingVolume.width + Theme.spacingSm : 0
+                readonly property real trailingEdge: floatingTrailing.x - Theme.spacingSm
 
                 x: bar.density === "condensed" ? 0
                     : Math.max(leadingEdge,
@@ -304,7 +308,7 @@ Item {
 
                 anchors.right: parent.right
                 anchors.verticalCenter: parent.verticalCenter
-                spacing: 10
+                spacing: Theme.chromeClusterSpacing
 
                 SpeedPill {
                     anchors.verticalCenter: parent.verticalCenter
@@ -332,7 +336,7 @@ Item {
         id: compactRowComponent
 
         RowLayout {
-            spacing: 6
+            spacing: Theme.chromeToolSpacing
 
             Item {
                 visible: bar.density === "minimal"
@@ -346,6 +350,7 @@ Item {
                 volume: bar.volume
                 volumeLeads: false
                 showVolume: false
+                onOverlay: true
                 onTogglePlaybackRequested: bar.togglePlaybackRequested()
                 onPreviousRequested: bar.previousRequested()
                 onNextRequested: bar.nextRequested()
@@ -357,6 +362,7 @@ Item {
 
             VideoVolumeControl {
                 visible: bar.density === "full"
+                onOverlay: true
                 isMuted: bar.isMuted
                 volume: bar.volume
                 onToggleMuteRequested: bar.toggleMuteRequested()
@@ -365,15 +371,15 @@ Item {
                 }
             }
 
-            Label {
+            StyledLabel {
                 objectName: "compactTime"
                 Layout.alignment: Qt.AlignVCenter
                 visible: bar.density === "full"
                 text: bar.compactTimeText
+                textStyle: Theme.subheadlineFont
+                monospacedDigits: true
                 color: Theme.overlayForeground
-                opacity: 0.92
-                font.pixelSize: 12
-                font.features: ({ "tnum": 1 })
+                opacity: Theme.chromeOverlayTextOpacity
             }
 
             Item {
@@ -405,8 +411,8 @@ Item {
 
         objectName: "speedButton"
         Layout.alignment: Qt.AlignVCenter
-        implicitWidth: 52
-        implicitHeight: 28
+        implicitWidth: Theme.speedPillWidth
+        implicitHeight: Theme.speedPillHeight
         padding: 0
         horizontalPadding: 0
         focusPolicy: Qt.NoFocus
@@ -415,23 +421,24 @@ Item {
 
         ToolTip.visible: speedPill.hovered
         ToolTip.text: qsTr("Playback Speed")
-        ToolTip.delay: 700
+        ToolTip.delay: Theme.tooltipDelay
         Accessible.name: qsTr("Playback Speed")
 
-        contentItem: Text {
+        contentItem: StyledLabel {
             text: speedPill.text
+            textStyle: Theme.calloutFont
+            weight: Theme.weightSemibold
+            monospacedDigits: true
             color: bar.compactLayout ? Theme.overlayForeground : Theme.textPrimary
-            font.pixelSize: 13
-            font.bold: true
             horizontalAlignment: Text.AlignHCenter
             verticalAlignment: Text.AlignVCenter
         }
 
         background: Rectangle {
-            radius: 14
+            radius: height / 2
             color: bar.speedPanelOpen
                 ? Theme.cardStroke
-                : (bar.compactLayout ? Qt.rgba(0, 0, 0, 0.2) : Theme.floatingBackground)
+                : (bar.compactLayout ? Theme.chromeScrimControl : Theme.floatingBackground)
             border.width: Theme.cardBorderWidth
             border.color: Theme.cardStroke
         }
@@ -442,9 +449,9 @@ Item {
 
         visible: bar.speedPanelOpen
         anchors.right: parent.right
-        anchors.rightMargin: bar.compactLayout ? 22 : 8
+        anchors.rightMargin: bar.compactLayout ? Theme.chromeCompactInset : Theme.spacingSm
         anchors.bottom: parent.top
-        anchors.bottomMargin: 8
+        anchors.bottomMargin: Theme.spacingSm
         speed: bar.speed
         onSpeedChangeRequested: function (value) {
             bar.speedChangeRequested(value)
