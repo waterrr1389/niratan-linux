@@ -87,6 +87,26 @@ struct StatisticsPreferencesLoad {
 // `StatisticsAutostartMode(rawValue:) ?? .off`.
 statistics::StatisticsAutostartMode autostart_mode_from_id(std::string_view id);
 
+enum class SyncMode { automatic, manual };
+enum class SyncProvider { gdrive, ttu };
+std::string_view sync_mode_id(SyncMode mode);
+std::string_view sync_provider_id(SyncProvider provider);
+
+// UserConfig.init and its sync-key didSet observers.
+struct SyncPreferences {
+    bool enabled = false;
+    SyncMode mode = SyncMode::automatic;
+    bool auto_sync = false;
+    std::string google_client_id;
+    SyncProvider provider = SyncProvider::gdrive;
+    bool upload_books = true;
+    bool statistics_sync = false;
+    statistics::StatisticsSyncMode statistics_mode = statistics::StatisticsSyncMode::merge;
+    bool sasayaki_sync = false;
+
+    bool operator==(const SyncPreferences&) const = default;
+};
+
 class GlobalSettings {
    public:
     // <data root>/settings.json under storage::data_root().
@@ -123,6 +143,16 @@ class GlobalSettings {
     std::string preferred_audio_source() const;
     static bool valid_preferred_audio_source(std::string_view source);
     StoreError save_preferred_audio_source(std::string_view source);
+    SyncPreferences sync_preferences() const;
+    StoreError save_sync_enabled(bool enabled);
+    StoreError save_sync_mode(SyncMode mode);
+    StoreError save_auto_sync(bool enabled);
+    StoreError save_google_client_id(std::string_view id);
+    StoreError save_sync_provider(SyncProvider provider);
+    StoreError save_sync_upload_books(bool enabled);
+    StoreError save_statistics_enable_sync(bool enabled);
+    StoreError save_statistics_sync_mode(statistics::StatisticsSyncMode mode);
+    StoreError save_sasayaki_enable_sync(bool enabled);
 
    private:
     StoreError write(const QJsonObject& values);

@@ -236,6 +236,8 @@ qt_add_library(niratan_app STATIC
     src/viewmodels/settings/settings_audio.cpp
     src/viewmodels/settings/settings_view_model.h
     src/viewmodels/settings/settings_view_model_state.h
+    src/viewmodels/sync/sync_settings_view_model.cpp
+    src/viewmodels/sync/sync_settings_view_model.h
     src/viewmodels/reader/reader_view_model.cpp
     src/viewmodels/reader/reader_view_model_gallery.cpp
     src/viewmodels/reader/reader_view_model.h
@@ -541,7 +543,7 @@ target_link_libraries(niratan_app PUBLIC niratan_core Qt6::Quick Qt6::QuickContr
 target_include_directories(niratan_app PUBLIC src/views/theme src/viewmodels/dictionary
     src/viewmodels/anki src/viewmodels/reader src/views/reader src/viewmodels/library src/views/player
     src/viewmodels/profiles src/viewmodels/sasayaki src/viewmodels/statistics
-    src/viewmodels/player src/viewmodels/settings src/viewmodels/video)
+    src/viewmodels/player src/viewmodels/settings src/viewmodels/sync src/viewmodels/video)
 target_compile_options(niratan_app PRIVATE -Wall -Wextra -Wpedantic -Werror)
 
 # The Niratan control style: every Qt Quick control drawn after its macOS

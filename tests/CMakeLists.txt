@@ -701,6 +701,15 @@ target_link_libraries(tst_global_settings PRIVATE niratan_core Qt6::Test)
 target_compile_options(tst_global_settings PRIVATE -Wall -Wextra -Wpedantic -Werror)
 add_test(NAME global_settings COMMAND tst_global_settings)
 
+qt_add_executable(tst_sync_settings_view_model
+    viewmodels/tst_sync_settings_view_model.cpp
+    fakes/fake_drive_server.cpp
+)
+target_include_directories(tst_sync_settings_view_model PRIVATE ${CMAKE_SOURCE_DIR}/src ${CMAKE_SOURCE_DIR}/tests)
+target_link_libraries(tst_sync_settings_view_model PRIVATE niratan_app Qt6::Test)
+target_compile_options(tst_sync_settings_view_model PRIVATE -Wall -Wextra -Wpedantic -Werror)
+add_test(NAME sync_settings_view_model COMMAND tst_sync_settings_view_model)
+
 qt_add_executable(tst_settings_store
     settings/tst_settings_store.cpp
 )

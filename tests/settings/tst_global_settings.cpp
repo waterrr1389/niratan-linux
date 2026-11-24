@@ -56,6 +56,71 @@ class GlobalSettingsTest : public QObject {
     Q_OBJECT
 
    private slots:
+    void sync_preferences_follow_user_config() {
+        using namespace niratan::settings;
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        const auto path = settings_file(dir);
+        GlobalSettings store(path);
+        QCOMPARE(store.sync_preferences(), SyncPreferences{});
+        write_text(
+            path,
+            R"({"enableSync":true,"syncMode":"unknown","enableAutoSync":true,"googleClientId":" test ","syncProvider":42,"syncUploadBooks":false,"statisticsEnableSync":true,"statisticsSyncMode":"Replace","sasayakiEnableSync":true})");
+        const auto actual = store.sync_preferences();
+        QVERIFY(actual.enabled && actual.auto_sync && actual.statistics_sync &&
+                actual.sasayaki_sync);
+        QVERIFY(!actual.upload_books);
+        QCOMPARE(actual.google_client_id, " test ");
+        QCOMPARE(actual.provider, SyncProvider::ttu);
+        QCOMPARE(actual.mode, SyncMode::automatic);
+        QCOMPARE(actual.statistics_mode, niratan::statistics::StatisticsSyncMode::replace);
+        write_text(path, R"({"googleClientId":"only"})");
+        QCOMPARE(store.sync_preferences().provider, SyncProvider::ttu);
+        write_text(path, R"({"enableSync":true})");
+        QCOMPARE(store.sync_preferences().provider, SyncProvider::ttu);
+        write_text(
+            path,
+            R"({"enableSync":"yes","syncUploadBooks":"no","googleClientId":42,"statisticsSyncMode":"unknown"})");
+        const auto fallback = store.sync_preferences();
+        QVERIFY(!fallback.enabled);
+        QVERIFY(fallback.upload_books);
+        QVERIFY(fallback.google_client_id.empty());
+        QCOMPARE(fallback.statistics_mode, niratan::statistics::StatisticsSyncMode::merge);
+    }
+
+    void sync_writes_preserve_unrelated_keys_and_reject_damage() {
+        using namespace niratan::settings;
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        const auto path = settings_file(dir);
+        GlobalSettings store(path);
+        write_text(path, R"({"other":17})");
+        const auto update = [&](const char* key, const QJsonValue& value, auto save) {
+            const auto before = read_object(path);
+            QCOMPARE(save(), StoreError::none);
+            auto expected = before;
+            expected.insert(QLatin1StringView(key), value);
+            QCOMPARE(read_object(path), expected);
+        };
+        update("enableSync", true, [&] { return store.save_sync_enabled(true); });
+        update("syncMode", "Manual", [&] { return store.save_sync_mode(SyncMode::manual); });
+        update("enableAutoSync", true, [&] { return store.save_auto_sync(true); });
+        update("googleClientId", " raw ", [&] { return store.save_google_client_id(" raw "); });
+        update("syncProvider", "ttu", [&] { return store.save_sync_provider(SyncProvider::ttu); });
+        update("syncUploadBooks", false, [&] { return store.save_sync_upload_books(false); });
+        update("statisticsEnableSync", true,
+               [&] { return store.save_statistics_enable_sync(true); });
+        update("statisticsSyncMode", "Replace", [&] {
+            return store.save_statistics_sync_mode(
+                niratan::statistics::StatisticsSyncMode::replace);
+        });
+        update("sasayakiEnableSync", true, [&] { return store.save_sasayaki_enable_sync(true); });
+        write_text(path, "{broken");
+        QCOMPARE(store.sync_preferences(), SyncPreferences{});
+        QCOMPARE(store.save_sync_enabled(true), StoreError::io_error);
+        QCOMPARE(read_text(path), "{broken");
+    }
+
     void autostartModeFromId_data() {
         QTest::addColumn<QString>("id");
         QTest::addColumn<int>("expected");
@@ -103,8 +168,9 @@ class GlobalSettingsTest : public QObject {
         QCOMPARE(read_text(settings_file(dir)), text);
 
         write_text(settings_file(dir), R"({"statisticsResetTime":-3})");
-        QCOMPARE(GlobalSettings(settings_file(dir)).statistics_preferences().preferences.reset_minutes,
-                 0);
+        QCOMPARE(
+            GlobalSettings(settings_file(dir)).statistics_preferences().preferences.reset_minutes,
+            0);
     }
 
     // `as? Bool`, `as? Int` and `String` reads fail on another JSON type, and
@@ -120,8 +186,9 @@ class GlobalSettingsTest : public QObject {
         QCOMPARE(load.preferences, StatisticsPreferences{});
 
         write_text(settings_file(dir), R"({"statisticsResetTime":90.5})");
-        QCOMPARE(GlobalSettings(settings_file(dir)).statistics_preferences().preferences.reset_minutes,
-                 0);
+        QCOMPARE(
+            GlobalSettings(settings_file(dir)).statistics_preferences().preferences.reset_minutes,
+            0);
     }
 
     void preferences_damagedFileIsInvalidAndKept() {
@@ -165,7 +232,8 @@ class GlobalSettingsTest : public QObject {
         const StatisticsTargetSettings targets =
             GlobalSettings(settings_file(dir)).statistics_targets();
         QCOMPARE(targets.daily_target_type, DailyTargetType::duration);
-        QCOMPARE(targets.daily_character_target, StatisticsTargetSettings::snap_character_target(1260));
+        QCOMPARE(targets.daily_character_target,
+                 StatisticsTargetSettings::snap_character_target(1260));
         QCOMPARE(targets.daily_duration_target_minutes, 240);
         QCOMPARE(targets.weekly_target_days, 1);
     }

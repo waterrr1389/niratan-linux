@@ -40,7 +40,9 @@ const auto kSasayakiDarkTextColor = QStringLiteral("sasayakiDarkTextColor");
 const auto kSasayakiDarkBackgroundColor = QStringLiteral("sasayakiDarkBackgroundColor");
 const auto kPreferredAudioSource = QStringLiteral("preferredAudioSource");
 
-QString id_text(std::string_view id) { return QString::fromUtf8(id.data(), qsizetype(id.size())); }
+QString id_text(std::string_view id) {
+    return QString::fromUtf8(id.data(), qsizetype(id.size()));
+}
 
 struct DocumentRead {
     LoadStatus status = LoadStatus::missing;
@@ -273,6 +275,63 @@ StoreError GlobalSettings::save_preferred_audio_source(std::string_view source) 
     return write(QJsonObject{{kPreferredAudioSource, id_text(source)}});
 }
 
+std::string_view sync_mode_id(SyncMode mode) {
+    return mode == SyncMode::manual ? "Manual" : "Auto";
+}
+std::string_view sync_provider_id(SyncProvider provider) {
+    return provider == SyncProvider::ttu ? "ttu" : "gdrive";
+}
+SyncPreferences GlobalSettings::sync_preferences() const {
+    const auto object = read_document(file_).object;
+    SyncPreferences result;
+    result.enabled = object.value("enableSync").toBool();
+    result.mode =
+        object.value("syncMode").toString() == "Manual" ? SyncMode::manual : SyncMode::automatic;
+    result.auto_sync = object.value("enableAutoSync").toBool();
+    result.google_client_id = object.value("googleClientId").toString().toStdString();
+    const auto provider = object.value("syncProvider").toString();
+    if (provider != "gdrive" &&
+        (provider == "ttu" || result.enabled || !result.google_client_id.empty())) {
+        result.provider = SyncProvider::ttu;
+    }
+    result.upload_books = object.value("syncUploadBooks").toBool(true);
+    result.statistics_sync = object.value("statisticsEnableSync").toBool();
+    result.statistics_mode = object.value("statisticsSyncMode").toString() == "Replace"
+        ? statistics::StatisticsSyncMode::replace
+        : statistics::StatisticsSyncMode::merge;
+    result.sasayaki_sync = object.value("sasayakiEnableSync").toBool();
+    return result;
+}
+StoreError GlobalSettings::save_sync_enabled(bool enabled) {
+    return write({{"enableSync", enabled}});
+}
+StoreError GlobalSettings::save_sync_mode(SyncMode mode) {
+    return write({{"syncMode", id_text(sync_mode_id(mode))}});
+}
+StoreError GlobalSettings::save_auto_sync(bool enabled) {
+    return write({{"enableAutoSync", enabled}});
+}
+StoreError GlobalSettings::save_google_client_id(std::string_view id) {
+    return write({{"googleClientId", id_text(id)}});
+}
+StoreError GlobalSettings::save_sync_provider(SyncProvider provider) {
+    return write({{"syncProvider", id_text(sync_provider_id(provider))}});
+}
+StoreError GlobalSettings::save_sync_upload_books(bool enabled) {
+    return write({{"syncUploadBooks", enabled}});
+}
+StoreError GlobalSettings::save_statistics_enable_sync(bool enabled) {
+    return write({{"statisticsEnableSync", enabled}});
+}
+StoreError GlobalSettings::save_statistics_sync_mode(statistics::StatisticsSyncMode mode) {
+    return write({{"statisticsSyncMode",
+                   mode == statistics::StatisticsSyncMode::replace ? QStringLiteral("Replace")
+                                                                   : QStringLiteral("Merge")}});
+}
+StoreError GlobalSettings::save_sasayaki_enable_sync(bool enabled) {
+    return write({{"sasayakiEnableSync", enabled}});
+}
+
 StoreError GlobalSettings::write(const QJsonObject& values) {
     if (file_.empty()) {
         return StoreError::io_error;
@@ -285,7 +344,7 @@ StoreError GlobalSettings::write(const QJsonObject& values) {
         read.object.insert(it.key(), it.value());
     }
     return storage::write_json_file(file_, QJsonDocument(read.object)) ? StoreError::none
-                                                                         : StoreError::io_error;
+                                                                       : StoreError::io_error;
 }
 
 }  // namespace niratan::settings
