@@ -50,11 +50,16 @@ QtObject {
     readonly property int bookDetailsCountFieldWidth: 120
     readonly property int bookDetailsTimeFieldWidth: 70
 
-    // The trend chart: bar, gap and axis label widths per time grain (day,
+    // The trend chart: bar and axis label widths per time grain (day,
     // week, month), then the chart's own heights, radii and marks.
     readonly property var trendBarWidths: [12, 22, 28]
-    readonly property var trendBarSpacings: [5, 8, 10]
     readonly property var trendLabelWidths: [42, 66, 58]
+    // The share of its slot a bar fills when the plot is too narrow for the
+    // grain's bar width.
+    readonly property real trendBarFill: 0.7
+    // trendSection's filter row: 8 between controls, 5 from caption to picker.
+    readonly property int trendControlSpacing: 8
+    readonly property int trendControlLabelSpacing: 5
     readonly property int trendChartHeight: 224
     readonly property int trendAxisWidth: 56
     readonly property int trendLabelHeight: 22

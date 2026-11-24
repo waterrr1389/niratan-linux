@@ -5,7 +5,9 @@
 // Features/Bookshelf/StatisticsDashboardView.swift: the range, time grain,
 // metric and style pickers, the hint and the chart. It stays first and full
 // width above the dashboard columns, and carries no range metric tiles of its
-// own. Decision D5 keeps the existing bar/line Canvas drawing.
+// own. Decision D5 keeps the existing bar/line Canvas drawing. The plot fits
+// the card's width with gridlines at the y ticks, as Swift Charts lays out
+// StatisticsTrendChartView, rather than scrolling sideways.
 
 pragma ComponentBehavior: Bound
 
@@ -42,32 +44,30 @@ StatisticsCard {
         return Math.max(value * 1.1, 1)
     }
 
-    // Bar, gap and axis label widths per time grain (day, week, month).
-    function barWidth() {
-        return Theme.trendBarWidths[StatisticsViewModel.trendGrain] ?? Theme.trendBarWidths[0]
-    }
-
-    function barSpacing() {
-        return Theme.trendBarSpacings[StatisticsViewModel.trendGrain] ?? Theme.trendBarSpacings[0]
-    }
-
-    function labelWidth() {
-        return Theme.trendLabelWidths[StatisticsViewModel.trendGrain] ?? Theme.trendLabelWidths[0]
-    }
+    // The plot fits the card: every period gets an equal slot of the plot
+    // width, a bar fills part of its slot up to the grain's bar width, and a
+    // date label is shown on every `labelStride`-th slot so whole labels never
+    // overlap. Labels near the ends are clamped inside the plot.
+    readonly property int pointCount: StatisticsViewModel.trend.length
+    readonly property real slotWidth: card.pointCount > 0 ? plot.width / card.pointCount : 0
+    readonly property real barWidth: Math.max(Theme.hairlineWidth,
+        Math.min(Theme.trendBarWidths[StatisticsViewModel.trendGrain] ?? Theme.trendBarWidths[0],
+                 card.slotWidth * Theme.trendBarFill))
+    readonly property real labelWidth: Theme.trendLabelWidths[StatisticsViewModel.trendGrain]
+                                       ?? Theme.trendLabelWidths[0]
+    readonly property int labelStride: card.slotWidth > 0
+        ? Math.max(1, Math.ceil((card.labelWidth + Theme.spacingXs) / card.slotWidth)) : 1
+    // The y ticks, as fractions of the maximum: gridlines and axis labels.
+    readonly property var ticks: [1, 0.5, 0]
 
     function shouldShowTrendLabel(index) {
-        var count = StatisticsViewModel.trend.length
-        if (count <= 8)
-            return true
-        var stride = Math.max(Math.ceil(count / 8), 1)
-        var last = count - 1
-        var lastShown = Math.floor(last / stride) * stride
-        // The final label replaces a grid label that would sit under it.
+        const last = card.pointCount - 1
         if (index === last)
-            return last - lastShown >= stride || lastShown === last
-        if (index === lastShown && last - lastShown < stride)
+            return true
+        // The final label replaces a stride label that would collide with it.
+        if (last - index < card.labelStride)
             return false
-        return index % stride === 0
+        return index % card.labelStride === 0
     }
 
     function compactNumber(value) {
@@ -104,17 +104,30 @@ StatisticsCard {
         return description.join("\n")
     }
 
+    // The selected range is named under the page title, so the card heading
+    // carries only its title.
     StatisticsSectionHeader {
         Layout.fillWidth: true
         title: qsTr("Range & Trend")
-        detail: card.host.rangeTitle()
     }
 
-    Flow {
+    // trendSection's filters: each picker under its caption, the four in one
+    // row while they fit and otherwise in a two-column grid, so both pickers
+    // of a column start at the same x.
+    GridLayout {
+        id: controls
+
+        readonly property real oneRowWidth: rangeGroup.implicitWidth + grainGroup.implicitWidth
+            + metricGroup.implicitWidth + styleGroup.implicitWidth + 3 * columnSpacing
+
         Layout.fillWidth: true
-        spacing: Theme.spacingLg
+        // The card's column width, not the grid's own, which follows its columns.
+        columns: controls.parent && controls.oneRowWidth <= controls.parent.width ? 4 : 2
+        columnSpacing: Theme.trendControlSpacing
+        rowSpacing: Theme.dashboardCardContentSpacing
 
         PickerGroup {
+            id: rangeGroup
             title: qsTr("Range")
 
             StatisticsSegments {
@@ -128,6 +141,7 @@ StatisticsCard {
         }
 
         PickerGroup {
+            id: grainGroup
             title: qsTr("Time Grain")
 
             StatisticsSegments {
@@ -140,6 +154,7 @@ StatisticsCard {
         }
 
         PickerGroup {
+            id: metricGroup
             title: qsTr("Metric")
 
             StatisticsSegments {
@@ -150,7 +165,9 @@ StatisticsCard {
                 }
             }
         }
+
         PickerGroup {
+            id: styleGroup
             title: qsTr("Style")
 
             StatisticsSegments {
@@ -187,84 +204,88 @@ StatisticsCard {
         visible: StatisticsViewModel.trend.length > 0
         spacing: Theme.spacingSm
 
+        // The y axis: one label per tick, centred on its gridline.
         Item {
             Layout.preferredWidth: Theme.trendAxisWidth
             Layout.fillHeight: true
 
-            AxisLabel {
-                anchors.right: parent.right
-                anchors.top: parent.top
-                text: card.formatAxis(card.maximum)
-            }
-            AxisLabel {
-                anchors.right: parent.right
-                anchors.verticalCenter: parent.verticalCenter
-                text: card.formatAxis(card.maximum / 2)
-            }
-            AxisLabel {
-                anchors.right: parent.right
-                anchors.bottom: parent.bottom
-                text: "0"
+            Repeater {
+                model: card.ticks
+
+                delegate: AxisLabel {
+                    required property real modelData
+
+                    anchors.right: parent.right
+                    y: Math.max(0, Math.min(plot.height - height,
+                                            plot.height * (1 - modelData) - height / 2))
+                    text: modelData === 0 ? "0" : card.formatAxis(card.maximum * modelData)
+                }
             }
         }
 
-        Flickable {
-            id: trendScroll
+        Item {
             Layout.fillWidth: true
             Layout.fillHeight: true
-            contentWidth: Math.max(trendRow.width + card.labelWidth(), width)
-            contentHeight: height
-            clip: true
-            boundsBehavior: Flickable.StopAtBounds
-            ScrollBar.horizontal: ScrollBar {
-                policy: ScrollBar.AsNeeded
-            }
 
-            Canvas {
-                id: trendLine
-                anchors.fill: trendRow
-                visible: card.host.chartStyle === 1
-                readonly property color accent: Theme.accent
-                onAccentChanged: requestPaint()
-                onVisibleChanged: requestPaint()
-                onWidthChanged: requestPaint()
-                onHeightChanged: requestPaint()
-                onPaint: {
-                    var ctx = getContext("2d")
-                    ctx.clearRect(0, 0, width, height)
-                    ctx.strokeStyle = accent
-                    ctx.fillStyle = accent
-                    ctx.lineWidth = Theme.trendLineWidth
-                    var points = StatisticsViewModel.trend
-                    var slot = card.barWidth() + card.barSpacing()
-                    var connected = false
-                    ctx.beginPath()
-                    for (var i = 0; i < points.length; ++i) {
-                        var value = card.trendValue(points[i])
-                        if (value === null) {
-                            connected = false
-                            continue
-                        }
-                        var x = (i + 0.5) * slot
-                        var y = Math.min(height - Theme.trendPointSize / 2,
-                                         height * (1 - value / card.maximum))
-                        if (connected)
-                            ctx.lineTo(x, y)
-                        else
-                            ctx.moveTo(x, y)
-                        ctx.fillRect(x - Theme.trendPointSize / 2, y - Theme.trendPointSize / 2,
-                                     Theme.trendPointSize, Theme.trendPointSize)
-                        connected = true
+            Item {
+                id: plot
+
+                width: parent.width
+                height: parent.height - Theme.trendLabelHeight
+
+                // Swift Charts' default horizontal gridlines at the y ticks.
+                Repeater {
+                    model: card.ticks
+
+                    delegate: Rectangle {
+                        required property real modelData
+
+                        width: plot.width
+                        height: Theme.hairlineWidth
+                        y: Math.min(plot.height - height, plot.height * (1 - modelData))
+                        color: Theme.separator
                     }
-                    ctx.stroke()
                 }
-            }
 
-            Row {
-                id: trendRow
-                x: card.labelWidth() / 2
-                height: trendScroll.height - Theme.trendLabelHeight
-                spacing: 0
+                Canvas {
+                    id: trendLine
+
+                    anchors.fill: parent
+                    visible: card.host.chartStyle === 1
+                    readonly property color accent: Theme.accent
+                    onAccentChanged: requestPaint()
+                    onVisibleChanged: requestPaint()
+                    onWidthChanged: requestPaint()
+                    onHeightChanged: requestPaint()
+                    onPaint: {
+                        var ctx = getContext("2d")
+                        ctx.clearRect(0, 0, width, height)
+                        ctx.strokeStyle = accent
+                        ctx.fillStyle = accent
+                        ctx.lineWidth = Theme.trendLineWidth
+                        var points = StatisticsViewModel.trend
+                        var connected = false
+                        ctx.beginPath()
+                        for (var i = 0; i < points.length; ++i) {
+                            var value = card.trendValue(points[i])
+                            if (value === null) {
+                                connected = false
+                                continue
+                            }
+                            var x = (i + 0.5) * card.slotWidth
+                            var y = Math.min(height - Theme.trendPointSize / 2,
+                                             height * (1 - value / card.maximum))
+                            if (connected)
+                                ctx.lineTo(x, y)
+                            else
+                                ctx.moveTo(x, y)
+                            ctx.fillRect(x - Theme.trendPointSize / 2, y - Theme.trendPointSize / 2,
+                                         Theme.trendPointSize, Theme.trendPointSize)
+                            connected = true
+                        }
+                        ctx.stroke()
+                    }
+                }
 
                 Repeater {
                     model: StatisticsViewModel.trend
@@ -272,76 +293,78 @@ StatisticsCard {
                         id: barColumn
                         required property int index
                         required property var modelData
-                        width: card.barWidth() + card.barSpacing()
-                        height: trendRow.height
+                        x: barColumn.index * card.slotWidth
+                        width: card.slotWidth
+                        height: plot.height
 
                         readonly property var value: card.trendValue(barColumn.modelData)
                         readonly property real barHeight:
                             barColumn.value === null || barColumn.value <= 0
                             ? Theme.trendEmptyBarHeight
-                            : Math.max(trendRow.height * barColumn.value
+                            : Math.max(plot.height * barColumn.value
                                        / card.maximum, Theme.trendMinimumBarHeight)
 
                         Rectangle {
                             visible: card.host.chartStyle === 0
-                            width: card.barWidth()
+                            width: card.barWidth
                             height: barColumn.barHeight
                             anchors.horizontalCenter: parent.horizontalCenter
                             anchors.bottom: parent.bottom
-                            radius: Theme.trendBarRadius
+                            // Only the top is rounded, so every bar stands flat on
+                            // the baseline; Rectangle clamps the radius to half a
+                            // narrow bar's width.
+                            topLeftRadius: Theme.trendBarRadius
+                            topRightRadius: Theme.trendBarRadius
                             color: card.host.tint(Theme.accent,
                                                   barHover.hovered ? 1 : Theme.trendBarOpacity)
                         }
                         HoverHandler { id: barHover }
                         ToolTip.visible: barHover.hovered
-                        ToolTip.delay: 350
+                        ToolTip.delay: Theme.tooltipDelay
                         ToolTip.text: card.trendDescription(barColumn.modelData)
                     }
                 }
             }
 
-            Row {
-                id: labelRow
-                x: card.labelWidth() / 2
-                anchors.top: trendRow.bottom
-                height: Theme.trendLabelHeight
-                spacing: 0
+            // The baseline rule at 0, drawn over the bars' feet in the gridline
+            // colour.
+            Rectangle {
+                y: plot.height - height
+                width: plot.width
+                height: Theme.hairlineWidth
+                color: Theme.separator
+            }
 
-                Repeater {
-                    model: StatisticsViewModel.trend
-                    delegate: Item {
-                        id: labelColumn
-                        required property int index
-                        required property var modelData
-                        width: card.barWidth() + card.barSpacing()
-                        height: Theme.trendLabelHeight
-
-                        AxisLabel {
-                            anchors.verticalCenter: parent.verticalCenter
-                            anchors.horizontalCenter: parent.horizontalCenter
-                            width: card.labelWidth()
-                            text: card.shouldShowTrendLabel(labelColumn.index)
-                                ? labelColumn.modelData.label : ""
-                            horizontalAlignment: Text.AlignHCenter
-                            elide: Text.ElideRight
-                        }
-                    }
+            // Period labels under the plot, clamped so the first and last
+            // stay whole inside the card.
+            Repeater {
+                model: StatisticsViewModel.trend
+                delegate: AxisLabel {
+                    id: periodLabel
+                    required property int index
+                    required property var modelData
+                    visible: card.shouldShowTrendLabel(periodLabel.index)
+                    y: plot.height + (Theme.trendLabelHeight - height) / 2
+                    x: Math.max(0, Math.min(plot.width - width,
+                                            (periodLabel.index + 0.5) * card.slotWidth - width / 2))
+                    text: periodLabel.modelData.label
                 }
             }
         }
     }
 
-    // A titled picker of the trend controls: caption label over the picker.
+    // trendControl: a caption2 semibold secondary caption over its picker.
     component PickerGroup: Column {
         id: group
 
         property string title
 
-        spacing: Theme.dashboardHeaderSpacing
+        Layout.alignment: Qt.AlignLeft | Qt.AlignTop
+        spacing: Theme.trendControlLabelSpacing
 
         StyledLabel {
             text: group.title
-            textStyle: Theme.captionFont
+            textStyle: Theme.caption2Font
             weight: Theme.weightSemibold
             secondary: true
         }
