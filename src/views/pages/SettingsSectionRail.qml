@@ -21,6 +21,7 @@ Rectangle {
         { key: "statistics", title: qsTr("Statistics"), symbol: "chart.xyaxis.line" },
         { key: "sasayaki", title: qsTr("Sasayaki (Audiobooks)"), symbol: "waveform" },
         { key: "wordAudio", title: qsTr("Word Audio"), symbol: "speaker.wave.2.fill" },
+        { key: "sync", title: qsTr("Syncing"), symbol: "cloud" },
         { key: "report", title: qsTr("Report an Issue"), symbol: "exclamationmark.bubble" }
     ]
     readonly property int lastSection: sections.length - 2
@@ -72,11 +73,12 @@ Rectangle {
                     width: rows.width
 
                     Text {
-                        visible: entry.index === 0 || entry.index === 4
+                        visible: entry.index === 0 || entry.index === 4 || entry.modelData.key === "sync"
                         leftPadding: 6
                         topPadding: 14
                         bottomPadding: 4
-                        text: entry.index === 0 ? qsTr("Library") : qsTr("Reader")
+                        text: entry.index === 0 ? qsTr("Library")
+                            : entry.index === 4 ? qsTr("Reader") : qsTr("Sync & Data")
                         color: Theme.textSecondary
                         font.pixelSize: Theme.fontSubheadline
                         font.weight: Font.DemiBold

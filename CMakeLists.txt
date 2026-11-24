@@ -331,6 +331,7 @@ qt_add_qml_module(niratan_app
         src/views/components/ValueRow.qml
         src/views/dictionary/AnkiMiningToast.qml
         src/views/icons/icon_map.js
+        src/views/icons/phosphor/regular/cloud.svg
         src/views/icons/phosphor/fill/skip-back-fill.svg
         src/views/icons/phosphor/fill/skip-forward-fill.svg
         src/views/icons/phosphor/fill/speaker-slash-fill.svg
@@ -455,6 +456,7 @@ qt_add_qml_module(niratan_app
         src/views/settings/ReaderDisplayCard.qml
         src/views/settings/StatisticsSettings.qml
         src/views/settings/WordAudioSettings.qml
+        src/views/settings/SyncSettings.qml
         src/views/reader/SasayakiChaptersTab.qml
         src/views/reader/ReaderAppearancePanel.qml
         src/views/reader/ReaderBottomControls.qml

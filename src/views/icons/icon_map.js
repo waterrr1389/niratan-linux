@@ -56,6 +56,7 @@ var icons = {
     "photo.on.rectangle": { weight: "regular", name: "images" },
     "headphones": { weight: "regular", name: "headphones" },
     "waveform": { weight: "regular", name: "waveform" },
+    "cloud": { weight: "regular", name: "cloud" },
     "pause.fill": { weight: "fill", name: "pause" },
     "play.fill": { weight: "fill", name: "play" },
     "timer": { weight: "regular", name: "timer" },

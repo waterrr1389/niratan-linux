@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include <QGuiApplication>
+#include <QDesktopServices>
 
 #include <clocale>
 #include <QFont>
@@ -14,6 +15,7 @@
 #include <QtWebEngineQuick/QtWebEngineQuick>
 
 #include "viewmodels/reader/reader_view_model.h"
+#include "viewmodels/sync/sync_settings_view_model.h"
 #include "views/dictionary/audio_scheme_handler.h"
 #include "views/dictionary/dictionary_media_scheme_handler.h"
 #include "views/reader/reader_scheme_handler.h"
@@ -92,6 +94,7 @@ int main(int argc, char* argv[]) {
     profile->installUrlSchemeHandler(QByteArrayLiteral("dict"),
                                      new niratan::ui::DictionaryMediaSchemeHandler(profile));
     auto* reader_model = niratan::viewmodels::ReaderViewModel::instance();
+    niratan::viewmodels::SyncSettingsViewModel::instance(&QDesktopServices::openUrl);
     auto* reader_handler = new niratan::ui::ReaderSchemeHandler(profile);
     reader_handler->set_view_model(reader_model);
     profile->installUrlSchemeHandler(QByteArrayLiteral("reader"), reader_handler);

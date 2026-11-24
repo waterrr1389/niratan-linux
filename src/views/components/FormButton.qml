@@ -19,6 +19,7 @@ T.AbstractButton {
     property string glyph
     // The default action of a dialog: accent fill with on-accent text.
     property bool prominent: false
+    property bool sizeToLabel: false
     // controlSize(.small): caption semibold on a chip-high capsule, as
     // ReaderGoToView.bookSummary draws Jump to.
     property bool small: false
@@ -36,7 +37,9 @@ T.AbstractButton {
     }
 
     contentItem: Item {
-        implicitWidth: labelRow.implicitWidth
+        implicitWidth: control.sizeToLabel
+            ? label.implicitWidth + (control.glyph !== "" ? glyphIcon.width + labelRow.spacing : 0)
+            : labelRow.implicitWidth
         implicitHeight: labelRow.implicitHeight
 
         Row {
@@ -46,6 +49,7 @@ T.AbstractButton {
             spacing: Theme.chipGlyphSpacing
 
             Icon {
+                id: glyphIcon
                 anchors.verticalCenter: parent.verticalCenter
                 visible: control.glyph !== ""
                 name: control.glyph

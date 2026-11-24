@@ -12,11 +12,16 @@
 
 #include <QtQmlIntegration/qqmlintegration.h>
 
+class QQmlEngine;
+class QJSEngine;
+
 namespace niratan::viewmodels {
 
 class SyncSettingsViewModel : public QObject {
     Q_OBJECT
     QML_ELEMENT
+    QML_SINGLETON
+    Q_PROPERTY(bool hasCredentials READ has_credentials NOTIFY credentialsChanged)
     Q_PROPERTY(bool enabled READ enabled WRITE setEnabled NOTIFY enabledChanged)
     Q_PROPERTY(QString syncMode READ syncMode WRITE setSyncMode NOTIFY syncModeChanged)
     Q_PROPERTY(bool autoSync READ autoSync WRITE setAutoSync NOTIFY autoSyncChanged)
@@ -46,6 +51,9 @@ class SyncSettingsViewModel : public QObject {
     explicit SyncSettingsViewModel(QObject* parent = nullptr);
     explicit SyncSettingsViewModel(Config config, QObject* parent = nullptr);
     ~SyncSettingsViewModel() override;
+    static SyncSettingsViewModel* instance(sync::LoopbackAuthorization::BrowserOpener opener = {});
+    static SyncSettingsViewModel* create(QQmlEngine*, QJSEngine*);
+    bool has_credentials() const;
     bool enabled() const;
     QString syncMode() const;
     bool autoSync() const;
@@ -82,6 +90,7 @@ class SyncSettingsViewModel : public QObject {
     bool auto_sync_enabled() const;
 
    signals:
+    void credentialsChanged();
     void enabledChanged();
     void syncModeChanged();
     void autoSyncChanged();

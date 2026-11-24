@@ -50,6 +50,7 @@ RowLayout {
                 case 4: return statistics
                 case 5: return sasayaki
                 case 6: return wordAudio
+                case 7: return syncSettings
                 default: return appearance
                 }
             }
@@ -63,4 +64,5 @@ RowLayout {
     Component { id: statistics; StatisticsSettings {} }
     Component { id: sasayaki; SasayakiSettingsForm {} }
     Component { id: wordAudio; WordAudioSettings {} }
+    Component { id: syncSettings; SyncSettings {} }
 }

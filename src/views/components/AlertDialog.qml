@@ -20,6 +20,7 @@ Dialog {
     property string message
     property string acceptText: qsTr("OK")
     property string rejectText
+    property bool acceptDestructive: false
     property bool hasField: false
     property alias fieldText: field.text
     property alias fieldName: field.objectName
@@ -104,7 +105,8 @@ Dialog {
 
             FormButton {
                 text: alert.acceptText
-                prominent: true
+                prominent: !alert.acceptDestructive
+                destructive: alert.acceptDestructive
                 onClicked: alert.accept()
             }
         }

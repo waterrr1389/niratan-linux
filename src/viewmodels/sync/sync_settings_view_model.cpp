@@ -7,6 +7,7 @@
 #include "services/sync/ttu_convert.h"
 
 #include <QPointer>
+#include <QQmlEngine>
 
 namespace niratan::viewmodels {
 namespace {
@@ -94,7 +95,10 @@ struct SyncSettingsViewModel::State {
     }
 
     void connection_changed(SyncSettingsViewModel& view, bool was_authenticated,
-                            const QString& old_status) {
+                            bool had_credentials, const QString& old_status) {
+        if (had_credentials != view.has_credentials()) {
+            emit view.credentialsChanged();
+        }
         if (was_authenticated != view.authenticated()) {
             emit view.authenticatedChanged();
         }
@@ -111,6 +115,26 @@ SyncSettingsViewModel::SyncSettingsViewModel(Config config, QObject* parent)
     : QObject(parent), state_(std::make_unique<State>(std::move(config))) {}
 
 SyncSettingsViewModel::~SyncSettingsViewModel() = default;
+
+SyncSettingsViewModel*
+SyncSettingsViewModel::instance(sync::LoopbackAuthorization::BrowserOpener opener) {
+    static auto* model = [&] {
+        Config config{storage::data_root().string(), {}, {}, {}};
+        config.auth.browser_opener = std::move(opener);
+        return new SyncSettingsViewModel(std::move(config));
+    }();
+    return model;
+}
+
+SyncSettingsViewModel* SyncSettingsViewModel::create(QQmlEngine*, QJSEngine*) {
+    auto* model = instance();
+    QJSEngine::setObjectOwnership(model, QJSEngine::CppOwnership);
+    return model;
+}
+
+bool SyncSettingsViewModel::has_credentials() const {
+    return state_->auth.access_token().has_value();
+}
 
 bool SyncSettingsViewModel::enabled() const {
     return state_->preferences.enabled;
@@ -199,11 +223,12 @@ void SyncSettingsViewModel::setAutoSync(bool value) {
 
 void SyncSettingsViewModel::setClientId(QString value) {
     const auto was_authenticated = authenticated();
+    const auto had_credentials = has_credentials();
     const auto old_status = connectionStatus();
     if (state_->save(*this, state_->preferences.google_client_id, value.toStdString(),
                      [this](const auto& v) { return state_->store.save_google_client_id(v); })) {
         emit clientIdChanged();
-        state_->connection_changed(*this, was_authenticated, old_status);
+        state_->connection_changed(*this, was_authenticated, had_credentials, old_status);
     }
 }
 
@@ -236,24 +261,26 @@ void SyncSettingsViewModel::signIn() {
     }
     clearError();
     const auto was_authenticated = authenticated();
+    const auto had_credentials = has_credentials();
     state_->connecting = true;
     emit connectingChanged();
     emit connectionStatusChanged();
-    state_->auth.authenticate([this, guard = QPointer(this), was_authenticated](auto failure) {
-        if (!guard) {
-            return;
-        }
-        const auto old_status = connectionStatus();
-        state_->connecting = false;
-        emit connectingChanged();
-        if (!failure) {
-            state_->drive.clear_cache();
-        }
-        state_->connection_changed(*this, was_authenticated, old_status);
-        if (failure && failure->kind != sync::AuthErrorKind::cancelled) {
-            state_->set_error(*this, QString::fromStdString(failure->description()));
-        }
-    });
+    state_->auth.authenticate(
+        [this, guard = QPointer(this), was_authenticated, had_credentials](auto failure) {
+            if (!guard) {
+                return;
+            }
+            const auto old_status = connectionStatus();
+            state_->connecting = false;
+            emit connectingChanged();
+            if (!failure) {
+                state_->drive.clear_cache();
+            }
+            state_->connection_changed(*this, was_authenticated, had_credentials, old_status);
+            if (failure && failure->kind != sync::AuthErrorKind::cancelled) {
+                state_->set_error(*this, QString::fromStdString(failure->description()));
+            }
+        });
 }
 
 void SyncSettingsViewModel::cancelSignIn() {
@@ -262,13 +289,14 @@ void SyncSettingsViewModel::cancelSignIn() {
 
 void SyncSettingsViewModel::signOut() {
     const auto was_authenticated = authenticated();
+    const auto had_credentials = has_credentials();
     const auto old_status = connectionStatus();
     const auto was_connecting = connecting();
     clearCache();
     state_->auth.sign_out();
     clearError();
     if (!was_connecting) {
-        state_->connection_changed(*this, was_authenticated, old_status);
+        state_->connection_changed(*this, was_authenticated, had_credentials, old_status);
     }
 }
 
