@@ -20,103 +20,68 @@ Item {
 
     signal jumpRequested()
 
-    ListView {
+    InspectorList {
         anchors.fill: parent
-        anchors.leftMargin: 10
-        anchors.rightMargin: 10
-        anchors.bottomMargin: 14
-        clip: true
-        spacing: 2
+        anchors.leftMargin: Theme.readerListInset
+        anchors.rightMargin: Theme.readerListInset
+        anchors.bottomMargin: Theme.readerListBottomInset
+        spacing: Theme.readerListSpacing
         model: ReaderViewModel.highlights
         section.property: "label"
-        section.delegate: Text {
+        section.delegate: ListSectionHeader {
             required property string section
             width: ListView.view.width
-            text: section
-            color: Theme.textSecondary
-            font.pixelSize: Theme.fontCaption
-            font.bold: true
-            leftPadding: 10
-            topPadding: 10
-            bottomPadding: 2
+            compact: true
+            title: section
         }
 
-        delegate: Item {
+        delegate: InspectorListRow {
             id: highlightRow
             required property var modelData
             width: ListView.view.width
-            implicitHeight: highlightContent.implicitHeight + 14
             objectName: "goToHighlightRow"
 
-            signal clicked()
+            hasContextMenu: true
+            onContextMenuRequested: highlightMenu.popup()
 
             onClicked: {
                 ReaderViewModel.jumpToCharacter(highlightRow.modelData.character);
                 root.jumpRequested();
             }
 
-            Rectangle {
-                anchors.fill: parent
-                radius: 9
-                color: highlightMouse.pressed
-                    ? Qt.rgba(Theme.textPrimary.r, Theme.textPrimary.g,
-                              Theme.textPrimary.b, 0.1)
-                    : highlightMouse.containsMouse
-                        ? Qt.rgba(Theme.textPrimary.r, Theme.textPrimary.g,
-                                  Theme.textPrimary.b, 0.06)
-                        : "transparent"
-            }
+            contentItem: RowLayout {
+                spacing: Theme.spacingSm
 
-            Rectangle {
-                anchors.left: parent.left
-                anchors.leftMargin: 10
-                anchors.top: parent.top
-                anchors.bottom: parent.bottom
-                anchors.topMargin: 9
-                anchors.bottomMargin: 9
-                width: 3
-                radius: 2
-                color: Theme.accent
-            }
-
-            ColumnLayout {
-                id: highlightContent
-                anchors.left: parent.left
-                anchors.right: parent.right
-                anchors.verticalCenter: parent.verticalCenter
-                anchors.leftMargin: 21
-                anchors.rightMargin: 10
-                spacing: 3
-
-                Text {
-                    Layout.fillWidth: true
-                    text: highlightRow.modelData.text.trim()
-                    color: Theme.textPrimary
-                    font.pixelSize: Theme.fontBody
-                    wrapMode: Text.Wrap
-                    maximumLineCount: 4
-                    elide: Text.ElideRight
+                Rectangle {
+                    Layout.fillHeight: true
+                    Layout.topMargin: Theme.readerListSpacing
+                    Layout.bottomMargin: Theme.readerListSpacing
+                    implicitWidth: Theme.readerHighlightWidth
+                    radius: Theme.focusRingWidth
+                    color: Theme.accent
                 }
 
-                Text {
+                ColumnLayout {
                     Layout.fillWidth: true
-                    text: ReaderViewModel.positionTextAt(highlightRow.modelData.character)
-                    color: Theme.textSecondary
-                    font.pixelSize: Theme.fontCaption
-                    elide: Text.ElideRight
-                }
-            }
+                    spacing: Theme.readerListDetailSpacing
 
-            MouseArea {
-                id: highlightMouse
-                anchors.fill: parent
-                hoverEnabled: true
-                acceptedButtons: Qt.LeftButton | Qt.RightButton
-                onClicked: mouse => {
-                    if (mouse.button === Qt.RightButton)
-                        highlightMenu.popup();
-                    else
-                        highlightRow.clicked();
+                    StyledLabel {
+                        Layout.fillWidth: true
+                        text: highlightRow.modelData.text.trim()
+                        textStyle: Theme.calloutFont
+                        textFormat: Text.PlainText
+                        wrapMode: Text.Wrap
+                        maximumLineCount: 4
+                        elide: Text.ElideRight
+                    }
+
+                    StyledLabel {
+                        Layout.fillWidth: true
+                        text: ReaderViewModel.positionTextAt(highlightRow.modelData.character)
+                        secondary: true
+                        textStyle: Theme.caption2Font
+                        elide: Text.ElideRight
+                    }
                 }
             }
 
@@ -130,13 +95,9 @@ Item {
         }
     }
 
-    Text {
-        anchors.centerIn: parent
-        width: parent.width - 36
+    ListStatus {
         visible: ReaderViewModel.highlights.length === 0
         text: qsTr("No Highlights")
-        color: Theme.textSecondary
-        font.pixelSize: Theme.fontBody
-        horizontalAlignment: Text.AlignHCenter
+        symbol: "highlighter"
     }
 }

@@ -85,7 +85,7 @@ Item {
         anchors.fill: parent
         spacing: 0
 
-        ReaderInspectorHeader {
+        PanelHeader {
             Layout.fillWidth: true
             title: qsTr("Sasayaki")
             subtitle: root.currentChapterTitle()
@@ -102,9 +102,9 @@ Item {
             player: root.player
         }
 
-        ReaderInspectorTabBar {
+        UnderlineTabBar {
             Layout.fillWidth: true
-            Layout.bottomMargin: 10
+            Layout.bottomMargin: Theme.inspectorTabBarPaddingBottom
             tabs: [
                 { text: qsTr("Resources"), icon: "tray.and.arrow.down" },
                 { text: qsTr("Chapters"), icon: "list.bullet" },

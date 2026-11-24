@@ -1549,7 +1549,7 @@ void ReaderPresentationTest::go_to_highlight_jumps_and_deletes() {
     QVERIFY(QMetaObject::invokeMethod(tabs[2], "clicked"));
     QList<QQuickItem*> rows;
     QTRY_VERIFY((rows = shown_named(panel, QStringLiteral("goToHighlightRow"))).size() == 1);
-    QVERIFY(shown_texts(rows.first()).contains(QStringLiteral("しす")));
+    QTRY_VERIFY(shown_texts(rows.first()).contains(QStringLiteral("しす")));
     QVERIFY(QMetaObject::invokeMethod(rows.first(), "clicked"));
     QTRY_COMPARE(page_->property("activeTool").toString(), QString());
     if (reader_->restoring()) {

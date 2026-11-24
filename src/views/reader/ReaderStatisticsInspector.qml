@@ -20,11 +20,13 @@
 // for Japanese, approximate words for English. The layout order is session,
 // book progress, then the history table; the SF Symbol icons beside the two
 // remaining-time rows are omitted because the row labels carry the meaning.
+// The content scrolls in a PanelScaffold inset 18 at the sides and bottom,
+// stops at its bounds and shows a scroll bar while it overflows. The hero
+// count keeps one line by eliding rather than SwiftUI's minimumScaleFactor.
 
 pragma ComponentBehavior: Bound
 
 import QtQuick
-import QtQuick.Controls
 import QtQuick.Layouts
 import Niratan
 
@@ -42,300 +44,229 @@ ColumnLayout {
     readonly property string countLabel: english ? qsTr("Approximate Words Read")
                                                 : qsTr("Characters Read")
 
+    // historyRow's value cells: callout tabular digits, trailing.
+    component HistoryValue: StyledLabel {
+        Layout.alignment: Qt.AlignRight
+        textStyle: Theme.calloutFont
+        monospacedDigits: true
+        elide: Text.ElideRight
+    }
+
+    function text(value) {
+        return value ? value : "";
+    }
+
     spacing: 0
 
-    ReaderInspectorHeader {
+    PanelHeader {
         Layout.fillWidth: true
         title: qsTr("Statistics")
         onCloseRequested: inspector.closeRequested()
 
         IconButton {
             icon: inspector.tracking ? "pause.fill" : "play.fill"
-            diameter: 28
-            iconSize: 11
+            diameter: Theme.closeButtonDiameter
+            iconSize: Theme.closeButtonGlyph
             accessibleName: inspector.tracking ? qsTr("Pause Tracking")
                                                : qsTr("Start Tracking")
             onClicked: ReaderViewModel.toggleTracking()
         }
     }
 
-    ScrollView {
-        id: scroll
+    PanelScaffold {
         Layout.fillWidth: true
         Layout.fillHeight: true
-        clip: true
+        compact: true
+        persistentScrollBar: true
+        topPadding: 0
+        horizontalPadding: Theme.panelHeaderPaddingHorizontal
+        bottomPadding: Theme.panelHeaderPaddingHorizontal
+        spacing: Theme.statisticsSectionSpacing
 
-        ColumnLayout {
-            width: scroll.availableWidth
-            spacing: Theme.spacingXl
+        HeroCard {
+            objectName: "sessionHero"
+            active: inspector.tracking
 
-            Rectangle {
-                objectName: "sessionHero"
-                Layout.fillWidth: true
-                Layout.leftMargin: 18
-                Layout.rightMargin: 18
-                implicitHeight: hero.implicitHeight + 2 * Theme.spacingLg
-                radius: 16
-                color: Qt.rgba(Theme.accent.r, Theme.accent.g, Theme.accent.b,
-                               inspector.tracking ? 0.12 : 0.06)
+            Item {
+                implicitHeight: Math.max(status.implicitHeight, sessionLabel.implicitHeight)
 
-                ColumnLayout {
-                    id: hero
-                    anchors.fill: parent
-                    anchors.margins: Theme.spacingLg
-                    spacing: 10
+                Row {
+                    id: status
 
-                    RowLayout {
-                        Layout.fillWidth: true
-                        spacing: 6
-
-                        Rectangle {
-                            Layout.preferredWidth: 7
-                            Layout.preferredHeight: 7
-                            radius: 3.5
-                            color: inspector.tracking ? Theme.popupSuccess
-                                                      : Theme.textSecondary
-                        }
-                        Text {
-                            text: inspector.tracking ? qsTr("Tracking") : qsTr("Paused")
-                            color: inspector.tracking ? Theme.textPrimary
-                                                      : Theme.textSecondary
-                            font.pixelSize: Theme.fontCaption
-                            font.bold: true
-                        }
-                        Item { Layout.fillWidth: true }
-                        Text {
-                            text: qsTr("Session")
-                            color: Theme.textSecondary
-                            font.pixelSize: Theme.fontCaption
-                        }
-                    }
-
-                    ColumnLayout {
-                        spacing: 0
-                        Text {
-                            text: inspector.sessionPeriod.characters
-                                  ? inspector.sessionPeriod.characters : ""
-                            color: Theme.textPrimary
-                            font.pixelSize: 40
-                            font.bold: true
-                            elide: Text.ElideRight
-                        }
-                        Text {
-                            text: inspector.countLabel
-                            color: Theme.textSecondary
-                            font.pixelSize: Theme.fontCaption
-                        }
-                    }
-
-                    RowLayout {
-                        Layout.fillWidth: true
-                        spacing: 14
-
-                        ColumnLayout {
-                            Layout.fillWidth: true
-                            spacing: 1
-                            Text {
-                                text: inspector.sessionPeriod.speed
-                                      ? inspector.sessionPeriod.speed : ""
-                                color: Theme.textPrimary
-                                font.pixelSize: Theme.fontBody
-                                font.bold: true
-                            }
-                            Text {
-                                text: qsTr("Reading Speed")
-                                color: Theme.textSecondary
-                                font.pixelSize: Theme.fontCaption
-                            }
-                        }
-                        Rectangle {
-                            Layout.preferredWidth: 1
-                            Layout.preferredHeight: 28
-                            color: Theme.cardStroke
-                        }
-                        ColumnLayout {
-                            Layout.fillWidth: true
-                            spacing: 1
-                            Text {
-                                text: inspector.sessionPeriod.duration
-                                      ? inspector.sessionPeriod.duration : ""
-                                color: Theme.textPrimary
-                                font.pixelSize: Theme.fontBody
-                                font.bold: true
-                            }
-                            Text {
-                                text: qsTr("Reading Time")
-                                color: Theme.textSecondary
-                                font.pixelSize: Theme.fontCaption
-                            }
-                        }
-                    }
-                }
-            }
-
-            ColumnLayout {
-                Layout.fillWidth: true
-                Layout.leftMargin: 18
-                Layout.rightMargin: 18
-                spacing: Theme.spacingSm
-
-                RowLayout {
-                    Layout.fillWidth: true
-                    Text {
-                        Layout.fillWidth: true
-                        text: qsTr("Book Progress")
-                        color: Theme.textPrimary
-                        font.pixelSize: Theme.fontCaption
-                        font.bold: true
-                    }
-                    Text {
-                        text: inspector.stats.bookPercent
-                              ? inspector.stats.bookPercent : ""
-                        color: Theme.textPrimary
-                        font.pixelSize: Theme.fontCaption
-                        font.bold: true
-                    }
-                }
-                ProgressBar {
-                    Layout.fillWidth: true
-                    from: 0
-                    to: 1
-                    value: inspector.stats.bookFraction ? inspector.stats.bookFraction : 0
-                }
-                RowLayout {
-                    Layout.fillWidth: true
-                    Text {
-                        Layout.fillWidth: true
-                        text: qsTr("Time to finish Book")
-                        color: Theme.textPrimary
-                        font.pixelSize: Theme.fontBody
-                    }
-                    Text {
-                        text: inspector.stats.bookRemaining
-                              ? inspector.stats.bookRemaining : "\u2014"
-                        color: text === "\u2014" ? Theme.textSecondary : Theme.textPrimary
-                        font.pixelSize: Theme.fontBody
-                    }
-                }
-                RowLayout {
-                    Layout.fillWidth: true
-                    Text {
-                        Layout.fillWidth: true
-                        text: qsTr("Time to finish Chapter")
-                        color: Theme.textPrimary
-                        font.pixelSize: Theme.fontBody
-                    }
-                    Text {
-                        text: inspector.stats.chapterRemaining
-                              ? inspector.stats.chapterRemaining : "\u2014"
-                        color: text === "\u2014" ? Theme.textSecondary : Theme.textPrimary
-                        font.pixelSize: Theme.fontBody
-                    }
-                }
-            }
-
-            ColumnLayout {
-                Layout.fillWidth: true
-                Layout.leftMargin: 18
-                Layout.rightMargin: 18
-                Layout.bottomMargin: 18
-                spacing: 6
-
-                Text {
-                    text: qsTr("History")
-                    color: Theme.textPrimary
-                    font.pixelSize: Theme.fontCaption
-                    font.bold: true
-                }
-
-                GridLayout {
-                    Layout.fillWidth: true
-                    columns: 4
-                    columnSpacing: 12
-                    rowSpacing: 8
-
-                    Text { text: "" }
-                    Text {
-                        Layout.alignment: Qt.AlignRight
-                        text: inspector.countLabel
-                        color: Theme.textSecondary
-                        font.pixelSize: Theme.fontCaption
-                        elide: Text.ElideRight
-                    }
-                    Text {
-                        Layout.alignment: Qt.AlignRight
-                        text: qsTr("Reading Speed")
-                        color: Theme.textSecondary
-                        font.pixelSize: Theme.fontCaption
-                    }
-                    Text {
-                        Layout.alignment: Qt.AlignRight
-                        text: qsTr("Reading Time")
-                        color: Theme.textSecondary
-                        font.pixelSize: Theme.fontCaption
-                    }
+                    anchors.verticalCenter: parent.verticalCenter
+                    spacing: Theme.statusDotSpacing
 
                     Rectangle {
-                        Layout.columnSpan: 4
-                        Layout.fillWidth: true
-                        Layout.preferredHeight: 1
-                        color: Theme.cardStroke
+                        anchors.verticalCenter: parent.verticalCenter
+                        width: Theme.statusDotSize
+                        height: Theme.statusDotSize
+                        radius: Theme.statusDotRadius
+                        color: inspector.tracking ? Theme.popupSuccess : Theme.textSecondary
                     }
 
-                    Text {
-                        text: qsTr("Today")
-                        color: Theme.textPrimary
-                        font.pixelSize: Theme.fontBody
-                        font.bold: true
-                    }
-                    Text {
-                        Layout.alignment: Qt.AlignRight
-                        text: inspector.todayPeriod.characters
-                              ? inspector.todayPeriod.characters : ""
-                        color: Theme.textPrimary
-                        font.pixelSize: Theme.fontBody
-                    }
-                    Text {
-                        Layout.alignment: Qt.AlignRight
-                        text: inspector.todayPeriod.speed ? inspector.todayPeriod.speed : ""
-                        color: Theme.textPrimary
-                        font.pixelSize: Theme.fontBody
-                    }
-                    Text {
-                        Layout.alignment: Qt.AlignRight
-                        text: inspector.todayPeriod.duration
-                              ? inspector.todayPeriod.duration : ""
-                        color: Theme.textPrimary
-                        font.pixelSize: Theme.fontBody
-                    }
-
-                    Text {
-                        text: qsTr("All Time")
-                        color: Theme.textPrimary
-                        font.pixelSize: Theme.fontBody
-                        font.bold: true
-                    }
-                    Text {
-                        Layout.alignment: Qt.AlignRight
-                        text: inspector.allTimePeriod.characters
-                              ? inspector.allTimePeriod.characters : ""
-                        color: Theme.textPrimary
-                        font.pixelSize: Theme.fontBody
-                    }
-                    Text {
-                        Layout.alignment: Qt.AlignRight
-                        text: inspector.allTimePeriod.speed ? inspector.allTimePeriod.speed : ""
-                        color: Theme.textPrimary
-                        font.pixelSize: Theme.fontBody
-                    }
-                    Text {
-                        Layout.alignment: Qt.AlignRight
-                        text: inspector.allTimePeriod.duration
-                              ? inspector.allTimePeriod.duration : ""
-                        color: Theme.textPrimary
-                        font.pixelSize: Theme.fontBody
+                    StyledLabel {
+                        text: inspector.tracking ? qsTr("Tracking") : qsTr("Paused")
+                        textStyle: Theme.captionFont
+                        weight: Theme.weightSemibold
+                        secondary: !inspector.tracking
                     }
                 }
+
+                StyledLabel {
+                    id: sessionLabel
+
+                    anchors.right: parent.right
+                    anchors.verticalCenter: parent.verticalCenter
+                    text: qsTr("Session")
+                    textStyle: Theme.captionFont
+                    secondary: true
+                }
+            }
+
+            Column {
+                StyledLabel {
+                    width: parent.width
+                    text: inspector.text(inspector.sessionPeriod.characters)
+                    textStyle: Theme.heroCountFont
+                    monospacedDigits: true
+                    elide: Text.ElideRight
+                    maximumLineCount: 1
+                }
+
+                StyledLabel {
+                    width: parent.width
+                    text: inspector.countLabel
+                    textStyle: Theme.captionFont
+                    secondary: true
+                }
+            }
+
+            RowLayout {
+                spacing: 0
+
+                MetricLabel {
+                    Layout.fillWidth: true
+                    Layout.preferredWidth: 0
+                    value: inspector.text(inspector.sessionPeriod.speed)
+                    label: qsTr("Reading Speed")
+                }
+
+                Rectangle {
+                    Layout.preferredWidth: Theme.hairlineWidth
+                    Layout.preferredHeight: Theme.metricDividerHeight
+                    color: Theme.separator
+                }
+
+                MetricLabel {
+                    Layout.fillWidth: true
+                    Layout.preferredWidth: 0
+                    Layout.leftMargin: Theme.metricLeading
+                    value: inspector.text(inspector.sessionPeriod.duration)
+                    label: qsTr("Reading Time")
+                }
+            }
+        }
+
+        Column {
+            spacing: Theme.statisticsGroupSpacing
+
+            Item {
+                width: parent.width
+                implicitHeight: Math.max(progressTitle.implicitHeight, percent.implicitHeight)
+
+                SectionTitle {
+                    id: progressTitle
+
+                    anchors.left: parent.left
+                    anchors.right: percent.left
+                    anchors.rightMargin: Theme.spacingSm
+                    text: qsTr("Book Progress")
+                }
+
+                StyledLabel {
+                    id: percent
+
+                    x: parent.width - width
+                    text: inspector.text(inspector.stats.bookPercent)
+                    textStyle: Theme.captionFont
+                    weight: Theme.weightSemibold
+                    monospacedDigits: true
+                }
+            }
+
+            ProgressTrack {
+                width: parent.width
+                value: inspector.stats.bookFraction ? inspector.stats.bookFraction : 0
+            }
+
+            ValueRow {
+                width: parent.width
+                label: qsTr("Time to finish Book")
+                value: inspector.text(inspector.stats.bookRemaining)
+            }
+
+            ValueRow {
+                width: parent.width
+                label: qsTr("Time to finish Chapter")
+                value: inspector.text(inspector.stats.chapterRemaining)
+            }
+        }
+
+        Column {
+            spacing: Theme.statisticsHistorySpacing
+
+            SectionTitle {
+                width: parent.width
+                text: qsTr("History")
+            }
+
+            GridLayout {
+                width: parent.width
+                columns: 4
+                columnSpacing: Theme.tableColumnSpacing
+                rowSpacing: Theme.tableRowSpacing
+
+                Item {
+                    Layout.fillWidth: true
+                }
+
+                Repeater {
+                    model: [inspector.countLabel, qsTr("Reading Speed"), qsTr("Reading Time")]
+
+                    delegate: StyledLabel {
+                        required property string modelData
+
+                        Layout.alignment: Qt.AlignRight
+                        text: modelData
+                        textStyle: Theme.caption2Font
+                        secondary: true
+                        elide: Text.ElideRight
+                    }
+                }
+
+                Rectangle {
+                    Layout.columnSpan: 4
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: Theme.hairlineWidth
+                    color: Theme.separator
+                }
+
+                StyledLabel {
+                    text: qsTr("Today")
+                    textStyle: Theme.calloutFont
+                    weight: Theme.weightMedium
+                }
+                HistoryValue { text: inspector.text(inspector.todayPeriod.characters) }
+                HistoryValue { text: inspector.text(inspector.todayPeriod.speed) }
+                HistoryValue { text: inspector.text(inspector.todayPeriod.duration) }
+                StyledLabel {
+                    text: qsTr("All Time")
+                    textStyle: Theme.calloutFont
+                    weight: Theme.weightMedium
+                }
+                HistoryValue { text: inspector.text(inspector.allTimePeriod.characters) }
+                HistoryValue { text: inspector.text(inspector.allTimePeriod.speed) }
+                HistoryValue { text: inspector.text(inspector.allTimePeriod.duration) }
             }
         }
     }

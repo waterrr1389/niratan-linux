@@ -118,11 +118,11 @@ Item {
         anchors.fill: parent
         spacing: 0
 
-        ReaderInspectorHeader {
+        PanelHeader {
             Layout.fillWidth: true
-            Layout.leftMargin: 12
-            Layout.rightMargin: 12
-            Layout.topMargin: 20
+            Layout.leftMargin: Theme.spacingMd
+            Layout.rightMargin: Theme.spacingMd
+            Layout.topMargin: Theme.galleryHeaderTopInset
             title: qsTr("Gallery")
             subtitle: gallery.imageCount > 0
                       ? qsTr("%1 images").arg(gallery.imageCount) : ""
@@ -133,29 +133,22 @@ Item {
             Layout.fillWidth: true
             Layout.fillHeight: true
 
-            BusyIndicator {
-                anchors.centerIn: parent
-                running: ReaderViewModel.galleryLoading
-                visible: running
+            ListStatus {
+                horizontalInset: Theme.galleryInset
+                busy: ReaderViewModel.galleryLoading
+                visible: busy || gallery.imageCount === 0
+                text: busy ? "" : qsTr("No Images")
+                symbol: "photo.on.rectangle"
             }
 
-            Text {
-                anchors.centerIn: parent
-                visible: !ReaderViewModel.galleryLoading && gallery.imageCount === 0
-                text: qsTr("No Images")
-                color: Theme.textSecondary
-                font.pixelSize: Theme.fontBody
-            }
-
-            ListView {
+            InspectorList {
                 id: sections
                 anchors.fill: parent
-                anchors.leftMargin: 30
-                anchors.rightMargin: 30
-                anchors.bottomMargin: 30
-                clip: true
+                anchors.leftMargin: Theme.galleryInset
+                anchors.rightMargin: Theme.galleryInset
+                anchors.bottomMargin: Theme.galleryInset
                 enabled: !preview.visible
-                spacing: 18
+                spacing: Theme.gallerySectionSpacing
                 visible: !ReaderViewModel.galleryLoading && gallery.imageCount > 0
                 model: {
                     const groups = [];
@@ -173,7 +166,7 @@ Item {
                     return groups;
                 }
                 onContentYChanged: {
-                    const index = sections.indexAt(1, 1);
+                    const index = sections.indexAt(sections.contentX, sections.contentY);
                     if (index >= 0)
                         gallery.stickyIndex = index;
                 }
@@ -182,44 +175,27 @@ Item {
                     id: chapterSection
                     required property var modelData
                     width: ListView.view.width
-                    spacing: 16
+                    spacing: Theme.spacingLg
 
-                    RowLayout {
+                    ListSectionHeader {
                         Layout.fillWidth: true
-                        spacing: 10
-                        Text {
-                            Layout.fillWidth: true
-                            text: chapterSection.modelData.title
-                            color: Theme.textPrimary
-                            font.pixelSize: Theme.fontTitle
-                            font.bold: true
-                            elide: Text.ElideRight
-                        }
-                        Text {
-                            text: chapterSection.modelData.images.length
-                            color: Theme.textSecondary
-                            font.pixelSize: Theme.fontCaption
-                            font.bold: true
-                        }
-                        Rectangle {
-                            Layout.fillWidth: true
-                            height: 1
-                            color: Qt.rgba(Theme.textPrimary.r, Theme.textPrimary.g,
-                                           Theme.textPrimary.b, 0.12)
-                        }
+                        title: chapterSection.modelData.title
+                        countText: String(chapterSection.modelData.images.length)
                     }
 
                     GridView {
                         id: grid
                         Layout.fillWidth: true
                         readonly property int columns: Math.max(1,
-                            Math.floor((width + 16) / (250 + 16)))
-                        readonly property real gap: 16
+                            Math.floor((width + gap) / (Theme.galleryColumnMinimum + gap)))
+                        readonly property real gap: Theme.spacingLg
                         Layout.preferredHeight: Math.ceil(
                             count / columns) * cellHeight
                         cellWidth: (width - (columns - 1) * gap) / columns
-                        cellHeight: Math.max(140, Math.min(360, cellWidth * 0.75))
+                        cellHeight: Math.max(Theme.galleryThumbnailMinHeight,
+                                             Math.min(Theme.galleryThumbnailMaxHeight, cellWidth * 0.75))
                         interactive: false
+                        boundsBehavior: Flickable.StopAtBounds
                         model: chapterSection.modelData.images
 
                         delegate: Item {
@@ -242,9 +218,8 @@ Item {
 
                             Rectangle {
                                 anchors.fill: parent
-                                radius: 10
-                                color: Qt.rgba(Theme.textSecondary.r, Theme.textSecondary.g,
-                                               Theme.textSecondary.b, 0.1)
+                                radius: Theme.galleryThumbnailRadius
+                                color: Theme.galleryThumbnailBackground
                                 clip: true
 
                                 Image {
@@ -254,7 +229,7 @@ Item {
                                     readonly property bool shaderBlur:
                                         GraphicsInfo.api !== GraphicsInfo.Software
                                     anchors.fill: parent
-                                    anchors.margins: 4
+                                    anchors.margins: Theme.spacingXs
                                     // Without a shader the software renderer keeps a
                                     // downsampled image, which still hides the unread art.
                                     sourceSize: unread && !shaderBlur
@@ -271,20 +246,10 @@ Item {
                                 }
                             }
 
-                            Rectangle {
+                            MediaCue {
                                 visible: gallery.isUnread(thumbnail.modelData.image)
                                 anchors.centerIn: parent
-                                width: 48
-                                height: 48
-                                radius: 24
-                                color: Theme.mediaOverlayScrim
-
-                                Icon {
-                                    anchors.centerIn: parent
-                                    name: "eye.slash.fill"
-                                    size: 22
-                                    color: Theme.overlayForeground
-                                }
+                                symbol: "eye.slash.fill"
                             }
 
                             TapHandler {
@@ -301,48 +266,20 @@ Item {
                 anchors.left: parent.left
                 anchors.right: parent.right
                 anchors.top: parent.top
-                height: 34
+                height: pinnedHeader.implicitHeight
                 visible: sections.visible && sections.contentY > 0
                 color: ReaderViewModel.hasBook ? ReaderViewModel.pageBackground
                                                : Theme.windowBackground
 
-                RowLayout {
+                ListSectionHeader {
+                    id: pinnedHeader
+
+                    readonly property var group: sections.model[gallery.stickyIndex]
                     anchors.fill: parent
-                    anchors.leftMargin: 30
-                    anchors.rightMargin: 30
-                    spacing: 10
-                    Text {
-                        Layout.fillWidth: true
-                        text: {
-                            const groups = sections.model;
-                            if (!groups || gallery.stickyIndex < 0
-                                    || gallery.stickyIndex >= groups.length)
-                                return "";
-                            return groups[gallery.stickyIndex].title;
-                        }
-                        color: Theme.textPrimary
-                        font.pixelSize: Theme.fontTitle
-                        font.bold: true
-                        elide: Text.ElideRight
-                    }
-                    Text {
-                        text: {
-                            const groups = sections.model;
-                            if (!groups || gallery.stickyIndex < 0
-                                    || gallery.stickyIndex >= groups.length)
-                                return "";
-                            return groups[gallery.stickyIndex].images.length;
-                        }
-                        color: Theme.textSecondary
-                        font.pixelSize: Theme.fontCaption
-                        font.bold: true
-                    }
-                    Rectangle {
-                        Layout.fillWidth: true
-                        height: 1
-                        color: Qt.rgba(Theme.textPrimary.r, Theme.textPrimary.g,
-                                       Theme.textPrimary.b, 0.12)
-                    }
+                    anchors.leftMargin: Theme.galleryInset
+                    anchors.rightMargin: Theme.galleryInset
+                    title: group ? group.title : ""
+                    countText: group ? String(group.images.length) : ""
                 }
             }
         }
@@ -395,34 +332,24 @@ Item {
 
         // GalleryImagePreview's unread cue: a large-title eye-slash in a circle.
         // It carries no input handling, so a tap reaches the reveal above.
-        Rectangle {
-            id: revealCue
+        MediaCue {
             anchors.centerIn: parent
-            width: 62
-            height: 62
-            radius: 31
-            color: Theme.mediaOverlayScrim
+            large: true
+            symbol: "eye.slash.fill"
             visible: previewImage.unread
             Accessible.role: Accessible.StaticText
             Accessible.name: qsTr("Unread Image")
-
-            Icon {
-                anchors.centerIn: parent
-                name: "eye.slash.fill"
-                size: 30
-                color: Theme.overlayForeground
-            }
         }
 
         IconButton {
             objectName: "galleryPreviewClose"
             anchors.top: parent.top
             anchors.right: parent.right
-            anchors.topMargin: 24
-            anchors.rightMargin: 24
+            anchors.topMargin: Theme.spacingXl
+            anchors.rightMargin: Theme.spacingXl
             icon: "xmark"
-            diameter: 38
-            iconSize: 15
+            diameter: Theme.galleryPreviewCloseDiameter
+            iconSize: Theme.galleryPreviewCloseGlyph
             accessibleName: qsTr("Close")
             ToolTip.visible: hovered
             ToolTip.text: accessibleName
@@ -433,33 +360,33 @@ Item {
             anchors.left: parent.left
             anchors.right: parent.right
             anchors.verticalCenter: parent.verticalCenter
-            anchors.leftMargin: 32
-            anchors.rightMargin: 32
+            anchors.leftMargin: Theme.galleryNavigationInset
+            anchors.rightMargin: Theme.galleryNavigationInset
 
             IconButton {
                 objectName: "galleryPrevious"
                 icon: "chevron.left"
-                diameter: 44
-                iconSize: 17
+                diameter: Theme.galleryNavigationDiameter
+                iconSize: Theme.galleryNavigationGlyph
                 accessibleName: qsTr("Previous")
                 ToolTip.visible: hovered
                 ToolTip.text: accessibleName
                 enabled: gallery.previewIndex > 0
-                opacity: enabled ? 1 : 0.35
+                opacity: enabled ? 1 : Theme.disabledOpacity
                 onClicked: preview.navigate(-1)
             }
             Item { Layout.fillWidth: true }
             IconButton {
                 objectName: "galleryNext"
                 icon: "chevron.right"
-                diameter: 44
-                iconSize: 17
+                diameter: Theme.galleryNavigationDiameter
+                iconSize: Theme.galleryNavigationGlyph
                 accessibleName: qsTr("Next")
                 ToolTip.visible: hovered
                 ToolTip.text: accessibleName
                 enabled: gallery.previewIndex >= 0
                          && gallery.previewIndex < gallery.imageCount - 1
-                opacity: enabled ? 1 : 0.35
+                opacity: enabled ? 1 : Theme.disabledOpacity
                 onClicked: preview.navigate(1)
             }
         }

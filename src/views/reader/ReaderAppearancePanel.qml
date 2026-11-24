@@ -25,7 +25,7 @@ ColumnLayout {
 
     spacing: 0
 
-    ReaderInspectorHeader {
+    PanelHeader {
         Layout.fillWidth: true
         title: qsTr("Appearance")
         onCloseRequested: panel.closeRequested()

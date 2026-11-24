@@ -19,11 +19,15 @@ T.AbstractButton {
     property string glyph
     // The default action of a dialog: accent fill with on-accent text.
     property bool prominent: false
+    // controlSize(.small): caption semibold on a chip-high capsule, as
+    // ReaderGoToView.bookSummary draws Jump to.
+    property bool small: false
 
     implicitWidth: implicitContentWidth + leftPadding + rightPadding
-    implicitHeight: Math.max(Theme.capsuleHeight, implicitContentHeight + topPadding + bottomPadding)
-    leftPadding: Theme.buttonPaddingHorizontal
-    rightPadding: Theme.buttonPaddingHorizontal
+    implicitHeight: Math.max(small ? Theme.chipHeight : Theme.capsuleHeight,
+                             implicitContentHeight + topPadding + bottomPadding)
+    leftPadding: small ? Theme.chipPaddingHorizontal : Theme.buttonPaddingHorizontal
+    rightPadding: small ? Theme.chipPaddingHorizontal : Theme.buttonPaddingHorizontal
     opacity: enabled ? 1 : Theme.buttonDisabledOpacity
     scale: down ? Theme.buttonPressedScale : 1
 
@@ -45,7 +49,7 @@ T.AbstractButton {
                 anchors.verticalCenter: parent.verticalCenter
                 visible: control.glyph !== ""
                 name: control.glyph
-                size: Theme.glyphSize
+                size: control.small ? Theme.chipGlyphSize : Theme.glyphSize
                 color: label.color
             }
 
@@ -53,9 +57,11 @@ T.AbstractButton {
                 id: label
 
                 anchors.verticalCenter: parent.verticalCenter
-                width: Math.min(implicitWidth, control.availableWidth
-                                - (control.glyph !== "" ? Theme.glyphSize + Theme.chipGlyphSpacing : 0))
+                width: Math.max(0, Math.min(implicitWidth, control.availableWidth
+                                - (control.glyph !== "" ? (control.small ? Theme.chipGlyphSize : Theme.glyphSize)
+                                                         + Theme.chipGlyphSpacing : 0)))
                 text: control.text
+                textStyle: control.small ? Theme.captionFont : Theme.bodyFont
                 weight: Theme.weightSemibold
                 color: control.destructive ? Theme.popupDanger
                        : control.prominent ? Theme.textOnAccent : Theme.textPrimary

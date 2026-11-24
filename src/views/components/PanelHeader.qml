@@ -33,6 +33,7 @@ Item {
         spacing: Theme.panelHeaderTitleSpacing
 
         StyledLabel {
+            objectName: "inspectorTitle"
             width: titles.width
             text: header.title
             textStyle: Theme.title3Font
@@ -75,6 +76,7 @@ Item {
         }
 
         IconButton {
+            objectName: "inspectorCloseButton"
             anchors.verticalCenter: parent.verticalCenter
             icon: "xmark"
             diameter: Theme.closeButtonDiameter

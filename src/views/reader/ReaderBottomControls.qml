@@ -2,8 +2,8 @@
 //
 // The reader's bottom overlay, following NativeMac/NativeReaderView.swift
 // `nativeBottomInfoOverlay` and `nativeBottomControls`: the statistics line
-// then the progress when it is shown at the bottom, both centred at 11 px with
-// tabular digits, and a trailing row of 34 px glass icon buttons with 16 px
+// then the progress when it is shown at the bottom, both centred in caption
+// with tabular digits, and a trailing row of 34 px glass icon buttons with 16 px
 // symbols, 8 apart, inset 32 from the trailing edge and 18 from the bottom.
 //
 // The order follows Swift: the tracking toggle, the lookup-aware playback
@@ -41,46 +41,46 @@ Item {
 
         anchors.horizontalCenter: parent.horizontalCenter
         anchors.bottom: parent.bottom
-        anchors.bottomMargin: 18
-        spacing: 2
+        anchors.bottomMargin: Theme.readerToolInsetBottom
+        spacing: Theme.readerInfoLineSpacing
         visible: controls.showsStatistics || controls.showsProgress
 
-        Text {
+        StyledLabel {
             objectName: "readerStatisticsLine"
             visible: controls.showsStatistics
             text: ReaderViewModel.statisticsText
             horizontalAlignment: Text.AlignHCenter
             color: ReaderViewModel.usesCustomInfoColor ? ReaderViewModel.infoColor
                                                        : Theme.textSecondary
-            font.pixelSize: 11
-            font.features: ({ "tnum": 1 })
+            textStyle: Theme.captionFont
+            monospacedDigits: true
         }
 
-        Text {
+        StyledLabel {
             objectName: "readerBottomProgress"
             visible: controls.showsProgress
             text: ReaderViewModel.progressText
             horizontalAlignment: Text.AlignHCenter
             color: ReaderViewModel.usesCustomInfoColor ? ReaderViewModel.infoColor
                                                        : Theme.textSecondary
-            font.pixelSize: 11
-            font.features: ({ "tnum": 1 })
+            textStyle: Theme.captionFont
+            monospacedDigits: true
         }
     }
 
     RowLayout {
         anchors.right: parent.right
-        anchors.rightMargin: 32
+        anchors.rightMargin: Theme.readerToolInsetTrailing
         anchors.bottom: parent.bottom
-        anchors.bottomMargin: 18
-        spacing: 8
+        anchors.bottomMargin: Theme.readerToolInsetBottom
+        spacing: Theme.readerToolSpacing
 
         IconButton {
             objectName: "readerTrackingButton"
             visible: ReaderViewModel.statisticsEnabled && ReaderViewModel.showStatisticsToggle
             icon: ReaderViewModel.tracking ? "timer" : "chart.xyaxis.line"
-            diameter: 34
-            iconSize: 16
+            diameter: Theme.readerToolDiameter
+            iconSize: Theme.readerToolGlyph
             accessibleName: ReaderViewModel.tracking ? qsTr("Pause Tracking")
                                                      : qsTr("Start Tracking")
             onClicked: ReaderViewModel.toggleTracking()
@@ -91,8 +91,8 @@ Item {
             visible: controls.sasayakiEnabled && ReaderViewModel.showSasayakiToggle
                      && controls.player.hasAudio
             icon: controls.player.playing || controls.pausedByLookup ? "pause.fill" : "waveform"
-            diameter: 34
-            iconSize: 16
+            diameter: Theme.readerToolDiameter
+            iconSize: Theme.readerToolGlyph
             accessibleName: controls.player.playing || controls.pausedByLookup
                             ? qsTr("Pause Sasayaki") : qsTr("Play Sasayaki")
             onClicked: controls.sasayakiToggleRequested()
@@ -101,8 +101,8 @@ Item {
         IconButton {
             objectName: "readerGoToButton"
             icon: "list.bullet"
-            diameter: 34
-            iconSize: 16
+            diameter: Theme.readerToolDiameter
+            iconSize: Theme.readerToolGlyph
             accessibleName: qsTr("Go to")
             ToolTip.visible: hovered
             ToolTip.text: accessibleName
@@ -112,8 +112,8 @@ Item {
         IconButton {
             objectName: "readerAppearanceButton"
             icon: "paintpalette"
-            diameter: 34
-            iconSize: 16
+            diameter: Theme.readerToolDiameter
+            iconSize: Theme.readerToolGlyph
             accessibleName: qsTr("Appearance")
             ToolTip.visible: hovered
             ToolTip.text: accessibleName
@@ -124,8 +124,8 @@ Item {
             objectName: "readerStatisticsButton"
             visible: ReaderViewModel.statisticsEnabled
             icon: "chart.bar.xaxis"
-            diameter: 34
-            iconSize: 16
+            diameter: Theme.readerToolDiameter
+            iconSize: Theme.readerToolGlyph
             accessibleName: qsTr("Statistics")
             ToolTip.visible: hovered
             ToolTip.text: accessibleName
@@ -136,8 +136,8 @@ Item {
             objectName: "readerGalleryButton"
             visible: ReaderViewModel.hasBook
             icon: "photo.on.rectangle"
-            diameter: 34
-            iconSize: 16
+            diameter: Theme.readerToolDiameter
+            iconSize: Theme.readerToolGlyph
             accessibleName: qsTr("Gallery")
             ToolTip.visible: hovered
             ToolTip.text: accessibleName
@@ -148,8 +148,8 @@ Item {
             objectName: "readerSasayakiButton"
             visible: controls.sasayakiEnabled && ReaderViewModel.hasBook
             icon: "headphones"
-            diameter: 34
-            iconSize: 16
+            diameter: Theme.readerToolDiameter
+            iconSize: Theme.readerToolGlyph
             accessibleName: qsTr("Sasayaki")
             ToolTip.visible: hovered
             ToolTip.text: accessibleName

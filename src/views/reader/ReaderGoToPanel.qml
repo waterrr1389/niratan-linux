@@ -17,12 +17,12 @@
 // jumps through ReaderViewModel.jumpToDisplayCount and closes the panel.
 //
 // The summary cover is 46x66 with a 6 px radius; the title takes at most two
-// lines and the position uses tabular digits.
+// lines and the position uses tabular digits. Both alerts are kit
+// AlertDialogs; Jump to's default button is Go, as in Swift.
 
 pragma ComponentBehavior: Bound
 
 import QtQuick
-import QtQuick.Controls
 import QtQuick.Layouts
 import Niratan
 
@@ -35,7 +35,7 @@ ColumnLayout {
 
     spacing: 0
 
-    ReaderInspectorHeader {
+    PanelHeader {
         Layout.fillWidth: true
         title: qsTr("Go to")
         onCloseRequested: panel.closeRequested()
@@ -43,48 +43,44 @@ ColumnLayout {
 
     RowLayout {
         Layout.fillWidth: true
-        Layout.leftMargin: 18
-        Layout.rightMargin: 18
-        Layout.bottomMargin: 14
+        Layout.leftMargin: Theme.panelHeaderPaddingHorizontal
+        Layout.rightMargin: Theme.panelHeaderPaddingHorizontal
+        Layout.bottomMargin: Theme.summaryPaddingBottom
         spacing: Theme.spacingMd
 
         Rectangle {
             objectName: "goToCover"
-            implicitWidth: 46
-            implicitHeight: 66
-            radius: 6
-            color: Qt.rgba(Theme.textSecondary.r, Theme.textSecondary.g,
-                           Theme.textSecondary.b, 0.18)
-            clip: true
+            Layout.alignment: Qt.AlignTop
+            implicitWidth: Theme.summaryCoverWidth
+            implicitHeight: Theme.summaryCoverHeight
+            radius: Theme.summaryCoverRadius
+            color: Theme.coverPlaceholder
 
-            Image {
+            RoundedImage {
                 anchors.fill: parent
                 source: ReaderViewModel.coverUrl
                 fillMode: Image.PreserveAspectCrop
-                asynchronous: true
+                radius: Theme.summaryCoverRadius
             }
         }
 
         ColumnLayout {
             Layout.fillWidth: true
-            spacing: 6
+            Layout.alignment: Qt.AlignTop
+            spacing: Theme.summarySpacing
 
-            Text {
+            StyledLabel {
                 objectName: "goToTitle"
                 Layout.fillWidth: true
                 text: ReaderViewModel.title
-                color: Theme.textPrimary
-                font.pixelSize: Theme.fontBody
-                font.bold: true
+                textStyle: Theme.headlineFont
                 wrapMode: Text.Wrap
                 maximumLineCount: 2
                 elide: Text.ElideRight
             }
 
-            ProgressBar {
+            ProgressTrack {
                 Layout.fillWidth: true
-                from: 0
-                to: 1
                 value: ReaderViewModel.progress
             }
 
@@ -92,22 +88,23 @@ ColumnLayout {
                 Layout.fillWidth: true
                 spacing: Theme.spacingSm
 
-                Text {
+                StyledLabel {
                     objectName: "goToPosition"
                     Layout.fillWidth: true
                     text: ReaderViewModel.positionText
-                    color: Theme.textSecondary
-                    font.pixelSize: Theme.fontCaption
-                    font.features: ({ "tnum": 1 })
+                    textStyle: Theme.captionFont
+                    secondary: true
+                    monospacedDigits: true
                     elide: Text.ElideRight
                 }
 
-                Button {
+                FormButton {
                     objectName: "goToJumpButton"
                     text: qsTr("Jump to")
-                    font.pixelSize: Theme.fontCaption
+                    glyph: "arrow.right.to.line"
+                    small: true
                     onClicked: {
-                        jumpDialog.jumpInput = "";
+                        jumpDialog.fieldText = "";
                         jumpDialog.open();
                     }
                 }
@@ -115,10 +112,10 @@ ColumnLayout {
         }
     }
 
-    ReaderInspectorTabBar {
+    UnderlineTabBar {
         id: tabs
         Layout.fillWidth: true
-        Layout.bottomMargin: 10
+        Layout.bottomMargin: Theme.inspectorTabBarPaddingBottom
         tabs: [
             { text: qsTr("Search"), icon: "magnifyingglass" },
             { text: qsTr("Chapters"), icon: "list.bullet" },
@@ -148,58 +145,33 @@ ColumnLayout {
         }
     }
 
-    Dialog {
+    AlertDialog {
         id: jumpDialog
         objectName: "goToJumpDialog"
-        modal: true
-        implicitWidth: 320
         title: qsTr("Jump to")
-        standardButtons: Dialog.Cancel | Dialog.Ok
+        message: ReaderViewModel.positionText
+        acceptText: qsTr("Go")
+        rejectText: qsTr("Cancel")
+        hasField: true
+        fieldName: "goToJumpField"
+        fieldPlaceholder: ReaderViewModel.englishContent
+                          ? qsTr("Word count") : qsTr("Character count")
 
-        property alias jumpInput: jumpField.text
-
-        onOpened: jumpField.text = ""
+        onOpened: jumpDialog.fieldText = ""
         onAccepted: {
-            if (ReaderViewModel.jumpToDisplayCount(jumpField.text))
+            if (ReaderViewModel.jumpToDisplayCount(jumpDialog.fieldText))
                 panel.closeRequested();
             else
                 invalidDialog.open();
         }
-
-        contentItem: ColumnLayout {
-            spacing: Theme.spacingSm
-
-            TextField {
-                id: jumpField
-                objectName: "goToJumpField"
-                Layout.fillWidth: true
-                placeholderText: ReaderViewModel.englishContent
-                                 ? qsTr("Word count") : qsTr("Character count")
-            }
-
-            Text {
-                Layout.fillWidth: true
-                text: ReaderViewModel.positionText
-                color: Theme.textSecondary
-                font.pixelSize: Theme.fontCaption
-            }
-        }
     }
 
-    Dialog {
+    AlertDialog {
         id: invalidDialog
         objectName: "goToInvalidDialog"
-        modal: true
-        implicitWidth: 320
         title: qsTr("Invalid input")
-        standardButtons: Dialog.Ok
-
-        contentItem: Text {
-            text: ReaderViewModel.englishContent
-                  ? qsTr("Please enter a valid word count")
-                  : qsTr("Please enter a valid character count")
-            color: Theme.textPrimary
-            wrapMode: Text.WordWrap
-        }
+        message: ReaderViewModel.englishContent
+                 ? qsTr("Please enter a valid word count")
+                 : qsTr("Please enter a valid character count")
     }
 }

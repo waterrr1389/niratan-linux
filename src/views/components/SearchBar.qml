@@ -22,6 +22,11 @@ Item {
 
     property alias text: field.text
     property alias placeholderText: field.placeholderText
+    // ReaderGoToView.swift searchTab uses a trailing submit button instead.
+    property bool showSubmitButton: false
+    property bool submitEnabled: true
+    property string fieldObjectName: "field"
+    readonly property int verticalInset: showSubmitButton ? Theme.spacingXs : Theme.spacingMd
 
     signal submitted()
 
@@ -30,19 +35,20 @@ Item {
     }
 
     implicitHeight: Math.max(leadingIcon.implicitHeight, field.implicitHeight,
-                             clearButton.implicitHeight) + 2 * 12
+                             showSubmitButton ? submitButton.implicitHeight : clearButton.implicitHeight)
+                             + 2 * verticalInset
 
     GlassCapsule {
         anchors.fill: parent
-        anchors.leftMargin: 20
-        anchors.rightMargin: 20
+        anchors.leftMargin: searchBar.showSubmitButton ? Theme.panelHeaderPaddingHorizontal : 20
+        anchors.rightMargin: anchors.leftMargin
 
         RowLayout {
             anchors.fill: parent
             anchors.leftMargin: 10
             anchors.rightMargin: 10
-            anchors.topMargin: 12
-            anchors.bottomMargin: 12
+            anchors.topMargin: searchBar.verticalInset
+            anchors.bottomMargin: searchBar.verticalInset
             spacing: 10
 
             Icon {
@@ -57,7 +63,7 @@ Item {
             TextField {
                 id: field
 
-                objectName: "field"
+                objectName: searchBar.fieldObjectName
                 Layout.fillWidth: true
                 Layout.alignment: Qt.AlignVCenter
                 background: null
@@ -74,7 +80,8 @@ Item {
 
                 onAccepted: {
                     searchBar.submitted()
-                    focus = false
+                    if (!searchBar.showSubmitButton)
+                        focus = false
                 }
             }
 
@@ -84,7 +91,7 @@ Item {
                 objectName: "clearButton"
                 implicitWidth: 22
                 implicitHeight: 22
-                visible: field.text.length > 0
+                visible: !searchBar.showSubmitButton && field.text.length > 0
                 Layout.alignment: Qt.AlignVCenter
 
                 signal clicked()
@@ -104,6 +111,17 @@ Item {
                     size: 16
                     color: Theme.textSecondary
                 }
+            }
+
+            IconButton {
+                id: submitButton
+
+                visible: searchBar.showSubmitButton
+                enabled: searchBar.submitEnabled
+                icon: "magnifyingglass"
+                diameter: Theme.closeButtonDiameter
+                accessibleName: qsTr("Search")
+                onClicked: searchBar.submitted()
             }
         }
     }

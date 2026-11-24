@@ -7,13 +7,9 @@
 // failure state, No matches, or the grouped results. A result jumps to its
 // character and closes the inspector through jumpRequested.
 //
-// Result rows follow NativeReaderInspectorRowBody: 9 px radius with a primary
-// tint at .06 on hover and .1 while pressed.
-
 pragma ComponentBehavior: Bound
 
 import QtQuick
-import QtQuick.Controls
 import QtQuick.Layouts
 import Niratan
 
@@ -42,39 +38,19 @@ Item {
         anchors.fill: parent
         spacing: 0
 
-        RowLayout {
+        SearchBar {
+            id: searchField
             Layout.fillWidth: true
-            Layout.leftMargin: 18
-            Layout.rightMargin: 18
-            Layout.bottomMargin: 10
-            spacing: Theme.spacingSm
-
-            Icon {
-                name: "magnifyingglass"
-                size: 14
-                color: Theme.textSecondary
-            }
-
-            TextField {
-                id: searchField
-                objectName: "goToSearchField"
-                Layout.fillWidth: true
-                placeholderText: qsTr("Search in this book")
-                onAccepted: root.runSearch()
-                onTextChanged: {
-                    if (!ReaderViewModel.hasSearchableText(text))
-                        root.clearSearch();
-                }
-            }
-
-            IconButton {
-                icon: "magnifyingglass"
-                diameter: 28
-                iconSize: 13
-                accessibleName: qsTr("Search")
-                enabled: ReaderViewModel.hasSearchableText(searchField.text)
-                         && ReaderViewModel.searchState !== 1
-                onClicked: root.runSearch()
+            Layout.bottomMargin: Theme.readerListInset
+            fieldObjectName: "goToSearchField"
+            placeholderText: qsTr("Search in this book")
+            showSubmitButton: true
+            submitEnabled: ReaderViewModel.hasSearchableText(text)
+                           && ReaderViewModel.searchState !== 1
+            onSubmitted: root.runSearch()
+            onTextChanged: {
+                if (!ReaderViewModel.hasSearchableText(text))
+                    root.clearSearch();
             }
         }
 
@@ -82,131 +58,69 @@ Item {
             Layout.fillWidth: true
             Layout.fillHeight: true
 
-            BusyIndicator {
-                anchors.centerIn: parent
-                running: ReaderViewModel.searchState === 1
-                visible: running
+            ListStatus {
+                visible: text.length > 0
+                symbol: "magnifyingglass"
+                busy: ReaderViewModel.searchState === 1
+                text: {
+                    const state = ReaderViewModel.searchState;
+                    if (state === 0 && root.submittedQuery.length === 0)
+                        return qsTr("Enter text to search this book");
+                    if (state === 1)
+                        return qsTr("Searching…");
+                    if (state === 3)
+                        return qsTr("Could not search this book");
+                    if (state === 2 && root.submittedQuery.length > 0
+                            && ReaderViewModel.searchResults.length === 0)
+                        return qsTr("No matches");
+                    return "";
+                }
             }
 
-            Text {
-                anchors.centerIn: parent
-                width: parent.width - 36
-                visible: root.submittedQuery.length === 0 && ReaderViewModel.searchState === 0
-                text: qsTr("Enter text to search this book")
-                color: Theme.textSecondary
-                font.pixelSize: Theme.fontBody
-                horizontalAlignment: Text.AlignHCenter
-                wrapMode: Text.WordWrap
-            }
-
-            Text {
-                anchors.centerIn: parent
-                width: parent.width - 36
-                visible: ReaderViewModel.searchState === 1
-                text: qsTr("Searching…")
-                color: Theme.textSecondary
-                font.pixelSize: Theme.fontBody
-                horizontalAlignment: Text.AlignHCenter
-            }
-
-            Text {
-                anchors.centerIn: parent
-                width: parent.width - 36
-                visible: ReaderViewModel.searchState === 3
-                text: qsTr("Could not search this book")
-                color: Theme.textSecondary
-                font.pixelSize: Theme.fontBody
-                horizontalAlignment: Text.AlignHCenter
-                wrapMode: Text.WordWrap
-            }
-
-            Text {
-                anchors.centerIn: parent
-                width: parent.width - 36
-                visible: root.submittedQuery.length > 0
-                         && ReaderViewModel.searchState === 2
-                         && ReaderViewModel.searchResults.length === 0
-                text: qsTr("No matches")
-                color: Theme.textSecondary
-                font.pixelSize: Theme.fontBody
-                horizontalAlignment: Text.AlignHCenter
-            }
-
-            ListView {
+            InspectorList {
                 anchors.fill: parent
-                anchors.leftMargin: 10
-                anchors.rightMargin: 10
-                anchors.bottomMargin: 14
-                clip: true
+                anchors.leftMargin: Theme.readerListInset
+                anchors.rightMargin: Theme.readerListInset
+                anchors.bottomMargin: Theme.readerListBottomInset
                 visible: ReaderViewModel.searchResults.length > 0
                 model: ReaderViewModel.searchResults
-                spacing: 2
+                spacing: Theme.readerListSpacing
 
-                delegate: Item {
+                delegate: InspectorListRow {
                     id: searchRow
                     required property var modelData
                     width: ListView.view.width
-                    implicitHeight: searchRowContent.implicitHeight + 14
                     objectName: "goToSearchRow"
-
-                    signal clicked()
 
                     onClicked: {
                         ReaderViewModel.jumpToCharacter(searchRow.modelData.character);
                         root.jumpRequested();
                     }
+                    contentItem: ColumnLayout {
+                        spacing: Theme.readerListDetailSpacing
 
-                    Rectangle {
-                        anchors.fill: parent
-                        radius: 9
-                        color: searchMouse.pressed
-                            ? Qt.rgba(Theme.textPrimary.r, Theme.textPrimary.g,
-                                      Theme.textPrimary.b, 0.1)
-                            : searchMouse.containsMouse
-                                ? Qt.rgba(Theme.textPrimary.r, Theme.textPrimary.g,
-                                          Theme.textPrimary.b, 0.06)
-                                : "transparent"
-                    }
-
-                    ColumnLayout {
-                        id: searchRowContent
-                        anchors.left: parent.left
-                        anchors.right: parent.right
-                        anchors.verticalCenter: parent.verticalCenter
-                        anchors.leftMargin: 10
-                        anchors.rightMargin: 10
-                        spacing: 3
-
-                        Text {
+                        StyledLabel {
                             Layout.fillWidth: true
                             textFormat: Text.RichText
                             wrapMode: Text.Wrap
                             maximumLineCount: 3
                             text: searchRow.modelData.before
-                                  + "<span style=\"background-color:"
-                                  + Qt.rgba(Theme.accent.r, Theme.accent.g, Theme.accent.b, 0.22)
+                                  + "<span style=\"background-color:" + Theme.readerSearchMatch
                                   + "\">" + searchRow.modelData.match + "</span>"
                                   + searchRow.modelData.after
-                            color: Theme.textPrimary
-                            font.pixelSize: Theme.fontBody
+                            textStyle: Theme.calloutFont
                         }
 
-                        Text {
+                        StyledLabel {
                             Layout.fillWidth: true
                             text: ReaderViewModel.positionTextAt(searchRow.modelData.character)
-                            color: Theme.textSecondary
-                            font.pixelSize: Theme.fontCaption
-                            font.features: ({ "tnum": 1 })
+                            secondary: true
+                            textStyle: Theme.caption2Font
+                            monospacedDigits: true
                             elide: Text.ElideRight
                         }
                     }
 
-                    MouseArea {
-                        id: searchMouse
-                        anchors.fill: parent
-                        hoverEnabled: true
-                        onClicked: searchRow.clicked()
-                    }
                 }
             }
         }

@@ -294,11 +294,23 @@ qt_add_qml_module(niratan_app
         src/views/components/RoundedImage.qml
         src/views/components/SegmentedPicker.qml
         src/views/components/SourceListRow.qml
+        src/views/components/InspectorList.qml
+        src/views/components/InspectorListRow.qml
+        src/views/components/ListSectionHeader.qml
+        src/views/components/ListStatus.qml
+        src/views/components/MediaCue.qml
         src/views/components/StepperControl.qml
         src/views/components/StyledLabel.qml
         src/views/components/ToggleSwitch.qml
         src/views/components/ToolbarButton.qml
         src/views/components/ToolbarGroup.qml
+        src/views/components/AlertDialog.qml
+        src/views/components/HeroCard.qml
+        src/views/components/MetricLabel.qml
+        src/views/components/ProgressTrack.qml
+        src/views/components/SectionTitle.qml
+        src/views/components/UnderlineTabBar.qml
+        src/views/components/ValueRow.qml
         src/views/dictionary/AnkiMiningToast.qml
         src/views/icons/icon_map.js
         src/views/icons/phosphor/fill/skip-back-fill.svg
@@ -432,8 +444,6 @@ qt_add_qml_module(niratan_app
         src/views/reader/ReaderGoToHighlightsTab.qml
         src/views/reader/ReaderGoToPanel.qml
         src/views/reader/ReaderGoToSearchTab.qml
-        src/views/reader/ReaderInspectorHeader.qml
-        src/views/reader/ReaderInspectorTabBar.qml
         src/views/reader/ReaderSidePanel.qml
         src/views/reader/ReaderTopInfo.qml
         src/views/reader/SasayakiPanel.qml

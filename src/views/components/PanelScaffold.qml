@@ -32,8 +32,12 @@ Item {
     readonly property Item column: columnItem
     readonly property ScrollBar scrollBar: bar
 
-    readonly property real topPadding: compact ? Theme.panelPaddingTop : Theme.formPaddingVertical
-    readonly property real bottomPadding: compact ? Theme.panelPaddingBottom : Theme.formPaddingVertical
+    // A reader side panel overrides these with its own Swift insets.
+    property real topPadding: compact ? Theme.panelPaddingTop : Theme.formPaddingVertical
+    property real bottomPadding: compact ? Theme.panelPaddingBottom : Theme.formPaddingVertical
+    property real horizontalPadding: compact ? Theme.panelPaddingHorizontal
+                                             : Theme.formPaddingHorizontal
+    property real spacing: compact ? Theme.panelSpacing : Theme.formSpacing
     readonly property bool showsHeader: compact && header !== null
 
     function attachHeader() {
@@ -87,12 +91,12 @@ Item {
             id: columnItem
 
             width: scaffold.compact
-                   ? Math.max(0, flick.width - 2 * Theme.panelPaddingHorizontal)
-                   : Math.min(Math.max(0, flick.width - 2 * Theme.formPaddingHorizontal),
+                   ? Math.max(0, flick.width - 2 * scaffold.horizontalPadding)
+                   : Math.min(Math.max(0, flick.width - 2 * scaffold.horizontalPadding),
                               Theme.formMaxContentWidth)
             x: (flick.width - width) / 2
             y: scaffold.topPadding
-            spacing: scaffold.compact ? Theme.panelSpacing : Theme.formSpacing
+            spacing: scaffold.spacing
 
             // Every section fills the column, so none is wider than the
             // viewport and none is skipped for having no width.

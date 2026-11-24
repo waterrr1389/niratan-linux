@@ -276,6 +276,13 @@ QtObject {
     readonly property int dialogWidth: 480
     readonly property int wideDialogWidth: 580
     readonly property int dialogEditorHeight: 240
+    // A SwiftUI .alert: a narrow card, its title, message, field and buttons
+    // stacked with the alert spacing.
+    readonly property int alertWidth: 320
+    readonly property int alertPadding: 20
+    readonly property int alertSpacing: 10
+    readonly property int fieldHeight: 28
+    readonly property int fieldPaddingHorizontal: 8
     // Below this form width the Appearance form's four Furigana segments
     // move under their label.
     readonly property int appearanceWideFormWidth: 520
@@ -317,6 +324,57 @@ QtObject {
     readonly property int inspectorCloseGlyphSize: 11
     readonly property int inspectorTabBarInset: 12
     readonly property int inspectorTabBarPaddingBottom: 10
+    // NativeReaderSidePanel: a 20 px card with a 0.7 px primary hairline at
+    // 16% (dark) or 10% (light).
+    readonly property int readerSidePanelRadius: 20
+    readonly property real readerSidePanelStrokeWidth: 0.7
+    readonly property color readerSidePanelStroke: dark ? "#29FFFFFF" : "#1A000000"
+    // NativeReaderInspectorTabBar: callout labels 7 above a 2 px accent
+    // underline, inset 12, over a divider at 0.6.
+    readonly property int underlineTabSpacing: 7
+    readonly property int underlineTabPaddingTop: 4
+    readonly property int underlineHeight: 2
+    readonly property real underlineDividerOpacity: 0.6
+    // ReaderGoToView.bookSummary: the 46x66 cover with a 6 px radius, its
+    // column 6 apart, 14 above the tab strip.
+    readonly property int summaryCoverWidth: 46
+    readonly property int summaryCoverHeight: 66
+    readonly property int summaryCoverRadius: 6
+    readonly property int summarySpacing: 6
+    readonly property int summaryPaddingBottom: 14
+    readonly property color coverPlaceholder: dark ? "#2EFFFFFF" : "#2E000000"
+    // ProgressView with controlSize(.small).
+    readonly property int progressTrackHeight: 4
+    // ReaderStatisticsContentView: sections 20 apart, the session hero card
+    // padded 16 at radius 16 with an accent wash of 12% while tracking and 6%
+    // paused, its 7 px status dot, the 40 px bold count and the metric pair
+    // split by a 28 px divider with 14 leading.
+    readonly property int statisticsSectionSpacing: 20
+    readonly property int statisticsGroupSpacing: 8
+    readonly property int statisticsHistorySpacing: 6
+    readonly property int heroCardRadius: 16
+    readonly property int heroCardPadding: 16
+    readonly property int heroCardSpacing: 10
+    readonly property real heroCardActiveOpacity: 0.12
+    readonly property real heroCardIdleOpacity: 0.06
+    readonly property int statusDotSize: 7
+    readonly property real statusDotRadius: 3.5
+    readonly property int statusDotSpacing: 6
+    readonly property font heroCountFont: Qt.font({ pixelSize: 40, weight: weightBold })
+    readonly property int metricSpacing: 1
+    readonly property int metricDividerHeight: 28
+    readonly property int metricLeading: 14
+    readonly property int tableColumnSpacing: 12
+    readonly property int tableRowSpacing: 8
+    // NativeReaderView nativeBottomControls and NativeReaderGlassIconButton:
+    // 34 px buttons with 16 px symbols, 8 apart, inset 32 trailing and 18
+    // from the bottom; the info lines 2 apart.
+    readonly property int readerToolDiameter: 34
+    readonly property int readerToolGlyph: 16
+    readonly property int readerToolSpacing: 8
+    readonly property int readerToolInsetTrailing: 32
+    readonly property int readerToolInsetBottom: 18
+    readonly property int readerInfoLineSpacing: 2
     // The reader's top title and progress capsule.
     readonly property int readerInfoCapsulePaddingHorizontal: 16
     readonly property int readerInfoCapsulePaddingVertical: 6
@@ -354,6 +412,38 @@ QtObject {
     readonly property int checkerboardCell: 6
     readonly property color checkerboardLight: "#FFFFFF"
     readonly property color checkerboardDark: "#C8C8C8"
+
+    // Reader lists: ReaderGoToView and NativeReaderInspectorRowBody.
+    readonly property int readerListInset: 10
+    readonly property int readerListBottomInset: 14
+    readonly property int readerListSpacing: 2
+    readonly property int readerListDetailSpacing: 3
+    readonly property int readerListRadius: 9
+    readonly property int readerListRowPadding: 7
+    readonly property int readerChapterIndent: 14
+    readonly property int readerHighlightWidth: 3
+    readonly property color readerRowSelected: Qt.alpha(accent, 0.18)
+    readonly property color readerRowSelectedPress: Qt.alpha(accent, 0.26)
+    readonly property color readerSearchMatch: Qt.alpha(accent, 0.22)
+
+    // Reader gallery: GalleryView.sectionHeader, thumbnail and GalleryImagePreview.
+    readonly property int galleryInset: 30
+    readonly property int galleryHeaderTopInset: 20
+    readonly property int gallerySectionSpacing: 18
+    readonly property int galleryColumnMinimum: 250
+    readonly property int galleryThumbnailMinHeight: 140
+    readonly property int galleryThumbnailMaxHeight: 360
+    readonly property int galleryThumbnailRadius: 10
+    readonly property int galleryThumbnailCueDiameter: 48
+    readonly property int galleryThumbnailCueGlyph: 22
+    readonly property int galleryPreviewCueDiameter: 62
+    readonly property int galleryPreviewCueGlyph: 30
+    readonly property int galleryPreviewCloseDiameter: 38
+    readonly property int galleryPreviewCloseGlyph: 15
+    readonly property int galleryNavigationInset: 32
+    readonly property int galleryNavigationDiameter: 44
+    readonly property int galleryNavigationGlyph: 17
+    readonly property color galleryThumbnailBackground: Qt.alpha(textSecondary, 0.1)
 
     // WCAG relative luminance of an sRGB colour.
     function luminance(colour) {

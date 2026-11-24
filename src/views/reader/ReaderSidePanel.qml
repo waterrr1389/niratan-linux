@@ -22,11 +22,10 @@ Rectangle {
     // Qt.LeftEdge or Qt.RightEdge, for the rounded edge that meets the page.
     property int edge: Qt.LeftEdge
 
-    radius: 20
+    radius: Theme.readerSidePanelRadius
     color: Theme.cardBackground
-    border.width: 0.7
-    border.color: Qt.rgba(Theme.textPrimary.r, Theme.textPrimary.g, Theme.textPrimary.b,
-                          Theme.dark ? 0.16 : 0.10)
+    border.width: Theme.readerSidePanelStrokeWidth
+    border.color: Theme.readerSidePanelStroke
 
     Item {
         id: contentItem
