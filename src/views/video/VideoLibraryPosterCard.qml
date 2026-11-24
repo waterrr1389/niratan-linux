@@ -24,7 +24,7 @@ Item {
     // The page's published file: URL for this item, from the view model's map.
     property string thumbnailUrl: ""
     property bool selected: false
-    property real posterWidth: 160
+    property real posterWidth: Theme.videoPosterDefaultWidth
 
     readonly property string rowID: rowData ? rowData.id : ""
     readonly property string displayTitle: rowData ? rowData.displayTitle : ""
@@ -42,7 +42,8 @@ Item {
     signal thumbnailRequested()
 
     width: posterWidth
-    implicitHeight: artwork.height + 9 + titleText.height + 3 + locationText.height
+    implicitHeight: artwork.height + Theme.videoPosterTitleSpacing + titleText.height
+                    + Theme.videoPosterLineSpacing + locationText.height
 
     Component.onCompleted: {
         if (card.rowID.length > 0)
@@ -107,54 +108,12 @@ Item {
         onTapped: (eventPoint) => card.contextMenuRequested(eventPoint.position)
     }
 
-    Item {
+    MediaThumbnail {
         id: artwork
 
         width: parent.width
-        height: Math.round(width * 9 / 16)
-
-        Item {
-            objectName: "thumbnailPlaceholder"
-
-            // ZStack order: the placeholder stays under the image while the
-            // frame decodes, and the image covers it once loaded.
-            anchors.fill: parent
-
-            Rectangle {
-                anchors.fill: parent
-                radius: 10
-                color: Theme.inactiveSelection
-            }
-
-            Icon {
-                anchors.centerIn: parent
-                name: "film"
-                size: 26
-                color: Theme.textTertiary
-            }
-        }
-
-        // VideoThumbnailImageView.body: scaled to fill the 16:9 artwork and
-        // clipped to its corner, under the scrim and overlays.
-        RoundedImage {
-            objectName: "thumbnailImage"
-
-            anchors.fill: parent
-            visible: card.thumbnailUrl.length > 0
-            source: card.thumbnailUrl
-            fillMode: Image.PreserveAspectCrop
-            radius: 10
-            maskWidth: 10
-            maskColor: Theme.windowBackground
-        }
-
-        Rectangle {
-            anchors.fill: parent
-            radius: 10
-            color: "transparent"
-            border.width: 1
-            border.color: Theme.cardStroke
-        }
+        height: implicitHeight
+        source: card.thumbnailUrl
 
         // The playback scrim keeps the overlay legible on the placeholder;
         // VideoLibraryPosterArtworkView's LinearGradient runs clear to black.
@@ -162,7 +121,7 @@ Item {
             anchors.left: parent.left
             anchors.right: parent.right
             anchors.bottom: parent.bottom
-            height: parent.height * 0.55
+            height: parent.height * Theme.videoPosterScrimShare
             visible: card.hasPlayback
             gradient: Gradient {
                 GradientStop { position: 0.0; color: "transparent" }
@@ -170,132 +129,94 @@ Item {
             }
         }
 
-        Item {
+        MediaCue {
+            objectName: "favoriteStar"
+
             anchors.top: parent.top
             anchors.left: parent.left
-            anchors.margins: 8
-            width: 22
-            height: 22
+            anchors.margins: Theme.videoPosterOverlayInset
+            implicitWidth: Theme.videoFavoriteBadgeDiameter
             visible: card.isFavorite
-
-            Rectangle {
-                anchors.fill: parent
-                radius: width / 2
-                color: Theme.mediaOverlayScrim
-            }
-
-            Icon {
-                objectName: "favoriteStar"
-
-                anchors.centerIn: parent
-                name: "star.fill"
-                size: 10
-                color: Theme.popupWarning
-            }
+            symbol: "star.fill"
+            glyphSize: Theme.videoFavoriteGlyph
+            glyphColor: Theme.popupWarning
         }
 
         Column {
             anchors.left: parent.left
             anchors.right: parent.right
             anchors.bottom: parent.bottom
-            anchors.leftMargin: 9
-            anchors.rightMargin: 9
-            anchors.bottomMargin: 8
-            spacing: 6
+            anchors.margins: Theme.videoPosterOverlayInset
+            spacing: Theme.videoMetaSpacing
             visible: card.hasPlayback
 
             Row {
                 anchors.right: parent.right
-                spacing: 4
+                spacing: Theme.spacingXs
 
                 Icon {
                     visible: card.isFinished
                     anchors.verticalCenter: parent.verticalCenter
                     name: "checkmark"
-                    size: 9
+                    size: Theme.videoPlaybackGlyph
                     color: Theme.overlayForeground
                 }
 
-                Text {
+                StyledLabel {
                     anchors.verticalCenter: parent.verticalCenter
                     text: card.playbackStateText()
                     color: Theme.overlayForeground
-                    font.pixelSize: Theme.fontCaption
-                    font.weight: Font.DemiBold
-                    font.features: { "tnum": 1 }
+                    textStyle: Theme.captionFont
+                    weight: Theme.weightSemibold
+                    monospacedDigits: true
                 }
             }
 
-            Item {
+            ProgressTrack {
                 objectName: "progressTrack"
 
                 readonly property real progress: card.progress
 
                 width: parent.width
-                height: 4
+                height: Theme.videoOverlayTrackHeight
+                onMedia: true
+                value: card.progress
                 visible: card.hasPlayback && !card.isFinished && card.progress > 0
-
-                Rectangle {
-                    anchors.fill: parent
-                    radius: height / 2
-                    color: Theme.overlayForeground
-                    opacity: 0.32
-                }
-
-                Rectangle {
-                    width: parent.width * Math.min(1, Math.max(0, card.progress))
-                    height: parent.height
-                    radius: height / 2
-                    color: Theme.accent
-                }
             }
         }
 
         // The play glyph appears on hover, as VideoLibraryPosterCardView does.
-        Item {
+        MediaCue {
             anchors.centerIn: parent
-            width: 46
-            height: 46
+            implicitWidth: Theme.videoPlayCueDiameter
             visible: hover.hovered
-
-            Rectangle {
-                anchors.fill: parent
-                radius: width / 2
-                color: Theme.mediaOverlayScrim
-            }
-
-            Icon {
-                anchors.centerIn: parent
-                name: "play.fill"
-                size: 18
-                color: Theme.overlayForeground
-            }
+            symbol: "play.fill"
+            glyphSize: Theme.videoPlayCueGlyph
         }
 
         Rectangle {
             anchors.fill: parent
-            anchors.margins: -4
-            radius: 14
+            anchors.margins: -Theme.videoPosterSelectionOutset
+            radius: Theme.videoPosterRadius + Theme.videoPosterSelectionOutset
             color: "transparent"
-            border.width: 2.5
+            border.width: Theme.videoPosterSelectionWidth
             border.color: Theme.accent
             visible: card.selected
         }
     }
 
-    Text {
+    StyledLabel {
         id: titleText
 
         anchors.top: artwork.bottom
-        anchors.topMargin: 9
+        anchors.topMargin: Theme.videoPosterTitleSpacing
         anchors.left: parent.left
         anchors.right: parent.right
-        anchors.leftMargin: 2
-        anchors.rightMargin: 2
+        anchors.leftMargin: Theme.videoPosterTextInset
+        anchors.rightMargin: Theme.videoPosterTextInset
         text: card.displayTitle
-        color: Theme.textPrimary
-        font.pixelSize: 13
-        font.weight: Font.DemiBold
+        textStyle: Theme.calloutFont
+        weight: Theme.weightSemibold
         wrapMode: Text.Wrap
         maximumLineCount: 2
     }
@@ -304,31 +225,31 @@ Item {
         id: locationText
 
         anchors.top: titleText.bottom
-        anchors.topMargin: 3
+        anchors.topMargin: Theme.videoPosterLineSpacing
         anchors.left: parent.left
         anchors.right: parent.right
-        anchors.leftMargin: 2
-        anchors.rightMargin: 2
-        spacing: 5
+        anchors.leftMargin: Theme.videoPosterTextInset
+        anchors.rightMargin: Theme.videoPosterTextInset
+        spacing: Theme.videoMetaSpacing
         clip: true
 
-        Text {
+        StyledLabel {
             text: card.rowData ? card.rowData.parentFolder : ""
-            color: Theme.textSecondary
-            font.pixelSize: Theme.fontCaption
+            textStyle: Theme.captionFont
+            secondary: true
             elide: Text.ElideRight
         }
 
-        Text {
+        StyledLabel {
             text: "\u00b7"
-            color: Theme.textTertiary
-            font.pixelSize: Theme.fontCaption
+            textStyle: Theme.captionFont
+            tertiary: true
         }
 
-        Text {
+        StyledLabel {
             text: card.rowData ? card.sizeText(card.rowData.fileSize) : ""
-            color: Theme.textSecondary
-            font.pixelSize: Theme.fontCaption
+            textStyle: Theme.captionFont
+            secondary: true
         }
     }
 }

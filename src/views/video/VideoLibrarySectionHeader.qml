@@ -29,16 +29,15 @@ Item {
     signal clicked()
     signal deleteCollectionRequested()
 
-    implicitHeight: collapsible ? 28 : 22
+    implicitHeight: collapsible ? Theme.videoSectionHeaderHeight : Theme.videoSectionTitleHeight
 
     // The plain header used by the generated modes.
-    Text {
+    StyledLabel {
         visible: !header.collapsible
         width: parent.width
         text: header.title
-        color: Theme.textPrimary
-        font.pixelSize: Theme.fontTitle
-        font.weight: Font.DemiBold
+        textStyle: Theme.title3Font
+        weight: Theme.weightSemibold
         elide: Text.ElideRight
     }
 
@@ -48,7 +47,7 @@ Item {
         visible: header.collapsible
         anchors.left: parent.left
         anchors.right: actions.visible ? actions.left : parent.right
-        anchors.rightMargin: 8
+        anchors.rightMargin: Theme.spacingSm
         height: parent.height
 
         TapHandler {
@@ -57,58 +56,46 @@ Item {
 
         Row {
             anchors.verticalCenter: parent.verticalCenter
-            spacing: 8
+            spacing: Theme.spacingSm
 
             Icon {
                 anchors.verticalCenter: parent.verticalCenter
                 name: "chevron.right"
-                size: 11
+                size: Theme.videoSectionChevron
                 color: Theme.textTertiary
                 rotation: header.expanded ? 90 : 0
             }
 
-            Text {
+            StyledLabel {
                 anchors.verticalCenter: parent.verticalCenter
                 text: header.title
-                color: Theme.textPrimary
-                font.pixelSize: Theme.fontTitle
-                font.weight: Font.DemiBold
+                textStyle: Theme.title3Font
+                weight: Theme.weightSemibold
                 elide: Text.ElideRight
             }
 
-            Text {
+            StyledLabel {
                 anchors.verticalCenter: parent.verticalCenter
                 text: header.count
-                color: Theme.textSecondary
-                font.pixelSize: Theme.fontCallout
-                font.features: { "tnum": 1 }
+                textStyle: Theme.calloutFont
+                secondary: true
+                monospacedDigits: true
             }
         }
     }
 
-    // VideoLibraryCollectionActionsMenu.
-    Item {
+    // VideoLibraryCollectionActionsMenu: a bare ellipsis glyph button.
+    GlyphButton {
         id: actions
 
         objectName: "collectionActionsButton"
         visible: header.hasCollection
         anchors.right: parent.right
         anchors.verticalCenter: parent.verticalCenter
-        width: 24
-        height: 24
-
-        signal clicked()
-
-        TapHandler {
-            onTapped: actions.clicked()
-        }
-
-        Icon {
-            anchors.centerIn: parent
-            name: "ellipsis"
-            size: 13
-            color: Theme.textSecondary
-        }
+        diameter: Theme.videoSectionActionDiameter
+        glyph: "ellipsis"
+        filled: false
+        Accessible.name: qsTr("Collection Actions")
 
         Menu {
             id: actionsMenu
@@ -120,6 +107,6 @@ Item {
             }
         }
 
-        onClicked: actionsMenu.popup(actions, 0, actions.height + 4)
+        onClicked: actionsMenu.popup(actions, 0, actions.height + Theme.spacingXs)
     }
 }

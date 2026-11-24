@@ -189,4 +189,82 @@ QtObject {
     // The video Inspector's scroll area inset under the tab bar and above the
     // panel's rounded bottom edge.
     readonly property int inspectorScrollInset: 10
+
+    // The video library, following VideoLibraryView.swift: poster cards
+    // (VideoLibraryPosterCardView, VideoLibraryPosterArtworkView) and list
+    // rows (VideoLibraryRowView) share one 16:9 thumbnail and overlay roles.
+    readonly property real videoThumbnailAspect: 16 / 9
+    readonly property int videoPosterDefaultWidth: 160
+    readonly property int videoPosterRadius: 10
+    readonly property int videoPosterOverlayInset: 8
+    readonly property int videoPosterTitleSpacing: 9
+    readonly property int videoPosterLineSpacing: 3
+    readonly property int videoPosterTextInset: 2
+    readonly property int videoPosterSelectionOutset: 4
+    readonly property real videoPosterSelectionWidth: 2.5
+    readonly property real videoPosterScrimShare: 0.55
+    readonly property int videoFavoriteBadgeDiameter: 22
+    readonly property int videoFavoriteGlyph: 10
+    readonly property int videoPlaybackGlyph: 9
+    readonly property int videoPlayCueDiameter: 46
+    readonly property int videoPlayCueGlyph: 18
+    readonly property int videoPlaceholderGlyph: 26
+    readonly property int videoOverlayTrackHeight: 4
+    readonly property real mediaTrackOpacity: 0.32
+    readonly property int videoRowThumbnailWidth: 120
+    readonly property int videoRowThumbnailRadius: 7
+    readonly property int videoRowInset: 6
+    readonly property int videoRowLeading: 12
+    readonly property int videoRowTextSpacing: 14
+    readonly property int videoRowTrailing: 12
+    readonly property int videoRowStateGlyph: 12
+    readonly property int videoRowSelectionRadius: 10
+    readonly property real videoRowSelectionOpacity: 0.16
+    readonly property int videoRowTrackHeight: 3
+    // The width below which a row drops its folder and date.
+    readonly property int videoRowDetailWidth: 520
+    readonly property int videoMetaSpacing: 5
+    // VideoLibraryPosterGridView: the gap between cards and rows, and how far
+    // a card may grow past the chosen width to fill a row.
+    readonly property int videoPosterSpacing: 20
+    readonly property real videoPosterGrowth: 1.5
+    readonly property int videoListSideInset: 10
+    // VideoLibraryContentHeader: 14 above, a 22 line and 10 below.
+    readonly property int videoContentHeaderHeight: 46
+    // ContentUnavailableView's glyph and the width its text wraps at.
+    readonly property int unavailableGlyph: 40
+    readonly property int unavailableWidth: 360
+    // VideoLibraryCollapsibleSectionHeader: its height, the plain header's,
+    // the disclosure chevron and the collection actions button.
+    readonly property int videoSectionHeaderHeight: 28
+    readonly property int videoSectionTitleHeight: 22
+    readonly property int videoSectionChevron: 11
+    readonly property int videoSectionActionDiameter: 24
+
+    // A sidebar column of source lists (the bookshelf and video library):
+    // its title in the toolbar band, list insets and section captions.
+    readonly property int sourceListToolbarHeight: 52
+    readonly property int sourceListTitleInset: 16
+    readonly property int sourceListTitleTrailing: 12
+    readonly property int sourceListInset: 6
+    readonly property int sourceListRowSpacing: 2
+    readonly property int sourceListSectionGap: 14
+
+    // LibraryCoverSizeButton's popover and the library toolbar it hangs from.
+    readonly property int coverSizeSpacing: 10
+    readonly property int coverSizeSmallGlyph: 11
+    readonly property int coverSizeLargeGlyph: 17
+    readonly property int coverSizeSliderWidth: 180
+    readonly property int coverSizeMinimum: 110
+    readonly property int coverSizeMaximum: 240
+    readonly property int coverSizeStep: 10
+    readonly property int popoverRadius: 10
+    // The dimming behind an in-page alert.
+    readonly property real alertScrimOpacity: 0.7
+    readonly property int popoverPadding: 16
+    readonly property int popoverOffset: 6
+    readonly property int libraryToolbarInset: 12
+    readonly property int librarySearchMinimumWidth: 140
+    readonly property int librarySearchMaximumWidth: 260
+    readonly property real librarySearchShare: 0.32
 }

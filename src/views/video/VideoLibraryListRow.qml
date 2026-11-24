@@ -43,7 +43,7 @@ Item {
     // VideoThumbnailImageView.task(id:): a created row asks once.
     signal thumbnailRequested()
 
-    implicitHeight: Math.max(artwork.height, textColumn.implicitHeight) + 6
+    implicitHeight: Math.max(artwork.height, textColumn.implicitHeight) + Theme.videoRowInset
 
     Component.onCompleted: {
         if (row.rowID.length > 0)
@@ -113,11 +113,11 @@ Item {
 
     Rectangle {
         anchors.fill: parent
-        anchors.leftMargin: 6
-        anchors.rightMargin: 6
-        radius: 10
-        color: row.selected ? Theme.accent : "transparent"
-        opacity: row.selected ? 0.16 : 0
+        anchors.leftMargin: Theme.videoRowInset
+        anchors.rightMargin: Theme.videoRowInset
+        radius: Theme.videoRowSelectionRadius
+        color: Theme.accent
+        opacity: row.selected ? Theme.videoRowSelectionOpacity : 0
     }
 
     TapHandler {
@@ -129,58 +129,17 @@ Item {
         onTapped: (eventPoint) => row.contextMenuRequested(eventPoint.position)
     }
 
-    Item {
+    MediaThumbnail {
         id: artwork
 
-        x: 12
+        x: Theme.videoRowLeading
         anchors.verticalCenter: parent.verticalCenter
-        width: 120
-        height: 67.5
+        width: Theme.videoRowThumbnailWidth
+        height: implicitHeight
+        radius: Theme.videoRowThumbnailRadius
+        source: row.thumbnailUrl
 
-        Item {
-            objectName: "thumbnailPlaceholder"
-
-            // ZStack order: the placeholder stays under the image while the
-            // frame decodes, and the image covers it once loaded.
-            anchors.fill: parent
-
-            Rectangle {
-                anchors.fill: parent
-                radius: 7
-                color: Theme.inactiveSelection
-            }
-
-            Icon {
-                anchors.centerIn: parent
-                name: "film"
-                size: 26
-                color: Theme.textTertiary
-            }
-        }
-
-        // VideoThumbnailImageView.body: scaled to fill the 16:9 artwork and
-        // clipped to its corner; the placeholder stays behind it.
-        RoundedImage {
-            objectName: "thumbnailImage"
-
-            anchors.fill: parent
-            visible: row.thumbnailUrl.length > 0
-            source: row.thumbnailUrl
-            fillMode: Image.PreserveAspectCrop
-            radius: 7
-            maskWidth: 7
-            maskColor: Theme.windowBackground
-        }
-
-        Rectangle {
-            anchors.fill: parent
-            radius: 7
-            color: "transparent"
-            border.width: 1
-            border.color: Theme.cardStroke
-        }
-
-        Item {
+        ProgressTrack {
             objectName: "progressTrack"
 
             readonly property real progress: row.progress
@@ -188,22 +147,10 @@ Item {
             anchors.left: parent.left
             anchors.right: parent.right
             anchors.bottom: parent.bottom
-            anchors.margins: 6
-            height: 3
+            anchors.margins: Theme.videoRowInset
+            height: Theme.videoRowTrackHeight
+            value: row.progress
             visible: row.hasPlayback && !row.isFinished && row.progress > 0
-
-            Rectangle {
-                anchors.fill: parent
-                radius: height / 2
-                color: Theme.shelfProgressTrack
-            }
-
-            Rectangle {
-                width: parent.width * Math.min(1, Math.max(0, row.progress))
-                height: parent.height
-                radius: height / 2
-                color: Theme.accent
-            }
         }
     }
 
@@ -211,32 +158,33 @@ Item {
         id: textColumn
 
         anchors.left: artwork.right
-        anchors.leftMargin: 14
+        anchors.leftMargin: Theme.videoRowTextSpacing
         anchors.right: stateText.left
-        anchors.rightMargin: 12
+        anchors.rightMargin: Theme.videoRowTrailing
         anchors.verticalCenter: parent.verticalCenter
-        spacing: 4
+        spacing: Theme.spacingXs
 
         Row {
             width: parent.width
-            spacing: 5
+            spacing: Theme.videoMetaSpacing
 
             Icon {
+                id: favoriteStar
+
                 objectName: "favoriteStar"
 
                 visible: row.isFavorite
                 anchors.verticalCenter: parent.verticalCenter
                 name: "star.fill"
-                size: 10
+                size: Theme.videoFavoriteGlyph
                 color: Theme.popupWarning
             }
 
-            Text {
-                width: parent.width - (row.isFavorite ? 15 : 0)
+            StyledLabel {
+                width: parent.width - (row.isFavorite ? favoriteStar.width + parent.spacing : 0)
                 text: row.displayTitle
-                color: Theme.textPrimary
-                font.pixelSize: Theme.fontBody
-                font.weight: Font.Medium
+                textStyle: Theme.calloutFont
+                weight: Theme.weightMedium
                 elide: Text.ElideMiddle
             }
         }
@@ -245,57 +193,51 @@ Item {
         // folder and date drop first when the row is narrow.
         Row {
             width: parent.width
-            spacing: 5
+            spacing: Theme.videoMetaSpacing
             clip: true
 
-            Text {
+            StyledLabel {
                 text: row.rowData ? row.rowData.sourceName : ""
-                color: Theme.textSecondary
-                font.pixelSize: Theme.fontCaption
+                textStyle: Theme.captionFont
+                secondary: true
                 elide: Text.ElideRight
             }
-
-            Text {
-                visible: row.width >= 520 && row.rowData
+            StyledLabel {
+                visible: row.width >= Theme.videoRowDetailWidth && row.rowData
                          && row.rowData.parentFolder.length > 0
                 text: "\u00b7"
-                color: Theme.textTertiary
-                font.pixelSize: Theme.fontCaption
+                textStyle: Theme.captionFont
+                tertiary: true
             }
-
-            Text {
-                visible: row.width >= 520 && row.rowData
+            StyledLabel {
+                visible: row.width >= Theme.videoRowDetailWidth && row.rowData
                          && row.rowData.parentFolder.length > 0
                 text: row.rowData ? row.rowData.parentFolder : ""
-                color: Theme.textSecondary
-                font.pixelSize: Theme.fontCaption
+                textStyle: Theme.captionFont
+                secondary: true
                 elide: Text.ElideRight
             }
-
-            Text {
+            StyledLabel {
                 text: "\u00b7"
-                color: Theme.textTertiary
-                font.pixelSize: Theme.fontCaption
+                textStyle: Theme.captionFont
+                tertiary: true
             }
-
-            Text {
+            StyledLabel {
                 text: row.rowData ? row.sizeText(row.rowData.fileSize) : ""
-                color: Theme.textSecondary
-                font.pixelSize: Theme.fontCaption
+                textStyle: Theme.captionFont
+                secondary: true
             }
-
-            Text {
-                visible: row.width >= 520 && row.modifiedText().length > 0
+            StyledLabel {
+                visible: row.width >= Theme.videoRowDetailWidth && row.modifiedText().length > 0
                 text: "\u00b7"
-                color: Theme.textTertiary
-                font.pixelSize: Theme.fontCaption
+                textStyle: Theme.captionFont
+                tertiary: true
             }
-
-            Text {
-                visible: row.width >= 520 && row.modifiedText().length > 0
+            StyledLabel {
+                visible: row.width >= Theme.videoRowDetailWidth && row.modifiedText().length > 0
                 text: row.modifiedText()
-                color: Theme.textSecondary
-                font.pixelSize: Theme.fontCaption
+                textStyle: Theme.captionFont
+                secondary: true
             }
         }
     }
@@ -304,24 +246,24 @@ Item {
         id: stateText
 
         anchors.right: parent.right
-        anchors.rightMargin: 12
+        anchors.rightMargin: Theme.videoRowTrailing
         anchors.verticalCenter: parent.verticalCenter
-        spacing: 4
+        spacing: Theme.spacingXs
 
         Icon {
             visible: row.hasPlayback && row.isFinished
             anchors.verticalCenter: parent.verticalCenter
             name: "checkmark.circle.fill"
-            size: 12
+            size: Theme.videoRowStateGlyph
             color: Theme.textSecondary
         }
 
-        Text {
+        StyledLabel {
             text: row.playbackStateText()
             color: row.isFinished ? Theme.textSecondary : Theme.accent
-            font.pixelSize: Theme.fontCaption
-            font.weight: Font.Medium
-            font.features: { "tnum": 1 }
+            textStyle: Theme.captionFont
+            weight: Theme.weightMedium
+            monospacedDigits: true
         }
     }
 }

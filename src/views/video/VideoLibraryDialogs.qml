@@ -66,7 +66,7 @@ Item {
         Rectangle {
             anchors.fill: parent
             color: Theme.windowBackground
-            opacity: 0.7
+            opacity: Theme.alertScrimOpacity
         }
 
         // Swallows clicks that would otherwise reach the library behind the
@@ -75,45 +75,15 @@ Item {
             anchors.fill: parent
         }
 
-        Rectangle {
-            anchors.centerIn: parent
-            width: Math.min(400, dialogs.width - 32)
-            height: Math.max(120, messageLabel.implicitHeight + 108)
-            radius: Theme.cardRadius
-            color: Theme.cardBackground
-            border.width: 1
-            border.color: Theme.cardStroke
+        AlertCard {
+            title: errorDialog.title
+            message: dialogs.model ? dialogs.model.errorMessage : ""
 
-            Text {
-                id: errorTitle
-
-                x: 20
-                y: 18
-                text: errorDialog.title
-                color: Theme.textPrimary
-                font.pixelSize: Theme.fontTitle2
-                font.weight: Font.DemiBold
-            }
-
-            Text {
-                id: messageLabel
-
-                x: 20
-                y: errorTitle.y + errorTitle.height + 10
-                width: parent.width - 40
-                text: dialogs.model ? dialogs.model.errorMessage : ""
-                textFormat: Text.PlainText
-                wrapMode: Text.Wrap
-                color: Theme.textSecondary
-                font.pixelSize: Theme.fontBody
-            }
-
-            Button {
+            FormButton {
                 objectName: "errorDialogOk"
-                anchors.right: parent.right
-                anchors.bottom: parent.bottom
-                anchors.margins: 16
                 text: qsTr("OK")
+                prominent: true
+                sizeToLabel: true
                 onClicked: errorDialog.accept()
             }
         }
@@ -147,7 +117,7 @@ Item {
         Rectangle {
             anchors.fill: parent
             color: Theme.windowBackground
-            opacity: 0.7
+            opacity: Theme.alertScrimOpacity
         }
 
         // Swallows clicks that would otherwise reach the library behind the
@@ -156,57 +126,23 @@ Item {
             anchors.fill: parent
         }
 
-        Rectangle {
-            anchors.centerIn: parent
-            width: Math.min(400, dialogs.width - 32)
-            height: Math.max(150, deleteMessage.implicitHeight + 118)
-            radius: Theme.cardRadius
-            color: Theme.cardBackground
-            border.width: 1
-            border.color: Theme.cardStroke
+        AlertCard {
+            title: deleteCollectionDialog.title
+            message: qsTr("This removes the collection but keeps its videos in your library.")
 
-            Text {
-                id: deleteTitle
-
-                x: 20
-                y: 18
-                text: deleteCollectionDialog.title
-                color: Theme.textPrimary
-                font.pixelSize: Theme.fontTitle2
-                font.weight: Font.DemiBold
+            FormButton {
+                objectName: "cancelDeleteCollection"
+                text: qsTr("Cancel")
+                sizeToLabel: true
+                onClicked: deleteCollectionDialog.reject()
             }
 
-            Text {
-                id: deleteMessage
-
-                x: 20
-                y: deleteTitle.y + deleteTitle.height + 10
-                width: parent.width - 40
-                text: qsTr("This removes the collection but keeps its videos in your library.")
-                textFormat: Text.PlainText
-                wrapMode: Text.Wrap
-                color: Theme.textSecondary
-                font.pixelSize: Theme.fontBody
-            }
-
-            Row {
-                anchors.right: parent.right
-                anchors.bottom: parent.bottom
-                anchors.margins: 16
-                spacing: 8
-
-                Button {
-                    objectName: "cancelDeleteCollection"
-                    text: qsTr("Cancel")
-                    onClicked: deleteCollectionDialog.reject()
-                }
-
-                Button {
-                    objectName: "confirmDeleteCollection"
-                    text: qsTr("Delete Collection")
-                    highlighted: true
-                    onClicked: deleteCollectionDialog.accept()
-                }
+            FormButton {
+                objectName: "confirmDeleteCollection"
+                text: qsTr("Delete Collection")
+                destructive: true
+                sizeToLabel: true
+                onClicked: deleteCollectionDialog.accept()
             }
         }
 
@@ -221,5 +157,54 @@ Item {
         acceptLabel: qsTr("Add")
 
         onAccepted: dialogs.foldersChosen([selectedFolder])
+    }
+
+    // The alert card, laid out as the kit's AlertDialog: a headline title,
+    // the secondary message and the trailing buttons given as children.
+    component AlertCard: Rectangle {
+        id: alertCard
+
+        property string title
+        property string message
+        default property alias buttons: buttonRow.data
+
+        anchors.centerIn: parent
+        width: Math.min(Theme.alertWidth, parent.width - 2 * Theme.spacingLg)
+        height: alertColumn.implicitHeight + 2 * Theme.alertPadding
+        radius: Theme.cardRadius
+        color: Theme.cardBackground
+        border.width: Theme.hairlineWidth
+        border.color: Theme.cardStroke
+
+        Column {
+            id: alertColumn
+
+            anchors.fill: parent
+            anchors.margins: Theme.alertPadding
+            spacing: Theme.alertSpacing
+
+            StyledLabel {
+                width: parent.width
+                text: alertCard.title
+                textStyle: Theme.headlineFont
+                wrapMode: Text.Wrap
+            }
+
+            StyledLabel {
+                width: parent.width
+                text: alertCard.message
+                textFormat: Text.PlainText
+                textStyle: Theme.footnoteFont
+                secondary: true
+                wrapMode: Text.Wrap
+            }
+
+            Row {
+                id: buttonRow
+
+                anchors.right: parent.right
+                spacing: Theme.capsuleSpacing
+            }
+        }
     }
 }

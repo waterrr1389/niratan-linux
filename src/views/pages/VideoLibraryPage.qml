@@ -52,7 +52,7 @@ Item {
     signal videoOpened(url videoUrl, url subtitleUrl, bool fromBeginning)
 
     property real toolbarInset: 0
-    readonly property int toolbarHeight: 52
+    readonly property int toolbarHeight: Theme.sourceListToolbarHeight
 
     // Set by the shell; the page refreshes its history when the Video window
     // closes, keeping the section's mode, sort and selection.
@@ -190,7 +190,7 @@ Item {
 
     Rectangle {
         x: sidebar.width
-        width: page.showsLibrarySidebar ? 1 : 0
+        width: page.showsLibrarySidebar ? Theme.hairlineWidth : 0
         height: parent.height
         color: Theme.separator
     }
@@ -198,7 +198,7 @@ Item {
     Item {
         id: detail
 
-        x: sidebar.width + (page.showsLibrarySidebar ? 1 : 0)
+        x: sidebar.width + (page.showsLibrarySidebar ? Theme.hairlineWidth : 0)
         width: page.width - x
         height: page.height
 
@@ -220,40 +220,39 @@ Item {
             anchors.top: toolbar.bottom
             anchors.left: parent.left
             anchors.right: parent.right
-            height: 14 + 22 + 10
+            height: Theme.videoContentHeaderHeight
             visible: video.hasSources
 
             Row {
-                x: 16
+                x: Theme.spacingLg
                 anchors.verticalCenter: parent.verticalCenter
-                spacing: 8
+                spacing: Theme.spacingSm
 
-                Text {
+                StyledLabel {
                     id: headerTitle
 
                     anchors.baseline: headerCount.baseline
                     text: page.modeTitle
-                    color: Theme.textPrimary
-                    font.pixelSize: Theme.fontTitle2
-                    font.weight: Font.DemiBold
+                    textStyle: Theme.title2Font
+                    weight: Theme.weightSemibold
                     elide: Text.ElideRight
                 }
 
-                Text {
+                StyledLabel {
                     id: headerCount
 
                     objectName: "headerCount"
                     text: page.sectionCount
-                    color: Theme.textSecondary
-                    font.pixelSize: Theme.fontTitle
-                    font.features: { "tnum": 1 }
+                    textStyle: Theme.title3Font
+                    secondary: true
+                    monospacedDigits: true
                 }
 
                 Icon {
                     visible: !page.showsLibrarySidebar
                     anchors.verticalCenter: parent.verticalCenter
                     name: "chevron.down"
-                    size: 10
+                    size: Theme.videoSectionChevron
                     color: Theme.textSecondary
                 }
             }
@@ -371,17 +370,16 @@ Item {
 
             Column {
                 anchors.centerIn: parent
-                spacing: 12
+                spacing: Theme.spacingMd
 
                 BusyIndicator {
                     anchors.horizontalCenter: parent.horizontalCenter
                     running: scanningOverlay.visible
                 }
 
-                Text {
+                StyledLabel {
                     text: qsTr("Scanning Video Folders...")
-                    color: Theme.textPrimary
-                    font.pixelSize: Theme.fontBody
+                    textStyle: Theme.bodyFont
                 }
             }
         }

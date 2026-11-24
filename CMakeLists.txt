@@ -280,6 +280,7 @@ qt_add_qml_module(niratan_app
     QML_FILES
         src/views/MainWindow.qml
         src/views/components/ColorWell.qml
+        src/views/components/CoverSizeSlider.qml
         src/views/components/FormButton.qml
         src/views/components/FormButtonRow.qml
         src/views/components/FormColorRow.qml
@@ -314,12 +315,15 @@ qt_add_qml_module(niratan_app
         src/views/components/SearchBar.qml
         src/views/components/RoundedImage.qml
         src/views/components/SegmentedPicker.qml
+        src/views/components/SourceListCaption.qml
         src/views/components/SourceListRow.qml
+        src/views/components/SourceListTitle.qml
         src/views/components/InspectorList.qml
         src/views/components/InspectorListRow.qml
         src/views/components/ListSectionHeader.qml
         src/views/components/ListStatus.qml
         src/views/components/MediaCue.qml
+        src/views/components/MediaThumbnail.qml
         src/views/components/StepperControl.qml
         src/views/components/StyledLabel.qml
         src/views/components/ToggleSwitch.qml
@@ -330,6 +334,7 @@ qt_add_qml_module(niratan_app
         src/views/components/MetricLabel.qml
         src/views/components/ProgressTrack.qml
         src/views/components/SectionTitle.qml
+        src/views/components/UnavailableView.qml
         src/views/components/UnderlineTabBar.qml
         src/views/components/ValueRow.qml
         src/views/dictionary/AnkiMiningToast.qml

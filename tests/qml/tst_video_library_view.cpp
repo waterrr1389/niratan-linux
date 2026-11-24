@@ -1203,8 +1203,8 @@ void VideoLibraryViewTest::delete_collection_asks_then_removes_only_the_collecti
     QQuickItem* confirm = shown_item_named(page, QStringLiteral("confirmDeleteCollection"));
     QVERIFY2(confirm != nullptr, "the confirmation has no destructive button");
     QCOMPARE(confirm->property("text").toString(), QStringLiteral("Delete Collection"));
-    QVERIFY2(shown_control(window.contentItem(), "QQuickButton", QStringLiteral("Cancel")) !=
-                 nullptr,
+    QVERIFY2(shown_control(window.contentItem(), "QQuickAbstractButton",
+                           QStringLiteral("Cancel")) != nullptr,
              "the confirmation has no Cancel button");
     click(confirm);
 

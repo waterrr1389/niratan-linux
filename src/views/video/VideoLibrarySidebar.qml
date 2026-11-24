@@ -25,7 +25,7 @@ Rectangle {
 
     property var model
     property real toolbarInset: 0
-    readonly property int toolbarHeight: 52
+    readonly property int toolbarHeight: Theme.sourceListToolbarHeight
     readonly property var counts: model ? model.modeCounts : ({})
 
     // VideoLibraryDisplayMode.libraryModes, .organizationModes and
@@ -48,16 +48,9 @@ Rectangle {
     color: Theme.columnBackground
     activeFocusOnTab: true
 
-    Text {
-        x: 16 + sidebar.toolbarInset
-        width: sidebar.width - x - 12
-        height: sidebar.toolbarHeight
-        verticalAlignment: Text.AlignVCenter
+    SourceListTitle {
+        leadingInset: sidebar.toolbarInset
         text: qsTr("Video Library")
-        color: Theme.textPrimary
-        font.pixelSize: Theme.fontTitle
-        font.weight: Font.Bold
-        elide: Text.ElideRight
     }
 
     Flickable {
@@ -67,7 +60,7 @@ Rectangle {
         anchors.topMargin: sidebar.toolbarHeight
         anchors.bottom: parent.bottom
         width: parent.width
-        contentHeight: rows.implicitHeight + 8
+        contentHeight: rows.implicitHeight + Theme.spacingSm
         clip: true
         boundsBehavior: Flickable.StopAtBounds
 
@@ -76,18 +69,13 @@ Rectangle {
         Column {
             id: rows
 
-            x: 6
-            width: list.width - 12
-            spacing: 2
+            x: Theme.sourceListInset
+            width: list.width - 2 * Theme.sourceListInset
+            spacing: Theme.sourceListRowSpacing
 
-            Text {
-                leftPadding: 6
-                topPadding: 6
-                bottomPadding: 2
+            SourceListCaption {
+                first: true
                 text: qsTr("Library")
-                color: Theme.textSecondary
-                font.pixelSize: Theme.fontSubheadline
-                font.weight: Font.DemiBold
             }
 
             Repeater {
@@ -126,14 +114,9 @@ Rectangle {
                 onClicked: sidebar.model.displayMode = "missing"
             }
 
-            Text {
-                leftPadding: 6
-                topPadding: 14
-                bottomPadding: 4
+            SourceListCaption {
+                first: false
                 text: qsTr("Organization")
-                color: Theme.textSecondary
-                font.pixelSize: Theme.fontSubheadline
-                font.weight: Font.DemiBold
             }
 
             Repeater {

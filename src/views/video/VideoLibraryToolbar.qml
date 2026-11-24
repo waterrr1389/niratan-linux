@@ -38,9 +38,11 @@ Item {
         id: searchBar
 
         objectName: "searchBar"
-        x: 12 + toolbar.toolbarInset
+        x: Theme.libraryToolbarInset + toolbar.toolbarInset
         y: Theme.spacingSm
-        width: Math.min(260, Math.max(140, toolbar.width * 0.32))
+        width: Math.min(Theme.librarySearchMaximumWidth,
+                       Math.max(Theme.librarySearchMinimumWidth,
+                                toolbar.width * Theme.librarySearchShare))
         placeholderText: qsTr("Search Videos")
         text: toolbar.model ? toolbar.model.searchText : ""
         onTextChanged: {
@@ -51,7 +53,7 @@ Item {
 
     ToolbarGroup {
         anchors.right: parent.right
-        anchors.rightMargin: 12
+        anchors.rightMargin: Theme.libraryToolbarInset
         anchors.verticalCenter: searchBar.verticalCenter
 
         ToolbarButton {
@@ -147,8 +149,7 @@ Item {
         }
     }
 
-    // LibraryCoverSizeButton's popover: small and large photo glyphs around a
-    // 180 px slider from 110 to 240 in steps of 10. It is an in-tree panel so
+    // LibraryCoverSizeButton's popover, the kit's CoverSizeSlider. It is an in-tree panel so
     // the page's test can reach the slider; the button toggles it and changing
     // the layout closes it.
     Rectangle {
@@ -156,48 +157,26 @@ Item {
 
         parent: toolbar
         visible: false
-        width: coverSizeRow.implicitWidth + 32
-        height: coverSizeRow.implicitHeight + 32
-        x: Math.max(8, Math.min(toolbar.width - width - 8,
+        width: coverSizeRow.implicitWidth + 2 * Theme.popoverPadding
+        height: coverSizeRow.implicitHeight + 2 * Theme.popoverPadding
+        x: Math.max(Theme.spacingSm, Math.min(toolbar.width - width - Theme.spacingSm,
                                 coverSizeButton.mapToItem(toolbar, 0, 0).x
                                 + coverSizeButton.width - width))
-        y: toolbar.height + 6
-        radius: 10
+        y: toolbar.height + Theme.popoverOffset
+        radius: Theme.popoverRadius
         color: Theme.floatingBackground
-        border.width: 1
+        border.width: Theme.hairlineWidth
         border.color: Theme.floatingStroke
 
-        Row {
+        CoverSizeSlider {
             id: coverSizeRow
 
             anchors.centerIn: parent
-            spacing: 10
-
-            Icon {
-                anchors.verticalCenter: parent.verticalCenter
-                name: "photo"
-                size: 11
-                color: Theme.textSecondary
-            }
-
-            Slider {
-                id: coverSizeSlider
-
-                objectName: "coverSizeSlider"
-                width: 180
-                anchors.verticalCenter: parent.verticalCenter
-                from: 110
-                to: 240
-                stepSize: 10
-                value: toolbar.model ? toolbar.model.posterSize : 160
-                onMoved: if (toolbar.model) toolbar.model.posterSize = Math.round(value)
-            }
-
-            Icon {
-                anchors.verticalCenter: parent.verticalCenter
-                name: "photo"
-                size: 17
-                color: Theme.textSecondary
+            sliderObjectName: "coverSizeSlider"
+            value: toolbar.model ? toolbar.model.posterSize : Theme.videoPosterDefaultWidth
+            onMoved: function (value) {
+                if (toolbar.model)
+                    toolbar.model.posterSize = value
             }
         }
     }

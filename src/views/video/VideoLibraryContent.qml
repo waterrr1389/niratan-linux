@@ -132,36 +132,33 @@ Item {
     }
 
     // No sources: ContentUnavailableView with the folder action.
-    Column {
+    UnavailableView {
         id: noSources
 
         anchors.centerIn: parent
-        width: parent.width - 32
+        width: Math.min(Theme.unavailableWidth, content.width - 2 * Theme.spacingXl)
         visible: content.model !== null && !content.model.hasSources
-        spacing: 8
+        symbol: "film.stack"
+        title: qsTr("No Video Folders")
+        message: qsTr("Add a local folder to build your video bookshelf.")
 
-        EmptyMessage {
-            width: parent.width
-            symbol: "film.stack"
-            title: qsTr("No Video Folders")
-            message: qsTr("Add a local folder to build your video bookshelf.")
-        }
-
-        Button {
+        FormButton {
             id: addFolderButton
 
             objectName: "emptyAddFolderButton"
             anchors.horizontalCenter: parent.horizontalCenter
             text: qsTr("Add Video Folder")
-            icon.source: IconMap.source("folder.badge.plus")
+            glyph: "folder.badge.plus"
+            prominent: true
+            sizeToLabel: true
             onClicked: content.addFolderRequested()
         }
     }
 
     // Sources but nothing in this mode.
-    EmptyMessage {
+    UnavailableView {
         anchors.centerIn: parent
-        width: Math.min(360, content.width - 48)
+        width: Math.min(Theme.unavailableWidth, content.width - 2 * Theme.spacingXl)
         visible: content.model !== null && content.model.hasSources
                  && !content.hasSections
         symbol: content.modeSymbol(content.model ? content.model.displayMode : "")
@@ -172,22 +169,25 @@ Item {
     ListView {
         id: libraryList
 
-        readonly property int sideMargin: content.listMode ? 10 : 16
+        readonly property int sideMargin: content.listMode ? Theme.videoListSideInset
+                                                            : Theme.spacingLg
         readonly property real rowWidth: Math.max(0, width - 2 * sideMargin)
-        readonly property real posterWidth: content.model ? content.model.posterWidth : 160
+        readonly property real posterWidth: content.model ? content.model.posterWidth
+                                                       : Theme.videoPosterDefaultWidth
         readonly property int columnCount: content.listMode ? 1
-                                          : Math.max(1, Math.floor((rowWidth + 20)
-                                                                  / (posterWidth + 20)))
-        readonly property real cellWidth: Math.min(posterWidth * 1.5,
-            Math.max(posterWidth, (rowWidth - (columnCount - 1) * 20) / columnCount))
+                                          : Math.max(1, Math.floor((rowWidth + Theme.videoPosterSpacing)
+                                                     / (posterWidth + Theme.videoPosterSpacing)))
+        readonly property real cellWidth: Math.min(posterWidth * Theme.videoPosterGrowth,
+            Math.max(posterWidth,
+                     (rowWidth - (columnCount - 1) * Theme.videoPosterSpacing) / columnCount))
 
         objectName: content.listMode ? "videoLibraryList" : "videoLibraryPosterList"
         anchors.fill: parent
         visible: content.hasSections
         clip: true
         boundsBehavior: Flickable.StopAtBounds
-        topMargin: 4
-        bottomMargin: 24
+        topMargin: Theme.spacingXs
+        bottomMargin: Theme.spacingXl
         currentIndex: -1
         keyNavigationEnabled: false
         cacheBuffer: 0
@@ -250,9 +250,9 @@ Item {
 
                     // Swift List's separator is omitted after a section's last row.
                     Rectangle {
-                        x: 12
-                        width: parent.width - 24
-                        height: 1
+                        x: Theme.videoRowLeading
+                        width: parent.width - 2 * Theme.videoRowLeading
+                        height: Theme.hairlineWidth
                         color: Theme.separator
                         visible: entry.modelData.separator
                     }
@@ -263,7 +263,7 @@ Item {
                 id: posterRow
 
                 Row {
-                    spacing: 20
+                    spacing: Theme.videoPosterSpacing
 
                     Repeater {
                         model: entry.modelData.cards
@@ -333,38 +333,6 @@ Item {
                     content.revealRequested(content.contextRow)
                 }
             }
-        }
-    }
-
-    // ContentUnavailableView: a large secondary glyph, a bold title and the
-    // description, centred.
-    component EmptyMessage: Column {
-        property string symbol
-        property string title
-        property string message
-
-        spacing: 8
-
-        Icon {
-            anchors.horizontalCenter: parent.horizontalCenter
-            size: 40
-            name: parent.symbol
-            color: Theme.textSecondary
-        }
-        Text {
-            width: parent.width
-            horizontalAlignment: Text.AlignHCenter
-            text: parent.title
-            color: Theme.textPrimary
-            font.pixelSize: Theme.fontTitle2
-            font.weight: Font.Bold
-        }
-        Text {
-            width: parent.width
-            horizontalAlignment: Text.AlignHCenter
-            wrapMode: Text.Wrap
-            text: parent.message
-            color: Theme.textSecondary
         }
     }
 }
