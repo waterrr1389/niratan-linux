@@ -207,11 +207,14 @@ class ReaderViewModel : public QObject {
     Q_PROPERTY(QString positionText READ position_text NOTIFY infoTextChanged)
 
    public:
+    // Port zero lets isolated readers use an OS-assigned listener.
+    explicit ReaderViewModel(quint16 media_port);
     ~ReaderViewModel() override;
 
     // The process-wide reader. The page and the reader:// scheme handler must
     // share one open book, so QML reaches the same instance main() created.
-    static ReaderViewModel* instance();
+    // Only the first call selects the port; normal callers use the Swift default.
+    static ReaderViewModel* instance(std::optional<quint16> first_media_port = std::nullopt);
     static ReaderViewModel* create(QQmlEngine* engine, QJSEngine* js_engine);
 
     QString title() const;
@@ -396,9 +399,6 @@ class ReaderViewModel : public QObject {
     void pageTurnRequested(const QString& direction);
 
    private:
-    // A default-constructible singleton would let QML bypass create().
-    ReaderViewModel();
-
     struct State;
     std::unique_ptr<State> state_;
 

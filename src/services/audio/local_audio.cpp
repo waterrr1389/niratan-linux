@@ -265,9 +265,9 @@ std::optional<LocalAudioEntry> find_local_audio(sqlite3* db, std::string_view te
     return entry;
 }
 
-std::string local_audio_url(std::string_view source, std::string_view file) {
+std::string local_audio_url(std::string_view source, std::string_view file, std::uint16_t port) {
     std::string url = "http://localhost:";
-    url += std::to_string(kLocalAudioPort);
+    url += std::to_string(port);
     url += "/localaudio/";
     url += source;
     url += '/';

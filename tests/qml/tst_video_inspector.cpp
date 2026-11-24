@@ -109,15 +109,11 @@ QString make_video(const QString& folder, const QString& name) {
 
 QQuickItem* open_player(QQmlApplicationEngine& engine, const QString& video,
                         QQuickWindow** video_window) {
-    engine.loadFromModule(QStringLiteral("Niratan"), QStringLiteral("MainWindow"));
+    engine.load(QUrl(QStringLiteral("qrc:/qt/qml/Niratan/src/views/shell/VideoWindow.qml")));
     if (engine.rootObjects().isEmpty()) {
         return nullptr;
     }
-    auto* window = qobject_cast<QQuickWindow*>(engine.rootObjects().constFirst());
-    if (window == nullptr || !QTest::qWaitForWindowExposed(window)) {
-        return nullptr;
-    }
-    *video_window = window->findChild<QQuickWindow*>(QStringLiteral("videoWindow"));
+    *video_window = qobject_cast<QQuickWindow*>(engine.rootObjects().constFirst());
     if (*video_window == nullptr) {
         return nullptr;
     }

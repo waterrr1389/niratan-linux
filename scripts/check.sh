@@ -17,7 +17,7 @@ scripts/check-format.sh
 scripts/check-wired.sh
 cmake --preset debug
 cmake --build build
-# Flow tests bind fixed local ports, so test runs from every worktree of this
-# repository queue on one machine-wide lock while builds stay parallel.
-flock "${TMPDIR:-/tmp}/niratan-ctest.lock" ctest --test-dir build --output-on-failure
+# Keep concurrent worktrees from oversubscribing the machine during testing.
+flock "${TMPDIR:-/tmp}/niratan-ctest.lock" \
+    ctest --test-dir build --output-on-failure -j "$(nproc)"
 cmake --build build --target all_qmllint

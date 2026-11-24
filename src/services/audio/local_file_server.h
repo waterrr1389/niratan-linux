@@ -16,7 +16,7 @@
 // unreadable local audio database answers the empty list for the source list
 // and 404 for a blob. The source list is:
 //   {"type":"audioSourceList","audioSources":[]}
-// or one entry {"name": source, "url": "http://localhost:18765/localaudio/
+// or one entry {"name": source, "url": "http://localhost:<port>/localaudio/
 // <source>/<percent-encoded file>"}. The empty body and the entry use the same
 // JSON escaping rules as JSONSerialization: quote, backslash and control
 // characters are escaped, everything else is UTF-8.

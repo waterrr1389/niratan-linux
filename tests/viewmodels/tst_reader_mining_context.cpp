@@ -47,11 +47,12 @@ class ReaderMiningContextTest : public QObject {
     void reports_the_lookup_offset();
     void exposes_current_book_context_and_clears_it();
     void keeps_url_for_an_unreadable_cover();
-    void serves_cover_and_gallery_on_the_fixed_port();
+    void serves_cover_and_gallery_on_the_same_port();
     void keeps_cover_path_when_the_port_is_in_use();
 
    private:
-    bool open_book(const QString& folder);
+    static bool open_book(ReaderViewModel& reader, const QString& folder);
+    bool open_book(const QString& folder) { return open_book(*reader_, folder); }
 
     niratan::test::TempDataRoot data_root_;
     ReaderViewModel* reader_ = nullptr;
@@ -168,15 +169,15 @@ void ReaderMiningContextTest::initTestCase() {
     const auto cover_path = niratan::storage::data_root() / "Books/First/表紙.PNG";
     QVERIFY(
         write_cover(QString::fromStdString(cover_path.string()), QByteArray("cover\0bytes", 11)));
-    reader_ = ReaderViewModel::instance();
+    reader_ = ReaderViewModel::instance(0);
 }
 
-bool ReaderMiningContextTest::open_book(const QString& folder) {
-    if (!reader_->openBook(folder) || revision(*reader_).isEmpty()) {
+bool ReaderMiningContextTest::open_book(ReaderViewModel& reader, const QString& folder) {
+    if (!reader.openBook(folder) || revision(reader).isEmpty()) {
         return false;
     }
-    send(*reader_, "restoreCompleted", {{"token", revision(*reader_)}});
-    return !reader_->restoring();
+    send(reader, "restoreCompleted", {{"token", revision(reader)}});
+    return !reader.restoring();
 }
 
 void ReaderMiningContextTest::cleanup() {
@@ -285,7 +286,6 @@ void ReaderMiningContextTest::reports_the_lookup_offset() {
 void ReaderMiningContextTest::exposes_current_book_context_and_clears_it() {
     const QString path =
         QString::fromStdString((niratan::storage::data_root() / "Books/First/表紙.PNG").string());
-    const QString url = "http://localhost:18765/cover/cover.PNG";
     QList<QStringList> lookups;
     const auto connection = connect(
         reader_, &ReaderViewModel::lookupRequested, this,
@@ -298,6 +298,9 @@ void ReaderMiningContextTest::exposes_current_book_context_and_clears_it() {
 
     QVERIFY(open_book("First"));
     QCOMPARE(reader_->title(), QString("Renamed First"));
+    const int port = QUrl(reader_->cover_url()).port();
+    QVERIFY(port > 0);
+    const QString url = QStringLiteral("http://localhost:%1/cover/cover.PNG").arg(port);
     send(*reader_, "textSelected", selection(*reader_, "First sentence."));
     QCOMPARE(lookups.size(), 1);
     QCOMPARE(lookups.at(0), (QStringList{"First sentence.", "原題", path, url}));
@@ -322,15 +325,20 @@ void ReaderMiningContextTest::keeps_url_for_an_unreadable_cover() {
     const QString missing_cover = data_root_.path() + "/missing.jpg";
     QVERIFY(!QFile::exists(missing_cover));
     QCOMPARE(reader_->cover_path(), missing_cover);
-    QCOMPARE(reader_->cover_url(), QString("http://localhost:18765/cover/cover.jpg"));
+    const QString url = reader_->cover_url();
+    const int port = QUrl(url).port();
+    QVERIFY(port > 0);
+    QCOMPARE(url, QStringLiteral("http://localhost:%1/cover/cover.jpg").arg(port));
 }
 
 // B11: AnkiManager.handlebarToValue (.bookCover) and LocalFileServer.setCover,
 // getCover and port. The reader hosts the cover and gallery on one server.
-void ReaderMiningContextTest::serves_cover_and_gallery_on_the_fixed_port() {
+void ReaderMiningContextTest::serves_cover_and_gallery_on_the_same_port() {
     QVERIFY(open_book("First"));
     const QString url = reader_->cover_url();
-    QCOMPARE(url, QString("http://localhost:18765/cover/cover.PNG"));
+    const int port = QUrl(url).port();
+    QVERIFY(port > 0);
+    QCOMPARE(url, QStringLiteral("http://localhost:%1/cover/cover.PNG").arg(port));
     QNetworkAccessManager network;
     expect_response(network, QUrl(url), QByteArray("cover\0bytes", 11));
 
@@ -339,7 +347,7 @@ void ReaderMiningContextTest::serves_cover_and_gallery_on_the_fixed_port() {
     const auto images = reader_->gallery_images();
     QCOMPARE(images.size(), 1);
     const QUrl image_url = images.at(0).toMap().value("url").toUrl();
-    QCOMPARE(image_url.port(), 18765);
+    QCOMPARE(image_url.port(), port);
     expect_response(network, image_url, QByteArray("gallery image bytes"));
 }
 
@@ -347,23 +355,23 @@ void ReaderMiningContextTest::serves_cover_and_gallery_on_the_fixed_port() {
 // preserves the attachment path and serves the gallery on an ephemeral port.
 void ReaderMiningContextTest::keeps_cover_path_when_the_port_is_in_use() {
     QTcpServer other_listener;
-    QVERIFY2(other_listener.listen(QHostAddress::Any, 18765),
-             qPrintable(other_listener.errorString()));
-    QVERIFY(open_book("First"));
-    QVERIFY(reader_->cover_url().isEmpty());
+    QVERIFY2(other_listener.listen(QHostAddress::Any, 0), qPrintable(other_listener.errorString()));
+    ReaderViewModel reader(other_listener.serverPort());
+    QVERIFY(open_book(reader, "First"));
+    QVERIFY(reader.cover_url().isEmpty());
 
-    reader_->loadGallery();
-    QTRY_VERIFY(!reader_->gallery_loading());
-    const auto images = reader_->gallery_images();
+    reader.loadGallery();
+    QTRY_VERIFY(!reader.gallery_loading());
+    const auto images = reader.gallery_images();
     QCOMPARE(images.size(), 1);
     const QUrl image_url = images.at(0).toMap().value("url").toUrl();
     QVERIFY(image_url.port() > 0);
-    QVERIFY(image_url.port() != 18765);
+    QVERIFY(image_url.port() != other_listener.serverPort());
     QNetworkAccessManager network;
     expect_response(network, image_url, QByteArray("gallery image bytes"));
     const auto cover_path = niratan::storage::data_root() / "Books/First/表紙.PNG";
-    QCOMPARE(reader_->cover_path(), QString::fromStdString(cover_path.string()));
-    QVERIFY(reader_->cover_url().isEmpty());
+    QCOMPARE(reader.cover_path(), QString::fromStdString(cover_path.string()));
+    QVERIFY(reader.cover_url().isEmpty());
 }
 
 QTEST_GUILESS_MAIN(ReaderMiningContextTest)

@@ -16,19 +16,19 @@ namespace niratan::viewmodels {
 void ReaderViewModel::State::BookMediaServer::set_book_images(std::string route,
                                                               ImageLookup lookup) {
     if (!lookup) {
-        fixed_.set_book_images({}, {});
-        fixed_.clear_media();
+        primary_.set_book_images({}, {});
+        primary_.clear_media();
         gallery_fallback_.reset();
         return;
     }
 
-    fixed_.set_book_images(route, lookup);
-    if (fixed_.is_listening()) {
+    primary_.set_book_images(route, lookup);
+    if (primary_.is_listening()) {
         gallery_fallback_.reset();
         return;
     }
 
-    fixed_.set_book_images({}, {});
+    primary_.set_book_images({}, {});
     if (!gallery_fallback_) {
         gallery_fallback_.emplace(std::string{}, 0);
     }
@@ -36,22 +36,22 @@ void ReaderViewModel::State::BookMediaServer::set_book_images(std::string route,
 }
 
 quint16 ReaderViewModel::State::BookMediaServer::port() const {
-    return gallery_fallback_ ? gallery_fallback_->port() : fixed_.port();
+    return gallery_fallback_ ? gallery_fallback_->port() : primary_.port();
 }
 
-bool ReaderViewModel::State::BookMediaServer::serve_cover(std::optional<QByteArray> bytes) {
+quint16 ReaderViewModel::State::BookMediaServer::serve_cover(std::optional<QByteArray> bytes) {
     // Keep published gallery URLs on their listener until the next gallery load.
     if (gallery_fallback_ && gallery_fallback_->is_listening()) {
-        return false;
+        return 0;
     }
     // An unreadable cover still has a URL if the fixed port is available.
     // Probe the bind without leaving placeholder bytes on the cover route.
-    fixed_.set_cover(bytes ? std::move(*bytes) : QByteArray{});
-    const bool available = fixed_.is_listening();
-    if (!bytes || !available) {
-        fixed_.clear_media();
+    primary_.set_cover(bytes ? std::move(*bytes) : QByteArray{});
+    const quint16 port = primary_.port();
+    if (!bytes || !port) {
+        primary_.clear_media();
     }
-    return available;
+    return port;
 }
 
 QString ReaderViewModel::document_title() const {
@@ -68,11 +68,11 @@ QString ReaderViewModel::cover_path() const {
 
 QString ReaderViewModel::cover_url() const {
     const auto path = reader::document_cover_path(state_->storage, state_->book);
-    if (!path || path->empty() ||
-        !state_->gallery_server.serve_cover(reader::read_document_cover(*path))) {
+    if (!path || path->empty()) {
         return {};
     }
-    return QString::fromStdString(reader::document_cover_url(*path));
+    const quint16 port = state_->gallery_server.serve_cover(reader::read_document_cover(*path));
+    return port ? QString::fromStdString(reader::document_cover_url(*path, port)) : QString{};
 }
 
 int ReaderViewModel::lookup_offset() const {

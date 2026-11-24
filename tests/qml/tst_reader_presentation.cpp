@@ -450,12 +450,12 @@ class ReaderPresentationTest : public QObject {
 void ReaderPresentationTest::initTestCase() {
     QVERIFY(data_root_.isValid());
     QVERIFY(write_global_settings(true, true));
+    reader_ = ReaderViewModel::instance(0);
     QVERIFY(apply_settings(base_settings()));
     QVERIFY(install_dictionary(std::filesystem::path(data_root_.path().toStdString())));
 
     const QString source = data_root_.path() + QStringLiteral("/reader.epub");
     QVERIFY(write_book(source.toStdString()));
-    reader_ = ReaderViewModel::instance();
     QVERIFY(reader_->importAndOpen(QUrl::fromLocalFile(source)));
     folder_ = reader_->book_folder();
     QVERIFY(!folder_.isEmpty());
@@ -504,7 +504,7 @@ bool ReaderPresentationTest::apply_settings(
     }
     const bool live = reader_ != nullptr && reader_->has_book() && saved_ != settings;
     saved_ = settings;
-    QSignalSpy changed(ReaderViewModel::instance(), &ReaderViewModel::settingsChanged);
+    QSignalSpy changed(reader_, &ReaderViewModel::settingsChanged);
     if (store->save_active_reader(settings) != niratan::settings::StoreError::none) {
         return false;
     }

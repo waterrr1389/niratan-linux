@@ -534,11 +534,10 @@ void VideoWindowTest::empty_window_shows_the_no_video_copy() {
     const Fixture fixture = make_fixture(root.path());
 
     QQmlApplicationEngine engine;
-    auto* window = load_main_window(engine);
-    QVERIFY(window != nullptr);
-    QVERIFY(QTest::qWaitForWindowExposed(window));
-    auto* video = window->findChild<QQuickWindow*>(QStringLiteral("videoWindow"));
+    engine.load(QUrl(QStringLiteral("qrc:/qt/qml/Niratan/src/views/shell/VideoWindow.qml")));
+    auto* video = qobject_cast<QQuickWindow*>(engine.rootObjects().value(0));
     QVERIFY(video != nullptr);
+    QCOMPARE(video->objectName(), QStringLiteral("videoWindow"));
     QVERIFY(QMetaObject::invokeMethod(video, "show"));
     QVERIFY(QTest::qWaitForWindowExposed(video));
 

@@ -63,11 +63,11 @@ void DocumentContextTest::relative_absolute_and_absent_covers() {
 
 // B11: AnkiManager.handlebarToValue (.bookCover) and LocalFileServer.port.
 void DocumentContextTest::cover_url_preserves_the_path_extension() {
-    QVERIFY(document_cover_url({}).empty());
-    QCOMPARE(document_cover_url("/library/cover.scan.JPEG"),
-             std::string("http://localhost:18765/cover/cover.JPEG"));
-    QCOMPARE(document_cover_url("/library/cover"),
-             std::string("http://localhost:18765/cover/cover."));
+    QVERIFY(document_cover_url({}, 12345).empty());
+    QCOMPARE(document_cover_url("/library/cover.scan.JPEG", 12345),
+             std::string("http://localhost:12345/cover/cover.JPEG"));
+    QCOMPARE(document_cover_url("/library/cover", 12345),
+             std::string("http://localhost:12345/cover/cover."));
 }
 
 // B10, B11: LocalFileServer.setCover(file:) and AnkiManager.addNoteAnkiConnect.

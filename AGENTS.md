@@ -230,7 +230,8 @@ Unicode rules, do the same rather than assuming ASCII.
   `pre-commit` runs the gate and refuses a commit while unstaged or untracked
   changes exist, because the gate builds the working tree. A commit that
   stages only Markdown runs `scripts/check-style.sh` instead of the full
-  gate. Close a running Niratan before the gate: flow tests bind port 18765.
+  gate. Tests that start a local listener use an OS-assigned port so a
+  running Niratan can keep its usual port.
 - Above the services, three layers of tests catch what unit tests cannot,
   without rendering or screenshots:
   - QML load test: each page loads offscreen with its view model; any QML

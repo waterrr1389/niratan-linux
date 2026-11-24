@@ -1,7 +1,6 @@
 #!/bin/sh
-# Runs the gate on the tree being committed. The gate builds the working tree,
-# so it only proves the commit when the working tree holds nothing beyond the
-# index; otherwise the commit is refused.
+# Tests use isolated listeners, so Niratan may stay open. The gate builds
+# the working tree and only proves the commit when it matches the index.
 set -e
 cd "$(git rev-parse --show-toplevel)"
 

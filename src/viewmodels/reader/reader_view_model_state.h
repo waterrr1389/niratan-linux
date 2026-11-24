@@ -31,20 +31,22 @@ struct ReaderViewModel::State {
         using ImageLookup =
             std::function<std::optional<audio::LocalFileServer::BookImage>(std::string_view)>;
 
+        explicit BookMediaServer(quint16 port) : primary_({}, port) {}
+
         // An empty lookup marks the end of a book and clears both media routes.
         void set_book_images(std::string route, ImageLookup lookup);
         quint16 port() const;
-        bool serve_cover(std::optional<QByteArray> bytes);
+        quint16 serve_cover(std::optional<QByteArray> bytes);
 
        private:
-        audio::LocalFileServer fixed_{{}, audio::kLocalAudioPort};
+        audio::LocalFileServer primary_;
         std::optional<audio::LocalFileServer> gallery_fallback_;
     };
 
-    explicit State(std::function<void()> on_settings_changed)
+    State(std::function<void()> on_settings_changed, quint16 media_port)
         : storage(storage::data_root()),
           settings_watch(storage.app_directory(), std::move(on_settings_changed)),
-          assets(reader::load_reader_scripts()) {}
+          assets(reader::load_reader_scripts()), gallery_server(media_port) {}
 
     books::BookStorage storage;
     reader::ReaderSettingsWatch settings_watch;

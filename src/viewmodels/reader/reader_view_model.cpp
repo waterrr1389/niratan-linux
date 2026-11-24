@@ -50,8 +50,9 @@ QColor qcolor_from_css(const std::string& css) {
 
 }  // namespace
 
-ReaderViewModel* ReaderViewModel::instance() {
-    static ReaderViewModel* model = new ReaderViewModel();
+ReaderViewModel* ReaderViewModel::instance(std::optional<quint16> first_media_port) {
+    static ReaderViewModel* model =
+        new ReaderViewModel(first_media_port.value_or(audio::kLocalAudioPort));
     return model;
 }
 
@@ -62,8 +63,8 @@ ReaderViewModel* ReaderViewModel::create(QQmlEngine*, QJSEngine*) {
     return model;
 }
 
-ReaderViewModel::ReaderViewModel()
-    : state_(std::make_unique<State>([this] { reload_settings(true); })) {
+ReaderViewModel::ReaderViewModel(quint16 media_port)
+    : state_(std::make_unique<State>([this] { reload_settings(true); }, media_port)) {
     // The inspector's text follows the tracker, the position and the profile.
     connect(this, &ReaderViewModel::statisticsChanged, this,
             &ReaderViewModel::statisticsInspectorChanged);

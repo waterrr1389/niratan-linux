@@ -4,8 +4,6 @@
 
 #include <QFile>
 
-#include "services/audio/local_audio.h"
-
 namespace niratan::reader {
 
 std::string document_title(std::string_view epub_title, const books::BookMetadata& book) {
@@ -17,7 +15,7 @@ std::optional<std::filesystem::path> document_cover_path(const books::BookStorag
     return storage.cover_path(book);
 }
 
-std::string document_cover_url(const std::filesystem::path& cover_path) {
+std::string document_cover_url(const std::filesystem::path& cover_path, quint16 port) {
     if (cover_path.empty()) {
         return {};
     }
@@ -25,8 +23,7 @@ std::string document_cover_url(const std::filesystem::path& cover_path) {
     if (extension.starts_with('.')) {
         extension.erase(0, 1);
     }
-    return "http://localhost:" + std::to_string(audio::kLocalAudioPort) + "/cover/cover." +
-        extension;
+    return "http://localhost:" + std::to_string(port) + "/cover/cover." + extension;
 }
 
 std::optional<QByteArray> read_document_cover(const std::filesystem::path& cover_path) {

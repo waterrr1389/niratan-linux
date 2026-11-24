@@ -188,6 +188,7 @@ class QmlLoadTest : public QObject {
     // Creates a page from src/views/pages inside window; null with error set.
     std::unique_ptr<QObject> create_page(const QString& page, QQuickWindow& window, QString& error);
 
+    QObject* main_window();
     QQmlApplicationEngine engine_;
 };
 
@@ -205,9 +206,15 @@ QString QmlLoadTest::warnings_after(const QString& label) {
     return report;
 }
 
+QObject* QmlLoadTest::main_window() {
+    if (engine_.rootObjects().isEmpty()) {
+        engine_.loadFromModule(QStringLiteral("Niratan"), QStringLiteral("MainWindow"));
+    }
+    return engine_.rootObjects().value(0);
+}
+
 void QmlLoadTest::main_window_loads() {
-    engine_.loadFromModule(QStringLiteral("Niratan"), QStringLiteral("MainWindow"));
-    QVERIFY2(!engine_.rootObjects().isEmpty(), "MainWindow was not created");
+    QVERIFY2(main_window(), "MainWindow was not created");
     const QString warnings = warnings_after(QStringLiteral("MainWindow"));
     QVERIFY2(warnings.isEmpty(), qPrintable(warnings));
 }
@@ -927,10 +934,9 @@ void QmlLoadTest::shared_components_load() {
 // text, or its class when it has none, so a control pushed out by the toolbar
 // is identifiable.
 void QmlLoadTest::video_window_is_declared_once() {
-    QQmlApplicationEngine engine;
-    engine.loadFromModule(QStringLiteral("Niratan"), QStringLiteral("MainWindow"));
-    QVERIFY2(!engine.rootObjects().isEmpty(), "MainWindow was not created");
-    auto* window = qobject_cast<QQuickWindow*>(engine.rootObjects().value(0));
+    auto* root = main_window();
+    QVERIFY2(root, "MainWindow was not created");
+    auto* window = qobject_cast<QQuickWindow*>(root);
     QVERIFY(window != nullptr);
 
     auto* video = window->findChild<QQuickWindow*>(QStringLiteral("videoWindow"));
@@ -944,10 +950,9 @@ void QmlLoadTest::video_window_is_declared_once() {
 }
 
 void QmlLoadTest::main_window_controls_fit() {
-    QQmlApplicationEngine engine;
-    engine.loadFromModule(QStringLiteral("Niratan"), QStringLiteral("MainWindow"));
-    QVERIFY2(!engine.rootObjects().isEmpty(), "MainWindow was not created");
-    auto* window = qobject_cast<QQuickWindow*>(engine.rootObjects().value(0));
+    auto* root = main_window();
+    QVERIFY2(root, "MainWindow was not created");
+    auto* window = qobject_cast<QQuickWindow*>(root);
     QVERIFY2(window != nullptr, "MainWindow is not a Window");
     window->resize(960, 640);
     QTest::qWait(100);

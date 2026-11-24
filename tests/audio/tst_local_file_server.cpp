@@ -291,8 +291,9 @@ void LocalFileServerTest::the_source_list_returns_one_entry() {
     QVERIFY(response.complete);
     QCOMPARE(response.status, 200);
     const QByteArray expected =
-        "{\"type\":\"audioSourceList\",\"audioSources\":[{\"name\":\"nhk16\",\"url\":"
-        "\"http://localhost:18765/localaudio/nhk16/cat%20x.mp3\"}]}";
+        QByteArray("{\"type\":\"audioSourceList\",\"audioSources\":[{\"name\":\"nhk16\",\"url\":"
+                   "\"http://localhost:") +
+        QByteArray::number(server.port()) + "/localaudio/nhk16/cat%20x.mp3\"}]}";
     QCOMPARE(response.body, expected);
 }
 

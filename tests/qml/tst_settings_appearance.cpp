@@ -109,8 +109,8 @@ double text_top(QQuickItem* root, const QString& text) {
     return -1;
 }
 
-std::unique_ptr<QObject> create_settings_window(QQmlApplicationEngine& engine, int height,
-                                                QQuickWindow*& window) {
+std::unique_ptr<QObject> create_main_window(QQmlApplicationEngine& engine, int height,
+                                            QQuickWindow*& window) {
     QQmlComponent component(&engine);
     component.loadFromModule(QStringLiteral("Niratan"), QStringLiteral("MainWindow"));
     if (component.isError()) {
@@ -127,6 +127,34 @@ std::unique_ptr<QObject> create_settings_window(QQmlApplicationEngine& engine, i
         return {};
     }
     return object;
+}
+
+std::unique_ptr<QObject> create_settings_window(QQmlApplicationEngine& engine, int height,
+                                                QQuickWindow*& window) {
+    auto host = std::make_unique<QQuickWindow>();
+    host->resize(720, height);
+    QQmlComponent component(
+        &engine,
+        QUrl(QStringLiteral("qrc:/qt/qml/Niratan/src/views/settings/AppearanceSettings.qml")));
+    std::unique_ptr<QObject> object(component.beginCreate(engine.rootContext()));
+    auto* appearance = qobject_cast<QQuickItem*>(object.get());
+    if (appearance) {
+        appearance->setParentItem(host->contentItem());
+        appearance->setSize(QSizeF(host->size()));
+    }
+    if (object) {
+        component.completeCreate();
+    }
+    if (!appearance || component.isError()) {
+        return {};
+    }
+    object.release()->setParent(host.get());
+    host->show();
+    if (!QTest::qWaitForWindowExposed(host.get())) {
+        return {};
+    }
+    window = host.get();
+    return host;
 }
 
 QQuickItem* appearance_detail(QQuickWindow* window) {
@@ -191,7 +219,7 @@ void SettingsAppearanceTest::popup_card_follows_swift_order() {
     QVERIFY(data.isValid());
     QQuickWindow* window = nullptr;
     std::unique_ptr<QObject> object = create_settings_window(engine_, 1400, window);
-    QVERIFY2(object != nullptr, "MainWindow was not created");
+    QVERIFY2(object != nullptr, "AppearanceSettings was not created");
     QQuickItem* appearance = appearance_detail(window);
     QVERIFY(appearance);
     QTest::qWait(50);
@@ -272,7 +300,7 @@ void SettingsAppearanceTest::popup_rows_write_their_setting() {
     QVERIFY(data.isValid());
     QQuickWindow* window = nullptr;
     std::unique_ptr<QObject> object = create_settings_window(engine_, 1400, window);
-    QVERIFY2(object != nullptr, "MainWindow was not created");
+    QVERIFY2(object != nullptr, "AppearanceSettings was not created");
     QQuickItem* appearance = appearance_detail(window);
     QVERIFY(appearance);
     QTest::qWait(50);
@@ -341,7 +369,7 @@ void SettingsAppearanceTest::popup_threshold_row_follows_swipe_toggle() {
     QVERIFY(data.isValid());
     QQuickWindow* window = nullptr;
     std::unique_ptr<QObject> object = create_settings_window(engine_, 1400, window);
-    QVERIFY2(object != nullptr, "MainWindow was not created");
+    QVERIFY2(object != nullptr, "AppearanceSettings was not created");
     QQuickItem* appearance = appearance_detail(window);
     QVERIFY(appearance);
     QTest::qWait(50);
@@ -383,7 +411,7 @@ void SettingsAppearanceTest::popup_threshold_row_follows_swipe_toggle() {
 // window horizontally.
 void SettingsAppearanceTest::popup_card_fits_the_default_window() {
     QQuickWindow* window = nullptr;
-    std::unique_ptr<QObject> object = create_settings_window(engine_, 640, window);
+    std::unique_ptr<QObject> object = create_main_window(engine_, 640, window);
     QVERIFY2(object != nullptr, "MainWindow was not created");
     QQuickItem* appearance = appearance_detail(window);
     QVERIFY(appearance);
@@ -422,7 +450,7 @@ void SettingsAppearanceTest::theme_custom_color_rows_follow_theme() {
     QVERIFY(data.isValid());
     QQuickWindow* window = nullptr;
     std::unique_ptr<QObject> object = create_settings_window(engine_, 640, window);
-    QVERIFY2(object != nullptr, "MainWindow was not created");
+    QVERIFY2(object != nullptr, "AppearanceSettings was not created");
     QQuickItem* appearance = appearance_detail(window);
     QVERIFY(appearance);
     QTest::qWait(50);
@@ -489,7 +517,7 @@ void SettingsAppearanceTest::theme_custom_color_rows_write_their_setting() {
     QVERIFY(data.isValid());
     QQuickWindow* window = nullptr;
     std::unique_ptr<QObject> object = create_settings_window(engine_, 640, window);
-    QVERIFY2(object != nullptr, "MainWindow was not created");
+    QVERIFY2(object != nullptr, "AppearanceSettings was not created");
     QQuickItem* appearance = appearance_detail(window);
     QVERIFY(appearance);
     QTest::qWait(50);
@@ -539,7 +567,7 @@ void SettingsAppearanceTest::layout_wheel_page_turn_follows_swift_order() {
     }
     QQuickWindow* window = nullptr;
     std::unique_ptr<QObject> object = create_settings_window(engine_, 640, window);
-    QVERIFY2(object != nullptr, "MainWindow was not created");
+    QVERIFY2(object != nullptr, "AppearanceSettings was not created");
     QQuickItem* appearance = appearance_detail(window);
     QVERIFY(appearance);
     QTest::qWait(50);
@@ -588,7 +616,7 @@ void SettingsAppearanceTest::display_statistics_rows_follow_statistics() {
     }
     QQuickWindow* window = nullptr;
     std::unique_ptr<QObject> object = create_settings_window(engine_, 640, window);
-    QVERIFY2(object != nullptr, "MainWindow was not created");
+    QVERIFY2(object != nullptr, "AppearanceSettings was not created");
     QQuickItem* appearance = appearance_detail(window);
     QVERIFY(appearance);
     QTest::qWait(50);
@@ -641,7 +669,7 @@ void SettingsAppearanceTest::display_statistics_rows_follow_statistics() {
         off.setEnableStatistics(false);
     }
     std::unique_ptr<QObject> second = create_settings_window(engine_, 640, window);
-    QVERIFY2(second != nullptr, "MainWindow was not created");
+    QVERIFY2(second != nullptr, "AppearanceSettings was not created");
     QQuickItem* hidden_appearance = appearance_detail(window);
     QVERIFY(hidden_appearance);
     QTest::qWait(50);

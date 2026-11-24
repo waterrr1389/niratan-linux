@@ -92,8 +92,9 @@ struct LocalAudioEntry {
 std::optional<LocalAudioEntry> find_local_audio(sqlite3* db, std::string_view term,
                                                 std::string_view raw_reading);
 
-// Full URL of a served file: kLocalAudioPort, the raw source and the encoded
+// Full URL of a served file: the listener port, the raw source and the encoded
 // file path.
-std::string local_audio_url(std::string_view source, std::string_view file);
+std::string local_audio_url(std::string_view source, std::string_view file,
+                            std::uint16_t port = kLocalAudioPort);
 
 }  // namespace niratan::audio

@@ -203,7 +203,7 @@ class FlowReaderMiningTest : public QObject {
 };
 
 void FlowReaderMiningTest::initTestCase() {
-    reader_ = ReaderViewModel::instance();
+    reader_ = ReaderViewModel::instance(0);
     QVERIFY(install_dictionary(niratan::storage::data_root()));
     const auto source = niratan::storage::data_root() / "mining.epub";
     QVERIFY(niratan::test::write_epub(source, kTitle.toStdString(), kSentence.toStdString(),
@@ -316,7 +316,10 @@ void FlowReaderMiningTest::connect_reader_lookup_and_add_the_card() {
     QCOMPARE(reader_->cover_path(),
              QString::fromStdString(
                  (data_root / "Books" / folder.toStdString() / "cover.png").string()));
-    QCOMPARE(reader_->cover_url(), QStringLiteral("http://localhost:18765/cover/cover.png"));
+    const QString cover = reader_->cover_url();
+    const int port = QUrl(cover).port();
+    QVERIFY(port > 0);
+    QCOMPARE(cover, QStringLiteral("http://localhost:%1/cover/cover.png").arg(port));
 
     QSignalSpy lookup(reader_, &ReaderViewModel::lookupRequested);
     const QJsonObject selection{

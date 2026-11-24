@@ -159,11 +159,11 @@ std::string json_string(std::string_view text) {
     return result;
 }
 
-std::string source_list_response(const std::string& source, const std::string& file) {
+std::string source_list_response(const std::string& source, const std::string& file, quint16 port) {
     std::string body = R"({"type":"audioSourceList","audioSources":[{"name":)";
     body += json_string(source);
     body += R"(,"url":)";
-    body += json_string(local_audio_url(source, file));
+    body += json_string(local_audio_url(source, file, port));
     body += "}]}";
     return body;
 }
@@ -347,7 +347,7 @@ void LocalFileServer::handle_request(QTcpSocket* socket, const QByteArray& heade
             send_response(socket, "200 OK", "application/json", kEmptySourceList);
             return;
         }
-        const std::string body = source_list_response(entry->source, entry->file);
+        const std::string body = source_list_response(entry->source, entry->file, port());
         send_response(socket, "200 OK", "application/json",
                       QByteArray(body.data(), static_cast<qsizetype>(body.size())));
         return;

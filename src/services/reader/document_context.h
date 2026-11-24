@@ -11,7 +11,7 @@
 // LocalFileServer.swift (setCover, port) and AnkiManager.swift (handlebarToValue,
 // addNoteAnkiConnect) use the same file for the served cover and the attachment.
 // The URL formatter uses the path extension as-is, including an empty extension.
-// The reader's single server serves both covers and gallery images on port
+// By default the reader serves both covers and gallery images on port
 // 18765. If it cannot bind there, the gallery uses an ephemeral port, the
 // cover URL is empty, and the attachment path is still available.
 
@@ -34,7 +34,7 @@ std::optional<std::filesystem::path> document_cover_path(const books::BookStorag
                                                          const books::BookMetadata& book);
 
 // An empty path has no URL. Formatting does not read the cover or start a server.
-std::string document_cover_url(const std::filesystem::path& cover_path);
+std::string document_cover_url(const std::filesystem::path& cover_path, quint16 port);
 
 // A read failure supplies no attachment bytes but does not change the URL.
 std::optional<QByteArray> read_document_cover(const std::filesystem::path& cover_path);
