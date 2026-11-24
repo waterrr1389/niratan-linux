@@ -242,23 +242,6 @@ std::string reader_script_block(const ShellInput& input, const ReaderScripts& sc
 
     script += "    window.hoshiReaderRestoreToken = '" + js_string(input.restore_token) + "';\n";
 
-    if (appearance.blur_images) {
-        script += R"js(    document.querySelectorAll('svg').forEach(svg => svg.classList.add('blurred'));
-    document.querySelectorAll('img:not(.gaiji):not(.gaiji-line)').forEach(img => {
-        const blurIllustration = () => {
-            if (img.classList.contains('block-img') || img.naturalWidth > 256 || img.naturalHeight > 256) {
-                img.classList.add('block-img', 'blurred');
-            }
-        };
-        if (img.complete || img.classList.contains('block-img')) {
-            blurIllustration();
-        } else {
-            img.addEventListener('load', blurIllustration, { once: true });
-        }
-    });
-)js";
-    }
-
     // The upstream chapter carries its own viewport; replacing it disables
     // pinch zoom and keeps CSS pixels equal to device-independent pixels.
     script += R"js(    var viewport = document.querySelector('meta[name="viewport"]');
@@ -334,6 +317,59 @@ std::string reader_script_block(const ShellInput& input, const ReaderScripts& sc
             script += '\n';
         }
     }
+
+    // NativeReaderView.injectReader: pictures are sized by the stylesheet, not
+    // by the publisher. A large non-gaiji img becomes block-img, which the CSS
+    // caps while keeping its ratio; Blur Images only adds the class and the
+    // wrapper. Clicking a blurred illustration reveals it; any other
+    // illustration reports its URL through imageTapped.
+    script += "    function setupImage(element, src, wrap, blurElement = element) {\n";
+    script += "        var target = element;\n";
+    script += appearance.blur_images ? "        if (true) {\n" : "        if (false) {\n";
+    script += R"js(            blurElement.classList.add('blurred');
+            if (wrap) {
+                target = document.createElement('div');
+                target.className = 'blur-wrapper';
+                blurElement.before(target);
+                target.append(blurElement);
+            }
+        }
+        target.onclick = event => {
+            event.preventDefault();
+            event.stopPropagation();
+            if (blurElement.classList.contains('blurred')) {
+                blurElement.classList.remove('blurred');
+                return;
+            }
+            window.webkit.messageHandlers.imageTapped.postMessage(new URL(src, document.baseURI).href);
+        };
+    }
+    document.querySelectorAll('svg[preserveAspectRatio="none"]').forEach(svg => svg.removeAttribute('preserveAspectRatio'));
+    document.querySelectorAll('svg').forEach(svg => {
+        var svgImage = svg.querySelector('image');
+        if (!svgImage) {
+            return;
+        }
+        setupImage(svgImage, svgImage.href.baseVal, false, svg);
+    });
+    Array.from(document.querySelectorAll('img')).forEach(img => {
+        const processImg = () => {
+            const isGaiji = img.classList.contains('gaiji') || img.classList.contains('gaiji-line');
+            if (!isGaiji && (img.naturalWidth > 256 || img.naturalHeight > 256)) {
+                img.classList.add('block-img');
+                setupImage(img, img.src, true);
+            }
+        };
+        if (img.complete) {
+            if (img.naturalWidth > 0) {
+                processImg();
+            }
+        } else {
+            img.onload = processImg;
+            img.onerror = () => {};
+        }
+    });
+)js";
 
     script += "    const lookupScanLength = " + std::to_string(input.scan_length) + ";\n";
     script += R"js(    document.addEventListener('click', event => {

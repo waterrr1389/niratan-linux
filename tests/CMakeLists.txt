@@ -955,6 +955,19 @@ add_test(NAME reader_presentation COMMAND tst_reader_presentation)
 set_tests_properties(reader_presentation PROPERTIES
     ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QTWEBENGINE_CHROMIUM_FLAGS=--disable-gpu")
 
+find_package(Qt6 REQUIRED COMPONENTS WebEngineWidgets)
+
+qt_add_executable(tst_reader_images
+    web/tst_reader_images.cpp
+)
+target_include_directories(tst_reader_images PRIVATE ${CMAKE_SOURCE_DIR}/src)
+target_link_libraries(tst_reader_images PRIVATE niratan_app Qt6::Test Qt6::WebEngineWidgets
+    Qt6::WebChannelQuick)
+target_compile_options(tst_reader_images PRIVATE -Wall -Wextra -Wpedantic -Werror)
+add_test(NAME reader_images COMMAND tst_reader_images)
+set_tests_properties(reader_images PROPERTIES
+    ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QTWEBENGINE_CHROMIUM_FLAGS=--disable-gpu")
+
 qt_add_executable(tst_popup_bridge
     web/tst_popup_bridge.cpp
 )

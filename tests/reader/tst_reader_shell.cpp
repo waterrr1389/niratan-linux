@@ -64,7 +64,8 @@ class ReaderShellTest : public QObject {
     void paragraph_layout_runs_between_font_readiness_and_restore();
     void the_bridge_shim_is_installed_before_the_scripts();
     void the_language_and_lookup_settings_are_passed();
-    void illustration_blur_is_opt_in();
+    void illustrations_are_promoted_regardless_of_blur();
+    void illustration_blur_wraps_and_reveals();
 };
 
 void ReaderShellTest::the_document_keeps_the_chapter_and_inserts_both_blocks() {
@@ -206,20 +207,50 @@ void ReaderShellTest::the_language_and_lookup_settings_are_passed() {
     QVERIFY(has(block, "scanNonJapaneseText = true;"));
 }
 
-void ReaderShellTest::illustration_blur_is_opt_in() {
+// NativeReaderView.injectReader: every svg loses preserveAspectRatio="none",
+// and an img that is not gaiji and larger than 256 px in either natural
+// dimension is promoted to block-img so the stylesheet keeps its ratio. Blur
+// Images only adds the blurred class and the wrapper.
+void ReaderShellTest::illustrations_are_promoted_regardless_of_blur() {
+    const std::string block = reader_script_block(input(), scripts());
+
+    QVERIFY(has(block, "querySelectorAll('svg[preserveAspectRatio=\"none\"]')"));
+    QVERIFY(has(block, "removeAttribute('preserveAspectRatio')"));
+    QVERIFY(has(block, "function setupImage(element, src, wrap, blurElement = element)"));
+
+    const auto process = block.find("img.classList.contains('gaiji')");
+    const auto large = block.find("img.naturalWidth > 256 || img.naturalHeight > 256");
+    const auto promote = block.find("img.classList.add('block-img');");
+    const auto setup = block.find("setupImage(img, img.src, true);");
+    const auto svg = block.find("setupImage(svgImage, svgImage.href.baseVal, false, svg);");
+    QVERIFY(process != std::string::npos);
+    QVERIFY(large != std::string::npos);
+    QVERIFY(promote != std::string::npos);
+    QVERIFY(setup != std::string::npos);
+    QVERIFY(svg != std::string::npos);
+    QVERIFY(process < large && large < promote && promote < setup);
+    QVERIFY(has(block, "setupImage(svgImage, svgImage.href.baseVal, false, svg)"));
+
+    const auto token = block.find("hoshiReaderRestoreToken");
+    const auto restore = block.find("return window.hoshiReader.restoreProgress(0.25)");
+    QVERIFY(token != std::string::npos);
+    QVERIFY(restore != std::string::npos);
+    QVERIFY(token < svg && svg < restore);
+}
+
+void ReaderShellTest::illustration_blur_wraps_and_reveals() {
     ShellInput shell = input();
-    const std::string mark = "classList.add('blurred')";
-    QVERIFY(!has(reader_script_block(shell, scripts()), mark));
+    const std::string plain = reader_script_block(shell, scripts());
+    QVERIFY(has(plain, "if (false) {\n"));
 
     shell.appearance.blur_images = true;
     const std::string block = reader_script_block(shell, scripts());
-    const auto token = block.find("hoshiReaderRestoreToken");
-    const auto blur = block.find(mark);
-    const auto restore = block.find("return window.hoshiReader.restoreProgress(0.25)");
-    QVERIFY(token != std::string::npos && token < blur && blur < restore);
-    QVERIFY(has(block, "querySelectorAll('svg')"));
-    QVERIFY(has(block, "img:not(.gaiji):not(.gaiji-line)"));
-    QVERIFY(has(block, "img.naturalWidth > 256 || img.naturalHeight > 256"));
+    QVERIFY(has(block, "if (true) {\n"));
+    QVERIFY(has(block, "target.className = 'blur-wrapper'"));
+    QVERIFY(has(block, "blurElement.classList.remove('blurred')"));
+    QVERIFY(has(block,
+                "webkit.messageHandlers.imageTapped.postMessage(new URL(src, "
+                "document.baseURI).href)"));
 }
 
 QTEST_APPLESS_MAIN(ReaderShellTest)

@@ -22,8 +22,13 @@
 //   restore token, writing mode through the stylesheet, and the initial
 //   restore call (a fragment jump or a progress restore).
 //
-// NativeReaderView.injectReader starts large non-gaiji illustrations blurred
-// when UserConfig.blurImages is enabled; SVG elements are also marked.
+// NativeReaderView.injectReader sizes illustrations, not the publisher: every
+// svg loses preserveAspectRatio="none", and every img that is not gaiji and
+// larger than 256 px in either natural dimension gains block-img so the
+// stylesheet caps it by its own ratio. With UserConfig.blurImages each such
+// image is wrapped and blurred, and a click reveals it; any other illustration
+// reports its URL through imageTapped. The host does not yet open an image
+// viewer, so imageTapped has no reader.
 // After fonts and images are ready, paginated paragraph mode prepares its
 // layout before highlights and the initial restore expression are applied.
 
