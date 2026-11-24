@@ -288,6 +288,8 @@ qt_add_qml_module(niratan_app
         src/views/components/FormPickerRow.qml
         src/views/components/FormRow.qml
         src/views/components/FormSection.qml
+        src/views/components/InspectorFormSection.qml
+        src/views/components/InspectorFormRow.qml
         src/views/components/FormSegmentedRow.qml
         src/views/components/FormSliderRow.qml
         src/views/components/FormStepperRow.qml

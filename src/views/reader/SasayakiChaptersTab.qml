@@ -12,12 +12,9 @@
 // A click seeks to the chapter's start and clears a pending stop, through
 // SasayakiViewModel.seekToAudiobookChapter.
 //
-// SF Symbols are approximated by text glyphs, as elsewhere in the port.
-
 pragma ComponentBehavior: Bound
 
 import QtQuick
-import QtQuick.Controls
 import QtQuick.Layouts
 import Niratan
 
@@ -37,142 +34,86 @@ Item {
         return hours > 0 ? hours + ":" + pad(minutes) + ":" + pad(rest) : minutes + ":" + pad(rest);
     }
 
-    component ChapterRow: Rectangle {
+    component ChapterRow: InspectorListRow {
         id: chapterRow
 
         required property var modelData
         required property int index
 
         readonly property bool current: root.player.currentAudiobookChapterId === chapterRow.modelData.id
-        readonly property bool hovered: hover.hovered
+        width: ListView.view.width - ListView.view.leftMargin - ListView.view.rightMargin
+        selected: current
+        Accessible.name: modelData.title
+        onClicked: root.player.seekToAudiobookChapter(chapterRow.modelData.id)
 
-        Layout.fillWidth: true
-        implicitHeight: content.implicitHeight + 14
-        radius: 9
-        color: chapterRow.current
-               ? Qt.rgba(Theme.accent.r, Theme.accent.g, Theme.accent.b, 0.18)
-               : (chapterRow.hovered
-                  ? Qt.rgba(Theme.textPrimary.r, Theme.textPrimary.g, Theme.textPrimary.b, 0.06)
-                  : "transparent")
-
-        HoverHandler {
-            id: hover
-        }
-
-        TapHandler {
-            onTapped: root.player.seekToAudiobookChapter(chapterRow.modelData.id)
-        }
-
-        RowLayout {
-            id: content
-
-            anchors.left: parent.left
-            anchors.right: parent.right
-            anchors.top: parent.top
-            anchors.leftMargin: 10
-            anchors.rightMargin: 10
-            anchors.topMargin: 7
-            spacing: 8
+        contentItem: RowLayout {
+            spacing: Theme.spacingSm
 
             Item {
-                Layout.preferredWidth: 14
-                Layout.preferredHeight: 17
+                Layout.preferredWidth: Theme.readerChapterIndent
+                Layout.preferredHeight: Theme.readerChapterMarkerHeight
 
-                Label {
+                Icon {
                     anchors.centerIn: parent
                     visible: chapterRow.current
-                    text: "\u266b"
+                    name: "speaker.wave.2.fill"
+                    size: Theme.readerChapterMarkerGlyph
                     color: Theme.accent
-                    font.pixelSize: 11
                 }
 
                 Rectangle {
                     anchors.centerIn: parent
                     visible: !chapterRow.current
-                    implicitWidth: 4
-                    implicitHeight: 4
-                    radius: 2
+                    implicitWidth: Theme.spacingXs
+                    implicitHeight: implicitWidth
+                    radius: Theme.rowSubtitleSpacing
                     color: Qt.rgba(Theme.textSecondary.r, Theme.textSecondary.g,
                                    Theme.textSecondary.b, 0.5)
                 }
             }
 
-            Label {
+            StyledLabel {
                 Layout.fillWidth: true
                 text: chapterRow.modelData.title
-                color: Theme.textPrimary
-                font.pixelSize: 13
-                font.bold: chapterRow.current
+                textStyle: Theme.calloutFont
+                weight: chapterRow.current ? Theme.weightSemibold : Theme.weightRegular
                 wrapMode: Text.WordWrap
                 maximumLineCount: 2
                 elide: Text.ElideRight
             }
 
-            Label {
-                Layout.leftMargin: 8
+            StyledLabel {
+                Layout.leftMargin: Theme.spacingSm
                 Layout.alignment: Qt.AlignVCenter
                 text: root.formatChapterTime(chapterRow.modelData.startTime)
-                color: Theme.textSecondary
-                font.pixelSize: 11
-                font.family: "monospace"
+                secondary: true
+                textStyle: Theme.captionFont
+                monospacedDigits: true
             }
         }
     }
 
     // ContentUnavailableView's list.bullet glyph over its title, centred.
-    ColumnLayout {
-        anchors.centerIn: parent
+    ListStatus {
         visible: !root.player.isLoadingAudiobookChapters && root.player.chapters.length === 0
-        spacing: 10
-
-        Label {
-            Layout.alignment: Qt.AlignHCenter
-            text: "\u2630"
-            color: Theme.textSecondary
-            font.pixelSize: 28
-        }
-
-        Label {
-            Layout.alignment: Qt.AlignHCenter
-            text: qsTr("No Chapters")
-            color: Theme.textPrimary
-            font.pixelSize: 15
-            font.bold: true
-        }
+        symbol: "list.bullet"
+        text: qsTr("No Chapters")
     }
 
-    ColumnLayout {
-        anchors.centerIn: parent
+    ListStatus {
         visible: root.player.isLoadingAudiobookChapters
-        spacing: 10
-
-        BusyIndicator {
-            Layout.alignment: Qt.AlignHCenter
-            running: root.player.isLoadingAudiobookChapters
-        }
-
-        Label {
-            Layout.alignment: Qt.AlignHCenter
-            text: qsTr("Loading Chapters...")
-            color: Theme.textSecondary
-            font.pixelSize: 13
-        }
+        busy: true
+        text: qsTr("Loading Chapters...")
     }
 
-    ListView {
-        id: chapterList
-
+    InspectorList {
         anchors.fill: parent
         visible: !root.player.isLoadingAudiobookChapters && root.player.chapters.length > 0
         model: root.player.chapters
-        spacing: 2
-        clip: true
-        leftMargin: 10
-        rightMargin: 10
-        bottomMargin: 14
-        boundsBehavior: Flickable.StopAtBounds
-
-        ScrollBar.vertical: ScrollBar {}
+        spacing: Theme.readerListSpacing
+        leftMargin: Theme.readerListInset
+        rightMargin: Theme.readerListInset
+        bottomMargin: Theme.readerListBottomInset
 
         delegate: ChapterRow {}
     }

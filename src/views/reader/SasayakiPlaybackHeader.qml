@@ -36,18 +36,17 @@ ColumnLayout {
                + ":" + (rest < 10 ? "0" : "") + rest;
     }
 
-    spacing: 12
+    spacing: Theme.spacingMd
 
     RowLayout {
         Layout.fillWidth: true
-        spacing: 12
+        spacing: Theme.spacingMd
 
         Rectangle {
-            implicitWidth: 64
-            implicitHeight: 64
-            radius: 10
-            color: Qt.rgba(Theme.textSecondary.r, Theme.textSecondary.g,
-                           Theme.textSecondary.b, 0.10)
+            implicitWidth: Theme.audiobookCoverSize
+            implicitHeight: Theme.audiobookCoverSize
+            radius: Theme.audiobookCoverRadius
+            color: Theme.audiobookCoverBackground
             clip: true
 
             Image {
@@ -63,33 +62,31 @@ ColumnLayout {
                 visible: header.player.audiobookArtworkSource.length === 0
                          && ReaderViewModel.coverUrl.length === 0
                 name: "waveform"
-                size: 22
+                size: Theme.audiobookCoverGlyphSize
                 color: Theme.textSecondary
             }
         }
 
         ColumnLayout {
             Layout.fillWidth: true
-            spacing: 2
+            spacing: Theme.panelHeaderTitleSpacing
 
-            Text {
+            StyledLabel {
                 Layout.fillWidth: true
                 text: header.player.audiobookTitle.length > 0
                       ? header.player.audiobookTitle : ReaderViewModel.title
-                color: Theme.textPrimary
-                font.pixelSize: Theme.fontBody
-                font.bold: true
+                textStyle: Theme.headlineFont
                 wrapMode: Text.WordWrap
                 maximumLineCount: 2
                 elide: Text.ElideRight
             }
 
-            Text {
+            StyledLabel {
                 Layout.fillWidth: true
                 visible: header.player.audiobookArtist.length > 0
                 text: header.player.audiobookArtist
-                color: Theme.textSecondary
-                font.pixelSize: Theme.fontCaption
+                secondary: true
+                textStyle: Theme.captionFont
                 maximumLineCount: 1
                 elide: Text.ElideRight
             }
@@ -98,7 +95,7 @@ ColumnLayout {
 
     ColumnLayout {
         Layout.fillWidth: true
-        spacing: 2
+        spacing: Theme.readerInspectorTimeSpacing
 
         Slider {
             Layout.fillWidth: true
@@ -118,78 +115,69 @@ ColumnLayout {
         RowLayout {
             Layout.fillWidth: true
 
-            Text {
+            StyledLabel {
                 text: header.formatTime(header.scrubTime >= 0 ? header.scrubTime
                                                               : header.player.position)
-                color: Theme.textSecondary
-                font.pixelSize: Theme.fontCaption
-                font.features: ({ "tnum": 1 })
+                secondary: true
+                textStyle: Theme.captionFont
+                monospacedDigits: true
             }
 
             Item { Layout.fillWidth: true }
 
-            Text {
+            StyledLabel {
                 text: "-" + header.formatTime(
                       Math.max(header.player.duration
                                - (header.scrubTime >= 0 ? header.scrubTime
                                                         : header.player.position), 0))
-                color: Theme.textSecondary
-                font.pixelSize: Theme.fontCaption
-                font.features: ({ "tnum": 1 })
+                secondary: true
+                textStyle: Theme.captionFont
+                monospacedDigits: true
             }
         }
     }
 
     RowLayout {
         Layout.alignment: Qt.AlignHCenter
-        spacing: 10
+        spacing: Theme.audiobookTransportSpacing
 
         IconButton {
             icon: "15.arrow.trianglehead.counterclockwise"
-            diameter: 34
-            iconSize: 14
+            diameter: Theme.audiobookTransportDiameter
+            iconSize: Theme.audiobookSkipGlyphSize
             accessibleName: qsTr("Back 15 seconds")
             onClicked: header.player.skipForward(false)
         }
 
         IconButton {
             icon: "backward.fill"
-            diameter: 34
-            iconSize: 13
+            diameter: Theme.audiobookTransportDiameter
+            iconSize: Theme.audiobookCueGlyphSize
             accessibleName: qsTr("Previous cue")
             onClicked: header.player.previousCue()
         }
 
-        Rectangle {
-            implicitWidth: 48
-            implicitHeight: 48
-            radius: 24
-            color: Theme.accent
-
-            Icon {
-                anchors.centerIn: parent
-                name: header.player.playing ? "pause.fill" : "play.fill"
-                size: 20
-                color: Theme.popupText
-            }
-
-            TapHandler {
-                onTapped: header.player.togglePlayback()
-            }
+        IconButton {
+            prominent: true
+            diameter: Theme.audiobookPlayDiameter
+            iconSize: Theme.audiobookPlayGlyphSize
+            icon: header.player.playing ? "pause.fill" : "play.fill"
+            accessibleName: header.player.playing ? qsTr("Pause") : qsTr("Play")
+            onClicked: header.player.togglePlayback()
         }
 
         IconButton {
             icon: "forward.fill"
-            diameter: 34
-            iconSize: 13
+            diameter: Theme.audiobookTransportDiameter
+            iconSize: Theme.audiobookCueGlyphSize
             accessibleName: qsTr("Next cue")
             onClicked: header.player.nextCue()
         }
 
         IconButton {
             icon: "15.arrow.trianglehead.clockwise"
-            diameter: 34
-            iconSize: 14
+            diameter: Theme.audiobookTransportDiameter
+            iconSize: Theme.audiobookSkipGlyphSize
             accessibleName: qsTr("Forward 15 seconds")
             onClicked: header.player.skipForward(true)
         }

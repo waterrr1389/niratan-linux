@@ -7,6 +7,7 @@
 // control surface with a hairline; the pressed tint follows
 // NativeSettingsActionButtonGlassSurface.
 import QtQuick
+import QtQuick.Controls
 import QtQuick.Templates as T
 import Niratan
 
@@ -23,6 +24,7 @@ T.AbstractButton {
     // controlSize(.small): caption semibold on a chip-high capsule, as
     // ReaderGoToView.bookSummary draws Jump to.
     property bool small: false
+    property bool busy: false
 
     implicitWidth: implicitContentWidth + leftPadding + rightPadding
     implicitHeight: Math.max(small ? Theme.chipHeight : Theme.capsuleHeight,
@@ -38,7 +40,7 @@ T.AbstractButton {
 
     contentItem: Item {
         implicitWidth: control.sizeToLabel
-            ? label.implicitWidth + (control.glyph !== "" ? glyphIcon.width + labelRow.spacing : 0)
+            ? label.implicitWidth + control.leadingWidth
             : labelRow.implicitWidth
         implicitHeight: labelRow.implicitHeight
 
@@ -47,6 +49,14 @@ T.AbstractButton {
 
             anchors.centerIn: parent
             spacing: Theme.chipGlyphSpacing
+
+            BusyIndicator {
+                anchors.verticalCenter: parent.verticalCenter
+                width: Theme.chipGlyphSize
+                height: width
+                visible: control.busy
+                running: visible
+            }
 
             Icon {
                 id: glyphIcon
@@ -62,8 +72,7 @@ T.AbstractButton {
 
                 anchors.verticalCenter: parent.verticalCenter
                 width: Math.max(0, Math.min(implicitWidth, control.availableWidth
-                                - (control.glyph !== "" ? (control.small ? Theme.chipGlyphSize : Theme.glyphSize)
-                                                         + Theme.chipGlyphSpacing : 0)))
+                                - control.leadingWidth))
                 text: control.text
                 textStyle: control.small ? Theme.captionFont : Theme.bodyFont
                 weight: Theme.weightSemibold
@@ -73,6 +82,11 @@ T.AbstractButton {
             }
         }
     }
+
+    readonly property real leadingWidth:
+        (busy ? Theme.chipGlyphSize + Theme.chipGlyphSpacing : 0)
+        + (glyph !== "" ? (small ? Theme.chipGlyphSize : Theme.glyphSize)
+                          + Theme.chipGlyphSpacing : 0)
 
     background: Rectangle {
         radius: height / 2

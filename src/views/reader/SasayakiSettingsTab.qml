@@ -26,7 +26,6 @@ pragma ComponentBehavior: Bound
 
 import QtQuick
 import QtQuick.Controls
-import QtQuick.Dialogs
 import QtQuick.Layouts
 import Niratan
 
@@ -36,59 +35,12 @@ Item {
     required property SasayakiViewModel player
     required property SasayakiSettingsViewModel settings
 
-    // NativeSettingsSectionCard in the inspector presentation.
-    component SectionCard: ColumnLayout {
-        id: card
-
-        property string title: ""
-
-        default property alias content: body.data
-
-        Layout.fillWidth: true
-        Layout.leftMargin: 18
-        Layout.rightMargin: 18
-        Layout.topMargin: 14
-        Layout.bottomMargin: 14
-        spacing: 4
-
-        Label {
-            Layout.fillWidth: true
-            Layout.bottomMargin: 2
-            visible: card.title.length > 0
-            text: card.title
-            color: Theme.textSecondary
-            font.pixelSize: Theme.fontCaption
-            font.bold: true
-        }
-
-        ColumnLayout {
-            id: body
-
-            Layout.fillWidth: true
-            spacing: 0
-        }
-
-        Rectangle {
-            Layout.fillWidth: true
-            implicitHeight: 1
-            color: Theme.popupDivider
-            opacity: 0.6
-        }
-    }
-
-    // NativeSettingsRow in the inspector presentation.
-    component SettingsRow: RowLayout {
-        Layout.fillWidth: true
-        Layout.minimumHeight: 32
-        spacing: 10
-    }
-
     // NativeSettingsSeparator renders nothing in the inspector presentation
     // (`if presentation != .inspector`), so no in-card separator is drawn; the
     // section card's bottom hairline is the only divider.
 
     // A toggle row that writes on change and re-binds to the model.
-    component ToggleRow: SettingsRow {
+    component ToggleRow: InspectorFormRow {
         id: toggleRow
 
         property string title: ""
@@ -97,14 +49,13 @@ Item {
         // Invoked after the value is written.
         signal written
 
-        Label {
+        StyledLabel {
             Layout.fillWidth: true
             text: toggleRow.title
-            color: Theme.textPrimary
-            font.pixelSize: 13
+            textStyle: Theme.calloutFont
         }
 
-        Switch {
+        ToggleSwitch {
             id: toggle
 
             checked: root.settings[toggleRow.propertyName]
@@ -130,36 +81,34 @@ Item {
             width: scroll.availableWidth
             spacing: 0
 
-            SectionCard {
+            InspectorFormSection {
                 title: qsTr("Playback")
 
                 ColumnLayout {
                     Layout.fillWidth: true
-                    Layout.leftMargin: 12
-                    Layout.rightMargin: 12
-                    Layout.topMargin: 10
-                    Layout.bottomMargin: 10
-                    spacing: 8
+                    Layout.leftMargin: Theme.spacingMd
+                    Layout.rightMargin: Theme.spacingMd
+                    Layout.topMargin: Theme.sliderRowPaddingVertical
+                    Layout.bottomMargin: Theme.sliderRowPaddingVertical
+                    spacing: Theme.sliderRowSpacing
 
                     RowLayout {
                         Layout.fillWidth: true
 
-                        Label {
+                        StyledLabel {
                             text: qsTr("Delay")
-                            color: Theme.textPrimary
-                            font.pixelSize: 13
+                            textStyle: Theme.calloutFont
                         }
 
                         Item {
                             Layout.fillWidth: true
                         }
 
-                        Label {
+                        StyledLabel {
                             text: (root.player.delay >= 0 ? "+" : "") + root.player.delay.toFixed(2) + "s"
-                            color: Theme.textPrimary
-                            font.pixelSize: 13
-                            font.bold: true
-                            font.family: "monospace"
+                            textStyle: Theme.calloutFont
+                            weight: Theme.weightSemibold
+                            monospacedDigits: true
                         }
                     }
 
@@ -185,31 +134,29 @@ Item {
 
                 ColumnLayout {
                     Layout.fillWidth: true
-                    Layout.leftMargin: 12
-                    Layout.rightMargin: 12
-                    Layout.topMargin: 10
-                    Layout.bottomMargin: 10
-                    spacing: 8
+                    Layout.leftMargin: Theme.spacingMd
+                    Layout.rightMargin: Theme.spacingMd
+                    Layout.topMargin: Theme.sliderRowPaddingVertical
+                    Layout.bottomMargin: Theme.sliderRowPaddingVertical
+                    spacing: Theme.sliderRowSpacing
 
                     RowLayout {
                         Layout.fillWidth: true
 
-                        Label {
+                        StyledLabel {
                             text: qsTr("Speed")
-                            color: Theme.textPrimary
-                            font.pixelSize: 13
+                            textStyle: Theme.calloutFont
                         }
 
                         Item {
                             Layout.fillWidth: true
                         }
 
-                        Label {
+                        StyledLabel {
                             text: root.player.rate.toFixed(2) + "x"
-                            color: Theme.textPrimary
-                            font.pixelSize: 13
-                            font.bold: true
-                            font.family: "monospace"
+                            textStyle: Theme.calloutFont
+                            weight: Theme.weightSemibold
+                            monospacedDigits: true
                         }
                     }
 
@@ -234,7 +181,7 @@ Item {
                 }
             }
 
-            SectionCard {
+            InspectorFormSection {
                 title: qsTr("Settings")
 
                 ToggleRow {
@@ -255,7 +202,7 @@ Item {
                 }
             }
 
-            SectionCard {
+            InspectorFormSection {
                 title: qsTr("Light Theme")
 
                 ColorRow {
@@ -277,7 +224,7 @@ Item {
                 }
             }
 
-            SectionCard {
+            InspectorFormSection {
                 title: qsTr("Dark Theme")
 
                 ColorRow {
@@ -301,7 +248,7 @@ Item {
 
             Item {
                 Layout.fillWidth: true
-                Layout.preferredHeight: 18
+                Layout.preferredHeight: Theme.readerInspectorFormInset
             }
         }
     }
@@ -309,7 +256,7 @@ Item {
     // A label row whose accessory is the colour swatch, as a hidden-label
     // ColorPicker shows it. The store keeps #RRGGBBAA; the swatch needs
     // #AARRGGBB.
-    component ColorRow: SettingsRow {
+    component ColorRow: InspectorFormRow {
         id: colorRow
 
         property string title: ""
@@ -320,41 +267,19 @@ Item {
                                         ? "#" + colorRow.hex.slice(7) + colorRow.hex.slice(1, 7)
                                         : colorRow.hex
 
-        Label {
+        StyledLabel {
             Layout.fillWidth: true
             text: colorRow.title
-            color: Theme.textPrimary
-            font.pixelSize: 13
+            textStyle: Theme.calloutFont
         }
 
-        Item {
-            Layout.preferredWidth: 24
-            Layout.preferredHeight: 24
-            Layout.rightMargin: 4
+        ColorWell {
+            Layout.preferredWidth: Theme.colorWellHeight
+            Layout.rightMargin: Theme.spacingXs
             Accessible.name: colorRow.title
-
-            Rectangle {
-                anchors.fill: parent
-                radius: 6
-                color: colorRow.swatch
-                border.width: 1
-                border.color: Theme.cardStroke
-            }
-
-            TapHandler {
-                onTapped: {
-                    picker.selectedColor = colorRow.swatch;
-                    picker.open();
-                }
-            }
-        }
-
-        ColorDialog {
-            id: picker
-
-            title: colorRow.title
-            options: ColorDialog.ShowAlphaChannel
-            onAccepted: {
+            dialogTitle: colorRow.title
+            color: colorRow.swatch
+            onPicked: selectedColor => {
                 const rgba = [selectedColor.r, selectedColor.g, selectedColor.b, selectedColor.a];
                 colorRow.picked("#" + rgba.map(function(channel) {
                     return Math.round(channel * 255).toString(16).padStart(2, "0");

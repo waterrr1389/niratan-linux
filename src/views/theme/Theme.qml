@@ -420,6 +420,20 @@ QtObject {
     readonly property int readerListDetailSpacing: 3
     readonly property int readerListRadius: 9
     readonly property int readerListRowPadding: 7
+    readonly property int readerInspectorFormInset: 18
+    readonly property int readerInspectorTimeSpacing: 2
+    readonly property int readerChapterMarkerHeight: 17
+    readonly property int readerChapterMarkerGlyph: 11
+    readonly property int audiobookCoverSize: 64
+    readonly property int audiobookCoverRadius: 10
+    readonly property int audiobookCoverGlyphSize: 22
+    readonly property color audiobookCoverBackground: Qt.alpha(textSecondary, 0.10)
+    readonly property int audiobookTransportDiameter: 34
+    readonly property int audiobookTransportSpacing: 10
+    readonly property int audiobookSkipGlyphSize: 14
+    readonly property int audiobookCueGlyphSize: 13
+    readonly property int audiobookPlayDiameter: 48
+    readonly property int audiobookPlayGlyphSize: 20
     readonly property int readerChapterIndent: 14
     readonly property int readerHighlightWidth: 3
     readonly property color readerRowSelected: Qt.alpha(accent, 0.18)

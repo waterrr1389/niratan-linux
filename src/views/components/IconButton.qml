@@ -20,6 +20,7 @@ Item {
     property int diameter: 38
     property real iconSize: 16
     property string accessibleName
+    property bool prominent: false
 
     signal clicked()
 
@@ -55,7 +56,7 @@ Item {
     Rectangle {
         anchors.fill: parent
         radius: width / 2
-        color: button.pressed
+        color: button.prominent ? Theme.accent : button.pressed
             ? Qt.rgba(Theme.textPrimary.r, Theme.textPrimary.g, Theme.textPrimary.b, 0.16)
             : button.hovered ? Theme.cardStroke : Theme.cardBackground
         border.width: 1
@@ -66,6 +67,6 @@ Item {
         anchors.centerIn: parent
         name: button.icon
         size: button.iconSize
-        color: Theme.textPrimary
+        color: button.prominent ? Theme.popupText : Theme.textPrimary
     }
 }

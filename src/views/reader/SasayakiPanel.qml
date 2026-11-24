@@ -95,9 +95,9 @@ Item {
         SasayakiPlaybackHeader {
             id: playback
             Layout.fillWidth: true
-            Layout.leftMargin: 18
-            Layout.rightMargin: 18
-            Layout.bottomMargin: 14
+            Layout.leftMargin: Theme.readerInspectorFormInset
+            Layout.rightMargin: Theme.readerInspectorFormInset
+            Layout.bottomMargin: Theme.readerListBottomInset
             visible: root.player.hasAudio
             player: root.player
         }

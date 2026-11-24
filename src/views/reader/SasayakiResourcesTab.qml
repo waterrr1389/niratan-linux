@@ -47,54 +47,6 @@ Item {
         onAccepted: root.player.openSubtitles(subtitleDialog.selectedFile)
     }
 
-    // NativeSettingsSectionCard in the inspector presentation.
-    component SectionCard: ColumnLayout {
-        id: card
-
-        property string title: ""
-
-        default property alias content: body.data
-
-        Layout.fillWidth: true
-        Layout.leftMargin: 18
-        Layout.rightMargin: 18
-        Layout.topMargin: 14
-        Layout.bottomMargin: 14
-        spacing: 4
-
-        Label {
-            Layout.fillWidth: true
-            Layout.bottomMargin: 2
-            visible: card.title.length > 0
-            text: card.title
-            color: Theme.textSecondary
-            font.pixelSize: Theme.fontCaption
-            font.bold: true
-        }
-
-        ColumnLayout {
-            id: body
-
-            Layout.fillWidth: true
-            spacing: 0
-        }
-
-        Rectangle {
-            Layout.fillWidth: true
-            implicitHeight: 1
-            color: Theme.popupDivider
-            opacity: 0.6
-        }
-    }
-
-    // NativeSettingsRow in the inspector presentation.
-    component SettingsRow: RowLayout {
-        Layout.fillWidth: true
-        Layout.minimumHeight: 32
-        Layout.leftMargin: 0
-        spacing: 10
-    }
-
     // NativeSettingsSeparator renders nothing in the inspector presentation
     // (`if presentation != .inspector`), so no in-card separator is drawn; the
     // section card's bottom hairline is the only divider.
@@ -110,56 +62,56 @@ Item {
             width: scroll.availableWidth
             spacing: 0
 
-            SectionCard {
+            InspectorFormSection {
                 title: qsTr("Audio")
 
-                SettingsRow {
-                    Label {
+                InspectorFormRow {
+                    StyledLabel {
                         text: qsTr("Load Audio")
-                        color: Theme.textPrimary
-                        font.pixelSize: 13
+                        textStyle: Theme.calloutFont
                     }
 
                     Item {
                         Layout.fillWidth: true
                     }
 
-                    Button {
+                    FormButton {
+                        sizeToLabel: true
                         text: qsTr("Load Audio")
                         Accessible.name: qsTr("Load Audio")
                         onClicked: audioDialog.open()
                     }
                 }
 
-                Label {
+                StyledLabel {
                     Layout.fillWidth: true
-                    Layout.leftMargin: 12
-                    Layout.rightMargin: 12
-                    Layout.topMargin: 10
-                    Layout.bottomMargin: 10
+                    Layout.leftMargin: Theme.spacingMd
+                    Layout.rightMargin: Theme.spacingMd
+                    Layout.topMargin: Theme.sliderRowPaddingVertical
+                    Layout.bottomMargin: Theme.sliderRowPaddingVertical
                     visible: root.player.error.length > 0
                     text: root.player.error
                     color: Theme.popupDanger
-                    font.pixelSize: 13
+                    textStyle: Theme.calloutFont
                     wrapMode: Text.WordWrap
                 }
             }
 
-            SectionCard {
+            InspectorFormSection {
                 title: qsTr("Subtitle Match")
 
-                SettingsRow {
-                    Label {
+                InspectorFormRow {
+                    StyledLabel {
                         Layout.fillWidth: true
                         text: root.player.subtitleName.length > 0
                               ? root.player.subtitleName : qsTr("No file selected")
-                        color: Theme.textPrimary
-                        font.pixelSize: 13
+                        textStyle: Theme.calloutFont
                         elide: Text.ElideRight
                         maximumLineCount: 1
                     }
 
-                    Button {
+                    FormButton {
+                        sizeToLabel: true
                         text: qsTr("Open")
                         Accessible.name: qsTr("Open")
                         onClicked: subtitleDialog.open()
@@ -167,27 +119,25 @@ Item {
                 }
             }
 
-            SectionCard {
+            InspectorFormSection {
                 ColumnLayout {
                     Layout.fillWidth: true
-                    spacing: 12
+                    spacing: Theme.spacingMd
 
-                    SettingsRow {
-                        Label {
+                    InspectorFormRow {
+                        StyledLabel {
                             text: qsTr("Search Window")
-                            color: Theme.textPrimary
-                            font.pixelSize: 13
+                            textStyle: Theme.calloutFont
                         }
 
                         Item {
                             Layout.fillWidth: true
                         }
 
-                        Label {
+                        StyledLabel {
                             text: root.player.matchSearchWindow.toString()
-                            color: Theme.textPrimary
-                            font.pixelSize: 13
-                            font.bold: true
+                            textStyle: Theme.calloutFont
+                            weight: Theme.weightSemibold
                         }
                     }
 
@@ -195,9 +145,9 @@ Item {
                         id: searchWindowSlider
 
                         Layout.fillWidth: true
-                        Layout.leftMargin: 16
-                        Layout.rightMargin: 16
-                        Layout.bottomMargin: 12
+                        Layout.leftMargin: Theme.spacingLg
+                        Layout.rightMargin: Theme.spacingLg
+                        Layout.bottomMargin: Theme.spacingMd
                         from: 50
                         to: 1000
                         stepSize: 50
@@ -215,92 +165,71 @@ Item {
                         onPressedChanged: if (!pressed && value !== root.player.matchSearchWindow) commit()
                     }
 
-                    RowLayout {
+                    FormButtonRow {
                         Layout.fillWidth: true
-                        Layout.preferredHeight: 36
-                        spacing: 8
+                        compact: true
 
-                        Button {
+                        FormButton {
+                            sizeToLabel: true
+                            text: root.player.matching ? qsTr("Matching…") : qsTr("Match")
+                            busy: root.player.matching
                             enabled: root.canMatch
                             onClicked: root.player.matchSubtitles(root.player.matchSearchWindow)
-
-                            contentItem: RowLayout {
-                                spacing: 6
-
-                                BusyIndicator {
-                                    Layout.preferredWidth: 14
-                                    Layout.preferredHeight: 14
-                                    running: root.player.matching
-                                    visible: root.player.matching
-                                }
-
-                                Label {
-                                    text: root.player.matching ? qsTr("Matching…") : qsTr("Match")
-                                    color: Theme.textPrimary
-                                    font.pixelSize: 13
-                                    font.bold: true
-                                }
-                            }
-                        }
-
-                        Item {
-                            Layout.fillWidth: true
                         }
                     }
                 }
             }
 
-            SectionCard {
+            InspectorFormSection {
                 visible: root.player.hasMatch
                 title: qsTr("Current Match")
 
-                SettingsRow {
-                    Label {
+                InspectorFormRow {
+                    StyledLabel {
                         text: qsTr("Match Rate")
-                        color: Theme.textPrimary
-                        font.pixelSize: 13
+                        textStyle: Theme.calloutFont
                     }
 
                     Item {
                         Layout.fillWidth: true
                     }
 
-                    Label {
+                    StyledLabel {
                         text: root.player.matchRateLabel
-                        color: Theme.textSecondary
-                        font.pixelSize: 13
-                        font.bold: true
+                        secondary: true
+                        textStyle: Theme.calloutFont
+                        weight: Theme.weightSemibold
                     }
                 }
 
-                Label {
+                StyledLabel {
                     Layout.fillWidth: true
-                    Layout.leftMargin: 16
-                    Layout.rightMargin: 16
-                    Layout.bottomMargin: 12
+                    Layout.leftMargin: Theme.spacingLg
+                    Layout.rightMargin: Theme.spacingLg
+                    Layout.bottomMargin: Theme.spacingMd
                     visible: root.player.inferredCount > 0
                     text: qsTr("Includes %1 subtitles located from surrounding narration. Their highlights may be approximate.").arg(root.player.inferredCount)
-                    color: Theme.textSecondary
-                    font.pixelSize: Theme.fontCaption
+                    secondary: true
+                    textStyle: Theme.captionFont
                     wrapMode: Text.WordWrap
                 }
             }
 
-            Label {
+            StyledLabel {
                 Layout.fillWidth: true
-                Layout.leftMargin: 30
-                Layout.rightMargin: 30
-                Layout.topMargin: 12
+                Layout.leftMargin: Theme.readerInspectorFormInset + Theme.spacingMd
+                Layout.rightMargin: Theme.readerInspectorFormInset + Theme.spacingMd
+                Layout.topMargin: Theme.spacingMd
                 visible: root.player.matchError.length > 0
                 text: root.player.matchError
                 color: Theme.popupDanger
-                font.pixelSize: 13
+                textStyle: Theme.calloutFont
                 wrapMode: Text.WordWrap
             }
 
             Item {
                 Layout.fillWidth: true
-                Layout.preferredHeight: 18
+                Layout.preferredHeight: Theme.readerInspectorFormInset
             }
         }
     }
