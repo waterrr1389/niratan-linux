@@ -9,7 +9,9 @@
 // [from, to], so a value off the step grid still reaches a bound; a half is
 // disabled at its bound, and both are disabled unless stepSize is positive.
 // The page writes the value back and formats valueText.
+// Editable integer settings also accept a typed value through stepped.
 import QtQuick
+import QtQuick.Controls
 import Niratan
 
 Item {
@@ -21,14 +23,17 @@ Item {
     property real stepSize: 1
     property string valueText
     property bool compact: false
+    property bool editable: false
+    property bool editing: false
 
     readonly property Item upButton: upHalf
     readonly property Item downButton: downHalf
 
     signal stepped(real value)
 
-    implicitWidth: (valueText !== "" ? valueLabel.implicitWidth + Theme.capsuleSpacing : 0)
-                   + Theme.stepperWidth
+    implicitWidth: Theme.stepperWidth + (valueText === "" && !editable ? 0
+        : Theme.capsuleSpacing + Math.max(valueLabel.implicitWidth,
+                                        editable ? Theme.wideInlineFieldWidth : 0))
     implicitHeight: Math.max(Theme.capsuleHeight, valueLabel.implicitHeight)
 
     Accessible.role: Accessible.SpinBox
@@ -36,6 +41,13 @@ Item {
 
     // Tab focuses the stepper; Up and Down step it like its two halves.
     activeFocusOnTab: true
+    Keys.onPressed: event => {
+        if (editable && activeFocus && /^[0-9]$/.test(event.text)
+            && !(event.modifiers & (Qt.ControlModifier | Qt.AltModifier | Qt.MetaModifier))) {
+            event.accepted = true
+            beginEdit(event.text, false)
+        }
+    }
     Keys.onUpPressed: {
         if (stepSize > 0 && value < to)
             stepped(Math.min(to, value + stepSize))
@@ -45,16 +57,74 @@ Item {
             stepped(Math.max(from, value - stepSize))
     }
 
+    function beginEdit(text: string, selectValue: bool) {
+        editor.text = text
+        editing = true
+        editor.forceActiveFocus()
+        if (selectValue)
+            editor.selectAll()
+    }
+
+    function finishEdit(commit: bool, keepFocus: bool) {
+        if (!editing)
+            return
+        const text = editor.text.trim()
+        editing = false
+        if (keepFocus)
+            forceActiveFocus()
+        if (commit && /^[+-]?[0-9]+$/.test(text)) {
+            const next = Math.max(from, Math.min(to, Number(text)))
+            if (next !== value)
+                stepped(next)
+        }
+    }
+
     StyledLabel {
         id: valueLabel
 
-        visible: stepper.valueText !== ""
+        objectName: "stepperValueLabel"
+        visible: !stepper.editing && stepper.valueText !== ""
+        anchors.right: body.left
+        anchors.rightMargin: Theme.capsuleSpacing
         anchors.verticalCenter: parent.verticalCenter
         text: stepper.valueText
         textStyle: stepper.compact ? Theme.calloutFont : Theme.bodyFont
         weight: stepper.compact ? Theme.weightSemibold : Theme.weightRegular
         secondary: true
         monospacedDigits: true
+
+        TapHandler {
+            enabled: stepper.editable
+            onTapped: stepper.beginEdit(String(stepper.value), true)
+        }
+    }
+
+    TextField {
+        id: editor
+
+        objectName: "stepperValueEditor"
+        visible: stepper.editing
+        activeFocusOnTab: false
+        anchors.left: parent.left
+        anchors.right: body.left
+        anchors.rightMargin: Theme.capsuleSpacing
+        anchors.verticalCenter: parent.verticalCenter
+        height: Theme.capsuleHeight
+        font.pixelSize: valueLabel.font.pixelSize
+        font.weight: valueLabel.font.weight
+        font.features: valueLabel.font.features
+        horizontalAlignment: TextInput.AlignRight
+        inputMethodHints: Qt.ImhFormattedNumbersOnly
+        onAccepted: stepper.finishEdit(true, true)
+        onActiveFocusChanged: {
+            if (!activeFocus)
+                stepper.finishEdit(true, false)
+        }
+        Keys.onShortcutOverride: event => {
+            if (event.key === Qt.Key_Escape)
+                event.accepted = true
+        }
+        Keys.onEscapePressed: stepper.finishEdit(false, true)
     }
 
     Rectangle {

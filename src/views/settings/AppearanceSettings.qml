@@ -157,6 +157,7 @@ PanelScaffold {
         FormDivider {}
         ValueStepper {
             label: qsTr("Font Size")
+            editable: true
             from: 16
             to: 40
             value: form.settingsModel.fontSize

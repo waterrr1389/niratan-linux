@@ -202,6 +202,7 @@ PanelScaffold {
         FormDivider {}
         FormStepperRow {
             label: qsTr("Max Results")
+            editable: true
             from: 1
             to: 50
             value: preferences.maxResults
@@ -212,6 +213,7 @@ PanelScaffold {
         FormDivider {}
         FormStepperRow {
             label: qsTr("Scan Length")
+            editable: true
             from: 1
             to: 64
             value: preferences.scanLength
@@ -251,6 +253,7 @@ PanelScaffold {
         FormStepperRow {
             objectName: "searchTextSizeRow"
             label: qsTr("Text Size")
+            editable: true
             from: 12
             to: 48
             value: preferences.searchTextSize

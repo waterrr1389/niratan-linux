@@ -16,6 +16,7 @@ FormRow {
     property real to: 1
     property real stepSize: 1
     property string valueText
+    property bool editable: false
 
     signal stepped(real value)
 
@@ -30,6 +31,7 @@ FormRow {
         stepSize: row.stepSize
         valueText: row.valueText
         compact: row.compact
+        editable: row.editable
         Accessible.name: row.label
         onStepped: value => row.stepped(value)
     }

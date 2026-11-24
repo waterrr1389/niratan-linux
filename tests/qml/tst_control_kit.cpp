@@ -183,6 +183,7 @@ class ControlKitTest : public QObject {
     void glyph_column();
     void row_breathing_room();
     void controls_emit_on_user_action();
+    void editable_stepper_accepts_integers();
     void colour_well_opens_dialog();
     void links_open_their_url();
     void panel_header_closes();
@@ -660,6 +661,62 @@ void ControlKitTest::row_breathing_room() {
                                 .arg(bounds.left())
                                 .arg(bounds.right())
                                 .arg(section->width())));
+    }
+}
+
+void ControlKitTest::editable_stepper_accepts_integers() {
+    auto window = make_window();
+    QVERIFY(window != nullptr);
+    window->requestActivate();
+    QVERIFY(QTest::qWaitForWindowActive(window.get()));
+    auto scene =
+        create("Item { width: 500; height: 300\n"
+               "  FormStepperRow { objectName: \"row\"; width: parent.width; label: \"Size\";"
+               "    from: 16; to: 40; value: 24; valueText: String(value); editable: true;"
+               "    onStepped: next => value = next }\n"
+               "  Item { objectName: \"other\"; y: 100 }\n"
+               "}",
+               *window);
+    QVERIFY(scene != nullptr);
+    auto* row = scene->findChild<QQuickItem*>(QStringLiteral("row"));
+    auto* other = scene->findChild<QQuickItem*>(QStringLiteral("other"));
+    QVERIFY(row != nullptr);
+    QVERIFY(other != nullptr);
+    auto* stepper = item_property(row, "trailingItem");
+    QVERIFY(stepper != nullptr);
+    auto* label = stepper->findChild<QQuickItem*>(QStringLiteral("stepperValueLabel"));
+    auto* editor = stepper->findChild<QQuickItem*>(QStringLiteral("stepperValueEditor"));
+    QVERIFY(label != nullptr);
+    QVERIFY(editor != nullptr);
+    QSignalSpy changes(row, SIGNAL(stepped(double)));
+
+    QTest::mouseClick(window.get(), Qt::LeftButton, {}, centre_in_window(label));
+    QTRY_VERIFY(editor->hasActiveFocus());
+    QTest::keyClick(window.get(), Qt::Key_3);
+    QTest::keyClick(window.get(), Qt::Key_1);
+    QTest::keyClick(window.get(), Qt::Key_Return);
+    QCOMPARE(changes.size(), 1);
+    QCOMPARE(row->property("value").toDouble(), 31.0);
+    QVERIFY(!editor->isVisible());
+
+    stepper->forceActiveFocus();
+    QTest::keyClick(window.get(), Qt::Key_9);
+    QTRY_VERIFY(editor->hasActiveFocus());
+    QTest::keyClick(window.get(), Qt::Key_9);
+    other->forceActiveFocus();
+    QCOMPARE(changes.size(), 2);
+    QCOMPARE(row->property("value").toDouble(), 40.0);
+    QVERIFY(!editor->isVisible());
+
+    for (const QString& rejected : {QStringLiteral("23"), QStringLiteral("20.5"), QString()}) {
+        QTest::mouseClick(window.get(), Qt::LeftButton, {}, centre_in_window(label));
+        QTRY_VERIFY(editor->hasActiveFocus());
+        QVERIFY(editor->setProperty("text", rejected));
+        QTest::keyClick(window.get(),
+                        rejected == QStringLiteral("23") ? Qt::Key_Escape : Qt::Key_Return);
+        QCOMPARE(changes.size(), 2);
+        QCOMPARE(row->property("value").toDouble(), 40.0);
+        QVERIFY(!editor->isVisible());
     }
 }
 
