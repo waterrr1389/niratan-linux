@@ -27,8 +27,8 @@ StatisticsCard {
     GridLayout {
         Layout.fillWidth: true
         columns: 2
-        columnSpacing: 8
-        rowSpacing: 8
+        columnSpacing: Theme.dashboardTileSpacing
+        rowSpacing: Theme.dashboardTileSpacing
 
         StatisticsMetricTile {
             Layout.fillWidth: true

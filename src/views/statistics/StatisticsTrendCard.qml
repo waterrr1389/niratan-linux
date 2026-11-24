@@ -42,28 +42,17 @@ StatisticsCard {
         return Math.max(value * 1.1, 1)
     }
 
+    // Bar, gap and axis label widths per time grain (day, week, month).
     function barWidth() {
-        if (StatisticsViewModel.trendGrain === 1)
-            return 22
-        if (StatisticsViewModel.trendGrain === 2)
-            return 28
-        return 12
+        return Theme.trendBarWidths[StatisticsViewModel.trendGrain] ?? Theme.trendBarWidths[0]
     }
 
     function barSpacing() {
-        if (StatisticsViewModel.trendGrain === 1)
-            return 8
-        if (StatisticsViewModel.trendGrain === 2)
-            return 10
-        return 5
+        return Theme.trendBarSpacings[StatisticsViewModel.trendGrain] ?? Theme.trendBarSpacings[0]
     }
 
     function labelWidth() {
-        if (StatisticsViewModel.trendGrain === 1)
-            return 66
-        if (StatisticsViewModel.trendGrain === 2)
-            return 58
-        return 42
+        return Theme.trendLabelWidths[StatisticsViewModel.trendGrain] ?? Theme.trendLabelWidths[0]
     }
 
     function shouldShowTrendLabel(index) {
@@ -123,16 +112,11 @@ StatisticsCard {
 
     Flow {
         Layout.fillWidth: true
-        spacing: 16
+        spacing: Theme.spacingLg
 
-        Column {
-            spacing: 4
+        PickerGroup {
+            title: qsTr("Range")
 
-            Label {
-                text: qsTr("Range")
-                color: Theme.textSecondary
-                font.pixelSize: 11
-            }
             StatisticsSegments {
                 objectName: "rangeSegments"
                 labels: [qsTr("Year"), qsTr("Month"), qsTr("Week"), qsTr("Day")]
@@ -143,14 +127,9 @@ StatisticsCard {
             }
         }
 
-        Column {
-            spacing: 4
+        PickerGroup {
+            title: qsTr("Time Grain")
 
-            Label {
-                text: qsTr("Time Grain")
-                color: Theme.textSecondary
-                font.pixelSize: 11
-            }
             StatisticsSegments {
                 labels: [qsTr("Day"), qsTr("Week"), qsTr("Month")]
                 currentIndex: StatisticsViewModel.trendGrain
@@ -160,14 +139,9 @@ StatisticsCard {
             }
         }
 
-        Column {
-            spacing: 4
+        PickerGroup {
+            title: qsTr("Metric")
 
-            Label {
-                text: qsTr("Metric")
-                color: Theme.textSecondary
-                font.pixelSize: 11
-            }
             StatisticsSegments {
                 labels: [qsTr("Characters"), qsTr("Duration"), qsTr("Speed")]
                 currentIndex: StatisticsViewModel.trendMetric
@@ -176,13 +150,9 @@ StatisticsCard {
                 }
             }
         }
-        Column {
-            spacing: 4
-            Label {
-                text: qsTr("Style")
-                color: Theme.textSecondary
-                font.pixelSize: 11
-            }
+        PickerGroup {
+            title: qsTr("Style")
+
             StatisticsSegments {
                 labels: [qsTr("Bar"), qsTr("Line")]
                 currentIndex: card.host.chartStyle
@@ -191,21 +161,21 @@ StatisticsCard {
         }
     }
 
-    Label {
+    StyledLabel {
         Layout.fillWidth: true
         text: qsTr("Range filters all dashboard cards. Time Grain changes only the trend chart.")
-        color: Theme.textSecondary
-        font.pixelSize: 11
+        textStyle: Theme.footnoteFont
+        secondary: true
         wrapMode: Text.WordWrap
     }
 
-    Label {
+    StyledLabel {
         Layout.fillWidth: true
-        Layout.preferredHeight: 150
+        Layout.preferredHeight: Theme.trendEmptyHeight
         visible: StatisticsViewModel.trend.length === 0
         text: qsTr("No trend data")
-        color: Theme.textSecondary
-        font.pixelSize: 13
+        textStyle: Theme.calloutFont
+        secondary: true
         horizontalAlignment: Text.AlignHCenter
         verticalAlignment: Text.AlignVCenter
     }
@@ -213,34 +183,28 @@ StatisticsCard {
     RowLayout {
         objectName: "trendChart"
         Layout.fillWidth: true
-        Layout.preferredHeight: 224
+        Layout.preferredHeight: Theme.trendChartHeight
         visible: StatisticsViewModel.trend.length > 0
-        spacing: 8
+        spacing: Theme.spacingSm
 
         Item {
-            Layout.preferredWidth: 56
+            Layout.preferredWidth: Theme.trendAxisWidth
             Layout.fillHeight: true
 
-            Label {
+            AxisLabel {
                 anchors.right: parent.right
                 anchors.top: parent.top
                 text: card.formatAxis(card.maximum)
-                color: Theme.textSecondary
-                font.pixelSize: 10
             }
-            Label {
+            AxisLabel {
                 anchors.right: parent.right
                 anchors.verticalCenter: parent.verticalCenter
                 text: card.formatAxis(card.maximum / 2)
-                color: Theme.textSecondary
-                font.pixelSize: 10
             }
-            Label {
+            AxisLabel {
                 anchors.right: parent.right
                 anchors.bottom: parent.bottom
                 text: "0"
-                color: Theme.textSecondary
-                font.pixelSize: 10
             }
         }
 
@@ -270,7 +234,7 @@ StatisticsCard {
                     ctx.clearRect(0, 0, width, height)
                     ctx.strokeStyle = accent
                     ctx.fillStyle = accent
-                    ctx.lineWidth = 2
+                    ctx.lineWidth = Theme.trendLineWidth
                     var points = StatisticsViewModel.trend
                     var slot = card.barWidth() + card.barSpacing()
                     var connected = false
@@ -282,12 +246,14 @@ StatisticsCard {
                             continue
                         }
                         var x = (i + 0.5) * slot
-                        var y = Math.min(height - 2, height * (1 - value / card.maximum))
+                        var y = Math.min(height - Theme.trendPointSize / 2,
+                                         height * (1 - value / card.maximum))
                         if (connected)
                             ctx.lineTo(x, y)
                         else
                             ctx.moveTo(x, y)
-                        ctx.fillRect(x - 2, y - 2, 4, 4)
+                        ctx.fillRect(x - Theme.trendPointSize / 2, y - Theme.trendPointSize / 2,
+                                     Theme.trendPointSize, Theme.trendPointSize)
                         connected = true
                     }
                     ctx.stroke()
@@ -297,7 +263,7 @@ StatisticsCard {
             Row {
                 id: trendRow
                 x: card.labelWidth() / 2
-                height: trendScroll.height - 22
+                height: trendScroll.height - Theme.trendLabelHeight
                 spacing: 0
 
                 Repeater {
@@ -312,9 +278,9 @@ StatisticsCard {
                         readonly property var value: card.trendValue(barColumn.modelData)
                         readonly property real barHeight:
                             barColumn.value === null || barColumn.value <= 0
-                            ? 2
+                            ? Theme.trendEmptyBarHeight
                             : Math.max(trendRow.height * barColumn.value
-                                       / card.maximum, 6)
+                                       / card.maximum, Theme.trendMinimumBarHeight)
 
                         Rectangle {
                             visible: card.host.chartStyle === 0
@@ -322,9 +288,9 @@ StatisticsCard {
                             height: barColumn.barHeight
                             anchors.horizontalCenter: parent.horizontalCenter
                             anchors.bottom: parent.bottom
-                            radius: 5
+                            radius: Theme.trendBarRadius
                             color: card.host.tint(Theme.accent,
-                                                  barHover.hovered ? 1 : 0.86)
+                                                  barHover.hovered ? 1 : Theme.trendBarOpacity)
                         }
                         HoverHandler { id: barHover }
                         ToolTip.visible: barHover.hovered
@@ -338,7 +304,7 @@ StatisticsCard {
                 id: labelRow
                 x: card.labelWidth() / 2
                 anchors.top: trendRow.bottom
-                height: 22
+                height: Theme.trendLabelHeight
                 spacing: 0
 
                 Repeater {
@@ -348,16 +314,14 @@ StatisticsCard {
                         required property int index
                         required property var modelData
                         width: card.barWidth() + card.barSpacing()
-                        height: 22
+                        height: Theme.trendLabelHeight
 
-                        Label {
+                        AxisLabel {
                             anchors.verticalCenter: parent.verticalCenter
                             anchors.horizontalCenter: parent.horizontalCenter
                             width: card.labelWidth()
                             text: card.shouldShowTrendLabel(labelColumn.index)
                                 ? labelColumn.modelData.label : ""
-                            color: Theme.textSecondary
-                            font.pixelSize: 10
                             horizontalAlignment: Text.AlignHCenter
                             elide: Text.ElideRight
                         }
@@ -365,6 +329,29 @@ StatisticsCard {
                 }
             }
         }
+    }
+
+    // A titled picker of the trend controls: caption label over the picker.
+    component PickerGroup: Column {
+        id: group
+
+        property string title
+
+        spacing: Theme.dashboardHeaderSpacing
+
+        StyledLabel {
+            text: group.title
+            textStyle: Theme.captionFont
+            weight: Theme.weightSemibold
+            secondary: true
+        }
+    }
+
+    // The chart's axis and period labels.
+    component AxisLabel: StyledLabel {
+        textStyle: Theme.caption2Font
+        secondary: true
+        monospacedDigits: true
     }
 
     Connections {

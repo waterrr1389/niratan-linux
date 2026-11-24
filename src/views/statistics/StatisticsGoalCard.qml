@@ -8,7 +8,6 @@
 pragma ComponentBehavior: Bound
 
 import QtQuick
-import QtQuick.Controls
 import QtQuick.Layouts
 import Niratan
 
@@ -26,13 +25,12 @@ StatisticsCard {
 
     RowLayout {
         Layout.fillWidth: true
-        spacing: 8
+        spacing: Theme.rowSpacing
 
-        Label {
+        StyledLabel {
             Layout.fillWidth: true
             text: qsTr("Goal Type")
-            color: Theme.textPrimary
-            font.pixelSize: 13
+            elide: Text.ElideRight
         }
         StatisticsSegments {
             labels: [qsTr("Characters"), qsTr("Duration")]
@@ -49,14 +47,11 @@ StatisticsCard {
         label: qsTr("Character Target")
         valueText: qsTr("%1 chars").arg(
             card.host.formatCharacters(StatisticsViewModel.characterTarget))
-        canDecrease: StatisticsViewModel.characterTarget
-                     > StatisticsViewModel.targetLimits.characterMin
-        canIncrease: StatisticsViewModel.characterTarget
-                     < StatisticsViewModel.targetLimits.characterMax
-        onDecrease: StatisticsViewModel.characterTarget = StatisticsViewModel.characterTarget
-            - StatisticsViewModel.targetLimits.characterStep
-        onIncrease: StatisticsViewModel.characterTarget = StatisticsViewModel.characterTarget
-            + StatisticsViewModel.targetLimits.characterStep
+        value: StatisticsViewModel.characterTarget
+        from: StatisticsViewModel.targetLimits.characterMin
+        to: StatisticsViewModel.targetLimits.characterMax
+        stepSize: StatisticsViewModel.targetLimits.characterStep
+        onStepped: value => StatisticsViewModel.characterTarget = value
     }
 
     StepperRow {
@@ -64,74 +59,57 @@ StatisticsCard {
         label: qsTr("Duration Target")
         valueText: card.host.formatDuration(
             StatisticsViewModel.durationTargetMinutes * 60)
-        canDecrease: StatisticsViewModel.durationTargetMinutes
-                     > StatisticsViewModel.targetLimits.durationMin
-        canIncrease: StatisticsViewModel.durationTargetMinutes
-                     < StatisticsViewModel.targetLimits.durationMax
-        onDecrease: StatisticsViewModel.durationTargetMinutes
-            = StatisticsViewModel.durationTargetMinutes
-            - StatisticsViewModel.targetLimits.durationStep
-        onIncrease: StatisticsViewModel.durationTargetMinutes
-            = StatisticsViewModel.durationTargetMinutes
-            + StatisticsViewModel.targetLimits.durationStep
+        value: StatisticsViewModel.durationTargetMinutes
+        from: StatisticsViewModel.targetLimits.durationMin
+        to: StatisticsViewModel.targetLimits.durationMax
+        stepSize: StatisticsViewModel.targetLimits.durationStep
+        onStepped: value => StatisticsViewModel.durationTargetMinutes = value
     }
 
     StepperRow {
         label: qsTr("Weekly Target Days")
         valueText: String(StatisticsViewModel.weeklyTargetDays)
-        canDecrease: StatisticsViewModel.weeklyTargetDays
-                     > StatisticsViewModel.targetLimits.weeklyMin
-        canIncrease: StatisticsViewModel.weeklyTargetDays
-                     < StatisticsViewModel.targetLimits.weeklyMax
-        onDecrease: StatisticsViewModel.weeklyTargetDays = StatisticsViewModel.weeklyTargetDays
-            - StatisticsViewModel.targetLimits.weeklyStep
-        onIncrease: StatisticsViewModel.weeklyTargetDays = StatisticsViewModel.weeklyTargetDays
-            + StatisticsViewModel.targetLimits.weeklyStep
+        value: StatisticsViewModel.weeklyTargetDays
+        from: StatisticsViewModel.targetLimits.weeklyMin
+        to: StatisticsViewModel.targetLimits.weeklyMax
+        stepSize: StatisticsViewModel.targetLimits.weeklyStep
+        onStepped: value => StatisticsViewModel.weeklyTargetDays = value
     }
 
-    Label {
+    StyledLabel {
         Layout.fillWidth: true
         text: qsTr("Goals recalculate historical progress and streaks.")
-        color: Theme.textSecondary
-        font.pixelSize: 11
+        textStyle: Theme.footnoteFont
+        secondary: true
         wrapMode: Text.WordWrap
     }
 
+    // A labelled kit stepper; the stepper clamps to the view model's limits
+    // and the row writes the stepped value back.
     component StepperRow: RowLayout {
         id: stepper
-        property string label
-        property string valueText
-        property bool canDecrease: true
-        property bool canIncrease: true
-        signal decrease()
-        signal increase()
-        Layout.fillWidth: true
-        spacing: 8
 
-        Label {
+        property string label
+        property alias valueText: control.valueText
+        property alias value: control.value
+        property alias from: control.from
+        property alias to: control.to
+        property alias stepSize: control.stepSize
+        signal stepped(real value)
+
+        Layout.fillWidth: true
+        spacing: Theme.rowSpacing
+
+        StyledLabel {
             Layout.fillWidth: true
             text: stepper.label
-            color: Theme.textPrimary
-            font.pixelSize: 13
             elide: Text.ElideRight
         }
-        Label {
-            text: stepper.valueText
-            color: Theme.textSecondary
-            font.pixelSize: 13
-            font.bold: true
-        }
-        Button {
-            implicitWidth: 30
-            text: "\u2212"
-            enabled: stepper.canDecrease
-            onClicked: stepper.decrease()
-        }
-        Button {
-            implicitWidth: 30
-            text: "+"
-            enabled: stepper.canIncrease
-            onClicked: stepper.increase()
+        StepperControl {
+            id: control
+
+            Accessible.name: stepper.label
+            onStepped: value => stepper.stepped(value)
         }
     }
 }

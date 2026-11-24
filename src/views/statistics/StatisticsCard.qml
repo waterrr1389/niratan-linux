@@ -2,8 +2,9 @@
 //
 // The card surface of the statistics dashboard, following the
 // `nativeGlassCardSurface` cards in
-// Features/Bookshelf/StatisticsDashboardView.swift: a solid theme surface with
-// a one-pixel stroke and the same 18 px inset around the content.
+// Features/Bookshelf/StatisticsDashboardView.swift (StatisticsDashboardCard):
+// the kit's GlassSurface holding a full-width, leading-aligned column padded
+// by the dashboard's card padding on every edge.
 
 pragma ComponentBehavior: Bound
 
@@ -11,23 +12,28 @@ import QtQuick
 import QtQuick.Layouts
 import Niratan
 
-Rectangle {
+GlassSurface {
     id: card
 
-    default property alias content: body.data
-    radius: Theme.cardRadius
-    color: Theme.cardBackground
-    border.width: 1
-    border.color: Theme.cardStroke
-    implicitWidth: body.implicitWidth + 36
-    implicitHeight: body.implicitHeight + 36
+    default property alias cardContent: body.data
+
+    implicitWidth: frame.implicitWidth
+    implicitHeight: frame.implicitHeight
 
     ColumnLayout {
-        id: body
+        id: frame
+
         anchors.left: parent.left
         anchors.right: parent.right
         anchors.top: parent.top
-        anchors.margins: 18
-        spacing: 10
+        spacing: 0
+
+        ColumnLayout {
+            id: body
+
+            Layout.fillWidth: true
+            Layout.margins: Theme.dashboardCardPadding
+            spacing: Theme.dashboardCardContentSpacing
+        }
     }
 }

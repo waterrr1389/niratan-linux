@@ -211,6 +211,19 @@ void click(QQuickItem* item) {
     QVERIFY(QMetaObject::invokeMethod(item, "clicked"));
 }
 
+// The first kit StepperControl under root: the item exposing `upButton`.
+QQuickItem* stepper_control(QQuickItem* root) {
+    if (root->property("upButton").value<QQuickItem*>() != nullptr) {
+        return root;
+    }
+    for (QQuickItem* child : root->childItems()) {
+        if (QQuickItem* found = stepper_control(child)) {
+            return found;
+        }
+    }
+    return nullptr;
+}
+
 bool write_bytes(const QString& path, const QByteArray& bytes) {
     QDir().mkpath(QFileInfo(path).absolutePath());
     QFile file(path);
@@ -562,7 +575,9 @@ void StatisticsViewTest::controls_write_the_view_model() {
 
     QQuickItem* range = item_named(page, QStringLiteral("rangeSegments"));
     QVERIFY2(range != nullptr, "the Range segments are missing");
-    QQuickItem* day = shown_control(range, "QQuickButton", QStringLiteral("Day"));
+    // The range picker is the kit SegmentedPicker; a segment carries its
+    // title as `text` and a `clicked` signal.
+    QQuickItem* day = shown_control(range, "QQuickItem", QStringLiteral("Day"));
     QVERIFY2(day != nullptr, "the Day range segment is missing");
     click(day);
     QTRY_COMPARE(model->range_mode(), 3);
@@ -576,9 +591,31 @@ void StatisticsViewTest::controls_write_the_view_model() {
     QQuickItem* stepper = item_named(page, QStringLiteral("characterTargetStepper"));
     QVERIFY2(stepper != nullptr, "the Character Target stepper is missing");
     const int before = model->character_target();
-    QQuickItem* increase = shown_control(stepper, "QQuickButton", QStringLiteral("+"));
-    QVERIFY2(increase != nullptr, "the Character Target increase control is missing");
-    click(increase);
+    QQuickItem* control = stepper_control(stepper);
+    QVERIFY2(control != nullptr && shown(control),
+             "the Character Target stepper control is missing");
+    auto* increase = control->property("upButton").value<QQuickItem*>();
+    QVERIFY2(increase != nullptr && shown(increase) && increase->isEnabled(),
+             "the Character Target increase half is missing or disabled");
+
+    // Scroll the stepper into the dashboard viewport, then press its
+    // increase half with the mouse.
+    QQuickItem* scroll = item_named(page, QStringLiteral("statisticsScroll"));
+    QVERIFY(scroll != nullptr);
+    auto* flickable = qobject_cast<QQuickItem*>(scroll->property("contentItem").value<QObject*>());
+    QVERIFY(flickable != nullptr);
+    const QPointF in_content =
+        increase->mapToItem(flickable->property("contentItem").value<QQuickItem*>(),
+                            QPointF(increase->width() / 2, increase->height() / 2));
+    const qreal maximum =
+        qMax(0.0, flickable->property("contentHeight").toReal() - flickable->height());
+    flickable->setProperty("contentY",
+                           qBound(0.0, in_content.y() - flickable->height() / 2, maximum));
+    const QPoint centre =
+        increase->mapToScene(QPointF(increase->width() / 2, increase->height() / 2)).toPoint();
+    QVERIFY2(QRect(QPoint(0, 0), window.size()).contains(centre),
+             "the increase half is outside the window after scrolling");
+    QTest::mouseClick(&window, Qt::LeftButton, Qt::NoModifier, centre);
     QTRY_COMPARE(model->character_target(), before + 500);
 
     object.reset();

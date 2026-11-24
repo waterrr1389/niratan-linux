@@ -8,7 +8,6 @@
 pragma ComponentBehavior: Bound
 
 import QtQuick
-import QtQuick.Controls
 import QtQuick.Layouts
 import Niratan
 
@@ -48,13 +47,13 @@ StatisticsCard {
         onActivated: function (index) { StatisticsViewModel.rankingMetric = index }
     }
 
-    Label {
+    StyledLabel {
         Layout.fillWidth: true
-        Layout.preferredHeight: 100
+        Layout.preferredHeight: Theme.dashboardEmptyHeight
         visible: StatisticsViewModel.ranking.length === 0
         text: qsTr("No reading records")
-        color: Theme.textSecondary
-        font.pixelSize: 13
+        textStyle: Theme.calloutFont
+        secondary: true
         horizontalAlignment: Text.AlignHCenter
         verticalAlignment: Text.AlignVCenter
     }
@@ -65,7 +64,7 @@ StatisticsCard {
             id: rankRow
             required property var modelData
             Layout.fillWidth: true
-            implicitHeight: 54
+            implicitHeight: Theme.rankingRowHeight
             Accessible.role: Accessible.Button
             Accessible.name: rankRow.modelData.title
             Accessible.onPressAction: card.host.openBookDetails(rankRow.modelData)
@@ -74,25 +73,33 @@ StatisticsCard {
             Keys.onSpacePressed: card.host.openBookDetails(rankRow.modelData)
             Rectangle {
                 anchors.fill: parent
-                radius: 4
-                color: card.host.tint(Theme.accent, 0.12)
-                visible: rankRow.activeFocus || rankTap.hovered
+                anchors.leftMargin: -Theme.spacingXs
+                anchors.rightMargin: -Theme.spacingXs
+                radius: Theme.controlRadius
+                color: rankTap.pressed ? Theme.pressTint : Theme.hoverTint
+                visible: rankRow.activeFocus || rankHover.hovered
             }
-            HoverHandler { id: rankTap }
-            TapHandler { onTapped: card.host.openBookDetails(rankRow.modelData) }
+            HoverHandler {
+                id: rankHover
+                cursorShape: Qt.PointingHandCursor
+            }
+            TapHandler {
+                id: rankTap
+                onTapped: card.host.openBookDetails(rankRow.modelData)
+            }
 
             RowLayout {
                 anchors.fill: parent
-                spacing: 12
+                spacing: Theme.rowSpacing
 
                 Item {
-                    Layout.preferredWidth: 36
-                    Layout.preferredHeight: 48
+                    Layout.preferredWidth: Theme.rankingCoverWidth
+                    Layout.preferredHeight: Theme.rankingCoverHeight
 
                     Rectangle {
                         anchors.fill: parent
-                        radius: 4
-                        color: card.host.tint(Theme.textPrimary, 0.06)
+                        radius: Theme.summaryCoverRadius
+                        color: Theme.coverPlaceholder
                         visible: rankRow.modelData.cover.length === 0
                     }
                     Image {
@@ -104,51 +111,38 @@ StatisticsCard {
                     }
                 }
 
-                Label {
-                    Layout.preferredWidth: 120
+                StyledLabel {
+                    Layout.preferredWidth: Theme.rankingTitleWidth
                     text: rankRow.modelData.title
-                    color: Theme.textPrimary
-                    font.pixelSize: 13
-                    font.bold: true
+                    textStyle: Theme.calloutFont
+                    weight: Theme.weightSemibold
                     maximumLineCount: 2
                     wrapMode: Text.WordWrap
                     elide: Text.ElideRight
                 }
 
-                Item {
+                ProgressTrack {
                     Layout.fillWidth: true
-                    Layout.preferredHeight: 9
-
-                    Rectangle {
-                        anchors.fill: parent
-                        radius: 4.5
-                        color: card.host.tint(Theme.textPrimary, 0.12)
-                    }
-                    Rectangle {
-                        width: Math.max(parent.width
-                                        * rankRow.modelData.value
-                                        / card.maximum,
-                                        rankRow.modelData.value > 0
-                                        ? 2 : 0)
-                        height: parent.height
-                        radius: 4.5
-                        color: card.host.tint(Theme.accent, 0.78)
-                    }
+                    value: rankRow.modelData.value / card.maximum
                 }
 
-                Label {
-                    Layout.preferredWidth: 84
+                StyledLabel {
+                    Layout.preferredWidth: Theme.rankingValueWidth
                     text: card.valueText(rankRow.modelData)
-                    color: Theme.textSecondary
-                    font.pixelSize: 12
+                    textStyle: Theme.calloutFont
+                    secondary: true
+                    monospacedDigits: true
                     horizontalAlignment: Text.AlignRight
-                    elide: Text.ElideRight
+                    maximumLineCount: 1
+                    fontSizeMode: Text.HorizontalFit
+                    minimumPixelSize: Math.round(Theme.calloutFont.pixelSize
+                                                 * Theme.metricMinimumScale)
                 }
             }
         }
     }
 
-    Button {
+    FormButton {
         Layout.fillWidth: true
         visible: StatisticsViewModel.hasMoreBooks
         text: qsTr("More Books")

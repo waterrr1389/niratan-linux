@@ -29,7 +29,9 @@
 // the loaded dashboard visible (`isInitialSnapshotLoading`).
 //
 // The calendar and shelf table scroll horizontally instead of shrinking their
-// cells. Every colour is a Theme token; the data series is Theme.accent.
+// cells. Every colour is a Theme token; the data series is Theme.accent. Type,
+// spacing, controls and the book details editor come from the kit and the
+// dashboard tokens of the theme, the same roles other pages use.
 
 pragma ComponentBehavior: Bound
 
@@ -46,9 +48,9 @@ Item {
     property real toolbarInset: 0
     property int chartStyle: 0
 
-    readonly property int outerMargin: 24
-    readonly property int cardSpacing: 16
-    readonly property bool wideLayout: page.width >= 840
+    readonly property int outerMargin: Theme.dashboardMargin
+    readonly property int cardSpacing: Theme.dashboardCardSpacing
+    readonly property bool wideLayout: page.width >= Theme.dashboardWideWidth
     readonly property var weekdayLabels: [
         qsTr("Mon"), qsTr("Tue"), qsTr("Wed"), qsTr("Thu"),
         qsTr("Fri"), qsTr("Sat"), qsTr("Sun")
@@ -103,207 +105,10 @@ Item {
         bookDetails.showBook(item)
     }
 
-    Dialog {
+    StatisticsBookDetailsDialog {
         id: bookDetails
-        parent: Overlay.overlay
-        anchors.centerIn: parent
-        width: Math.min(page.width - 24, 780)
-        height: Math.min(page.height - 24, 560)
-        modal: true
-        standardButtons: Dialog.Close
-        property var book: ({})
-        property string dateKey: ""
-        property string sessionId: ""
-        readonly property var day: StatisticsViewModel.bookDays.find(
-            item => item.dateKey === dateKey)
 
-        function chooseSession(session) {
-            sessionId = session ? session.id : ""
-            countField.text = session ? String(session.characters) : ""
-            hoursField.text = session ? String(session.hours) : ""
-            minutesField.text = session ? String(session.minutes) : ""
-        }
-
-        function selectDay(item, preferred) {
-            dateKey = item ? item.dateKey : ""
-            var sessions = item ? item.sessions : []
-            chooseSession(sessions.find(session => session.id === preferred)
-                ?? (sessions.length === 1 ? sessions[0] : null))
-        }
-
-        function restoreSelection(date, session) {
-            var days = StatisticsViewModel.bookDays
-            selectDay(days.find(item => item.dateKey === date) ?? days[days.length - 1], session)
-        }
-
-        function showBook(item) {
-            book = item
-            StatisticsViewModel.openBookDetails(item.id)
-            restoreSelection("", "")
-            open()
-        }
-
-        title: qsTr("Statistics")
-        contentItem: ColumnLayout {
-            RowLayout {
-                Layout.fillWidth: true
-                Image {
-                    Layout.preferredWidth: 48
-                    Layout.preferredHeight: 64
-                    source: bookDetails.book.cover ?? ""
-                    fillMode: Image.PreserveAspectFit
-                }
-                Label {
-                    Layout.fillWidth: true
-                    text: bookDetails.book.title ?? ""
-                    color: Theme.textPrimary
-                    font.bold: true
-                    elide: Text.ElideRight
-                }
-            }
-            Label {
-                Layout.fillWidth: true
-                visible: StatisticsViewModel.detailError.length > 0
-                text: StatisticsViewModel.detailError
-                color: Theme.popupDanger
-                wrapMode: Text.WordWrap
-                Accessible.role: Accessible.AlertMessage
-            }
-            GridLayout {
-                Layout.fillWidth: true
-                Layout.fillHeight: true
-                columns: bookDetails.width >= 620 ? 2 : 1
-                ListView {
-                    Layout.fillWidth: true
-                    Layout.fillHeight: true
-                    Layout.preferredWidth: 270
-                    Layout.preferredHeight: 160
-                    clip: true
-                    model: StatisticsViewModel.bookDays
-                    ScrollBar.vertical: ScrollBar {}
-                    delegate: ItemDelegate {
-                        id: detailDay
-                        required property var modelData
-                        width: ListView.view.width
-                        highlighted: detailDay.modelData.dateKey === bookDetails.dateKey
-                        text: qsTr("%1\n%2 · %3 · %n session(s)", "", detailDay.modelData.sessions.length)
-                            .arg(page.fullDate(detailDay.modelData.dateKey))
-                            .arg(page.formatCharacters(detailDay.modelData.characters))
-                            .arg(page.formatDuration(detailDay.modelData.duration))
-                        onClicked: bookDetails.selectDay(detailDay.modelData, "")
-                    }
-                    Label {
-                        anchors.centerIn: parent
-                        visible: StatisticsViewModel.bookDays.length === 0
-                        text: qsTr("No reading records")
-                        color: Theme.textSecondary
-                    }
-                }
-                ColumnLayout {
-                    Layout.fillWidth: true
-                    Layout.fillHeight: true
-                    Label {
-                        Layout.fillWidth: true
-                        text: bookDetails.day ? page.fullDate(bookDetails.dateKey)
-                            : qsTr("Select a day to edit its reading sessions.")
-                        color: Theme.textPrimary
-                        wrapMode: Text.WordWrap
-                    }
-                    ListView {
-                        Layout.fillWidth: true
-                        Layout.fillHeight: true
-                        Layout.preferredHeight: 120
-                        clip: true
-                        model: bookDetails.day?.sessions ?? []
-                        ScrollBar.vertical: ScrollBar {}
-                        delegate: ItemDelegate {
-                            id: detailSession
-                            required property var modelData
-                            width: ListView.view.width
-                            highlighted: detailSession.modelData.id === bookDetails.sessionId
-                            text: qsTr("%1–%2\n%3 · %4 · %5")
-                                .arg(Qt.formatTime(detailSession.modelData.start, Qt.locale().timeFormat(Locale.ShortFormat)))
-                                .arg(Qt.formatTime(detailSession.modelData.end, Qt.locale().timeFormat(Locale.ShortFormat)))
-                                .arg(page.formatCharacters(detailSession.modelData.characters))
-                                .arg(page.formatDuration(detailSession.modelData.duration))
-                                .arg(page.formatSpeed(detailSession.modelData.speed))
-                            onClicked: bookDetails.chooseSession(detailSession.modelData)
-                        }
-                    }
-                    Flow {
-                        Layout.fillWidth: true
-                        spacing: Theme.spacingSm
-                        visible: bookDetails.sessionId.length > 0
-                        TextField {
-                            id: countField
-                            width: 120
-                            placeholderText: qsTr("Characters read")
-                            Accessible.name: placeholderText
-                            validator: IntValidator { bottom: 0 }
-                        }
-                        TextField {
-                            id: hoursField
-                            width: 62
-                            placeholderText: qsTr("Hours")
-                            Accessible.name: placeholderText
-                            validator: IntValidator { bottom: 0 }
-                        }
-                        TextField {
-                            id: minutesField
-                            width: 70
-                            placeholderText: qsTr("Minutes")
-                            Accessible.name: placeholderText
-                            validator: IntValidator { bottom: 0; top: 59 }
-                        }
-                        Button {
-                            text: qsTr("Save")
-                            enabled: countField.acceptableInput && hoursField.acceptableInput
-                                && minutesField.acceptableInput
-                            onClicked: {
-                                if (StatisticsViewModel.saveBookSession(bookDetails.sessionId,
-                                    Number(countField.text), Number(hoursField.text),
-                                    Number(minutesField.text))) {
-                                    bookDetails.restoreSelection(bookDetails.dateKey, bookDetails.sessionId)
-                                }
-                            }
-                        }
-                    }
-                    Flow {
-                        Layout.fillWidth: true
-                        spacing: Theme.spacingSm
-                        Button {
-                            visible: bookDetails.sessionId.length > 0
-                            text: qsTr("Delete Session")
-                            onClicked: deleteStats.ask(0)
-                        }
-                        Button {
-                            visible: !!bookDetails.day
-                            text: qsTr("Delete This Day")
-                            onClicked: deleteStats.ask(1)
-                        }
-                        Button {
-                            visible: StatisticsViewModel.bookDays.length > 0
-                            text: qsTr("Delete All Statistics")
-                            onClicked: deleteStats.ask(2)
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    StatisticsDeleteDialog {
-        id: deleteStats
-        sessionId: bookDetails.sessionId
-        dateKey: bookDetails.dateKey
-        onAccepted: {
-            var id = deleteStats.scope === 0 ? deleteStats.sessionId : ""
-            var date = deleteStats.scope === 1 ? deleteStats.dateKey : ""
-            if ((deleteStats.scope === 0 && !id) || (deleteStats.scope === 1 && !date))
-                return
-            if (StatisticsViewModel.deleteBookSessions(id, date))
-                bookDetails.restoreSelection(deleteStats.scope === 0 ? deleteStats.dateKey : "", "")
-        }
+        host: page
     }
 
     Rectangle {
@@ -318,7 +123,6 @@ Item {
         anchors.top: parent.top
         anchors.left: parent.left
         anchors.right: parent.right
-        height: 48
         leadingInset: page.toolbarInset
         title: qsTr("Statistics")
         subtitle: page.rangeTitle()
@@ -344,16 +148,15 @@ Item {
 
             x: page.outerMargin
             y: page.outerMargin
-            width: Math.max(page.width - page.outerMargin * 2, 240)
+            width: Math.max(page.width - page.outerMargin * 2, Theme.dashboardMinimumWidth)
             spacing: page.cardSpacing
 
             StatisticsCard {
                 Layout.fillWidth: true
                 visible: StatisticsViewModel.hasCorruptStatistics
-                Label {
+                StyledLabel {
                     Layout.fillWidth: true
                     text: qsTr("Some statistics are temporarily unavailable.")
-                    color: Theme.textPrimary
                     wrapMode: Text.WordWrap
                 }
             }
@@ -364,10 +167,12 @@ Item {
                 visible: !StatisticsViewModel.hasLoaded
                 RowLayout {
                     Layout.fillWidth: true
-                    Label {
+                    spacing: Theme.rowSpacing
+
+                    StyledLabel {
                         Layout.fillWidth: true
                         text: qsTr("Loading Statistics")
-                        color: Theme.textSecondary
+                        secondary: true
                     }
                     BusyIndicator { running: !StatisticsViewModel.hasLoaded }
                 }
@@ -375,9 +180,9 @@ Item {
                     model: 3
                     delegate: Rectangle {
                         Layout.fillWidth: true
-                        Layout.preferredHeight: 46
-                        radius: 6
-                        color: Theme.cardStroke
+                        Layout.preferredHeight: Theme.dashboardPlaceholderHeight
+                        radius: Theme.metricTileRadius
+                        color: Theme.metricTileBackground
                     }
                 }
             }
@@ -444,18 +249,15 @@ Item {
                 Layout.fillWidth: true
                 visible: StatisticsViewModel.hasLoaded && !StatisticsViewModel.hasStatistics
 
-                Label {
+                StatisticsSectionHeader {
                     Layout.fillWidth: true
-                    text: qsTr("No Reading Records")
-                    color: Theme.textPrimary
-                    font.pixelSize: 18
-                    font.bold: true
+                    title: qsTr("No Reading Records")
                 }
-                Label {
+                StyledLabel {
                     Layout.fillWidth: true
                     text: qsTr("Open a book and start reading with statistics enabled.")
-                    color: Theme.textSecondary
-                    font.pixelSize: 13
+                    textStyle: Theme.calloutFont
+                    secondary: true
                     wrapMode: Text.WordWrap
                 }
             }

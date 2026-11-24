@@ -43,7 +43,9 @@ pragma Singleton
 import QtQuick
 import Niratan
 
-QtObject {
+// Plain geometry tokens of the larger pages live in ThemeMetrics, which this
+// singleton extends, so every token is still read as Theme.<name>.
+ThemeMetrics {
     readonly property bool dark: ThemeState.dark
 
     // The page behind content, the main sidebar and the second column a
@@ -348,6 +350,18 @@ QtObject {
     // padded 16 at radius 16 with an accent wash of 12% while tracking and 6%
     // paused, its 7 px status dot, the 40 px bold count and the metric pair
     // split by a 28 px divider with 14 leading.
+    // StatisticsDashboardView: the page margin and card gap, the card padding
+    // and inner rhythm, the tinted metric tiles, the goal ring, the week chips
+    // and the two-column breakpoint. Type comes from the shared text roles.
+    readonly property int dashboardMargin: spacingXl
+    readonly property int dashboardCardSpacing: spacingLg
+    readonly property int dashboardCardPadding: spacingLg
+    readonly property int dashboardCardContentSpacing: spacingMd
+    readonly property int dashboardTileSpacing: spacingSm
+    readonly property int dashboardHeaderSpacing: rowSubtitleSpacing
+    readonly property int metricTileRadius: spacingMd
+    readonly property int metricTilePadding: spacingMd
+    readonly property color metricTileBackground: inspectorChipBackground
     readonly property int statisticsSectionSpacing: 20
     readonly property int statisticsGroupSpacing: 8
     readonly property int statisticsHistorySpacing: 6
@@ -423,11 +437,6 @@ QtObject {
     readonly property int readerInspectorTimeSpacing: 2
     readonly property int readerChapterMarkerHeight: 17
     readonly property int readerChapterMarkerGlyph: 11
-    // StatisticsView.swift minimumScaleFactor: the session count, the hero
-    // metrics and the history cells shrink to fit before they would be cut.
-    readonly property real statisticsHeroMinimumScale: 0.6
-    readonly property real metricMinimumScale: 0.7
-    readonly property real statisticsHistoryMinimumScale: 0.75
     // The trailing reader inspector scales with the window, after the
     // playerPanelWidth clamp of NativeReaderView.swift, so it stays usable in
     // ordinary Linux window sizes; NativeReaderSidePanel's fixed 440 is the cap.

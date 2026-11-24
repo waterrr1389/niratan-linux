@@ -440,6 +440,7 @@ qt_add_qml_module(niratan_app
         src/views/video/VideoLibraryToolbar.qml
         src/views/statistics/StatisticsCalendarCard.qml
         src/views/statistics/StatisticsCard.qml
+        src/views/statistics/StatisticsBookDetailsDialog.qml
         src/views/statistics/StatisticsDeleteDialog.qml
         src/views/statistics/StatisticsGoalCard.qml
         src/views/statistics/StatisticsMetricTile.qml
@@ -532,6 +533,7 @@ qt_add_qml_module(niratan_app
         src/views/pages/ReaderPage.qml
         src/views/theme/ControlKitSheet.qml
         src/views/theme/Theme.qml
+        src/views/theme/ThemeMetrics.qml
         src/views/theme/ThemePreview.qml
 )
 # The interface font, Inter, stands in for SF Pro; Japanese falls back to the

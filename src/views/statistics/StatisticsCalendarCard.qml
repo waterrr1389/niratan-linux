@@ -37,7 +37,7 @@ StatisticsCard {
         var index = StatisticsViewModel.calendarDays.findIndex(
             day => day.dateKey === card.selectedKey)
         if (index >= 0) {
-            const x = Math.floor(index / 7) * (12 + weeksRow.spacing)
+            const x = Math.floor(index / 7) * (Theme.calendarCellSize + weeksRow.spacing)
             calendarScroll.contentX = Math.min(
                 Math.max(0, calendarScroll.contentWidth - calendarScroll.width),
                 Math.max(0, x - calendarScroll.width / 2))
@@ -66,7 +66,8 @@ StatisticsCard {
     Flickable {
         id: calendarScroll
         Layout.fillWidth: true
-        Layout.preferredHeight: 7 * 12 + 6 * 4 + 18
+        Layout.preferredHeight: 7 * Theme.calendarCellSize + 6 * Theme.calendarCellSpacing
+                                + Theme.calendarScrollBarRoom
         contentWidth: weeksRow.width
         contentHeight: height
         clip: true
@@ -77,31 +78,31 @@ StatisticsCard {
 
         Row {
             id: weeksRow
-            spacing: 4
+            spacing: Theme.calendarCellSpacing
 
             Repeater {
                 model: Math.ceil(StatisticsViewModel.calendarDays.length / 7)
                 delegate: Column {
                     id: weekColumn
                     required property int index
-                    spacing: 4
+                    spacing: Theme.calendarCellSpacing
 
                     Repeater {
                         model: card.weekSlice(weekColumn.index)
                         delegate: Rectangle {
                             id: dayCell
                             required property var modelData
-                            width: 12
-                            height: 12
-                            radius: 3
+                            width: Theme.calendarCellSize
+                            height: Theme.calendarCellSize
+                            radius: Theme.calendarCellRadius
                             color: dayCell.modelData.factor > 0
                                 ? card.host.tint(Theme.accent, dayCell.modelData.factor)
-                                : Theme.cardStroke
-                            border.width: dayCell.selected ? 2
-                                : dayCell.inRange ? 1 : 0
+                                : Theme.trackBackground
+                            border.width: dayCell.selected ? Theme.calendarSelectedStroke
+                                : dayCell.inRange ? Theme.hairlineWidth : 0
                             border.color: dayCell.selected
                                 ? Theme.accent
-                                : card.host.tint(Theme.accent, 0.45)
+                                : card.host.tint(Theme.accent, Theme.calendarRangeOpacity)
 
                             readonly property bool selected:
                                 dayCell.modelData.dateKey === card.selectedKey
@@ -136,21 +137,28 @@ StatisticsCard {
 
     RowLayout {
         Layout.fillWidth: true
-        Label {
+        spacing: Theme.rowSpacing
+
+        StyledLabel {
             Layout.fillWidth: true
             text: qsTr("Selected: %1").arg(card.host.fullDate(card.selectedKey))
+            textStyle: Theme.calloutFont
+            weight: Theme.weightSemibold
             color: Theme.accent
-            font.bold: true
+            elide: Text.ElideRight
         }
-        Label {
+        StyledLabel {
             visible: !StatisticsViewModel.selectedCalendarDay.hasRecords
             text: qsTr("No reading records")
-            color: Theme.textSecondary
+            textStyle: Theme.calloutFont
+            secondary: true
         }
     }
 
     RowLayout {
         Layout.fillWidth: true
+        spacing: Theme.dashboardTileSpacing
+
         StatisticsMetricTile {
             label: qsTr("Characters")
             value: card.host.formatCharacters(StatisticsViewModel.selectedCalendarDay.characters)

@@ -8,7 +8,6 @@
 pragma ComponentBehavior: Bound
 
 import QtQuick
-import QtQuick.Controls
 import QtQuick.Layouts
 import Niratan
 
@@ -41,8 +40,8 @@ StatisticsCard {
     GridLayout {
         Layout.fillWidth: true
         columns: 2
-        columnSpacing: 8
-        rowSpacing: 8
+        columnSpacing: Theme.dashboardTileSpacing
+        rowSpacing: Theme.dashboardTileSpacing
 
         StatisticsMetricTile {
             Layout.fillWidth: true
@@ -80,11 +79,11 @@ StatisticsCard {
         }
     }
 
-    Label {
+    StyledLabel {
         Layout.fillWidth: true
         text: qsTr("Speed ignores reading samples under 1 minute.")
-        color: Theme.textSecondary
-        font.pixelSize: 11
+        textStyle: Theme.footnoteFont
+        secondary: true
         wrapMode: Text.WordWrap
     }
 }

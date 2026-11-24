@@ -1,13 +1,13 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
-// The title-over-detail heading of a statistics card, following the section
-// headers in Features/Bookshelf/StatisticsDashboardView.swift: title2
-// semibold over a secondary callout.
+// The title-over-detail heading of a statistics card, following
+// `sectionHeader` in Features/Bookshelf/StatisticsDashboardView.swift: a
+// semibold title over a secondary detail line, in the kit's card heading
+// roles.
 
 pragma ComponentBehavior: Bound
 
 import QtQuick
-import QtQuick.Controls
 import QtQuick.Layouts
 import Niratan
 
@@ -16,22 +16,23 @@ ColumnLayout {
 
     property string title
     property string detail
-    spacing: 3
 
-    Label {
+    spacing: Theme.dashboardHeaderSpacing
+
+    StyledLabel {
         Layout.fillWidth: true
         text: header.title
-        color: Theme.textPrimary
-        font.pixelSize: 16
-        font.bold: true
+        textStyle: Theme.title3Font
+        weight: Theme.weightSemibold
         elide: Text.ElideRight
     }
-    Label {
+
+    StyledLabel {
         Layout.fillWidth: true
         visible: header.detail.length > 0
         text: header.detail
-        color: Theme.textSecondary
-        font.pixelSize: 12
+        textStyle: Theme.subheadlineFont
+        secondary: true
         elide: Text.ElideRight
     }
 }

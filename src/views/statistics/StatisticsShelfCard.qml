@@ -26,6 +26,16 @@ StatisticsCard {
         detail: card.host.rangeTitle()
     }
 
+    // Column widths of the shelf table, in table order: shelf, books, total
+    // characters, recorded characters, duration and average speed.
+    readonly property var columnWidths: Theme.shelfTableColumnWidths
+
+    function cells(row) {
+        return [row.name, String(row.books), card.host.formatCharacters(row.totalCharacters),
+                card.host.formatCharacters(row.characters), card.host.formatDuration(row.time),
+                card.host.formatSpeed(row.speed)]
+    }
+
     Flickable {
         id: shelfScroll
         Layout.fillWidth: true
@@ -40,75 +50,28 @@ StatisticsCard {
 
         Column {
             id: shelfColumn
-            width: Math.max(680, shelfScroll.width)
+            width: Math.max(Theme.shelfTableMinimumWidth, shelfScroll.width)
             spacing: 0
 
-            Row {
-                width: parent.width
-                spacing: 10
-
-                TableCell {
-                    cellWidth: 160
-                    text: qsTr("Shelf")
-                    color: Theme.textSecondary
-                    font.bold: true
-                    font.pixelSize: 11
-                }
-                TableCell {
-                    cellWidth: 56
-                    rightAligned: true
-                    text: qsTr("Books")
-                    color: Theme.textSecondary
-                    font.bold: true
-                    font.pixelSize: 11
-                }
-                TableCell {
-                    cellWidth: 112
-                    rightAligned: true
-                    text: qsTr("Total Characters")
-                    color: Theme.textSecondary
-                    font.bold: true
-                    font.pixelSize: 11
-                }
-                TableCell {
-                    cellWidth: 118
-                    rightAligned: true
-                    text: qsTr("Recorded Characters")
-                    color: Theme.textSecondary
-                    font.bold: true
-                    font.pixelSize: 11
-                }
-                TableCell {
-                    cellWidth: 82
-                    rightAligned: true
-                    text: qsTr("Duration")
-                    color: Theme.textSecondary
-                    font.bold: true
-                    font.pixelSize: 11
-                }
-                TableCell {
-                    cellWidth: 92
-                    rightAligned: true
-                    text: qsTr("Avg Speed")
-                    color: Theme.textSecondary
-                    font.bold: true
-                    font.pixelSize: 11
-                }
+            TableRow {
+                header: true
+                texts: [qsTr("Shelf"), qsTr("Books"), qsTr("Total Characters"),
+                    qsTr("Recorded Characters"), qsTr("Duration"), qsTr("Avg Speed")]
             }
 
             Rectangle {
                 width: parent.width
-                height: 1
-                color: Theme.cardStroke
+                height: Theme.hairlineWidth
+                color: Theme.separator
             }
 
-            Label {
+            StyledLabel {
                 width: parent.width
-                height: 96
+                height: Theme.dashboardEmptyHeight
                 visible: StatisticsViewModel.shelfComparison.length === 0
                 text: qsTr("No reading records")
-                color: Theme.textSecondary
-                font.pixelSize: 13
+                textStyle: Theme.calloutFont
+                secondary: true
                 horizontalAlignment: Text.AlignHCenter
                 verticalAlignment: Text.AlignVCenter
             }
@@ -122,47 +85,14 @@ StatisticsCard {
                     width: shelfColumn.width
                     spacing: 0
 
-                    Row {
-                        width: parent.width
-                        spacing: 10
-
-                        TableCell {
-                            cellWidth: 160
-                            text: shelfRow.modelData.name
-                        }
-                        TableCell {
-                            cellWidth: 56
-                            rightAligned: true
-                            text: String(shelfRow.modelData.books)
-                        }
-                        TableCell {
-                            cellWidth: 112
-                            rightAligned: true
-                            text: card.host.formatCharacters(
-                                shelfRow.modelData.totalCharacters)
-                        }
-                        TableCell {
-                            cellWidth: 118
-                            rightAligned: true
-                            text: card.host.formatCharacters(
-                                shelfRow.modelData.characters)
-                        }
-                        TableCell {
-                            cellWidth: 82
-                            rightAligned: true
-                            text: card.host.formatDuration(shelfRow.modelData.time)
-                        }
-                        TableCell {
-                            cellWidth: 92
-                            rightAligned: true
-                            text: card.host.formatSpeed(shelfRow.modelData.speed)
-                        }
+                    TableRow {
+                        texts: card.cells(shelfRow.modelData)
                     }
 
                     Rectangle {
                         width: parent.width
-                        height: 1
-                        color: Theme.cardStroke
+                        height: Theme.hairlineWidth
+                        color: Theme.separator
                         visible: shelfRow.index
                                  < StatisticsViewModel.shelfComparison.length - 1
                     }
@@ -171,15 +101,34 @@ StatisticsCard {
         }
     }
 
-    component TableCell: Label {
-        property int cellWidth: 100
-        property bool rightAligned: false
-        width: cellWidth
-        topPadding: 6
-        bottomPadding: 6
-        color: Theme.textPrimary
-        font.pixelSize: 12
-        elide: Text.ElideRight
-        horizontalAlignment: rightAligned ? Text.AlignRight : Text.AlignLeft
+    // One table line: the first column leading, the numbers trailing. The
+    // header is a caption semibold secondary, the rows callout tabular digits.
+    component TableRow: Row {
+        id: tableRow
+
+        property var texts: []
+        property bool header: false
+
+        width: shelfColumn.width
+        spacing: Theme.tableColumnSpacing
+
+        Repeater {
+            model: tableRow.texts
+            delegate: StyledLabel {
+                required property int index
+                required property string modelData
+
+                width: card.columnWidths[index]
+                topPadding: Theme.tableCellPadding
+                bottomPadding: Theme.tableCellPadding
+                text: modelData
+                textStyle: tableRow.header ? Theme.captionFont : Theme.calloutFont
+                weight: tableRow.header ? Theme.weightSemibold : textStyle.weight
+                secondary: tableRow.header
+                monospacedDigits: index > 0
+                elide: Text.ElideRight
+                horizontalAlignment: index > 0 ? Text.AlignRight : Text.AlignLeft
+            }
+        }
     }
 }

@@ -8,7 +8,6 @@
 pragma ComponentBehavior: Bound
 
 import QtQuick
-import QtQuick.Controls
 import QtQuick.Layouts
 import Niratan
 
@@ -22,17 +21,17 @@ StatisticsCard {
 
     RowLayout {
         Layout.fillWidth: true
-        spacing: 16
+        spacing: Theme.spacingLg
 
         GoalRing {
-            Layout.preferredWidth: 108
-            Layout.preferredHeight: 108
+            Layout.preferredWidth: Theme.goalRingSize
+            Layout.preferredHeight: Theme.goalRingSize
             percent: StatisticsViewModel.today.targetPercent
         }
 
         ColumnLayout {
             Layout.fillWidth: true
-            spacing: 10
+            spacing: Theme.dashboardCardContentSpacing
 
             StatisticsSectionHeader {
                 Layout.fillWidth: true
@@ -43,8 +42,8 @@ StatisticsCard {
             GridLayout {
                 Layout.fillWidth: true
                 columns: 2
-                columnSpacing: 8
-                rowSpacing: 8
+                columnSpacing: Theme.dashboardTileSpacing
+                rowSpacing: Theme.dashboardTileSpacing
 
                 StatisticsMetricTile {
                     Layout.fillWidth: true
@@ -74,7 +73,7 @@ StatisticsCard {
         id: ring
         property int percent: 0
         property color accent: Theme.accent
-        property color track: Theme.cardStroke
+        property color track: Theme.trackBackground
 
         onPercentChanged: ringCanvas.requestPaint()
         onWidthChanged: ringCanvas.requestPaint()
@@ -87,7 +86,7 @@ StatisticsCard {
             onPaint: {
                 var ctx = getContext("2d")
                 ctx.clearRect(0, 0, ringCanvas.width, ringCanvas.height)
-                var lineWidth = 13
+                var lineWidth = Theme.goalRingLineWidth
                 var center = Math.min(ringCanvas.width, ringCanvas.height) / 2
                 var radius = Math.max(center - lineWidth / 2 - 1, 0)
                 ctx.lineWidth = lineWidth
@@ -120,20 +119,20 @@ StatisticsCard {
 
         Column {
             anchors.centerIn: parent
-            spacing: 1
+            spacing: Theme.metricSpacing
 
-            Label {
+            StyledLabel {
                 anchors.horizontalCenter: parent.horizontalCenter
                 text: ring.percent + "%"
-                color: Theme.textPrimary
-                font.pixelSize: 20
-                font.bold: true
+                textStyle: Theme.title2Font
+                weight: Theme.weightBold
+                monospacedDigits: true
             }
-            Label {
+            StyledLabel {
                 anchors.horizontalCenter: parent.horizontalCenter
                 text: qsTr("Goal")
-                color: Theme.textSecondary
-                font.pixelSize: 10
+                textStyle: Theme.caption2Font
+                secondary: true
             }
         }
     }

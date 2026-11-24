@@ -8,7 +8,6 @@
 pragma ComponentBehavior: Bound
 
 import QtQuick
-import QtQuick.Controls
 import QtQuick.Layouts
 import Niratan
 
@@ -30,8 +29,8 @@ StatisticsCard {
     GridLayout {
         Layout.fillWidth: true
         columns: 2
-        columnSpacing: 8
-        rowSpacing: 8
+        columnSpacing: Theme.dashboardTileSpacing
+        rowSpacing: Theme.dashboardTileSpacing
 
         StatisticsMetricTile {
             Layout.fillWidth: true
@@ -57,7 +56,7 @@ StatisticsCard {
 
     RowLayout {
         Layout.fillWidth: true
-        spacing: 6
+        spacing: Theme.weekChipSpacing
 
         Repeater {
             model: StatisticsViewModel.week.days
@@ -66,41 +65,37 @@ StatisticsCard {
                 required property int index
                 required property var modelData
                 Layout.fillWidth: true
-                implicitHeight: 50
+                implicitHeight: Theme.weekChipHeight
 
                 Rectangle {
                     anchors.fill: parent
-                    radius: 10
+                    radius: Theme.weekChipRadius
                     color: chip.modelData.metTarget
-                        ? card.host.tint(Theme.accent, 0.14)
-                        : Qt.rgba(Theme.textPrimary.r, Theme.textPrimary.g,
-                                  Theme.textPrimary.b, 0.06)
-                    border.width: chip.modelData.isToday ? 1.5 : 0
-                    border.color: card.host.tint(Theme.accent, 0.5)
+                        ? card.host.tint(Theme.accent, Theme.weekChipMetOpacity)
+                        : Theme.metricTileBackground
+                    border.width: chip.modelData.isToday ? Theme.weekChipTodayStroke : 0
+                    border.color: card.host.tint(Theme.accent, Theme.weekChipTodayOpacity)
                 }
 
                 Column {
                     anchors.centerIn: parent
-                    spacing: 2
+                    spacing: Theme.dashboardHeaderSpacing
 
-                    Label {
+                    StyledLabel {
                         anchors.horizontalCenter: parent.horizontalCenter
                         text: card.host.weekdayLabels[chip.index]
-                        color: chip.modelData.metTarget
-                            ? Theme.accent
-                            : Theme.textSecondary
-                        font.pixelSize: 10
-                        font.bold: true
+                        textStyle: Theme.caption2Font
+                        weight: Theme.weightSemibold
+                        color: chip.modelData.metTarget ? Theme.accent : Theme.textSecondary
                     }
-                    Label {
+                    StyledLabel {
                         anchors.horizontalCenter: parent.horizontalCenter
                         text: chip.modelData.percent >= 0
                             ? chip.modelData.percent + "%"
                             : "-"
-                        color: chip.modelData.metTarget
-                            ? Theme.accent
-                            : Theme.textSecondary
-                        font.pixelSize: 10
+                        textStyle: Theme.captionFont
+                        monospacedDigits: true
+                        color: chip.modelData.metTarget ? Theme.accent : Theme.textSecondary
                     }
                 }
             }
