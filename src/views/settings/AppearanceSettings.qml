@@ -22,7 +22,7 @@ PanelScaffold {
     readonly property list<string> themeLabels: [qsTr("System"), qsTr("Light"), qsTr("Dark"), qsTr("Sepia"), qsTr("Custom")]
     readonly property list<string> furiganaModes: ["Off", "Dimmed", "Toggle", "Hidden"]
     readonly property list<string> furiganaLabels: [qsTr("Show"), qsTr("Dimmed"), qsTr("Tap to Reveal"), qsTr("Hidden")]
-    readonly property list<string> fonts: Qt.fontFamilies()
+    readonly property list<string> fonts: FontFamilies.installed
     readonly property bool paginated: !form.settingsModel.continuousMode
     readonly property bool paragraph: paginated && form.settingsModel.paragraphMode
     readonly property bool spreadsAvailable: paginated && !form.settingsModel.verticalWriting && !form.settingsModel.paragraphMode
@@ -146,7 +146,9 @@ PanelScaffold {
 
         FormDivider {}
         FormPickerRow {
+            controlName: "appearanceFont"
             label: qsTr("Font")
+            largeList: true
             model: form.fonts.includes(form.settingsModel.selectedFont)
                    ? form.fonts : [form.settingsModel.selectedFont].concat(form.fonts)
             currentIndex: Math.max(0, model.indexOf(form.settingsModel.selectedFont))

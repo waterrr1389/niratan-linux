@@ -275,6 +275,8 @@ qt_add_resources(niratan_app "reader_scripts"
         src/web/reader/selection.js
 )
 set_source_files_properties(src/views/theme/Theme.qml PROPERTIES QT_QML_SINGLETON_TYPE TRUE)
+set_source_files_properties(src/views/components/FontFamilies.qml
+    PROPERTIES QT_QML_SINGLETON_TYPE TRUE)
 qt_add_qml_module(niratan_app
     URI Niratan
     QML_FILES
@@ -288,6 +290,8 @@ qt_add_qml_module(niratan_app
         src/views/components/FormLinkRow.qml
         src/views/components/FormPickerRow.qml
         src/views/components/FormRow.qml
+        src/views/components/ListMenuPopup.qml
+        src/views/components/FontFamilies.qml
         src/views/components/FormSection.qml
         src/views/components/InspectorFormSection.qml
         src/views/components/InspectorFormRow.qml

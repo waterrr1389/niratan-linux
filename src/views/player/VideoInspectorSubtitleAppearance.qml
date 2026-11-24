@@ -25,9 +25,7 @@ VideoInspectorSection {
 
     required property var engine
     readonly property var settings: engine.videoSettings
-    readonly property var families: Qt.fontFamilies().sort(function (a, b) {
-        return a.localeCompare(b, undefined, { numeric: true, sensitivity: "base" })
-    })
+    readonly property var families: FontFamilies.sorted
     readonly property var edgeKeys: ["off", "softShadow", "clearOutline", "highContrast"]
 
     // A stored "#RRGGBB" or "#RRGGBBAA" as a colour, and a colour back as "#RRGGBBAA".
@@ -94,6 +92,7 @@ VideoInspectorSection {
         controlName: "inspectorFontFamily"
         glyph: "textformat"
         label: qsTr("Subtitle Font")
+        largeList: true
         model: [qsTr("System Default")].concat(appearance.families)
         currentIndex: Math.max(0, appearance.families.indexOf(
             String(appearance.settings.videoSubtitleFontFamily)) + 1)

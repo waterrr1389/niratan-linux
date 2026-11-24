@@ -180,6 +180,8 @@ class QmlLoadTest : public QObject {
     void shared_components_load();
     void video_window_is_declared_once();
     void main_window_controls_fit();
+    void font_pickers_create_rows_only_in_view();
+    void inspector_font_picker_stores_the_chosen_family();
 
    private:
     // Empty when the component loaded without a QML warning.
@@ -994,6 +996,202 @@ void QmlLoadTest::main_window_controls_fit() {
     };
     visit(visit, window->contentItem());
     QVERIFY2(offenders.isEmpty(), qPrintable(offenders.join(QLatin1Char('\n'))));
+}
+
+// NativeGlassMenuPicker over the installed families (AppearanceView Font row,
+// VideoInspectorView subtitleAppearanceSection): a closed font picker holds no
+// rows, an open one only those in view, and only choosing a row activates it.
+void QmlLoadTest::font_pickers_create_rows_only_in_view() {
+    QQmlComponent component(&engine_);
+    component.loadFromModule(QStringLiteral("Niratan"), QStringLiteral("MainWindow"));
+    std::unique_ptr<QObject> object(
+        component.createWithInitialProperties({{QStringLiteral("sectionIndex"), 3}}));
+    QVERIFY2(object != nullptr, qPrintable(error_text(component)));
+    auto* window = qobject_cast<QQuickWindow*>(object.get());
+    QVERIFY(window);
+    window->resize(960, 640);
+    QVERIFY(QTest::qWaitForWindowExposed(window));
+
+    const auto rows_of = [](QObject* picker) {
+        auto* list = qvariant_cast<QObject*>(
+            qvariant_cast<QObject*>(picker->property("listMenu"))->property("listView"));
+        return list;
+    };
+    const auto created_rows = [](QObject* list) {
+        auto* content = qvariant_cast<QQuickItem*>(list->property("contentItem"));
+        qsizetype rows = 0;
+        for (QQuickItem* child : content->childItems()) {
+            rows += child->inherits("QQuickMenuItem") ? 1 : 0;
+        }
+        return rows;
+    };
+
+    QQuickItem* reader = window->findChild<QQuickItem*>(QStringLiteral("appearanceFont"));
+    QTRY_VERIFY(reader != nullptr);
+    QVERIFY(reader->property("largeList").toBool());
+    auto* menu = qvariant_cast<QObject*>(reader->property("menu"));
+    QVERIFY(menu != nullptr);
+    QCOMPARE(menu->property("count").toInt(), 0);
+    QVERIFY(rows_of(reader) != nullptr);
+    QCOMPARE(rows_of(reader)->property("count").toInt(), 0);
+
+    const QStringList model = reader->property("model").toStringList();
+    const int selected = reader->property("currentIndex").toInt();
+    QVERIFY(!model.isEmpty() && selected >= 0);
+    QSignalSpy activated(reader, SIGNAL(activated(int)));
+    auto* popup = qvariant_cast<QObject*>(reader->property("listMenu"));
+    QObject* list = rows_of(reader);
+    const auto click_picker = [&] {
+        QTest::mouseClick(window, Qt::LeftButton, Qt::NoModifier,
+                          reader->mapToScene(reader->boundingRect().center()).toPoint());
+    };
+
+    for (int pass = 0; pass < 2; ++pass) {
+        click_picker();
+        QTRY_VERIFY(popup->property("opened").toBool());
+        QCOMPARE(list->property("count").toInt(), model.size());
+        const auto rows = created_rows(list);
+        QVERIFY(rows > 0);
+        if (model.size() > 60) {
+            QVERIFY2(rows < 60, qPrintable(QStringLiteral("%1 rows created").arg(rows)));
+        }
+        QCOMPARE(list->property("currentIndex").toInt(), selected);
+        QTest::keyClick(window, Qt::Key_Escape);
+        QTRY_VERIFY(!popup->property("visible").toBool());
+        QCOMPARE(list->property("count").toInt(), 0);
+    }
+    QCOMPARE(activated.count(), 0);
+
+    click_picker();
+    QTRY_VERIFY(popup->property("opened").toBool());
+    const int target = selected + 1 < model.size() ? selected + 1 : selected;
+    if (target != selected) {
+        QTest::keyClick(window, Qt::Key_Down);
+    }
+    QTest::keyClick(window, Qt::Key_Return);
+    QTRY_COMPARE(activated.count(), 1);
+    QCOMPARE(activated.first().first().toInt(), target);
+    QTRY_VERIFY(!popup->property("visible").toBool());
+    // The stored family is the chosen name; the list may drop a saved name
+    // that is not installed, so compare the text rather than the index.
+    QTRY_COMPARE(reader->property("currentText").toString(), model.at(target));
+
+    click_picker();
+    QTRY_VERIFY(popup->property("opened").toBool());
+    QQuickItem* current = qvariant_cast<QQuickItem*>(list->property("currentItem"));
+    QVERIFY(current != nullptr);
+    QTest::mouseClick(window, Qt::LeftButton, Qt::NoModifier,
+                      current->mapToScene(current->boundingRect().center()).toPoint());
+    QTRY_COMPARE(activated.count(), 2);
+    QCOMPARE(activated.last().first().toInt(), reader->property("currentIndex").toInt());
+    QCOMPARE(reader->property("currentText").toString(), model.at(target));
+    QTRY_VERIFY(!popup->property("visible").toBool());
+}
+
+// VideoInspectorView subtitleAppearanceSection and subtitleFontFamily: System
+// Default first, then the sorted families; a named family is stored as is and
+// System Default as the empty string. An unavailable stored name shows System
+// Default and stays stored until the user chooses.
+void QmlLoadTest::inspector_font_picker_stores_the_chosen_family() {
+    QQmlComponent component(&engine_);
+    component.setData(R"(
+import QtQuick
+import Niratan
+
+Window {
+    width: 480
+    height: 640
+    visible: true
+
+    property alias fake: fake
+
+    QtObject {
+        id: fake
+
+        property var videoSettings: ({ videoSubtitleFontFamily: "Niratan Missing Family" })
+        property var writes: []
+
+        function changeVideoSetting(key, value) {
+            writes = writes.concat([[key, value]])
+            const next = Object.assign({}, videoSettings)
+            next[key] = value
+            videoSettings = next
+        }
+
+        function resetSubtitleAppearance() {}
+    }
+
+    VideoInspectorSubtitleAppearance {
+        width: parent.width
+        engine: fake
+    }
+}
+)",
+                      QUrl(QStringLiteral("qrc:/inspector_font_fixture.qml")));
+    std::unique_ptr<QObject> object(component.create(engine_.rootContext()));
+    QVERIFY2(object != nullptr, qPrintable(error_text(component)));
+    auto* window = qobject_cast<QQuickWindow*>(object.get());
+    QVERIFY(window);
+    QVERIFY(QTest::qWaitForWindowExposed(window));
+    auto* fake = qvariant_cast<QObject*>(window->property("fake"));
+    QVERIFY(fake != nullptr);
+    const auto writes = [fake] { return fake->property("writes").toList(); };
+    const auto stored = [fake] {
+        return fake->property("videoSettings")
+            .toMap()
+            .value(QStringLiteral("videoSubtitleFontFamily"));
+    };
+
+    QQuickItem* picker = window->findChild<QQuickItem*>(QStringLiteral("inspectorFontFamily"));
+    QVERIFY(picker != nullptr);
+    QVERIFY(picker->property("largeList").toBool());
+    auto* menu = qvariant_cast<QObject*>(picker->property("menu"));
+    auto* popup = qvariant_cast<QObject*>(picker->property("listMenu"));
+    QVERIFY(menu != nullptr && popup != nullptr);
+    auto* list = qvariant_cast<QObject*>(popup->property("listView"));
+    QVERIFY(list != nullptr);
+    QCOMPARE(menu->property("count").toInt(), 0);
+    QCOMPARE(list->property("count").toInt(), 0);
+
+    const QStringList model = picker->property("model").toStringList();
+    QVERIFY(model.size() >= 2);
+    QCOMPARE(model.first(), QStringLiteral("System Default"));
+    QCOMPARE(picker->property("currentIndex").toInt(), 0);
+    const auto open = [&] {
+        QTest::mouseClick(window, Qt::LeftButton, Qt::NoModifier,
+                          picker->mapToScene(picker->boundingRect().center()).toPoint());
+        QTRY_VERIFY(popup->property("opened").toBool());
+    };
+
+    open();
+    QTest::keyClick(window, Qt::Key_Escape);
+    QTRY_VERIFY(!popup->property("visible").toBool());
+    QTest::qWait(20);
+    QCOMPARE(writes().size(), 0);
+    QCOMPARE(stored().toString(), QStringLiteral("Niratan Missing Family"));
+
+    open();
+    QCOMPARE(list->property("currentIndex").toInt(), 0);
+    QTest::keyClick(window, Qt::Key_Down);
+    QTest::keyClick(window, Qt::Key_Return);
+    QTRY_COMPARE(writes().size(), 1);
+    QCOMPARE(writes().at(0).toList(),
+             QVariantList({QStringLiteral("videoSubtitleFontFamily"), model.at(1)}));
+    QTRY_COMPARE(picker->property("currentIndex").toInt(), 1);
+    QTRY_VERIFY(!popup->property("visible").toBool());
+
+    open();
+    QCOMPARE(list->property("currentIndex").toInt(), 1);
+    QQuickItem* first = nullptr;
+    QVERIFY(QMetaObject::invokeMethod(list, "itemAtIndex", Q_RETURN_ARG(QQuickItem*, first),
+                                      Q_ARG(int, 0)));
+    QVERIFY(first != nullptr);
+    QTest::mouseClick(window, Qt::LeftButton, Qt::NoModifier,
+                      first->mapToScene(first->boundingRect().center()).toPoint());
+    QTRY_COMPARE(writes().size(), 2);
+    QCOMPARE(writes().at(1).toList(),
+             QVariantList({QStringLiteral("videoSubtitleFontFamily"), QString()}));
+    QTRY_COMPARE(picker->property("currentIndex").toInt(), 0);
 }
 
 int main(int argc, char* argv[]) {

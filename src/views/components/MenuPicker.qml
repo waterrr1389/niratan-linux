@@ -24,8 +24,14 @@ T.AbstractButton {
     // also be shown here until the user chooses a replacement.
     property string placeholderText
     property bool constrainMenuHeight: false
+    // A long model such as the font families opens a ListMenuPopup, which
+    // creates rows only while open and only those in view, instead of a Menu
+    // holding one item per entry from the start. Its height always fits the
+    // window.
+    property bool largeList: false
 
     readonly property Menu menu: popupMenu
+    readonly property ListMenuPopup listMenu: listPopup
 
     signal activated(int index)
 
@@ -41,7 +47,21 @@ T.AbstractButton {
     Accessible.role: Accessible.ComboBox
     Accessible.name: currentText
 
-    onClicked: popupMenu.popup(picker, 0, picker.height + Theme.spacingXs)
+    onClicked: {
+        if (picker.largeList)
+            listPopup.open()
+        else
+            popupMenu.popup(picker, 0, picker.height + Theme.spacingXs)
+    }
+
+    ListMenuPopup {
+        id: listPopup
+
+        y: picker.height + Theme.spacingXs
+        model: picker.model
+        currentIndex: picker.currentIndex
+        onActivated: index => picker.activated(index)
+    }
 
     background: Rectangle {
         radius: height / 2
@@ -100,6 +120,7 @@ T.AbstractButton {
         }
 
         Instantiator {
+            active: !picker.largeList
             model: picker.model
 
             delegate: MenuItem {

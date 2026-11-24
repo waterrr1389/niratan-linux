@@ -15,6 +15,7 @@ FormRow {
     property real minimumWidth: Theme.pickerMinimumWidth
     property alias placeholderText: picker.placeholderText
     property alias constrainMenuHeight: picker.constrainMenuHeight
+    property alias largeList: picker.largeList
 
     // The object name of the picker, for tests that drive the control.
     property alias controlName: picker.objectName
