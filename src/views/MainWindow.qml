@@ -73,6 +73,23 @@ ApplicationWindow {
         value: ReaderViewModel.interfaceTheme
     }
 
+    // Settings is created on its first visit and then kept, hidden and
+    // disabled, while another section shows; see SettingsPage.
+    property bool settingsVisited: false
+
+    function showSettingsIfSelected() {
+        const settings = settingsLoader.item as SettingsPage
+        if (window.sectionIndex !== 3) {
+            settings?.leave()
+            return
+        }
+        window.settingsVisited = true
+        settings?.enter()
+    }
+
+    onSectionIndexChanged: window.showSettingsIfSelected()
+    Component.onCompleted: window.showSettingsIfSelected()
+
     function openReader(folder) {
         if (!ReaderViewModel.openBook(folder))
             return
@@ -112,7 +129,17 @@ ApplicationWindow {
                 sourceComponent: window.sectionIndex === 0 ? bookshelfDetail
                     : window.sectionIndex === 1 ? dictionaryDetail
                     : window.sectionIndex === 2 ? videoDetail
-                    : settingsDetail
+                    : null
+            }
+
+            Loader {
+                id: settingsLoader
+
+                anchors.fill: parent
+                active: window.settingsVisited
+                visible: window.sectionIndex === 3
+                enabled: visible
+                sourceComponent: settingsDetail
             }
 
             ToolbarButton {

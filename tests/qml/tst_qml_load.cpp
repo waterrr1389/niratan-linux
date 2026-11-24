@@ -182,6 +182,7 @@ class QmlLoadTest : public QObject {
     void main_window_controls_fit();
     void font_pickers_create_rows_only_in_view();
     void inspector_font_picker_stores_the_chosen_family();
+    void settings_page_is_kept_after_the_first_visit();
 
    private:
     // Empty when the component loaded without a QML warning.
@@ -442,7 +443,10 @@ void QmlLoadTest::settings_column_switches_details() {
                               row->mapToScene(row->boundingRect().center()).toPoint());
         }
         QTRY_VERIFY(page->findChild<QQuickItem*>(detail_name));
-        QTRY_VERIFY(detail.isNull());
+        // The Appearance form is kept and hidden; every other form is
+        // destroyed on deselection.
+        QTRY_VERIFY(detail.isNull() ||
+                    (detail->objectName() == "settings-appearance" && !detail->isVisible()));
         detail = page->findChild<QQuickItem*>(detail_name);
         QCOMPARE(title->property("text").toString(), titles.at(index));
         QVERIFY(row->property("selected").toBool());
@@ -1192,6 +1196,83 @@ Window {
     QCOMPARE(writes().at(1).toList(),
              QVariantList({QStringLiteral("videoSubtitleFontFamily"), QString()}));
     QTRY_COMPARE(picker->property("currentIndex").toInt(), 0);
+}
+
+// NativeMacDetailView.selectedContent and NativeSettingsReuseView: Settings
+// shows only in its section and opens at Appearance. The shell and the
+// Appearance form are kept after the first visit; the other forms are not.
+void QmlLoadTest::settings_page_is_kept_after_the_first_visit() {
+    QQmlComponent component(&engine_);
+    component.loadFromModule(QStringLiteral("Niratan"), QStringLiteral("MainWindow"));
+    std::unique_ptr<QObject> object(
+        component.createWithInitialProperties({{QStringLiteral("sectionIndex"), 0}}));
+    QVERIFY2(object != nullptr, qPrintable(error_text(component)));
+    auto* window = qobject_cast<QQuickWindow*>(object.get());
+    QVERIFY(window);
+    window->resize(960, 640);
+    QVERIFY(QTest::qWaitForWindowExposed(window));
+    QVERIFY(window->findChild<QQuickItem*>(QStringLiteral("settingsPage")) == nullptr);
+
+    window->setProperty("sectionIndex", 3);
+    QPointer<QQuickItem> page = window->findChild<QQuickItem*>(QStringLiteral("settingsPage"));
+    QTRY_VERIFY(page);
+    QPointer<QQuickItem> appearance =
+        page->findChild<QQuickItem*>(QStringLiteral("settings-appearance"));
+    QVERIFY(appearance);
+    QTRY_VERIFY(appearance->isVisible());
+
+    // Choose another section, scroll Appearance and open a menu, then leave.
+    QQuickItem* row = nullptr;
+    for (QQuickItem* item : visual_items(window->contentItem())) {
+        if (item->objectName() == QStringLiteral("settingsRow-anki")) {
+            row = item;
+        }
+    }
+    QVERIFY(row);
+    QTest::mouseClick(window, Qt::LeftButton, Qt::NoModifier,
+                      row->mapToScene(row->boundingRect().center()).toPoint());
+    QTRY_VERIFY(page->findChild<QQuickItem*>(QStringLiteral("settings-anki")));
+    QPointer<QQuickItem> anki = page->findChild<QQuickItem*>(QStringLiteral("settings-anki"));
+    QVERIFY(!appearance->isVisible());
+    window->setProperty("sectionIndex", 0);
+    QTRY_VERIFY(!page->isVisible());
+    QVERIFY(!page->isEnabled());
+    QTRY_VERIFY(anki.isNull());
+    const auto focus_inside = [&] {
+        for (QQuickItem* item = window->activeFocusItem(); item; item = item->parentItem()) {
+            if (item == page) {
+                return true;
+            }
+        }
+        return false;
+    };
+    QVERIFY(!focus_inside());
+
+    window->setProperty("sectionIndex", 3);
+    QTRY_VERIFY(page && page->isVisible());
+    QCOMPARE(window->findChild<QQuickItem*>(QStringLiteral("settingsPage")), page.data());
+    QCOMPARE(page->findChild<QQuickItem*>(QStringLiteral("settings-appearance")),
+             appearance.data());
+    QTRY_VERIFY(appearance->isVisible());
+    QVERIFY(page->findChild<QQuickItem*>(QStringLiteral("settings-anki")) == nullptr);
+    QVERIFY(page->isEnabled());
+    QVERIFY(focus_inside());
+
+    // A menu left open and a scrolled form do not survive leaving.
+    auto* flick = qvariant_cast<QQuickItem*>(appearance->property("flickable"));
+    QVERIFY(flick);
+    flick->setProperty("contentY", flick->property("originY").toReal() + 40);
+    auto* font = appearance->findChild<QQuickItem*>(QStringLiteral("appearanceFont"));
+    QVERIFY(font);
+    auto* popup = qvariant_cast<QObject*>(font->property("listMenu"));
+    QVERIFY(popup);
+    QVERIFY(QMetaObject::invokeMethod(popup, "open"));
+    QTRY_VERIFY(popup->property("opened").toBool());
+    window->setProperty("sectionIndex", 1);
+    QTRY_VERIFY(!popup->property("visible").toBool());
+    window->setProperty("sectionIndex", 3);
+    QTRY_VERIFY(appearance->isVisible());
+    QCOMPARE(flick->property("contentY").toReal(), flick->property("originY").toReal());
 }
 
 int main(int argc, char* argv[]) {
