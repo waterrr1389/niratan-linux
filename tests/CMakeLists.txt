@@ -452,7 +452,7 @@ add_test(NAME google_drive_auth COMMAND tst_google_drive_auth)
 
 qt_add_executable(tst_flow_sync flows/tst_flow_sync.cpp fakes/fake_drive_server.cpp)
 target_include_directories(tst_flow_sync PRIVATE ${CMAKE_SOURCE_DIR}/src ${CMAKE_SOURCE_DIR}/tests)
-target_link_libraries(tst_flow_sync PRIVATE niratan_core Qt6::Test)
+target_link_libraries(tst_flow_sync PRIVATE niratan_app Qt6::Test)
 target_compile_options(tst_flow_sync PRIVATE -Wall -Wextra -Wpedantic -Werror)
 add_test(NAME flow_sync COMMAND tst_flow_sync)
 
