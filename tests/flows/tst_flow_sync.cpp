@@ -5,18 +5,83 @@
 
 #include "fakes/fake_drive_server.h"
 #include "fakes/oauth_fixture.h"
+#include "fakes/ttu_fixture.h"
+#include "services/statistics/statistics_storage.h"
 #include "services/sync/drive_client.h"
 #include "services/sync/drive_files.h"
 #include "services/sync/oauth_client.h"
 #include "services/sync/oauth_credentials.h"
 #include "services/sync/ttu_naming.h"
+#include "services/sync/ttu_sync.h"
 
+#include <QJsonDocument>
 #include <QtTest>
 
 class SyncFlowTest : public QObject {
     Q_OBJECT
 
    private slots:
+    void imports_ttu_sidecars_then_exports_a_newer_bookmark() {
+        using namespace niratan;
+        using namespace niratan::sync;
+        using namespace ttu_fixture;
+        Library library;
+        QVERIFY(library.start());
+        QVERIFY(library.bookmark(100, remote_ms - 1000));
+        FakeDriveServer server;
+        QVERIFY(server.start());
+        server.enable_tree();
+        seed_folders(server);
+        seed_media(server);
+        auto transport = transport_for(server);
+        TtuDrive drive(*transport);
+        TtuSync sync(drive, library.storage, {}, 0, QTimeZone::utc());
+        const TtuSyncOptions options{.sync_stats = true, .sync_audio_book = true};
+        Result<TtuResult> result;
+        sync.sync_book(library.book, {}, options, result.receive());
+        QTRY_VERIFY(result.done);
+        QCOMPARE(result.value,
+                 (std::optional{TtuResult{TtuResult::Kind::imported, "Display Title", 250}}));
+        QVERIFY(!result.error);
+        QCOMPARE(
+            library.storage.load_bookmark(library.book.folder),
+            (std::optional{books::Bookmark{1, 0.0625, 250, remote_ms / 1000.0 - unix_reference}}));
+        const auto rows = statistics::load_statistics(library.path(), 0, QTimeZone::utc()).daily;
+        QCOMPARE(rows.size(), 1U);
+        QCOMPARE(rows.front().date_key, "2023-07-22");
+        QCOMPARE(rows.front().characters_read, 1200);
+        QCOMPARE(library.storage.load_sasayaki_playback(library.book.folder),
+                 (std::optional{sasayaki::SasayakiPlaybackData{42.5, 0.0, 1.0F, {}}}));
+        const auto requests_before = server.requests().size();
+        result = {};
+        sync.sync_book(library.book, {}, options, result.receive());
+        QTRY_VERIFY(result.done);
+        QCOMPARE(result.value,
+                 (std::optional{TtuResult{TtuResult::Kind::synced, "Display Title", 0}}));
+        QCOMPARE(server.requests().size(), requests_before + 1);
+        QCOMPARE(server.requests().back().method, "GET");
+        QVERIFY(library.bookmark(600, remote_ms + 2000));
+        result = {};
+        sync.sync_book(library.book, {}, options, result.receive());
+        QTRY_VERIFY(result.done);
+        QCOMPARE(result.value,
+                 (std::optional{TtuResult{TtuResult::Kind::exported, "Display Title", 600}}));
+        bool uploaded_progress = false;
+        for (const auto& request : server.requests()) {
+            if (request.path == QStringLiteral("/upload/drive/v3/files/p") &&
+                request.method == "PATCH") {
+                QCOMPARE(request.metadata.value("name").toString(),
+                         QStringLiteral("progress_1_6_1690000002000_0.6.json"));
+                QCOMPARE(
+                    QJsonDocument::fromJson(request.media),
+                    QJsonDocument::fromJson(
+                        R"({"dataId":7,"exploredCharCount":600,"progress":0.6,"lastBookmarkModified":1690000002000})"));
+                uploaded_progress = true;
+            }
+        }
+        QVERIFY(uploaded_progress);
+    }
+
     void signs_in_over_loopback_and_refreshes_drive_credentials() {
         using namespace niratan::sync;
         using namespace oauth_fixture;

@@ -108,6 +108,10 @@ qt_add_library(niratan_core STATIC
     src/services/sync/oauth_loopback.cpp
     src/services/sync/sync_config.cpp
     src/services/sync/oauth_client.cpp
+    src/services/sync/ttu_progress.cpp
+    src/services/sync/ttu_drive.cpp
+    src/services/sync/ttu_sync.cpp
+    src/services/sync/ttu_sync_sidecars.cpp
     src/services/sasayaki/srt_parser.cpp
     src/services/sasayaki/cue_timeline.cpp
     src/services/sasayaki/cue_audio.cpp

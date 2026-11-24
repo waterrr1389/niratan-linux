@@ -426,6 +426,12 @@ target_link_libraries(tst_drive_client PRIVATE niratan_core Qt6::Test)
 target_compile_options(tst_drive_client PRIVATE -Wall -Wextra -Wpedantic -Werror)
 add_test(NAME drive_client COMMAND tst_drive_client)
 
+qt_add_executable(tst_ttu_sync sync/tst_ttu_sync.cpp fakes/fake_drive_server.cpp)
+target_include_directories(tst_ttu_sync PRIVATE ${CMAKE_SOURCE_DIR}/src ${CMAKE_SOURCE_DIR}/tests)
+target_link_libraries(tst_ttu_sync PRIVATE niratan_core Qt6::Test)
+target_compile_options(tst_ttu_sync PRIVATE -Wall -Wextra -Wpedantic -Werror)
+add_test(NAME ttu_sync COMMAND tst_ttu_sync)
+
 qt_add_executable(tst_google_drive_auth sync/tst_google_drive_auth.cpp fakes/fake_drive_server.cpp)
 target_include_directories(tst_google_drive_auth PRIVATE ${CMAKE_SOURCE_DIR}/src ${CMAKE_SOURCE_DIR}/tests)
 target_link_libraries(tst_google_drive_auth PRIVATE niratan_core Qt6::Test)
