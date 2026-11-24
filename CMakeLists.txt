@@ -99,6 +99,7 @@ qt_add_library(niratan_core STATIC
     src/models/sasayaki/sasayaki.cpp
     src/models/sasayaki/sasayaki_settings.cpp
     src/models/statistics/statistics.cpp
+    src/services/sync/ttu_naming.cpp
     src/services/sasayaki/srt_parser.cpp
     src/services/sasayaki/cue_timeline.cpp
     src/services/sasayaki/cue_audio.cpp

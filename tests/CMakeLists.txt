@@ -414,6 +414,18 @@ target_link_libraries(tst_statistics PRIVATE niratan_core Qt6::Test)
 target_compile_options(tst_statistics PRIVATE -Wall -Wextra -Wpedantic -Werror)
 add_test(NAME statistics COMMAND tst_statistics)
 
+qt_add_executable(tst_ttu_naming sync/tst_ttu_naming.cpp)
+target_include_directories(tst_ttu_naming PRIVATE ${CMAKE_SOURCE_DIR}/src)
+target_link_libraries(tst_ttu_naming PRIVATE niratan_core Qt6::Test)
+target_compile_options(tst_ttu_naming PRIVATE -Wall -Wextra -Wpedantic -Werror)
+add_test(NAME ttu_naming COMMAND tst_ttu_naming)
+
+qt_add_executable(tst_flow_sync flows/tst_flow_sync.cpp)
+target_include_directories(tst_flow_sync PRIVATE ${CMAKE_SOURCE_DIR}/src)
+target_link_libraries(tst_flow_sync PRIVATE niratan_core Qt6::Test)
+target_compile_options(tst_flow_sync PRIVATE -Wall -Wextra -Wpedantic -Werror)
+add_test(NAME flow_sync COMMAND tst_flow_sync)
+
 qt_add_executable(tst_library_model
     books/tst_library_model.cpp
 )
