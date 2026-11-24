@@ -24,6 +24,8 @@ class SyncSettingsViewModel : public QObject {
     Q_PROPERTY(bool hasCredentials READ has_credentials NOTIFY credentialsChanged)
     Q_PROPERTY(bool enabled READ enabled WRITE setEnabled NOTIFY enabledChanged)
     Q_PROPERTY(QString syncMode READ syncMode WRITE setSyncMode NOTIFY syncModeChanged)
+    // "ttu" or "gdrive", resolved as GlobalSettings::sync_preferences does.
+    Q_PROPERTY(QString provider READ provider NOTIFY providerChanged)
     Q_PROPERTY(bool autoSync READ autoSync WRITE setAutoSync NOTIFY autoSyncChanged)
     Q_PROPERTY(QString clientId READ clientId WRITE setClientId NOTIFY clientIdChanged)
     Q_PROPERTY(QString connectionStatus READ connectionStatus NOTIFY connectionStatusChanged)
@@ -57,6 +59,7 @@ class SyncSettingsViewModel : public QObject {
     bool has_credentials() const;
     bool enabled() const;
     QString syncMode() const;
+    QString provider() const;
     bool autoSync() const;
     QString clientId() const;
     QString connectionStatus() const;
@@ -85,7 +88,8 @@ class SyncSettingsViewModel : public QObject {
     Q_INVOKABLE void clearCache();
     Q_INVOKABLE void clearError();
     Q_INVOKABLE void clearSyncError();
-    Q_INVOKABLE void syncBook(QString folder);
+    // direction is "", "import" or "export"; "" compares bookmarks.
+    Q_INVOKABLE void syncBook(QString folder, QString direction = {});
 
     sync::TtuSyncOptions ttu_options(bool import_only) const;
     bool auto_sync_enabled() const;
@@ -94,6 +98,7 @@ class SyncSettingsViewModel : public QObject {
     void credentialsChanged();
     void enabledChanged();
     void syncModeChanged();
+    void providerChanged();
     void autoSyncChanged();
     void clientIdChanged();
     void connectionStatusChanged();
@@ -111,6 +116,8 @@ class SyncSettingsViewModel : public QObject {
     void syncFailed(QString message);
 
    private:
+    bool refresh_provider();
+
     struct State;
     std::unique_ptr<State> state_;
 };

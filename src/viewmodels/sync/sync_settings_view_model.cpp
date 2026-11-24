@@ -137,6 +137,10 @@ bool SyncSettingsViewModel::enabled() const {
     return state_->preferences.enabled;
 }
 
+QString SyncSettingsViewModel::provider() const {
+    return QString::fromLatin1(settings::sync_provider_id(state_->preferences.provider));
+}
+
 QString SyncSettingsViewModel::syncMode() const {
     return QString::fromLatin1(settings::sync_mode_id(state_->preferences.mode));
 }
@@ -195,10 +199,25 @@ QString SyncSettingsViewModel::syncError() const {
     return state_->sync_error;
 }
 
+// Without an explicit syncProvider the store infers it from enableSync and
+// googleClientId, so the cached value is re-read after either changes.
+bool SyncSettingsViewModel::refresh_provider() {
+    const auto provider = state_->store.sync_preferences().provider;
+    if (provider == state_->preferences.provider) {
+        return false;
+    }
+    state_->preferences.provider = provider;
+    return true;
+}
+
 void SyncSettingsViewModel::setEnabled(bool value) {
     if (state_->save(*this, state_->preferences.enabled, value,
                      [this](bool v) { return state_->store.save_sync_enabled(v); })) {
+        const auto provider_moved = refresh_provider();
         emit enabledChanged();
+        if (provider_moved) {
+            emit providerChanged();
+        }
     }
 }
 
@@ -224,7 +243,11 @@ void SyncSettingsViewModel::setClientId(QString value) {
     const auto old_status = connectionStatus();
     if (state_->save(*this, state_->preferences.google_client_id, value.toStdString(),
                      [this](const auto& v) { return state_->store.save_google_client_id(v); })) {
+        const auto provider_moved = refresh_provider();
         emit clientIdChanged();
+        if (provider_moved) {
+            emit providerChanged();
+        }
         state_->connection_changed(*this, was_authenticated, had_credentials, old_status);
     }
 }
@@ -309,7 +332,7 @@ void SyncSettingsViewModel::clearSyncError() {
     state_->set_sync_error(*this, {});
 }
 
-void SyncSettingsViewModel::syncBook(QString folder) {
+void SyncSettingsViewModel::syncBook(QString folder, QString direction) {
     if (syncing()) {
         return;
     }
@@ -323,9 +346,15 @@ void SyncSettingsViewModel::syncBook(QString folder) {
         state_->set_sync_error(*this, tr("Book not found"));
         return;
     }
+    std::optional<sync::SyncDirection> forced;
+    if (direction == QStringLiteral("import")) {
+        forced = sync::SyncDirection::import_from_ttu;
+    } else if (direction == QStringLiteral("export")) {
+        forced = sync::SyncDirection::export_to_ttu;
+    }
     state_->syncing = true;
     emit syncingChanged();
-    state_->syncer.sync_book(std::move(*book), std::nullopt, ttu_options(false),
+    state_->syncer.sync_book(std::move(*book), forced, ttu_options(false),
                              [this, guard = QPointer(this)](auto result, auto failure) {
                                  if (!guard) {
                                      return;

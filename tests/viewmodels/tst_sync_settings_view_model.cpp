@@ -274,6 +274,85 @@ class SyncSettingsViewModelTest : public QObject {
         }
     }
 
+    // UserConfig.syncProvider: an explicit gdrive stays; without one,
+    // enabling sync resolves to ttu.
+    void provider_follows_store_data() {
+        QTest::addColumn<QByteArray>("settings");
+        QTest::addColumn<QString>("before");
+        QTest::addColumn<QString>("after");
+        QTest::newRow("explicit gdrive") << QByteArray(R"({"syncProvider":"gdrive"})")
+                                         << QStringLiteral("gdrive") << QStringLiteral("gdrive");
+        QTest::newRow("implicit") << QByteArray("{}") << QStringLiteral("gdrive")
+                                  << QStringLiteral("ttu");
+    }
+
+    void provider_follows_store() {
+        QFETCH(QByteArray, settings);
+        QFETCH(QString, before);
+        QFETCH(QString, after);
+        oauth_fixture::AuthFixture fixture;
+        QVERIFY(fixture.start());
+        QVERIFY(oauth_fixture::write(fixture.settings(), settings));
+        SyncSettingsViewModel model(config(fixture));
+        QCOMPARE(model.provider(), before);
+        QSignalSpy changed(&model, &SyncSettingsViewModel::providerChanged);
+        model.setEnabled(true);
+        QCOMPARE(model.provider(), after);
+        QCOMPARE(changed.size(), before == after ? 0 : 1);
+    }
+
+    // With sync disabled and no explicit provider, a client ID alone selects ttu.
+    void provider_follows_client_id() {
+        oauth_fixture::AuthFixture fixture;
+        QVERIFY(fixture.start());
+        QVERIFY(oauth_fixture::write(fixture.settings(), "{}"));
+        SyncSettingsViewModel model(config(fixture));
+        QCOMPARE(model.provider(), QStringLiteral("gdrive"));
+        QSignalSpy changed(&model, &SyncSettingsViewModel::providerChanged);
+        QString seen;
+        connect(&model, &SyncSettingsViewModel::clientIdChanged, &model,
+                [&] { seen = model.provider(); });
+        model.setClientId(QString::fromLatin1(oauth_fixture::client_id));
+        QCOMPARE(model.provider(), QStringLiteral("ttu"));
+        QCOMPARE(seen, QStringLiteral("ttu"));
+        QCOMPARE(changed.size(), 1);
+        model.setClientId({});
+        QCOMPARE(model.provider(), QStringLiteral("gdrive"));
+        QCOMPARE(changed.size(), 2);
+    }
+
+    // BookCell's manual Sync menu passes .importFromTtu or .exportToTtu, which
+    // win over the bookmark comparison.
+    void manual_sync_forced_direction_data() {
+        QTest::addColumn<QString>("direction");
+        QTest::newRow("import over newer local") << QStringLiteral("import");
+        QTest::newRow("export over newer remote") << QStringLiteral("export");
+    }
+
+    void manual_sync_forced_direction() {
+        QFETCH(QString, direction);
+        const bool exporting = direction == QStringLiteral("export");
+        oauth_fixture::AuthFixture fixture;
+        QVERIFY(fixture.start());
+        ttu_fixture::Library library;
+        QVERIFY(library.start());
+        const auto offset = exporting ? -2000 : 2000;
+        QVERIFY(library.bookmark(600, ttu_fixture::remote_ms + offset));
+        auto options = config(fixture);
+        QVERIFY(authorize_library(fixture, library, options));
+        fixture.endpoint.enable_tree();
+        ttu_fixture::seed_folders(fixture.endpoint);
+        ttu_fixture::seed_media(fixture.endpoint);
+        SyncSettingsViewModel model(std::move(options));
+        QSignalSpy finished(&model, &SyncSettingsViewModel::syncFinished);
+        model.syncBook(QString::fromStdString(library.book.folder), direction);
+        QTRY_COMPARE(finished.size(), 1);
+        using Kind = sync::TtuResult::Kind;
+        QCOMPARE(finished.front(),
+                 (QVariantList{int(exporting ? Kind::exported : Kind::imported),
+                               QStringLiteral("Display Title"), exporting ? 600 : 250}));
+    }
+
     void manual_sync_uses_shared_caches_and_signals() {
         oauth_fixture::AuthFixture fixture;
         QVERIFY(fixture.start());

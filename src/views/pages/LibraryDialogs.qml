@@ -1,10 +1,14 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
 // The bookshelf's book menu and its confirmations, following
-// Features/Bookshelf/BookCell.swift (the context menu: Move, Mark Read,
-// Rename and Delete, with their glyphs; `BookRenameSheet`; the delete and mark-read
-// confirmation dialogs) and NativeMac/NativeReuseViews.swift (the bulk delete
-// alert of `bookshelfContent`). Sync and Export entries are out of scope.
+// Features/Bookshelf/BookCell.swift (the context menu: Move, the ッツ Sync
+// entry, Mark Read, Rename and Delete, with their glyphs; `BookRenameSheet`;
+// the delete and mark-read confirmation dialogs), NativeMac/NativeReuseViews.swift
+// (the bulk delete alert of `bookshelfContent`) and Features/Bookshelf/
+// BookshelfView.swift with BookshelfViewModel.syncBook and handleSyncResult
+// (the Syncing... overlay, the error alert and the result alert). Sync is a
+// single item in Auto mode and an Import/Export submenu in Manual mode, and
+// only shown while sync is enabled. The Export entry is out of scope.
 pragma ComponentBehavior: Bound
 
 import QtQuick
@@ -25,7 +29,27 @@ Item {
     function showBookMenu(folder, title) {
         dialogs.folder = folder
         dialogs.bookTitle = title
+        dialogs.placeSyncEntry()
         bookMenu.popup()
+    }
+
+    // BookCell shows one ッツ Sync entry, chosen by syncMode, right after Move.
+    // take*() detaches the entries without destroying them, so they can be
+    // inserted again on the next popup.
+    function placeSyncEntry() {
+        for (let i = bookMenu.count - 1; i >= 0; --i) {
+            const row = bookMenu.itemAt(i)
+            if (row === syncItem)
+                bookMenu.takeItem(i)
+            else if (row && row.subMenu === syncMenu)
+                bookMenu.takeMenu(i)
+        }
+        if (!SyncSettingsViewModel.enabled || SyncSettingsViewModel.provider !== "ttu")
+            return
+        if (SyncSettingsViewModel.syncMode === "Manual")
+            bookMenu.insertMenu(1, syncMenu)
+        else
+            bookMenu.insertItem(1, syncItem)
     }
 
     function confirmBulkDelete(folders) {
@@ -33,8 +57,40 @@ Item {
         bulkDeleteDialog.open()
     }
 
+    MenuItem {
+        id: syncItem
+
+        objectName: "bookSyncItem"
+
+        text: qsTr("Sync")
+        icon.source: IconMap.source("arrow.triangle.2.circlepath")
+        onTriggered: SyncSettingsViewModel.syncBook(dialogs.folder, "")
+    }
+
+    Menu {
+        id: syncMenu
+
+        objectName: "bookSyncMenu"
+
+        title: qsTr("Sync")
+        icon.source: IconMap.source("arrow.triangle.2.circlepath")
+
+        MenuItem {
+            text: qsTr("Import")
+            icon.source: IconMap.source("arrow.down")
+            onTriggered: SyncSettingsViewModel.syncBook(dialogs.folder, "import")
+        }
+        MenuItem {
+            text: qsTr("Export")
+            icon.source: IconMap.source("arrow.up")
+            onTriggered: SyncSettingsViewModel.syncBook(dialogs.folder, "export")
+        }
+    }
+
     Menu {
         id: bookMenu
+
+        objectName: "bookMenu"
 
         Menu {
             title: qsTr("Move")
@@ -109,6 +165,48 @@ Item {
         acceptText: qsTr("Confirm")
         rejectText: qsTr("Cancel")
         onAccepted: dialogs.model.markRead(dialogs.folder)
+    }
+
+    LoadingOverlay {
+        message: qsTr("Syncing...")
+        active: SyncSettingsViewModel.syncing
+    }
+
+    AlertDialog {
+        id: syncErrorDialog
+
+        title: qsTr("Error")
+        message: qsTr("Sync failed: %1").arg(SyncSettingsViewModel.syncError)
+        onClosed: SyncSettingsViewModel.clearSyncError()
+    }
+
+    // handleSyncResult: a skipped result shows nothing.
+    AlertDialog {
+        id: syncResultDialog
+    }
+
+    Connections {
+        target: SyncSettingsViewModel
+
+        function onSyncErrorChanged() {
+            if (SyncSettingsViewModel.syncError !== "")
+                syncErrorDialog.open()
+        }
+
+        function onSyncFinished(kind, title, characterCount) {
+            const messages = [
+                qsTr("%1 is already synced").arg(title),
+                qsTr("Synced %1 from ッツ\n%2 characters").arg(title).arg(characterCount),
+                qsTr("Synced %1 to ッツ\n%2 characters").arg(title).arg(characterCount)
+            ]
+            if (kind < 0 || kind >= messages.length)
+                return
+            // handleSyncResult reloads progress after an import.
+            if (kind === 1)
+                dialogs.model.refresh()
+            syncResultDialog.message = messages[kind]
+            syncResultDialog.open()
+        }
     }
 
     AlertDialog {

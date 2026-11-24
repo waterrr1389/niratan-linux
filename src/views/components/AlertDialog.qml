@@ -64,6 +64,7 @@ Dialog {
 
         StyledLabel {
             width: parent.width
+            visible: alert.title !== ""
             text: alert.title
             textStyle: Theme.headlineFont
             wrapMode: Text.Wrap

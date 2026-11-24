@@ -25,10 +25,6 @@ T.MenuItem {
 
     readonly property color textColor: control.highlighted ? Theme.textOnAccent : Theme.textPrimary
 
-    icon.width: 14
-    icon.height: 14
-    icon.color: textColor
-
     contentItem: IconLabel {
         readonly property real arrowPadding: control.subMenu && control.arrow
                                              ? control.arrow.width + control.spacing : 0
@@ -37,7 +33,13 @@ T.MenuItem {
         mirrored: control.mirrored
         display: control.display
         alignment: Qt.AlignLeft
-        icon: control.icon
+        // A submenu row receives its Menu's whole icon, size and tint
+        // included, so the glyph size and highlight tint are applied here.
+        icon.name: control.icon.name
+        icon.source: control.icon.source
+        icon.width: 14
+        icon.height: 14
+        icon.color: control.textColor
         text: control.text
         font: control.font
         color: control.textColor

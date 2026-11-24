@@ -199,6 +199,56 @@ class SettingsSyncTest : public QObject {
         }
     }
 
+    // BookCell's contextMenu: Sync follows Move, as an item in Auto mode and
+    // an Import/Export submenu in Manual mode; reopening keeps it intact.
+    void book_menu_sync_entry() {
+        auto* sync = engine_.singletonInstance<QObject*>("Niratan", "SyncSettingsViewModel");
+        QVERIFY(sync);
+        QCOMPARE(sync->property("provider").toString(), QStringLiteral("ttu"));
+        QQmlComponent component(&engine_);
+        component.setData("import Niratan\nLibraryDialogs { model: LibraryViewModel {} }",
+                          QUrl(QStringLiteral("qrc:/book_menu_test.qml")));
+        QTRY_VERIFY(!component.isLoading());
+        std::unique_ptr<QObject> dialogs(component.create());
+        QVERIFY2(dialogs, qPrintable(component.errorString()));
+        qobject_cast<QQuickItem*>(dialogs.get())->setParentItem(window_->contentItem());
+        auto* menu = dialogs->findChild<QObject*>("bookMenu");
+        QVERIFY(menu);
+        const auto row_at = [menu](int index) {
+            QQuickItem* row = nullptr;
+            QMetaObject::invokeMethod(menu, "itemAt", qReturnArg(row), index);
+            return row;
+        };
+        const auto open = [&] {
+            QVERIFY(QMetaObject::invokeMethod(dialogs.get(), "showBookMenu",
+                                              QVariant(QStringLiteral("book")),
+                                              QVariant(QStringLiteral("Title"))));
+            QTRY_VERIFY(menu->property("opened").toBool());
+        };
+        for (const auto& mode :
+             {QStringLiteral("Auto"), QStringLiteral("Manual"), QStringLiteral("Manual"),
+              QStringLiteral("Auto"), QStringLiteral("Auto")}) {
+            QVERIFY(sync->setProperty("syncMode", mode));
+            open();
+            QCOMPARE(menu->property("count").toInt(), 5);
+            auto* row = row_at(1);
+            QVERIFY(row);
+            QCOMPARE(row->property("text").toString(), QStringLiteral("Sync"));
+            auto* sub = row->property("subMenu").value<QObject*>();
+            QCOMPARE(sub != nullptr, mode == QStringLiteral("Manual"));
+            if (sub) {
+                QCOMPARE(sub->property("count").toInt(), 2);
+            }
+            QVERIFY(QMetaObject::invokeMethod(menu, "close"));
+            QTRY_VERIFY(!menu->property("visible").toBool());
+        }
+        QVERIFY(sync->setProperty("enabled", false));
+        open();
+        QCOMPARE(menu->property("count").toInt(), 4);
+        QVERIFY(QMetaObject::invokeMethod(menu, "close"));
+        QVERIFY(sync->setProperty("enabled", true));
+    }
+
     void fits_default_window() {
         QVERIFY(find("syncDataSection"));
         for (auto* item : visual_items(window_->contentItem())) {

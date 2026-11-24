@@ -127,6 +127,9 @@ var icons = {
     "rectangle.topthird.inset.filled": { weight: "regular", name: "align-top-simple" },
     "rectangle.bottomthird.inset.filled": { weight: "regular", name: "align-bottom-simple" },
     "ellipsis": { weight: "regular", name: "dots-three" },
+    "arrow.triangle.2.circlepath": { weight: "regular", name: "arrows-clockwise" },
+    "arrow.down": { weight: "regular", name: "arrow-down" },
+    "arrow.up": { weight: "regular", name: "arrow-up" },
 }
 
 // The bundled asset for an SF Symbol name, or "" when the table has no row.

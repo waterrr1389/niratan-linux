@@ -328,6 +328,7 @@ qt_add_qml_module(niratan_app
         src/views/components/InspectorListRow.qml
         src/views/components/ListSectionHeader.qml
         src/views/components/ListStatus.qml
+        src/views/components/LoadingOverlay.qml
         src/views/components/MediaCue.qml
         src/views/components/MediaThumbnail.qml
         src/views/components/StepperControl.qml
@@ -346,6 +347,9 @@ qt_add_qml_module(niratan_app
         src/views/dictionary/AnkiMiningToast.qml
         src/views/icons/icon_map.js
         src/views/icons/phosphor/regular/cloud.svg
+        src/views/icons/phosphor/regular/arrows-clockwise.svg
+        src/views/icons/phosphor/regular/arrow-down.svg
+        src/views/icons/phosphor/regular/arrow-up.svg
         src/views/icons/phosphor/fill/skip-back-fill.svg
         src/views/icons/phosphor/fill/skip-forward-fill.svg
         src/views/icons/phosphor/fill/speaker-slash-fill.svg
