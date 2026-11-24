@@ -185,6 +185,8 @@ class QmlLoadTest : public QObject {
     void inspector_font_picker_stores_the_chosen_family();
     void settings_page_is_kept_after_the_first_visit();
     void kept_appearance_form_rereads_the_active_profile();
+    void color_wells_create_their_dialog_on_open();
+    void leaving_settings_dismisses_an_open_color_dialog();
 
    private:
     // Empty when the component loaded without a QML warning.
@@ -1327,6 +1329,127 @@ void QmlLoadTest::kept_appearance_form_rereads_the_active_profile() {
     QTest::keyClick(window, Qt::Key_Down);
     QTRY_VERIFY(appearance->isVisible());
     QCOMPARE(model->property("fontSize").toInt(), original);
+}
+
+namespace {
+
+qsizetype color_dialogs(QObject* root) {
+    qsizetype count = 0;
+    for (QObject* object : root->findChildren<QObject*>()) {
+        count += object->inherits("QQuickColorDialog") ? 1 : 0;
+    }
+    return count;
+}
+
+}  // namespace
+
+// SwiftUI ColorPicker as used by AppearanceView, SasayakiSettingsView and
+// VideoInspectorView: each well opens on its own current colour with alpha
+// and passes an accepted colour unchanged. On Linux the dialog exists only
+// after its well is first opened (mouse or Space); reject emits nothing.
+void QmlLoadTest::color_wells_create_their_dialog_on_open() {
+    QQuickWindow window;
+    window.resize(480, 240);
+    QQmlComponent component(&engine_);
+    component.setData(R"(
+import QtQuick
+import Niratan
+
+Item {
+    width: 480
+    height: 240
+
+    ColorWell { objectName: "first"; x: 20; y: 20; color: "#80ff0000"; dialogTitle: "First" }
+    ColorWell { objectName: "second"; x: 20; y: 80; color: "#00ff00"; dialogTitle: "Second" }
+}
+)",
+                      QUrl(QStringLiteral("qrc:/color_well_fixture.qml")));
+    std::unique_ptr<QObject> object(component.create(engine_.rootContext()));
+    QVERIFY2(object != nullptr, qPrintable(error_text(component)));
+    auto* root = qobject_cast<QQuickItem*>(object.get());
+    QVERIFY(root);
+    root->setParentItem(window.contentItem());
+    window.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&window));
+    QCOMPARE(color_dialogs(root), 0);
+
+    auto* first = root->findChild<QQuickItem*>(QStringLiteral("first"));
+    auto* second = root->findChild<QQuickItem*>(QStringLiteral("second"));
+    QVERIFY(first && second);
+    QSignalSpy first_picked(first, SIGNAL(picked(QColor)));
+    QSignalSpy second_picked(second, SIGNAL(picked(QColor)));
+
+    QTest::mouseClick(&window, Qt::LeftButton, Qt::NoModifier,
+                      first->mapToScene(first->boundingRect().center()).toPoint());
+    QTRY_COMPARE(color_dialogs(root), 1);
+    QCOMPARE(color_dialogs(second), 0);
+    QObject* dialog = first->findChild<QObject*>(QStringLiteral("colorDialog"));
+    QVERIFY(dialog);
+    QTRY_VERIFY(dialog->property("visible").toBool());
+    QCOMPARE(dialog->property("title").toString(), QStringLiteral("First"));
+    QVERIFY((dialog->property("options").toInt() & 0x1) != 0);
+    QCOMPARE(dialog->property("selectedColor").value<QColor>(), QColor("#80ff0000"));
+
+    dialog->setProperty("selectedColor", QColor("#400000ff"));
+    QVERIFY(QMetaObject::invokeMethod(dialog, "accept"));
+    QTRY_COMPARE(first_picked.count(), 1);
+    QCOMPARE(first_picked.first().first().value<QColor>(), QColor("#400000ff"));
+    QCOMPARE(second_picked.count(), 0);
+    QTRY_VERIFY(!dialog->property("visible").toBool());
+
+    // The page writes the colour back; the next open starts from it.
+    first->setProperty("color", QColor("#400000ff"));
+    window.requestActivate();
+    QVERIFY(QTest::qWaitForWindowActive(&window));
+    first->forceActiveFocus();
+    QTRY_VERIFY(first->hasActiveFocus());
+    QTest::keyClick(&window, Qt::Key_Space);
+    QTRY_VERIFY(dialog->property("visible").toBool());
+    QCOMPARE(dialog->property("selectedColor").value<QColor>(), QColor("#400000ff"));
+    dialog->setProperty("selectedColor", QColor("#ffffff"));
+    QVERIFY(QMetaObject::invokeMethod(dialog, "reject"));
+    QTRY_VERIFY(!dialog->property("visible").toBool());
+    QTest::qWait(20);
+    QCOMPARE(first_picked.count(), 1);
+    QCOMPARE(color_dialogs(root), 1);
+}
+
+// The kept Settings page dismisses an open colour dialog when another
+// section is shown, without emitting picked.
+void QmlLoadTest::leaving_settings_dismisses_an_open_color_dialog() {
+    QQmlComponent component(&engine_);
+    component.loadFromModule(QStringLiteral("Niratan"), QStringLiteral("MainWindow"));
+    std::unique_ptr<QObject> object(
+        component.createWithInitialProperties({{QStringLiteral("sectionIndex"), 3}}));
+    QVERIFY2(object != nullptr, qPrintable(error_text(component)));
+    auto* window = qobject_cast<QQuickWindow*>(object.get());
+    QVERIFY(window);
+    window->resize(960, 640);
+    QVERIFY(QTest::qWaitForWindowExposed(window));
+    QQuickItem* appearance = window->findChild<QQuickItem*>(QStringLiteral("settings-appearance"));
+    QTRY_VERIFY(appearance);
+    QCOMPARE(color_dialogs(appearance), 0);
+
+    // The colour rows show while the reader theme is Custom.
+    auto* model = qvariant_cast<QObject*>(appearance->property("settingsModel"));
+    QVERIFY(model);
+    model->setProperty("theme", QStringLiteral("Custom"));
+    auto* row = appearance->findChild<QQuickItem*>(QStringLiteral("customBackgroundColorRow"));
+    QVERIFY(row);
+    QTRY_VERIFY(row->isVisible());
+    auto* well = qvariant_cast<QQuickItem*>(row->property("trailingItem"));
+    QVERIFY(well);
+    QSignalSpy picked(well, SIGNAL(picked(QColor)));
+    QVERIFY(QMetaObject::invokeMethod(well, "open"));
+    QObject* dialog = well->findChild<QObject*>(QStringLiteral("colorDialog"));
+    QVERIFY(dialog);
+    QTRY_VERIFY(dialog->property("visible").toBool());
+    QCOMPARE(color_dialogs(appearance), 1);
+
+    window->setProperty("sectionIndex", 0);
+    QTRY_VERIFY(!dialog->property("visible").toBool());
+    QTest::qWait(20);
+    QCOMPARE(picked.count(), 0);
 }
 
 int main(int argc, char* argv[]) {

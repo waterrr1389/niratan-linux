@@ -6,7 +6,12 @@
 // and Features/Video/VideoInspectorView.swift colorRow. The well is 44 by 24
 // at radius 6 with a hairline; a translucent colour is drawn over a
 // checkerboard so its alpha shows. picked is emitted when the dialog is
-// accepted; the page writes `color` back.
+// accepted; the page writes `color` back. The dialog is created on the first
+// open, so a page of wells costs no dialogs until one is used; each open
+// starts from the well's colour at that moment. close(), or the well being
+// hidden, dismisses an open dialog without emitting picked.
+pragma ComponentBehavior: Bound
+
 import QtQuick
 import QtQuick.Dialogs
 import Niratan
@@ -35,11 +40,24 @@ Item {
     onClicked: open()
 
     function open() {
+        dialogLoader.active = true
+        const dialog = dialogLoader.item as ColorDialog
         dialog.selectedColor = well.color
         dialog.open()
     }
 
+    function close() {
+        (dialogLoader.item as ColorDialog)?.reject()
+    }
+
     onColorChanged: swatch.requestPaint()
+
+    // A well hidden with its page (another section shown) does not leave its
+    // dialog up; this is not an acceptance, so nothing is picked.
+    onVisibleChanged: {
+        if (!well.visible)
+            well.close()
+    }
 
     // The software renderer has no shader to clip to a rounded shape, so the
     // swatch paints its own rounded checkerboard and colour.
@@ -82,12 +100,17 @@ Item {
         onTapped: well.clicked()
     }
 
-    ColorDialog {
-        id: dialog
+    Loader {
+        id: dialogLoader
 
-        objectName: "colorDialog"
-        title: well.dialogTitle
-        options: ColorDialog.ShowAlphaChannel
-        onAccepted: well.picked(selectedColor)
+        active: false
+        sourceComponent: ColorDialog {
+            id: dialog
+
+            objectName: "colorDialog"
+            title: well.dialogTitle
+            options: ColorDialog.ShowAlphaChannel
+            onAccepted: well.picked(dialog.selectedColor)
+        }
     }
 }
