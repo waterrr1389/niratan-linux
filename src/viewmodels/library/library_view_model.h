@@ -83,6 +83,10 @@ class LibraryViewModel : public QObject {
     Q_INVOKABLE QString createShelf(const QString& name);
     Q_INVOKABLE bool renameShelf(const QString& from, const QString& to);
     Q_INVOKABLE void deleteShelf(const QString& name);
+    // The first shelf holding the book, following
+    // BookshelfViewModel.shelfName(containing:); empty when it is on none or
+    // unknown.
+    Q_INVOKABLE QString shelfForBook(const QString& folder) const;
     Q_INVOKABLE void moveBookToShelf(const QString& folder, const QString& shelf);
     Q_INVOKABLE void moveBooksToShelf(const QStringList& folders, const QString& shelf);
 

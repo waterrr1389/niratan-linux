@@ -9,6 +9,10 @@
 // (the Syncing... overlay, the error alert and the result alert). Sync is a
 // single item in Auto mode and an Import/Export submenu in Manual mode, and
 // only shown while sync is enabled. The Export entry is out of scope.
+//
+// Decision: the Move submenu also checks the book's current shelf (None when
+// it is on no shelf); Swift only disables that row, and the owner asked to see
+// where the book is.
 pragma ComponentBehavior: Bound
 
 import QtQuick
@@ -25,10 +29,14 @@ Item {
 
     property string folder
     property string bookTitle
+    // The shelf the book is on, read on every popup: the Move submenu marks
+    // it and disables it, as BookCell disables the current destination.
+    property string currentBookShelf
 
     function showBookMenu(folder, title) {
         dialogs.folder = folder
         dialogs.bookTitle = title
+        dialogs.currentBookShelf = dialogs.model.shelfForBook(folder)
         dialogs.placeSyncEntry()
         bookMenu.popup()
     }
@@ -116,6 +124,8 @@ Item {
             MenuItem {
                 text: qsTr("None")
                 icon.source: IconMap.source("tray")
+                checked: dialogs.currentBookShelf === ""
+                enabled: !checked
                 onTriggered: dialogs.model.moveBookToShelf(dialogs.folder, "")
             }
 
@@ -127,6 +137,8 @@ Item {
 
                     text: modelData.name
                     icon.source: IconMap.source("folder")
+                    checked: dialogs.currentBookShelf === modelData.name
+                    enabled: !checked
                     onTriggered: dialogs.model.moveBookToShelf(dialogs.folder, modelData.name)
                 }
             }

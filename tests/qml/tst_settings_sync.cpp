@@ -2,6 +2,8 @@
 // SyncView.swift: TTU connection, behaviour and data rows.
 
 #include "../viewmodels/data_root.h"
+#include "models/books/book.h"
+#include "services/books/book_storage.h"
 #include "services/storage/app_paths.h"
 #include "services/sync/oauth_credentials.h"
 
@@ -311,6 +313,91 @@ class SettingsSyncTest : public QObject {
         QCOMPARE(menu->property("count").toInt(), 4);
         QVERIFY(QMetaObject::invokeMethod(menu, "close"));
         QVERIFY(sync->setProperty("enabled", true));
+    }
+
+    // The Move submenu checks and disables the book's shelf, None for a book
+    // on no shelf, and follows a move on the next popup.
+    void book_menu_marks_current_shelf() {
+        const niratan::books::BookStorage storage(niratan::storage::data_root());
+        for (const std::string folder : {"shelf-a", "shelf-b"}) {
+            niratan::books::BookMetadata book;
+            book.id = "ID-" + folder;
+            book.title = folder;
+            book.folder = folder;
+            QVERIFY(storage.save_metadata(book));
+        }
+        QVERIFY(
+            storage.save_shelves({niratan::books::BookShelf{"Novel", {"ID-shelf-a", "ID-shelf-b"}},
+                                  niratan::books::BookShelf{"Other", {}}}));
+        QQmlComponent component(&engine_);
+        component.setData("import Niratan\nLibraryDialogs { model: LibraryViewModel {} }",
+                          QUrl(QStringLiteral("qrc:/shelf_menu_test.qml")));
+        QTRY_VERIFY(!component.isLoading());
+        std::unique_ptr<QObject> dialogs(component.create());
+        QVERIFY2(dialogs, qPrintable(component.errorString()));
+        qobject_cast<QQuickItem*>(dialogs.get())->setParentItem(window_->contentItem());
+        auto* menu = dialogs->findChild<QObject*>("bookMenu");
+        QVERIFY(menu);
+        // Names of the checked rows of the Move submenu; each checked row is
+        // also disabled.
+        const auto checked_rows = [&](const QString& folder) {
+            QStringList names;
+            [&] {
+                QVERIFY(QMetaObject::invokeMethod(dialogs.get(), "showBookMenu", QVariant(folder),
+                                                  QVariant(folder)));
+                QTRY_VERIFY(menu->property("opened").toBool());
+                QQuickItem* first = nullptr;
+                QMetaObject::invokeMethod(menu, "itemAt", qReturnArg(first), 0);
+                QVERIFY(first);
+                auto* move = first->property("subMenu").value<QObject*>();
+                QVERIFY(move);
+                for (int i = 0; i < move->property("count").toInt(); ++i) {
+                    QQuickItem* row = nullptr;
+                    QMetaObject::invokeMethod(move, "itemAt", qReturnArg(row), i);
+                    QVERIFY(row);
+                    if (row->property("checked").toBool()) {
+                        QVERIFY(!row->property("enabled").toBool());
+                        names.append(row->property("text").toString());
+                    } else {
+                        QVERIFY(row->property("enabled").toBool());
+                    }
+                }
+                QVERIFY(QMetaObject::invokeMethod(menu, "close"));
+                QTRY_VERIFY(!menu->property("visible").toBool());
+            }();
+            return names;
+        };
+        // Chooses a destination from the Move submenu, as the user does.
+        const auto choose = [&](const QString& folder, const QString& name) {
+            QVERIFY(QMetaObject::invokeMethod(dialogs.get(), "showBookMenu", QVariant(folder),
+                                              QVariant(folder)));
+            QTRY_VERIFY(menu->property("opened").toBool());
+            QQuickItem* first = nullptr;
+            QMetaObject::invokeMethod(menu, "itemAt", qReturnArg(first), 0);
+            QVERIFY(first);
+            auto* move = first->property("subMenu").value<QObject*>();
+            QVERIFY(move);
+            QQuickItem* target = nullptr;
+            for (int i = 0; i < move->property("count").toInt() && !target; ++i) {
+                QQuickItem* row = nullptr;
+                QMetaObject::invokeMethod(move, "itemAt", qReturnArg(row), i);
+                if (row && row->property("text").toString() == name) {
+                    target = row;
+                }
+            }
+            QVERIFY(target);
+            QVERIFY(target->property("enabled").toBool());
+            QVERIFY(QMetaObject::invokeMethod(target, "triggered"));
+            QVERIFY(QMetaObject::invokeMethod(menu, "close"));
+            QTRY_VERIFY(!menu->property("visible").toBool());
+        };
+        QCOMPARE(checked_rows(QStringLiteral("shelf-b")), QStringList{QStringLiteral("Novel")});
+        QCOMPARE(checked_rows(QStringLiteral("shelf-a")), QStringList{QStringLiteral("Novel")});
+        choose(QStringLiteral("shelf-a"), QStringLiteral("Other"));
+        QCOMPARE(checked_rows(QStringLiteral("shelf-a")), QStringList{QStringLiteral("Other")});
+        choose(QStringLiteral("shelf-a"), QStringLiteral("None"));
+        QCOMPARE(checked_rows(QStringLiteral("shelf-a")), QStringList{QStringLiteral("None")});
+        QCOMPARE(checked_rows(QStringLiteral("shelf-b")), QStringList{QStringLiteral("Novel")});
     }
 
     void fits_default_window() {

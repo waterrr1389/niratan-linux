@@ -456,6 +456,20 @@ void LibraryViewModel::deleteShelf(const QString& name) {
     refresh();
 }
 
+QString LibraryViewModel::shelfForBook(const QString& folder) const {
+    const auto index = state_->find_book(folder.toStdString());
+    if (!index.has_value()) {
+        return {};
+    }
+    const std::string& id = state_->library.books[*index].metadata.id;
+    for (const BookShelf& shelf : state_->library.shelves) {
+        if (std::ranges::find(shelf.book_ids, id) != shelf.book_ids.end()) {
+            return QString::fromStdString(shelf.name);
+        }
+    }
+    return {};
+}
+
 void LibraryViewModel::moveBookToShelf(const QString& folder, const QString& shelf) {
     moveBooksToShelf({folder}, shelf);
 }

@@ -46,6 +46,7 @@ class LibraryViewModelTest : public QObject {
    private slots:
     void smart_counts_follow_the_library();
     void smart_counts_change_with_shelf_membership();
+    void shelf_for_book_follows_moves();
     void smart_counts_drop_a_book_marked_read();
 };
 
@@ -87,6 +88,31 @@ void LibraryViewModelTest::smart_counts_change_with_shelf_membership() {
     QCOMPARE(counts.value(QStringLiteral("all")).toInt(), 2);
     QCOMPARE(counts.value(QStringLiteral("reading")).toInt(), 1);
     QCOMPARE(counts.value(QStringLiteral("unshelved")).toInt(), 1);
+}
+
+// shelfForBook names the first shelf holding the book, as
+// BookshelfViewModel.shelfName(containing:) does, and follows moves; None and
+// an unknown folder give an empty name.
+void LibraryViewModelTest::shelf_for_book_follows_moves() {
+    niratan::test::TempDataRoot root;
+    QVERIFY(root.isValid());
+    const BookStorage storage(niratan::storage::data_root());
+    add_book(storage, "a", 0.0);
+    add_book(storage, "b", 0.0);
+    add_book(storage, "c", 0.0);
+    QVERIFY(storage.save_shelves(
+        {BookShelf{"Novel", {"ID-a", "ID-b", "ID-c"}}, BookShelf{"Other", {"ID-c"}}}));
+
+    LibraryViewModel model;
+    QCOMPARE(model.shelfForBook(QStringLiteral("a")), QStringLiteral("Novel"));
+    QCOMPARE(model.shelfForBook(QStringLiteral("c")), QStringLiteral("Novel"));
+    model.moveBookToShelf(QStringLiteral("a"), QStringLiteral("Other"));
+    QCOMPARE(model.shelfForBook(QStringLiteral("a")), QStringLiteral("Other"));
+    QCOMPARE(model.shelfForBook(QStringLiteral("b")), QStringLiteral("Novel"));
+    model.moveBookToShelf(QStringLiteral("a"), QString());
+    QCOMPARE(model.shelfForBook(QStringLiteral("a")), QString());
+    QCOMPARE(model.shelfForBook(QStringLiteral("b")), QStringLiteral("Novel"));
+    QCOMPARE(model.shelfForBook(QStringLiteral("missing")), QString());
 }
 
 // Marking a book read moves it out of Currently Reading without a refresh;
