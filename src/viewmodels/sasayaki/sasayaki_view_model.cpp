@@ -55,10 +55,6 @@ std::optional<std::string> resolve_book_folder() {
 }  // namespace
 SasayakiViewModel::SasayakiViewModel(QObject* parent)
     : QObject(parent), state_(std::make_unique<State>()) {
-    state_->player = new QMediaPlayer(this);
-    state_->output = new QAudioOutput(this);
-    state_->player->setAudioOutput(state_->output);
-
     state_->seek_timer = new QTimer(this);
     state_->seek_timer->setSingleShot(true);
     connect(state_->seek_timer, &QTimer::timeout, this, [this]() {
@@ -69,6 +65,27 @@ SasayakiViewModel::SasayakiViewModel(QObject* parent)
         state_->seek_update_cue = true;
         state_->seek_stop_time.reset();
     });
+
+    connect(ReaderViewModel::instance(), &ReaderViewModel::bookChanged, this,
+            [this]() { reload_book(); });
+    connect(ReaderViewModel::instance(), &ReaderViewModel::chapterChanged, this, [this]() {
+        rebuild_cue_list();
+        update_cue();
+    });
+
+    reload_book();
+}
+
+// The player is created with the first audio source: a QMediaPlayer brings up
+// the multimedia backend, whose hardware decoder probe would otherwise delay
+// opening every window that hosts the reader.
+void SasayakiViewModel::ensure_player() {
+    if (state_->player != nullptr) {
+        return;
+    }
+    state_->player = new QMediaPlayer(this);
+    state_->output = new QAudioOutput(this);
+    state_->player->setAudioOutput(state_->output);
 
     connect(state_->player, &QMediaPlayer::positionChanged, this, [this](qint64 milliseconds) {
         if (state_->reloading) {
@@ -126,15 +143,6 @@ SasayakiViewModel::SasayakiViewModel(QObject* parent)
             [this](QMediaPlayer::Error, const QString& message) {
                 set_error(message.isEmpty() ? tr("The audio file could not be played.") : message);
             });
-
-    connect(ReaderViewModel::instance(), &ReaderViewModel::bookChanged, this,
-            [this]() { reload_book(); });
-    connect(ReaderViewModel::instance(), &ReaderViewModel::chapterChanged, this, [this]() {
-        rebuild_cue_list();
-        update_cue();
-    });
-
-    reload_book();
 }
 
 SasayakiViewModel::~SasayakiViewModel() {
@@ -197,7 +205,9 @@ bool SasayakiViewModel::openAudio(const QUrl& file) {
     }
 
     save_playback(state_->position);
-    state_->player->stop();
+    if (state_->player != nullptr) {
+        state_->player->stop();
+    }
     state_->audio_path = info.absoluteFilePath();
     state_->audio_name = info.fileName();
     state_->playback.audio_bookmark = state_->audio_path.toUtf8();
@@ -254,8 +264,10 @@ void SasayakiViewModel::reload_book() {
     if (state_->has_root) {
         save_playback(state_->position);
     }
-    state_->player->stop();
-    state_->player->setSource(QUrl());
+    if (state_->player != nullptr) {
+        state_->player->stop();
+        state_->player->setSource(QUrl());
+    }
 
     state_->folder.clear();
     state_->has_root = false;

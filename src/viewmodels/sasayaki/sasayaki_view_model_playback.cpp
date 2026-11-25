@@ -242,7 +242,9 @@ void SasayakiViewModel::setRate(double rate) {
         return;
     }
     state_->rate = clamped;
-    state_->player->setPlaybackRate(clamped);
+    if (state_->player != nullptr) {
+        state_->player->setPlaybackRate(clamped);
+    }
     emit rateChanged();
     save_playback(state_->position);
 }

@@ -97,6 +97,7 @@ QVariantList SasayakiViewModel::chapters() const {
 
 void SasayakiViewModel::open_audio_source() {
     state_->needs_initial_seek = true;
+    ensure_player();
     state_->player->setSource(QUrl::fromLocalFile(state_->audio_path));
     state_->player->setPlaybackRate(state_->rate);
 

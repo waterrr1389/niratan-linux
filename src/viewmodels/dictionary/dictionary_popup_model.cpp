@@ -68,8 +68,11 @@ struct DictionaryPopupModel::State {
     QJsonArray entries;
     int search_text_size = 26;
     bool page = false;
-    QAudioOutput audio_output;
-    QMediaPlayer audio_player;
+    // Created on the first word audio: a QAudioOutput brings up the
+    // multimedia backend, whose hardware decoder probe would otherwise delay
+    // every window that hosts a popup.
+    std::unique_ptr<QAudioOutput> audio_output;
+    std::unique_ptr<QMediaPlayer> audio_player;
     bool dark = false;
     QColor background = QColor(QStringLiteral("#FFFFFF"));
     QColor text_color = QColor(QStringLiteral("#000000"));
@@ -146,9 +149,6 @@ DictionarySets dictionary_sets(const DictionaryStore& store,
 DictionaryPopupModel::DictionaryPopupModel(QObject* parent)
     : QObject(parent), state_(std::make_unique<State>()) {
     state_->assets = load_popup_assets();
-    state_->audio_player.setAudioOutput(&state_->audio_output);
-    connect(&state_->audio_player, &QMediaPlayer::errorOccurred, this,
-            [this] { set_audio_error(tr("Could not play word audio")); });
     connect(&state_->settings_watch, &settings::DictionarySettingsWatch::changed, this, [this] {
         const int text_size = state_->settings_watch.settings().search_text_size.value_or(26);
         if (text_size != state_->search_text_size) {
@@ -219,16 +219,26 @@ void DictionaryPopupModel::playWordAudio(const QString& audioUrl) {
         return;
     }
     set_audio_error({});
-    state_->audio_player.stop();
-    if (state_->audio_player.error() != QMediaPlayer::NoError) {
-        state_->audio_player.setSource({});
+    if (!state_->audio_player) {
+        state_->audio_output = std::make_unique<QAudioOutput>();
+        state_->audio_player = std::make_unique<QMediaPlayer>();
+        state_->audio_player->setAudioOutput(state_->audio_output.get());
+        connect(state_->audio_player.get(), &QMediaPlayer::errorOccurred, this,
+                [this] { set_audio_error(tr("Could not play word audio")); });
     }
-    state_->audio_player.setSource(source);
-    state_->audio_player.play();
+    QMediaPlayer& player = *state_->audio_player;
+    player.stop();
+    if (player.error() != QMediaPlayer::NoError) {
+        player.setSource({});
+    }
+    player.setSource(source);
+    player.play();
 }
 
 void DictionaryPopupModel::stopWordAudio() {
-    state_->audio_player.stop();
+    if (state_->audio_player) {
+        state_->audio_player->stop();
+    }
 }
 
 void DictionaryPopupModel::showAudioSourceMenu(const QVariantMap& data) {

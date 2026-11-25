@@ -279,6 +279,7 @@ class SasayakiViewModel : public QObject {
     bool load_match();
     void apply_match_result(const sasayaki::SasayakiMatchData& result);
     void restore_audio();
+    void ensure_player();
     void open_audio_source();
     void rebuild_timeline(bool refresh_highlight = false);
     void rebuild_cue_list();
