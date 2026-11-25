@@ -571,12 +571,12 @@ Item {
     }
 
     MiningViewModel {
-        id: miningModel
+        id: mining
     }
 
     AnkiMiningToast {
-        status: miningModel.toastStatus
-        message: miningModel.toastMessage
+        status: mining.toastStatus
+        message: mining.toastMessage
     }
 
     PlayerInspectorViewModel {
@@ -740,7 +740,7 @@ Item {
             anchors.fill: parent
             z: 2
             engine: mpv
-            miningModel: miningModel
+            miningModel: mining
             videoFile: page.videoFile
             paused: mpv.paused
             bottomInset: page.compactChrome ? 28 : 56
