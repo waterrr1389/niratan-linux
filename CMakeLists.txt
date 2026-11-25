@@ -620,5 +620,15 @@ target_link_libraries(niratan PRIVATE niratan_app niratan_appplugin niratan_styl
     niratan_styleplugin)
 target_compile_options(niratan PRIVATE -Wall -Wextra -Wpedantic -Werror)
 
+# The KDE desktop entry launches the release binary, and KDE keeps serving the
+# previous build from its service cache until that cache is rebuilt.
+find_program(NIRATAN_KBUILDSYCOCA kbuildsycoca6)
+if(NIRATAN_KBUILDSYCOCA AND CMAKE_BUILD_TYPE STREQUAL "Release")
+    add_custom_command(TARGET niratan POST_BUILD
+        COMMAND sh -c "'${NIRATAN_KBUILDSYCOCA}' > /dev/null 2>&1 || true"
+        COMMENT "Refreshing the KDE service cache"
+        VERBATIM)
+endif()
+
 enable_testing()
 add_subdirectory(tests)
