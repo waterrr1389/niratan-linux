@@ -18,7 +18,7 @@
 // nativeAppearanceContent).
 //
 // The registered ReaderPage is created inside a window around a book imported
-// into a temporary data root (two chapters of ten and eight characters, the
+// into a temporary data root (two chapters of ten and eleven characters, the
 // first showing one image), with a one-entry dictionary for the lookup case
 // and a silent WAV for Sasayaki playback. The empty-gallery case opens the
 // text-only epub_fixture.h book instead. The web view never loads the chapter (no reader://
@@ -115,7 +115,7 @@ const QByteArray kPixel =
                         "0000000d49444154789c63f8cfc0f01f00050001ff89993d1d0000000049454e44"
                         "ae426082");
 
-// Two chapters of ten and eight readable characters; the first also shows
+// Two chapters of ten and eleven readable characters; the first also shows
 // one manifested image, which the gallery lists.
 bool write_book(const std::filesystem::path& path) {
     int error = 0;
@@ -159,7 +159,7 @@ bool write_book(const std::filesystem::path& path) {
 </html>)XML"},
         {"first.xhtml",
          "<html><body><p>あいうえおかきくけこ</p><img src=\"pixel.png\"/></body></html>"},
-        {"second.xhtml", "<html><body><p>さしすせそたちつ</p></body></html>"},
+        {"second.xhtml", "<html><body><p>さしすせそたちつあしす</p></body></html>"},
         {"pixel.png", kPixel.toStdString()},
     };
     for (const auto& [name, bytes] : entries) {
@@ -1173,6 +1173,33 @@ void ReaderPresentationTest::go_to_search_result_jumps_and_closes() {
     QCOMPARE(reader_->chapter_index(), chapter);
     QCOMPARE(page_->property("activeTool").toString(), QStringLiteral("goTo"));
 
+    const auto scene_y = [](const QQuickItem* item) { return item->mapToScene(QPointF()).y(); };
+    const auto by_y = [&](QList<QQuickItem*> items) {
+        std::ranges::sort(items, {}, scene_y);
+        return items;
+    };
+
+    // groupedSearchResults: one header per chapter with hits, naming it and
+    // its count, above that chapter's results.
+    {
+        QSignalSpy searched(reader_, &ReaderViewModel::searchChanged);
+        field->setProperty("text", QStringLiteral("あ"));
+        QVERIFY(QMetaObject::invokeMethod(field, "accepted"));
+        QTRY_VERIFY(searched.count() >= 2 && reader_->search_state() == 2);
+    }
+    QList<QQuickItem*> headers;
+    QTRY_VERIFY((headers = shown_named(panel, QStringLiteral("goToSearchSection"))).size() == 2);
+    headers = by_y(headers);
+    QCOMPARE(shown_texts(headers[0]),
+             QStringList({QStringLiteral("First Chapter"), QStringLiteral("1 result")}));
+    QCOMPARE(shown_texts(headers[1]),
+             QStringList({QStringLiteral("Second Chapter"), QStringLiteral("1 result")}));
+    const QList<QQuickItem*> hit_rows = by_y(shown_named(panel, QStringLiteral("goToSearchRow")));
+    QCOMPARE(hit_rows.size(), qsizetype(2));
+    QVERIFY(scene_y(headers[0]) < scene_y(hit_rows[0]));
+    QVERIFY(scene_y(hit_rows[0]) < scene_y(headers[1]));
+    QVERIFY(scene_y(headers[1]) < scene_y(hit_rows[1]));
+
     {
         QSignalSpy searched(reader_, &ReaderViewModel::searchChanged);
         field->setProperty("text", QStringLiteral("しす"));
@@ -1180,7 +1207,13 @@ void ReaderPresentationTest::go_to_search_result_jumps_and_closes() {
         QTRY_VERIFY(searched.count() >= 2 && reader_->search_state() == 2);
     }
     QList<QQuickItem*> rows;
-    QTRY_VERIFY(!(rows = shown_named(panel, QStringLiteral("goToSearchRow"))).isEmpty());
+    QTRY_VERIFY((rows = shown_named(panel, QStringLiteral("goToSearchRow"))).size() == 2);
+    rows = by_y(rows);
+    const QList<QQuickItem*> sections = shown_named(panel, QStringLiteral("goToSearchSection"));
+    QCOMPARE(sections.size(), qsizetype(1));
+    QCOMPARE(shown_texts(sections.first()),
+             QStringList({QStringLiteral("Second Chapter"), QStringLiteral("2 results")}));
+    QVERIFY(scene_y(sections.first()) < scene_y(rows.first()));
     QVERIFY(QMetaObject::invokeMethod(rows.first(), "clicked"));
     QTRY_COMPARE(page_->property("activeTool").toString(), QString());
     if (reader_->restoring()) {

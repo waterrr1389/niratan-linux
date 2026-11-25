@@ -86,41 +86,63 @@ Item {
                 model: ReaderViewModel.searchResults
                 spacing: Theme.readerListSpacing
 
-                delegate: InspectorListRow {
-                    id: searchRow
+                // groupedSearchResults: results arrive in spine order and the
+                // first of each spine carries groupCount, so a header goes
+                // above it; grouping by label would merge chapters sharing one.
+                delegate: ColumnLayout {
+                    id: searchItem
                     required property var modelData
                     width: ListView.view.width
-                    objectName: "goToSearchRow"
+                    spacing: Theme.readerListSpacing
 
-                    onClicked: {
-                        ReaderViewModel.jumpToCharacter(searchRow.modelData.character);
-                        root.jumpRequested();
-                    }
-                    contentItem: ColumnLayout {
-                        spacing: Theme.readerListDetailSpacing
-
-                        StyledLabel {
-                            Layout.fillWidth: true
-                            textFormat: Text.RichText
-                            wrapMode: Text.Wrap
-                            maximumLineCount: 3
-                            text: searchRow.modelData.before
-                                  + "<span style=\"background-color:" + Theme.readerSearchMatch
-                                  + "\">" + searchRow.modelData.match + "</span>"
-                                  + searchRow.modelData.after
-                            textStyle: Theme.calloutFont
-                        }
-
-                        StyledLabel {
-                            Layout.fillWidth: true
-                            text: ReaderViewModel.positionTextAt(searchRow.modelData.character)
-                            secondary: true
-                            textStyle: Theme.caption2Font
-                            monospacedDigits: true
-                            elide: Text.ElideRight
-                        }
+                    ListSectionHeader {
+                        Layout.fillWidth: true
+                        visible: searchItem.modelData.groupCount > 0
+                        objectName: "goToSearchSection"
+                        compact: true
+                        title: searchItem.modelData.label.length > 0
+                               ? searchItem.modelData.label : qsTr("Untitled Chapter")
+                        countText: searchItem.modelData.groupCount === 1
+                                   ? qsTr("1 result")
+                                   : qsTr("%1 results").arg(searchItem.modelData.groupCount)
                     }
 
+                    InspectorListRow {
+                        id: searchRow
+                        readonly property var modelData: searchItem.modelData
+                        Layout.fillWidth: true
+                        objectName: "goToSearchRow"
+
+                        onClicked: {
+                            ReaderViewModel.jumpToCharacter(searchRow.modelData.character);
+                            root.jumpRequested();
+                        }
+                        contentItem: ColumnLayout {
+                            spacing: Theme.readerListDetailSpacing
+
+                            StyledLabel {
+                                Layout.fillWidth: true
+                                textFormat: Text.RichText
+                                wrapMode: Text.Wrap
+                                maximumLineCount: 3
+                                text: searchRow.modelData.before
+                                      + "<span style=\"background-color:" + Theme.readerSearchMatch
+                                      + "\">" + searchRow.modelData.match + "</span>"
+                                      + searchRow.modelData.after
+                                textStyle: Theme.calloutFont
+                            }
+
+                            StyledLabel {
+                                Layout.fillWidth: true
+                                text: ReaderViewModel.positionTextAt(searchRow.modelData.character)
+                                secondary: true
+                                textStyle: Theme.caption2Font
+                                monospacedDigits: true
+                                elide: Text.ElideRight
+                            }
+                        }
+
+                    }
                 }
             }
         }

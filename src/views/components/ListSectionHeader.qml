@@ -29,6 +29,7 @@ Item {
             Layout.fillWidth: header.compact
             Layout.preferredWidth: implicitWidth
             Layout.minimumWidth: 0
+            Layout.alignment: header.compact ? Qt.AlignBaseline : Qt.AlignVCenter
             text: header.title
             textStyle: header.compact ? Theme.captionFont : Theme.headlineFont
             weight: Theme.weightSemibold
@@ -36,8 +37,18 @@ Item {
             elide: Text.ElideRight
         }
 
+        // ReaderGoToView.swift searchResultsContent: a compact header ends
+        // in a plain tertiary caption2 count rather than the gallery's pill.
         StyledLabel {
-            visible: header.countText.length > 0
+            visible: header.compact && header.countText.length > 0
+            Layout.alignment: Qt.AlignBaseline
+            text: header.countText
+            textStyle: Theme.caption2Font
+            tertiary: true
+        }
+
+        StyledLabel {
+            visible: !header.compact && header.countText.length > 0
             text: header.countText
             textStyle: Theme.captionFont
             weight: Theme.weightSemibold
