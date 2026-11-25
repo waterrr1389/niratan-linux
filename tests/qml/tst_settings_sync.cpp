@@ -11,6 +11,7 @@
 #include <QJsonObject>
 #include <QQmlComponent>
 #include <QQmlEngine>
+#include <QPointer>
 #include <QQuickItem>
 #include <QQuickStyle>
 #include <QQuickWindow>
@@ -242,6 +243,69 @@ class SettingsSyncTest : public QObject {
             QVERIFY(QMetaObject::invokeMethod(menu, "close"));
             QTRY_VERIFY(!menu->property("visible").toBool());
         }
+        // Reopening the menu, as for another book, keeps the Sync row live:
+        // the pointer passing down from Move highlights it, and Down from
+        // Move selects it and then the next action.
+        const auto hover = [&](QQuickItem* row) {
+            QTest::mouseMove(
+                window_.get(),
+                row->mapToScene(QPointF(row->width() / 2, row->height() / 2)).toPoint());
+            QTest::qWait(100);
+        };
+        const auto key_down = [&] {
+            QTest::keyClick(window_.get(), Qt::Key_Down);
+            return row_at(menu->property("currentIndex").toInt());
+        };
+        for (const auto& mode : {QStringLiteral("Auto"), QStringLiteral("Auto"),
+                                 QStringLiteral("Manual"), QStringLiteral("Auto")}) {
+            QVERIFY(sync->setProperty("syncMode", mode));
+            open();
+            auto* move = row_at(0);
+            auto* row = row_at(1);
+            auto* next = row_at(2);
+            QVERIFY(move && row && next);
+            QVERIFY(row->y() > move->y() && next->y() > row->y());
+            hover(move);
+            hover(row);
+            QVERIFY2(row->property("hovered").toBool(), qPrintable(mode));
+            hover(next);
+            QVERIFY(next->property("hovered").toBool());
+            menu->setProperty("currentIndex", 0);
+            QCOMPARE(key_down(), row);
+            // The next enabled action after Sync.
+            QQuickItem* after = nullptr;
+            for (int i = 2; i < menu->property("count").toInt() && !after; ++i) {
+                auto* candidate = row_at(i);
+                if (candidate && candidate->property("enabled").toBool()) {
+                    after = candidate;
+                }
+            }
+            QVERIFY(after);
+            QCOMPARE(key_down(), after);
+            QVERIFY(QMetaObject::invokeMethod(menu, "close"));
+            QTRY_VERIFY(!menu->property("visible").toBool());
+        }
+        // Reopening for another book while the Manual submenu is open closes
+        // that submenu and shows the new entry.
+        QVERIFY(sync->setProperty("syncMode", QStringLiteral("Manual")));
+        open();
+        menu->setProperty("currentIndex", 0);
+        QVERIFY(key_down());
+        QPointer<QObject> previous = row_at(1)->property("subMenu").value<QObject*>();
+        QVERIFY(previous);
+        QTest::keyClick(window_.get(), Qt::Key_Right);
+        QTRY_VERIFY(previous->property("visible").toBool());
+        QVERIFY(sync->setProperty("syncMode", QStringLiteral("Auto")));
+        QVERIFY(QMetaObject::invokeMethod(dialogs.get(), "showBookMenu",
+                                          QVariant(QStringLiteral("other")),
+                                          QVariant(QStringLiteral("Other"))));
+        QTRY_VERIFY(previous.isNull() || !previous->property("visible").toBool());
+        QTRY_VERIFY(menu->property("opened").toBool());
+        QVERIFY(row_at(1));
+        QCOMPARE(row_at(1)->property("text").toString(), QStringLiteral("Sync"));
+        QVERIFY(row_at(1)->property("subMenu").value<QObject*>() == nullptr);
+        QVERIFY(QMetaObject::invokeMethod(menu, "close"));
+        QTRY_VERIFY(!menu->property("visible").toBool());
         QVERIFY(sync->setProperty("enabled", false));
         open();
         QCOMPARE(menu->property("count").toInt(), 4);

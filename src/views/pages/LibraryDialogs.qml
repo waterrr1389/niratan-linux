@@ -34,22 +34,35 @@ Item {
     }
 
     // BookCell shows one ッツ Sync entry, chosen by syncMode, right after Move.
-    // take*() detaches the entries without destroying them, so they can be
-    // inserted again on the next popup.
+    // Each popup removes the previous entry and inserts a freshly created one:
+    // a row detached from the menu and inserted again stays undrawn and deaf
+    // to the pointer, and a hidden row inside a closed menu is not laid out
+    // again when its height changes.
+    property QtObject syncEntry: null
+
     function placeSyncEntry() {
-        for (let i = bookMenu.count - 1; i >= 0; --i) {
-            const row = bookMenu.itemAt(i)
-            if (row === syncItem)
-                bookMenu.takeItem(i)
-            else if (row && row.subMenu === syncMenu)
-                bookMenu.takeMenu(i)
-        }
+        // The menu may still be open on the entry being replaced; drop the
+        // selection so removing that row does not move it in a loop.
+        bookMenu.currentIndex = -1
+        if (dialogs.syncEntry instanceof Menu) {
+            // Removing a submenu row does not close the submenu itself.
+            const previous = dialogs.syncEntry as Menu
+            previous.close()
+            bookMenu.removeMenu(previous)
+        } else if (dialogs.syncEntry)
+            bookMenu.removeItem(dialogs.syncEntry)
+        dialogs.syncEntry = null
         if (!SyncSettingsViewModel.enabled || SyncSettingsViewModel.provider !== "ttu")
             return
-        if (SyncSettingsViewModel.syncMode === "Manual")
-            bookMenu.insertMenu(1, syncMenu)
-        else
-            bookMenu.insertItem(1, syncItem)
+        if (SyncSettingsViewModel.syncMode === "Manual") {
+            const menu = syncMenuComponent.createObject(dialogs) as Menu
+            bookMenu.insertMenu(1, menu)
+            dialogs.syncEntry = menu
+        } else {
+            const item = syncItemComponent.createObject(dialogs) as MenuItem
+            bookMenu.insertItem(1, item)
+            dialogs.syncEntry = item
+        }
     }
 
     function confirmBulkDelete(folders) {
@@ -57,33 +70,37 @@ Item {
         bulkDeleteDialog.open()
     }
 
-    MenuItem {
-        id: syncItem
+    Component {
+        id: syncItemComponent
 
-        objectName: "bookSyncItem"
+        MenuItem {
+            objectName: "bookSyncItem"
 
-        text: qsTr("Sync")
-        icon.source: IconMap.source("arrow.triangle.2.circlepath")
-        onTriggered: SyncSettingsViewModel.syncBook(dialogs.folder, "")
+            text: qsTr("Sync")
+            icon.source: IconMap.source("arrow.triangle.2.circlepath")
+            onTriggered: SyncSettingsViewModel.syncBook(dialogs.folder, "")
+        }
     }
 
-    Menu {
-        id: syncMenu
+    Component {
+        id: syncMenuComponent
 
-        objectName: "bookSyncMenu"
+        Menu {
+            objectName: "bookSyncMenu"
 
-        title: qsTr("Sync")
-        icon.source: IconMap.source("arrow.triangle.2.circlepath")
+            title: qsTr("Sync")
+            icon.source: IconMap.source("arrow.triangle.2.circlepath")
 
-        MenuItem {
-            text: qsTr("Import")
-            icon.source: IconMap.source("arrow.down")
-            onTriggered: SyncSettingsViewModel.syncBook(dialogs.folder, "import")
-        }
-        MenuItem {
-            text: qsTr("Export")
-            icon.source: IconMap.source("arrow.up")
-            onTriggered: SyncSettingsViewModel.syncBook(dialogs.folder, "export")
+            MenuItem {
+                text: qsTr("Import")
+                icon.source: IconMap.source("arrow.down")
+                onTriggered: SyncSettingsViewModel.syncBook(dialogs.folder, "import")
+            }
+            MenuItem {
+                text: qsTr("Export")
+                icon.source: IconMap.source("arrow.up")
+                onTriggered: SyncSettingsViewModel.syncBook(dialogs.folder, "export")
+            }
         }
     }
 

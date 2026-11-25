@@ -885,8 +885,10 @@ target_link_libraries(tst_settings_sync PRIVATE niratan_app niratan_appplugin ni
     niratan_styleplugin Qt6::Test Qt6::Quick Qt6::QuickControls2 Qt6::WebEngineQuick)
 target_compile_options(tst_settings_sync PRIVATE -Wall -Wextra -Wpedantic -Werror)
 add_test(NAME settings_sync COMMAND tst_settings_sync)
+# The offscreen platform turns control hover off; the book menu test hovers.
 set_tests_properties(settings_sync PROPERTIES
-    ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QTWEBENGINE_CHROMIUM_FLAGS=--disable-gpu")
+    ENVIRONMENT
+    "QT_QPA_PLATFORM=offscreen;QTWEBENGINE_CHROMIUM_FLAGS=--disable-gpu;QT_QUICK_CONTROLS_HOVER_ENABLED=1")
 
 qt_add_executable(tst_control_style
     qml/tst_control_style.cpp
