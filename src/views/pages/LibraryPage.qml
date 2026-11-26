@@ -9,23 +9,30 @@
 // and confirmations).
 //
 // The shelf column takes 24% of the width, clamped to 176..230, and the
-// detail the rest. The detail's top row is the window toolbar: its primary
-// group holds Sort (a menu of Recent, Title and Manual), Select Books, Cover
-// Size (a popover slider from 110 to 240 in steps of 10), Statistics (while
-// statistics are enabled) and Import EPUB. While selecting, Done leads the row and the group holds Move
-// to Shelf and Delete. Below, the selection's title in title2 semibold with
-// its count, then the grid: columns exactly `coverWidth` wide, 20 apart, with
-// 20 between rows and 16 of side padding, aligned to the leading edge. An
-// empty library shows "No Books"; an empty selection shows the empty-shelf
-// copy for its kind.
+// detail the rest. The detail's top row is the window toolbar: the search
+// field (prompt "Search Books") at its leading edge, then the primary group
+// with Sort (a menu of Recent, Title and Manual), Select Books, Cover Size (a
+// popover slider from 110 to 240 in steps of 10), Statistics (while statistics
+// are enabled) and Import EPUB. While selecting, Done leads the row and the
+// group holds Move to Shelf and Delete; the search field hides but keeps its
+// query and filter, so Done returns to them. Below, the selection's title in
+// title2 semibold with its count, then the grid: columns exactly `coverWidth`
+// wide, 20 apart, with 20 between rows and 16 of side padding, aligned to the
+// leading edge. An empty library shows "No Books"; an empty selection shows
+// the empty-shelf copy for its kind.
+//
+// Search follows NativeReuseViews.displayedSection: the query is trimmed and
+// matched case-insensitively against the display title and the stored title,
+// after the shelf's sort, so matches keep the sorted order. A filtered shelf
+// allows no cover reordering, and no matches replace the shelf's empty message
+// with "No Results" naming the query.
 //
 // BookshelfFileDropTarget wraps the shelf: a drag with at least one EPUB is
 // accepted as a copy and its files are imported, while other drags are
 // refused. importBooksProgress follows BookshelfViewModel.importBooks: a
 // blocking overlay shows "Importing k / n..." during a multi-file batch.
 //
-// Out of scope: the search field (the view model does not filter by title
-// yet), Google Drive rows and refresh, Z-Library and sync actions.
+// Out of scope: Google Drive rows and refresh, Z-Library and sync actions.
 pragma ComponentBehavior: Bound
 
 import QtQuick
@@ -53,6 +60,27 @@ Item {
     property bool selecting: false
     property var selectedFolders: ({})
     readonly property int selectedCount: Object.keys(page.selectedFolders).length
+
+    // NativeReuseViews.displayedSection: the query is trimmed, an empty one
+    // shows the shelf as sorted, and a match is a case-insensitive substring of
+    // the display or the stored title. Filtering keeps the shelf's order.
+    property string searchQuery: ""
+    readonly property string trimmedQuery: searchQuery.trim()
+    readonly property bool isFiltered: trimmedQuery.length > 0
+    readonly property var displayedBooks: {
+        if (!page.isFiltered)
+            return library.books
+        const query = page.trimmedQuery.toLocaleLowerCase()
+        const matches = []
+        for (let index = 0; index < library.books.length; ++index) {
+            const book = library.books[index]
+            const title = String(book.title ?? "").toLocaleLowerCase()
+            const stored = String(book.storedTitle ?? "").toLocaleLowerCase()
+            if (title.includes(query) || stored.includes(query))
+                matches.push(book)
+        }
+        return matches
+    }
 
     readonly property string selectionTitle: {
         const shelf = library.selectedShelf
@@ -174,6 +202,27 @@ Item {
                 small: true
                 sizeToLabel: true
                 onClicked: page.clearSelection()
+            }
+
+            // .searchable(placement: .toolbar): the query stays while selecting
+            // even though the field is not part of the selection toolbar.
+            SearchBar {
+                id: searchBar
+
+                objectName: "librarySearchBar"
+                fieldObjectName: "librarySearchField"
+                x: Theme.spacingLg
+                anchors.verticalCenter: parent.verticalCenter
+                width: Math.min(Theme.librarySearchMaximumWidth,
+                                Math.max(Theme.librarySearchMinimumWidth,
+                                         toolbar.width * Theme.librarySearchShare))
+                visible: !page.selecting
+                placeholderText: qsTr("Search Books")
+                text: page.searchQuery
+                onTextChanged: {
+                    if (page.searchQuery !== text)
+                        page.searchQuery = text
+                }
             }
 
             ToolbarGroup {
@@ -315,6 +364,7 @@ Item {
             property string dragSource: ""
             property string dragTarget: ""
             readonly property bool reorderEnabled: library.selectedShelf !== "reading"
+                                                  && !page.isFiltered
 
             function clearDrag() {
                 dragSource = ""
@@ -329,7 +379,7 @@ Item {
                 const pos = contentItem.mapFromItem(grid, position)
                 for (let i = 0; i < count; ++i) {
                     const item = itemAtIndex(i)
-                    const folder = library.books[i].folder
+                    const folder = page.displayedBooks[i] ? page.displayedBooks[i].folder : ""
                     if (item && folder !== excluded
                             && pos.x >= item.x - inset
                             && pos.x < item.x + library.coverWidth + inset
@@ -363,7 +413,7 @@ Item {
                         + Theme.bookStripHeight + 3 * Theme.bookFrameInset
                         + Theme.bookTitleSpacing + Theme.bookTitleHeight + grid.rowSpacing
             boundsBehavior: Flickable.StopAtBounds
-            model: library.books
+            model: page.displayedBooks
 
             ScrollBar.vertical: ScrollBar {}
 
@@ -427,7 +477,7 @@ Item {
                         id: countText
 
                         anchors.verticalCenter: parent.verticalCenter
-                        text: library.bookCount
+                        text: page.displayedBooks.length
                         textStyle: Theme.title3Font
                         secondary: true
                         monospacedDigits: true
@@ -437,15 +487,21 @@ Item {
                 Item {
                     width: parent.width
                     height: Theme.shelfEmptyMinimumHeight
-                    visible: library.bookCount === 0
+                    visible: page.displayedBooks.length === 0
 
+                    // ContentUnavailableView.search(text:) while filtered;
+                    // LibraryShelfEmptyView otherwise.
                     UnavailableView {
+                        objectName: "libraryShelfEmptyView"
                         anchors.centerIn: parent
                         width: Math.min(Theme.unavailableWidth, parent.width - 2 * Theme.spacingSm)
-                        symbol: library.selectedShelf === "reading" ? "book"
+                        symbol: page.isFiltered ? "magnifyingglass"
+                            : library.selectedShelf === "reading" ? "book"
                             : library.selectedShelf === "unshelved" ? "tray" : "folder"
-                        title: qsTr("This Shelf Is Empty")
-                        message: library.selectedShelf === "reading"
+                        title: page.isFiltered ? qsTr("No Results") : qsTr("This Shelf Is Empty")
+                        message: page.isFiltered
+                            ? qsTr("No results for “%1”.").arg(page.trimmedQuery)
+                            : library.selectedShelf === "reading"
                             ? qsTr("Titles you've started but not finished appear here.")
                             : library.selectedShelf === "unshelved"
                             ? qsTr("Everything in the library is on a shelf.")

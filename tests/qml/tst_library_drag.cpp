@@ -215,16 +215,16 @@ void LibraryDragTest::library_drag_wires_books_and_custom_shelves() {
     const std::vector<BookShelf> original_shelves{first, second};
     QCOMPARE(storage.load_shelves(), original_shelves);
 
-    auto* rename = page->findChild<QObject*>(QStringLiteral("libraryRenameShelfDialog"));
-    QVERIFY(rename);
-    QVERIFY(QMetaObject::invokeMethod(rename, "open"));
-    QTRY_VERIFY(rename->property("visible").toBool());
-    QTest::mousePress(&window, Qt::LeftButton, Qt::NoModifier, from);
-    QTest::mouseMove(&window, end);
-    QTest::mouseRelease(&window, Qt::LeftButton, Qt::NoModifier, end);
-    QCOMPARE(storage.load_shelves(), original_shelves);
-    QVERIFY(QMetaObject::invokeMethod(rename, "close"));
-    QTRY_VERIFY(!rename->property("visible").toBool());
+    // An open inline editor turns shelf dragging off, and cancelling restores
+    // it (LibraryShelfSidebar's .onMove gate).
+    auto* column = page->findChild<QObject*>(QStringLiteral("libraryShelfColumn"));
+    QVERIFY(column);
+    QVERIFY(
+        QMetaObject::invokeMethod(column, "beginRename", Q_ARG(QVariant, QStringLiteral("First"))));
+    QTRY_VERIFY(!column->property("shelfDraggingEnabled").toBool());
+    QVERIFY(QMetaObject::invokeMethod(column, "cancelRename",
+                                      Q_ARG(QVariant, QStringLiteral("First"))));
+    QTRY_VERIFY(column->property("shelfDraggingEnabled").toBool());
 
     QTest::mousePress(&window, Qt::LeftButton, Qt::NoModifier, from);
     QTest::mouseMove(&window, end);

@@ -8,7 +8,9 @@
 // nativeBottomControls, toggleSidePanel and updateReaderContentCoverage, the
 // .gallery overlay with GalleryView.swift, the Jump to alert of
 // Features/Reader/Search/ReaderGoToView.swift, and the Sasayaki inspector of
-// Features/Sasayaki/SasayakiSheet.swift.
+// Features/Sasayaki/SasayakiSheet.swift. The focus-mode key follows
+// Features/Reader/ReaderShortcutActions.swift `toggleFocusMode` and
+// NativeReaderView's `handleReaderToggleFocusModeShortcut`.
 //
 // The page owns the single active tool: Go to opens on the leading edge, the
 // Appearance, Statistics and Sasayaki inspectors on the trailing edge, and the
@@ -71,6 +73,19 @@ Item {
         let item = page.Window.activeFocusItem
         while (item) {
             if (item === lookupSurface)
+                return true
+            item = item.parent
+        }
+        return false
+    }
+
+    // ReaderShortcutActions.toggleFocusMode is a plain key, so a focused text
+    // field (a dialog's or the Go to panel's) owns it instead.
+    function textInputHasFocus(): bool {
+        let item = page.Window.activeFocusItem
+        while (item) {
+            if (item instanceof TextField || item instanceof TextInput
+                    || item instanceof TextEdit)
                 return true
             item = item.parent
         }
@@ -233,6 +248,15 @@ Item {
         context: Qt.WindowShortcut
         enabled: page.sidePanelOpen
         onActivated: page.closeTool()
+    }
+
+    // NativeReaderView.handleReaderToggleFocusModeShortcut: "f" toggles focus
+    // mode; an open panel, lookup or focused text field keeps the key.
+    Shortcut {
+        sequence: "f"
+        context: Qt.WindowShortcut
+        enabled: !page.sidePanelOpen && !lookupModel.hasResults && !page.textInputHasFocus()
+        onActivated: page.focusMode = !page.focusMode
     }
 
     Shortcut {

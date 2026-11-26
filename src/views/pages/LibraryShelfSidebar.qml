@@ -10,9 +10,14 @@
 // Niratan's inner columns do (Pictures/video.png, setting.png).
 //
 // A shelf row's context menu offers Rename and Delete Shelf; deleting asks
-// first and keeps the books in the library. Swift creates and renames a
-// shelf inline; here both go through a small name dialog. Google Drive's row
-// is out of scope.
+// first and keeps the books in the library. Rename starts an inline editor in
+// the row: the label becomes a focused text field with the current name and
+// placeholder "Shelf name", the folder glyph stays and the count badge hides.
+// Return and focus loss commit through LibraryViewModel.renameShelf (so empty
+// or unchanged names leave the shelf alone and a duplicate is rejected), and
+// Escape cancels. Shelf dragging is off while the editor is open. Swift
+// creates a shelf inline too; New Shelf still uses the name dialog here.
+// Google Drive's row is out of scope.
 pragma ComponentBehavior: Bound
 
 import QtQuick
@@ -28,8 +33,41 @@ Rectangle {
     property real toolbarInset: 0
     readonly property int toolbarHeight: Theme.sourceListToolbarHeight
 
+    // LibraryShelfSidebar.editingShelfID and draftName: the shelf whose row
+    // holds the inline editor, and its text.
+    property string editingShelf: ""
+    property string draftShelfName: ""
+    readonly property bool shelfDraggingEnabled: editingShelf.length === 0
+
+    objectName: "libraryShelfColumn"
     color: Theme.columnBackground
     activeFocusOnTab: true
+
+    function beginRename(name) {
+        if (name === editingShelf)
+            return
+        editingShelf = ""
+        draftShelfName = name
+        editingShelf = name
+    }
+
+    // commitRename and cancelRename: a stale callback from a row that already
+    // stopped editing changes nothing.
+    function commitRename(name) {
+        if (name !== editingShelf)
+            return
+        const from = editingShelf
+        const to = draftShelfName.trim()
+        editingShelf = ""
+        if (to.length === 0 || to === from)
+            return
+        column.model.renameShelf(from, to)
+    }
+
+    function cancelRename(name) {
+        if (name === editingShelf)
+            editingShelf = ""
+    }
 
     AlertDialog {
         id: shelfDialog
@@ -48,22 +86,6 @@ Rectangle {
         }
     }
 
-    AlertDialog {
-        id: renameShelfDialog
-
-        objectName: "libraryRenameShelfDialog"
-        property string fromName
-
-        title: qsTr("Rename Shelf")
-        hasField: true
-        selectFieldOnOpen: true
-        fieldPlaceholder: qsTr("Shelf name")
-        rejectText: qsTr("Cancel")
-
-        onAboutToShow: renameShelfDialog.fieldText = renameShelfDialog.fromName
-        onAccepted: column.model.renameShelf(renameShelfDialog.fromName, renameShelfDialog.fieldText)
-    }
-
     // LibraryShelfSidebar's confirmationDialog: a destructive Delete Shelf.
     AlertDialog {
         id: deleteShelfDialog
@@ -76,7 +98,10 @@ Rectangle {
         acceptDestructive: true
         rejectText: qsTr("Cancel")
 
-        onAccepted: column.model.deleteShelf(deleteShelfDialog.shelfName)
+        onAccepted: {
+            column.cancelRename(deleteShelfDialog.shelfName)
+            column.model.deleteShelf(deleteShelfDialog.shelfName)
+        }
     }
 
     Menu {
@@ -85,15 +110,14 @@ Rectangle {
         property string shelfName
 
         MenuItem {
+            objectName: "libraryRenameShelfItem"
             text: qsTr("Rename")
             icon.source: IconMap.source("pencil")
-            onTriggered: {
-                renameShelfDialog.fromName = shelfMenu.shelfName
-                renameShelfDialog.open()
-            }
+            onTriggered: column.beginRename(shelfMenu.shelfName)
         }
         MenuSeparator {}
         MenuItem {
+            objectName: "libraryDeleteShelfItem"
             text: qsTr("Delete Shelf")
             icon.source: IconMap.source("trash")
             onTriggered: {
@@ -152,7 +176,7 @@ Rectangle {
 
             parent: list
             target: null
-            enabled: !renameShelfDialog.visible
+            enabled: column.shelfDraggingEnabled
             acceptedDevices: PointerDevice.Mouse
             onActiveChanged: {
                 if (active) {
@@ -231,14 +255,29 @@ Rectangle {
                     badge: modelData.count
                     selected: column.model.selectedShelf === "shelf:" + modelData.name
                     emphasized: column.activeFocus
+                    editing: column.editingShelf === modelData.name
+                    editorObjectName: "libraryShelfNameField"
+                    editorPlaceholderText: qsTr("Shelf name")
                     onClicked: {
                         column.forceActiveFocus()
                         column.model.selectedShelf = "shelf:" + modelData.name
                     }
+                    onDoubleClicked: column.beginRename(modelData.name)
                     onContextMenuRequested: {
                         shelfMenu.shelfName = modelData.name
                         shelfMenu.popup()
                     }
+                    onEditingChanged: {
+                        if (editing)
+                            editorText = column.draftShelfName
+                    }
+                    onEditorTextChanged: {
+                        if (editing)
+                            column.draftShelfName = editorText
+                    }
+                    onEditorAccepted: column.commitRename(modelData.name)
+                    onEditorCancelled: column.cancelRename(modelData.name)
+                    onEditorFocusLost: column.commitRename(modelData.name)
 
                     Rectangle {
                         anchors.left: parent.left

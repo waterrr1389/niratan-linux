@@ -8,7 +8,13 @@
 // focus (`emphasized`) and with the grey inactive selection otherwise, as
 // macOS draws an unfocused source list. A zero badge is hidden, as SwiftUI's
 // `.badge(Int)` hides 0.
+//
+// `editing` replaces the title with a plain text field for an inline rename,
+// as LibraryShelfSidebar.shelfRow draws its TextField: the glyph stays, the
+// badge hides, and the field takes focus when it appears. Accepted, cancelled
+// and focus-lost are reported to the owner, which decides what to commit.
 import QtQuick
+import QtQuick.Controls
 import Niratan
 
 Item {
@@ -23,9 +29,18 @@ Item {
     property color symbolColor: Theme.accent
     // Names the badge for a page test; empty leaves it anonymous.
     property string badgeObjectName
+    // The inline editor's state and text; see the comment above.
+    property bool editing: false
+    property alias editorText: editor.text
+    property alias editorPlaceholderText: editor.placeholderText
+    property alias editorObjectName: editor.objectName
 
     signal clicked()
     signal contextMenuRequested()
+    signal doubleClicked()
+    signal editorAccepted()
+    signal editorCancelled()
+    signal editorFocusLost()
 
     readonly property bool filled: row.selected && row.emphasized
     readonly property color textColor: row.filled ? Theme.textOnAccent : Theme.textPrimary
@@ -59,6 +74,13 @@ Item {
         onTapped: row.contextMenuRequested()
     }
 
+    // LibraryShelfSidebar's primaryAction: a double click starts the rename
+    // while the single-click selection above still happens first.
+    TapHandler {
+        acceptedButtons: Qt.LeftButton
+        onDoubleTapped: row.doubleClicked()
+    }
+
     // Tight insets so "Currently Reading" and a two-digit badge fit the
     // 176 px minimum of the bookshelf's shelf column.
     Icon {
@@ -81,15 +103,47 @@ Item {
 
         Text {
             width: parent.width
+            visible: !row.editing
             text: row.title
             color: row.textColor
             font.pixelSize: Theme.fontBody
             elide: Text.ElideRight
         }
 
+        TextField {
+            id: editor
+
+            width: parent.width
+            visible: row.editing
+            background: null
+            padding: 0
+            leftPadding: 0
+            rightPadding: 0
+            topPadding: 0
+            bottomPadding: 0
+            color: row.textColor
+            font.pixelSize: Theme.fontBody
+            selectByMouse: true
+            activeFocusOnTab: false
+
+            onVisibleChanged: {
+                if (visible)
+                    Qt.callLater(forceActiveFocus)
+            }
+            onActiveFocusChanged: {
+                if (!activeFocus && visible)
+                    row.editorFocusLost()
+            }
+            onAccepted: row.editorAccepted()
+            Keys.onEscapePressed: event => {
+                row.editorCancelled()
+                event.accepted = true
+            }
+        }
+
         Text {
             width: parent.width
-            visible: row.detail.length > 0
+            visible: row.detail.length > 0 && !row.editing
             text: row.detail
             color: row.filled ? Theme.textOnAccent : Theme.textSecondary
             font.pixelSize: Theme.fontCaption
@@ -104,7 +158,7 @@ Item {
         anchors.right: parent.right
         anchors.rightMargin: 6
         anchors.verticalCenter: parent.verticalCenter
-        visible: row.badge > 0
+        visible: row.badge > 0 && !row.editing
         text: row.badge
         color: row.filled ? Theme.textOnAccent : Theme.textSecondary
         font.pixelSize: Theme.fontCallout

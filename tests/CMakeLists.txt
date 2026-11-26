@@ -1157,6 +1157,22 @@ add_test(NAME reader_auto_sync COMMAND tst_reader_auto_sync)
 set_tests_properties(reader_auto_sync PROPERTIES
     ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QTWEBENGINE_CHROMIUM_FLAGS=--disable-gpu")
 
+qt_add_executable(tst_library_views
+    qml/tst_library_views.cpp
+)
+target_include_directories(tst_library_views PRIVATE
+    ${CMAKE_SOURCE_DIR}/src
+    ${CMAKE_CURRENT_SOURCE_DIR}/viewmodels
+    ${CMAKE_CURRENT_SOURCE_DIR}/flows
+)
+target_link_libraries(tst_library_views PRIVATE niratan_app niratan_appplugin niratan_style
+    niratan_styleplugin Qt6::Test
+    Qt6::Quick Qt6::QuickControls2 Qt6::WebEngineQuick)
+target_compile_options(tst_library_views PRIVATE -Wall -Wextra -Wpedantic -Werror)
+add_test(NAME library_views COMMAND tst_library_views)
+set_tests_properties(library_views PROPERTIES
+    ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QTWEBENGINE_CHROMIUM_FLAGS=--disable-gpu")
+
 find_package(Qt6 REQUIRED COMPONENTS WebEngineWidgets)
 
 qt_add_executable(tst_reader_images

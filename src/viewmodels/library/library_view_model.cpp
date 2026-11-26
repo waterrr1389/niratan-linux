@@ -174,6 +174,7 @@ void LibraryViewModel::State::rebuild_views() {
         entry.insert(QStringLiteral("folder"), QString::fromStdString(book.metadata.folder));
         entry.insert(QStringLiteral("title"),
                      QString::fromStdString(book.metadata.display_title()));
+        entry.insert(QStringLiteral("storedTitle"), QString::fromStdString(book.metadata.title));
         entry.insert(QStringLiteral("progress"), value);
         entry.insert(QStringLiteral("percent"), QString::number(value * 100.0, 'f', 1));
         entry.insert(QStringLiteral("finished"), value >= kFinished);
