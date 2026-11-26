@@ -43,7 +43,7 @@ PanelScaffold {
 
     DictionarySettingsViewModel {
         id: library
-        Component.onCompleted: library.refresh()
+        Component.onCompleted: library.openAsync()
     }
 
     FileDialog {

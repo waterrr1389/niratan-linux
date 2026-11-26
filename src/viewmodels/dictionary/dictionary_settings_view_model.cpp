@@ -1,8 +1,12 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "dictionary_settings_view_model.h"
+#include "dictionary_settings_view_model_catalog.h"
 
+#include <QFutureWatcher>
+#include <QPromise>
 #include <QStringList>
+#include <QThreadPool>
 #include <QUrl>
 #include <QVariantMap>
 
@@ -18,10 +22,8 @@
 #include "models/dictionary/dictionary_config.h"
 #include "models/dictionary/dictionary_recommendation.h"
 #include "models/profiles/content_language.h"
-#include "models/profiles/profile_index.h"
 #include "services/dictionary/dictionary_config_store.h"
 #include "services/dictionary/dictionary_store.h"
-#include "services/profiles/profile_repository.h"
 #include "services/storage/app_paths.h"
 
 namespace niratan::viewmodels {
@@ -34,8 +36,6 @@ using niratan::dictionary::DictionaryInfo;
 using niratan::dictionary::DictionaryStore;
 using niratan::dictionary::DictionaryType;
 using niratan::profiles::ContentLanguage;
-using niratan::profiles::HoshiProfile;
-using niratan::profiles::ProfileRepository;
 
 QString type_text(DictionaryType type) {
     const std::string_view name = dictionary::dictionary_type_name(type);
@@ -88,83 +88,11 @@ std::optional<DictionaryCategory> category_from(const QString& text) {
     return std::nullopt;
 }
 
-struct Lists {
-    std::vector<DictionaryInfo> term_dictionaries;
-    std::vector<DictionaryInfo> frequency_dictionaries;
-    std::vector<DictionaryInfo> pitch_dictionaries;
-    std::vector<DictionaryInfo> kanji_dictionaries;
-};
-
-const std::vector<DictionaryInfo>& list_for(const Lists& lists, DictionaryType type) {
-    switch (type) {
-        case DictionaryType::term:
-            return lists.term_dictionaries;
-        case DictionaryType::frequency:
-            return lists.frequency_dictionaries;
-        case DictionaryType::pitch:
-            return lists.pitch_dictionaries;
-        case DictionaryType::kanji:
-            return lists.kanji_dictionaries;
-    }
-    return lists.term_dictionaries;
-}
-
-std::vector<DictionaryInfo>& mutable_list_for(Lists& lists, DictionaryType type) {
-    switch (type) {
-        case DictionaryType::term:
-            return lists.term_dictionaries;
-        case DictionaryType::frequency:
-            return lists.frequency_dictionaries;
-        case DictionaryType::pitch:
-            return lists.pitch_dictionaries;
-        case DictionaryType::kanji:
-            return lists.kanji_dictionaries;
-    }
-    return lists.term_dictionaries;
-}
-
-Lists resolve_lists(const std::optional<DictionaryConfig>& config, bool default_profile) {
-    const DictionaryStore store(niratan::storage::dictionaries_root());
-    Lists lists;
-    lists.term_dictionaries = dictionary::resolved_dictionary_list(
-        store.installed(DictionaryType::term), config, DictionaryType::term, default_profile);
-    lists.frequency_dictionaries =
-        dictionary::resolved_dictionary_list(store.installed(DictionaryType::frequency), config,
-                                             DictionaryType::frequency, default_profile);
-    lists.pitch_dictionaries = dictionary::resolved_dictionary_list(
-        store.installed(DictionaryType::pitch), config, DictionaryType::pitch, default_profile);
-    lists.kanji_dictionaries = dictionary::resolved_dictionary_list(
-        store.installed(DictionaryType::kanji), config, DictionaryType::kanji, default_profile);
-    return lists;
-}
-
-struct Context {
-    ProfileRepository repository;
-    HoshiProfile profile;
-    bool default_profile = false;
-    std::optional<DictionaryConfig> config;
-    Lists lists;
-};
-
-// The active profile and all four resolved lists; nothing when the process has
-// no usable data root.
-std::optional<Context> load_context() {
-    std::optional<ProfileRepository> repository = ProfileRepository::at_data_root();
-    if (!repository.has_value()) {
-        return std::nullopt;
-    }
-    const HoshiProfile profile = repository->active_profile();
-    const bool default_profile = profile.id == repository->index().default_profile_id;
-
-    std::optional<DictionaryConfig> config;
-    if (const auto directory = repository->profile_directory(profile.id)) {
-        config = dictionary::load_dictionary_config(*directory / "dictionary_config.json");
-    }
-
-    Context context{std::move(*repository), profile, default_profile, std::move(config), {}};
-    context.lists = resolve_lists(context.config, context.default_profile);
-    return context;
-}
+using dictionary_settings::Context;
+using dictionary_settings::list_for;
+using dictionary_settings::Lists;
+using dictionary_settings::load_context;
+using dictionary_settings::mutable_list_for;
 
 QVariantList rows_for(const std::vector<DictionaryInfo>& dictionaries) {
     QVariantList rows;
@@ -265,6 +193,7 @@ struct DictionarySettingsViewModel::State {
     QVariantList recommended;
     QStringList frequency_titles;
     QString error;
+    quint64 load_generation = 0;
 };
 
 DictionarySettingsViewModel::DictionarySettingsViewModel(QObject* parent)
@@ -292,7 +221,43 @@ QString DictionarySettingsViewModel::error() const {
     return state_->error;
 }
 
+void DictionarySettingsViewModel::openAsync() {
+    if (!state_->error.isEmpty()) {
+        state_->error.clear();
+        emit errorChanged();
+    }
+    struct Result {
+        QVariantList rows;
+        QVariantList recommended;
+        QStringList frequency_titles;
+    };
+    const QString type = state_->dictionary_type;
+    const quint64 generation = ++state_->load_generation;
+    auto* watcher = new QFutureWatcher<Result>(this);
+    connect(watcher, &QFutureWatcher<Result>::finished, this, [this, watcher, generation] {
+        watcher->deleteLater();
+        if (generation != state_->load_generation) {
+            return;
+        }
+        Result result = watcher->result();
+        state_->rows = std::move(result.rows);
+        state_->recommended = std::move(result.recommended);
+        state_->frequency_titles = std::move(result.frequency_titles);
+        emit rowsChanged();
+    });
+    QPromise<Result> promise;
+    watcher->setFuture(promise.future());
+    QThreadPool::globalInstance()->start([work = std::move(promise), type]() mutable {
+        work.start();
+        Result result;
+        reload_rows(result.rows, result.recommended, result.frequency_titles, type);
+        work.addResult(std::move(result));
+        work.finish();
+    });
+}
+
 void DictionarySettingsViewModel::refresh() {
+    ++state_->load_generation;
     if (!state_->error.isEmpty()) {
         state_->error.clear();
         emit errorChanged();
@@ -307,6 +272,7 @@ void DictionarySettingsViewModel::selectType(const QString& type) {
     if (!parsed.has_value()) {
         return;
     }
+    ++state_->load_generation;
     state_->dictionary_type = type_text(*parsed);
     reload_rows(state_->rows, state_->recommended, state_->frequency_titles,
                 state_->dictionary_type);
@@ -328,6 +294,7 @@ void DictionarySettingsViewModel::setEnabled(const QString& title, bool enabled)
     }
     found->is_enabled = enabled;
     save_lists(*context, context->lists);
+    ++state_->load_generation;
     reload_rows(state_->rows, state_->recommended, state_->frequency_titles,
                 state_->dictionary_type);
     emit rowsChanged();
@@ -351,6 +318,7 @@ void DictionarySettingsViewModel::setCategory(const QString& title, const QStrin
     }
     found->category = *parsed;
     save_lists(*context, context->lists);
+    ++state_->load_generation;
     reload_rows(state_->rows, state_->recommended, state_->frequency_titles,
                 state_->dictionary_type);
     emit rowsChanged();
@@ -385,6 +353,7 @@ void DictionarySettingsViewModel::move(const QString& title, const QString& targ
     dictionaries.insert(dictionaries.begin() + insert_at, std::move(moved));
     renumber(dictionaries);
     save_lists(*context, context->lists);
+    ++state_->load_generation;
     reload_rows(state_->rows, state_->recommended, state_->frequency_titles,
                 state_->dictionary_type);
     emit rowsChanged();
@@ -409,6 +378,7 @@ void DictionarySettingsViewModel::remove(const QString& title) {
     dictionaries.erase(found);
     renumber(dictionaries);
     save_lists(*context, context->lists);
+    ++state_->load_generation;
     reload_rows(state_->rows, state_->recommended, state_->frequency_titles,
                 state_->dictionary_type);
     emit rowsChanged();
@@ -460,6 +430,7 @@ void DictionarySettingsViewModel::importFiles(const QVariantList& urls) {
             }
             save_lists(*context, context->lists);
         }
+        ++state_->load_generation;
         reload_rows(state_->rows, state_->recommended, state_->frequency_titles,
                     state_->dictionary_type);
         emit rowsChanged();

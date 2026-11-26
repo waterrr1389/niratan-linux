@@ -18,7 +18,9 @@
 // Rows are the selected type's resolved list of the active profile, in list
 // order, as {"title", "enabled", "category"}; a new page starts on Term and
 // the type picker accepts the Swift raw values Term, Frequency, Pitch and
-// Kanji. Every command resolves the active profile again, reads its
+// Kanji. openAsync() performs the initial catalog read on a worker and applies
+// it on the GUI thread; refresh() and commands keep their synchronous reload.
+// Every command resolves the active profile again, reads its
 // dictionary_config.json, scans the typed store and resolves each type; it
 // writes the four lists through save_dictionary_config, so the selected list
 // changes and the other lists keep their entries and orders.
@@ -81,6 +83,7 @@ class DictionarySettingsViewModel : public QObject {
     QStringList frequencyDictionaryTitles() const;
     QString error() const;
 
+    Q_INVOKABLE void openAsync();
     Q_INVOKABLE void refresh();
     Q_INVOKABLE void selectType(const QString& type);
     Q_INVOKABLE void importFiles(const QVariantList& urls);

@@ -23,9 +23,16 @@
 #include <QUrl>
 #include <QtTest>
 
+#include <atomic>
+#include <chrono>
 #include <filesystem>
 #include <optional>
 #include <string>
+#include <thread>
+
+#include <fcntl.h>
+#include <sys/stat.h>
+#include <unistd.h>
 
 #include "models/dictionary/dictionary_config.h"
 #include "services/dictionary/dictionary_config_store.h"
@@ -117,12 +124,76 @@ bool row_enabled(const QVariantList& rows, qsizetype index) {
     return rows.at(index).toMap().value(QStringLiteral("enabled")).toBool();
 }
 
+// Holds the FIFO writer independently of the GUI thread. A synchronous catalog
+// read finishes only through the watchdog, while an asynchronous one is
+// released explicitly by the test. Destruction always releases and joins.
+class HeldIndexWriter {
+   public:
+    HeldIndexWriter(QString path, QByteArray bytes)
+        : path_(std::move(path)), bytes_(std::move(bytes)), worker_([this] { run(); }) {}
+    ~HeldIndexWriter() { release(); }
+
+    HeldIndexWriter(const HeldIndexWriter&) = delete;
+    HeldIndexWriter& operator=(const HeldIndexWriter&) = delete;
+
+    void release() {
+        released_ = true;
+        if (worker_.joinable()) {
+            worker_.join();
+        }
+    }
+
+    bool watchdog_released() const { return watchdog_released_; }
+
+   private:
+    void run() {
+        const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(2);
+        while (!released_ && std::chrono::steady_clock::now() < deadline) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(2));
+        }
+        if (!released_) {
+            watchdog_released_ = true;
+        }
+
+        int writer = -1;
+        for (int attempt = 0; attempt < 200 && writer < 0; ++attempt) {
+            writer = open(path_.toLocal8Bit().constData(), O_WRONLY | O_NONBLOCK);
+            if (writer < 0) {
+                std::this_thread::sleep_for(std::chrono::milliseconds(10));
+            }
+        }
+        if (writer < 0) {
+            return;
+        }
+        qsizetype offset = 0;
+        while (offset < bytes_.size()) {
+            const ssize_t count =
+                write(writer, bytes_.constData() + offset, bytes_.size() - offset);
+            if (count <= 0) {
+                break;
+            }
+            offset += count;
+        }
+        close(writer);
+    }
+
+    QString path_;
+    QByteArray bytes_;
+    std::atomic<bool> released_ = false;
+    std::atomic<bool> watchdog_released_ = false;
+    std::thread worker_;
+};
+
 }  // namespace
 
 class DictionarySettingsViewModelTest : public QObject {
     Q_OBJECT
 
    private slots:
+    void opening_returns_while_the_catalog_read_is_held();
+    void opening_presents_the_profile_catalog_asynchronously();
+    void a_late_open_result_cannot_override_a_newer_type();
+    void a_late_open_result_cannot_override_a_mutation();
     void rows_are_the_selected_types_resolved_list();
     void enabling_a_title_writes_the_config();
     void a_category_change_is_term_only();
@@ -132,6 +203,100 @@ class DictionarySettingsViewModelTest : public QObject {
     void import_failures_are_reported();
     void frequency_dictionary_titles_are_the_enabled_titles();
 };
+
+// B1: opening returns while a worker is held on the catalog read, then
+// publishes the completed rows on the GUI thread.
+void DictionarySettingsViewModelTest::opening_returns_while_the_catalog_read_is_held() {
+    Fixture fixture;
+    QVERIFY(fixture.imported);
+    const auto index = niratan::storage::dictionaries_root() / "Term" / "Probe" / "index.json";
+    const QString index_path = QString::fromStdString(index.string());
+    QVERIFY(QFile::remove(index_path));
+    QCOMPARE(mkfifo(index_path.toLocal8Bit().constData(), 0600), 0);
+
+    HeldIndexWriter writer(index_path, minimal_index(QStringLiteral("Probe")));
+    DictionarySettingsViewModel model;
+    model.openAsync();
+    QVERIFY(model.rows().isEmpty());
+    QVERIFY(model.recommended().isEmpty());
+
+    writer.release();
+    QVERIFY(!writer.watchdog_released());
+    QTRY_COMPARE(model.rows().size(), qsizetype(1));
+    QCOMPARE(row_text(model.rows(), 0), QStringLiteral("Probe"));
+}
+
+// B1/B2: the completed result retains the active profile's configured
+// enablement, category and recommendation language.
+void DictionarySettingsViewModelTest::opening_presents_the_profile_catalog_asynchronously() {
+    Fixture fixture;
+    QVERIFY(fixture.imported);
+    ProfileRepository repository{niratan::storage::data_root()};
+    const auto english =
+        repository.create_profile("English", ContentLanguage::english, std::nullopt);
+    QVERIFY(english.profile.has_value());
+    QVERIFY(!repository.set_active_profile(english.profile->id).has_value());
+    DictionaryConfig config;
+    config.term_dictionaries = {
+        DictionaryEntry{"Probe", true, 0, niratan::anki::DictionaryCategory::bilingual}};
+    QVERIFY(save_dictionary_config(
+        profile_directory(english.profile->id) / "dictionary_config.json", config));
+
+    DictionarySettingsViewModel model;
+    QSignalSpy changed(&model, &DictionarySettingsViewModel::rowsChanged);
+    model.openAsync();
+    QTRY_COMPARE(model.rows().size(), qsizetype(1));
+    QCOMPARE(model.rows().at(0).toMap(),
+             (QVariantMap{{"title", QStringLiteral("Probe")},
+                          {"enabled", true},
+                          {"category", QStringLiteral("bilingual")}}));
+    QVERIFY(!model.recommended().isEmpty());
+    for (const QVariant& value : model.recommended()) {
+        QCOMPARE(value.toMap().value(QStringLiteral("language")).toString(), QStringLiteral("en"));
+    }
+    QCOMPARE(changed.count(), 1);
+}
+
+// A synchronous type selection supersedes an initial read whose result arrives
+// later on the GUI thread.
+void DictionarySettingsViewModelTest::a_late_open_result_cannot_override_a_newer_type() {
+    Fixture fixture;
+    QVERIFY(fixture.imported);
+    DictionarySettingsViewModel model;
+    QSignalSpy changed(&model, &DictionarySettingsViewModel::rowsChanged);
+    model.openAsync();
+    QTRY_COMPARE(model.rows().size(), qsizetype(1));
+
+    model.openAsync();
+    model.selectType(QStringLiteral("Frequency"));
+    QCOMPARE(model.dictionary_type(), QStringLiteral("Frequency"));
+    QCOMPARE(row_text(model.rows(), 0), QStringLiteral("Probe"));
+    QTest::qWait(50);
+    QCOMPARE(model.dictionary_type(), QStringLiteral("Frequency"));
+    QCOMPARE(row_text(model.rows(), 0), QStringLiteral("Probe"));
+    QCOMPARE(changed.count(), 2);
+}
+
+// A command's newer resolved state and stored config cannot be replaced by the
+// initial read that was already in flight.
+void DictionarySettingsViewModelTest::a_late_open_result_cannot_override_a_mutation() {
+    Fixture fixture;
+    QVERIFY(fixture.imported);
+    DictionarySettingsViewModel model;
+    QSignalSpy changed(&model, &DictionarySettingsViewModel::rowsChanged);
+    model.openAsync();
+    QTRY_COMPARE(model.rows().size(), qsizetype(1));
+
+    model.openAsync();
+    model.setEnabled(QStringLiteral("Probe"), false);
+    QVERIFY(!row_enabled(model.rows(), 0));
+    QTest::qWait(50);
+    QVERIFY(!row_enabled(model.rows(), 0));
+    const auto config = saved_config("default-ja");
+    QVERIFY(config.has_value());
+    QVERIFY(!config->term_dictionaries.front().is_enabled);
+    QCOMPARE(changed.count(), 2);
+}
 
 // B2: rows are the active profile's resolved list for the selected type.
 void DictionarySettingsViewModelTest::rows_are_the_selected_types_resolved_list() {
@@ -427,5 +592,5 @@ void DictionarySettingsViewModelTest::frequency_dictionary_titles_are_the_enable
              (QStringList{QStringLiteral("Probe"), QStringLiteral("Alpha")}));
 }
 
-QTEST_APPLESS_MAIN(DictionarySettingsViewModelTest)
+QTEST_GUILESS_MAIN(DictionarySettingsViewModelTest)
 #include "tst_dictionary_settings_view_model.moc"

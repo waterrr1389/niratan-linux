@@ -196,6 +196,8 @@ qt_add_library(niratan_app STATIC
     src/viewmodels/dictionary/dictionary_popup_model.h
     src/viewmodels/dictionary/dictionary_settings_view_model.cpp
     src/viewmodels/dictionary/dictionary_settings_view_model.h
+    src/viewmodels/dictionary/dictionary_settings_view_model_catalog.cpp
+    src/viewmodels/dictionary/dictionary_settings_view_model_catalog.h
     src/viewmodels/library/library_view_model.cpp
     src/viewmodels/library/library_view_model.h
     src/viewmodels/profiles/profiles_view_model.cpp

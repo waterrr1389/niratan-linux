@@ -590,9 +590,9 @@ void QmlLoadTest::dictionary_settings_page_lists_the_management_controls() {
 
     auto* recommendations =
         item->findChild<QQuickItem*>(QStringLiteral("recommendedDictionariesButton"));
-    QVERIFY(recommendations);
+    QTRY_VERIFY(recommendations && recommendations->property("enabled").toBool());
     QVERIFY(QMetaObject::invokeMethod(recommendations, "click"));
-    QVERIFY(visual_page_texts(window.contentItem()).contains(QStringLiteral("JMdict")));
+    QTRY_VERIFY(visual_page_texts(window.contentItem()).contains(QStringLiteral("JMdict")));
 
     const QString warnings = warnings_after(QStringLiteral("DictionarySettingsPage"));
     QVERIFY2(warnings.isEmpty(), qPrintable(warnings));
