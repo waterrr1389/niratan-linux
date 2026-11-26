@@ -16,6 +16,8 @@
 #include <QTemporaryDir>
 #include <QTest>
 
+#include <sys/stat.h>
+
 #include <algorithm>
 #include <cmath>
 #include <optional>
@@ -90,6 +92,7 @@ class VideoMiningTest : public QObject {
     void videoMiningContext_reportsRequestedCaptureFailures();
     void directMediaStore_claimWaitAndFinish();
     void directMediaStore_replacesOnlyAnAbsentDestination();
+    void directMediaStore_movesATemporaryFileFromAnotherFilesystem();
 };
 
 void VideoMiningTest::audioClipRange_padsAndClamps() {
@@ -460,6 +463,36 @@ void VideoMiningTest::directMediaStore_replacesOnlyAnAbsentDestination() {
     QVERIFY(!store.replace(missing, untouched));
     QCOMPARE(read_file(untouched), QByteArray("keep"));
     QVERIFY(!file_exists(missing));
+}
+
+// replaceMediaItem moves with FileManager, which copies across volumes. The
+// captures are written to the temporary location, often a tmpfs, while the
+// Anki media directory lives on disk; rename alone fails there with EXDEV.
+void VideoMiningTest::directMediaStore_movesATemporaryFileFromAnotherFilesystem() {
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    const QString other_root = QStringLiteral("/dev/shm");
+    if (!QFileInfo(other_root).isDir() || !QFileInfo(other_root).isWritable()) {
+        QSKIP("no second writable filesystem at /dev/shm");
+    }
+    QTemporaryDir other(other_root + QStringLiteral("/niratan-media-XXXXXX"));
+    QVERIFY(other.isValid());
+    struct stat media_stat{};
+    struct stat other_stat{};
+    QCOMPARE(::stat(directory.path().toLocal8Bit().constData(), &media_stat), 0);
+    QCOMPARE(::stat(other.path().toLocal8Bit().constData(), &other_stat), 0);
+    if (media_stat.st_dev == other_stat.st_dev) {
+        QSKIP("/dev/shm and the temporary directory share a filesystem");
+    }
+
+    DirectMediaStore store(directory.path().toStdString());
+    const auto destination = store.path_for("clip.m4a");
+    const std::string temp = (other.path() + QStringLiteral("/clip.m4a")).toStdString();
+    QVERIFY(write_file(temp, "audio"));
+
+    QVERIFY(store.replace(temp, destination));
+    QCOMPARE(read_file(destination), QByteArray("audio"));
+    QVERIFY(!file_exists(temp));
 }
 
 QTEST_APPLESS_MAIN(VideoMiningTest)

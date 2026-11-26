@@ -73,14 +73,27 @@ bool DirectMediaStore::replace(const std::string& temp, const std::string& desti
     if (!exists(temp)) {
         return false;
     }
+    const std::filesystem::path from(temp);
+    const std::filesystem::path to(destination);
     std::error_code error;
-    std::filesystem::rename(std::filesystem::path(temp), std::filesystem::path(destination), error);
-    if (error) {
-        std::error_code ignored;
-        std::filesystem::remove(std::filesystem::path(temp), ignored);
-        return false;
+    std::filesystem::rename(from, to, error);
+    if (error == std::errc::cross_device_link) {
+        // FileManager.moveItem copies across volumes; the temporary location
+        // (often a tmpfs) and the media directory are usually different ones.
+        error.clear();
+        std::filesystem::copy_file(from, to, error);
+        if (error == std::errc::file_exists) {
+            // Another writer finished the same file first; keep it, as when
+            // the destination already existed.
+            error.clear();
+        } else if (error) {
+            std::error_code ignored;
+            std::filesystem::remove(to, ignored);
+        }
     }
-    return true;
+    std::error_code ignored;
+    std::filesystem::remove(from, ignored);
+    return !error;
 }
 
 }  // namespace niratan::player

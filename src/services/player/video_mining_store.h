@@ -16,7 +16,8 @@
 // absent. finish reports succeeded && the file exists to every waiter and
 // releases ownership, so a failed generation can be claimed again.
 //
-// replace moves the temporary file when the destination is absent and, when
+// replace moves the temporary file when the destination is absent (copying
+// and removing it when it is on another filesystem, as FileManager does) and, when
 // the destination already exists, discards the temporary file and keeps the
 // destination, reporting true in both cases. A missing temporary file reports
 // false and leaves the destination untouched.
