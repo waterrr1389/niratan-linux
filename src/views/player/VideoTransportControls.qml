@@ -5,10 +5,12 @@
 // and Features/Video/Playback/PlaybackEngine.swift `VideoPlaybackSpeed` for the
 // pill label.
 //
-// Previous and next stay disabled because the port has no playlist; play is
-// the filled pause while playing and the filled play while paused. The bar
-// draws volume through VideoVolumeControl in the floating layout and hides the
-// cluster here through `showVolume`; the compact row keeps both here.
+// Previous and next follow `previousEnabled` and `nextEnabled` from the bar;
+// they are enabled only when the episode list has a neighbour in that
+// direction. Play is the filled pause while playing and the filled play while
+// paused. The bar draws volume through VideoVolumeControl in the floating
+// layout and hides the cluster here through `showVolume`; the compact row
+// keeps both here.
 //
 // Object names: previousButton, playButton, nextButton, volumeButton,
 // volumeTrack; the play glyph is playIcon. Each button carries a `tip` string

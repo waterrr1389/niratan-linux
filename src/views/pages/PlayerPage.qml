@@ -7,6 +7,9 @@
 // specifies auto-hide and pointer reveal. Playback goes through MpvItem only.
 // Floating theme tokens keep overlays legible over the black video stage.
 // The playback bar and study sidebar share the same A-B loop state.
+// Episode navigation follows VideoPlaylist.swift (previousURL, nextURL) and
+// VideoPlayerViewModel.swift (playPrevious, playNext, onPlaybackEnded); the
+// autoplay preference is Core/UserConfig.swift's videoAutoPlayNext.
 
 pragma ComponentBehavior: Bound
 
@@ -143,11 +146,9 @@ Item {
         osdTimer.restart()
     }
 
-    // VideoPlayerScreen+Chrome.swift: reveal on pointer movement and schedule
-    // the hide one second later.
+    // VideoPlayerScreen+Chrome.swift: reveal on pointer movement and on the
+    // episode commands; hiding is scheduled only once a video is loaded.
     function notePointerMovement() {
-        if (!mpv.loaded)
-            return
         page.chromeVisible = true
         page.scheduleHide()
     }
@@ -445,6 +446,22 @@ Item {
         page.notePointerMovement()
     }
 
+    // VideoPlayerScreen.swift onPrevious/onNext: the transport buttons and the
+    // shortcuts run the same episode command and reveal the controls.
+    function playPreviousEpisode() {
+        if (!inspectorModel.playPreviousEpisode())
+            return false
+        page.notePointerMovement()
+        return true
+    }
+
+    function playNextEpisode() {
+        if (!inspectorModel.playNextEpisode())
+            return false
+        page.notePointerMovement()
+        return true
+    }
+
     function toggleTranscript() {
         if (page.studyOpen && studySidebar.selectedTab === 1) {
             page.studyOpen = false
@@ -504,6 +521,18 @@ Item {
                 studyModel.mineCurrentSubtitle()
                 page.showOSD(qsTr("Mining History"), studyModel.lastMiningNotice)
             }
+            return
+        }
+        // Swift uses Command+Shift+arrows for episodes; Linux follows the
+        // Control+Shift mapping from Niratan-win. They act only with a neighbor
+        // present and never take a repeat, plain arrows or the subtitle
+        // combinations.
+        if (event.key === Qt.Key_Left && control && shift && !alt && !meta) {
+            event.accepted = !event.isAutoRepeat && page.playPreviousEpisode()
+            return
+        }
+        if (event.key === Qt.Key_Right && control && shift && !alt && !meta) {
+            event.accepted = !event.isAutoRepeat && page.playNextEpisode()
             return
         }
         if (control || meta)
@@ -598,6 +627,7 @@ Item {
     PlayerInspectorViewModel {
         id: inspectorModel
         objectName: "inspectorModel"
+        onEpisodeRequested: function (url) { page.openVideo(url, false) }
     }
 
     PlayerStudyViewModel {
@@ -751,6 +781,10 @@ Item {
             onEnded: {
                 page.chromeVisible = true
                 page.forceActiveFocus()
+                // VideoPlayerViewModel.onPlaybackEnded: only EOF consults the
+                // stored autoplay flag, and only when it is currently true.
+                if (mpv.videoSettings.videoAutoPlayNext)
+                    page.playNextEpisode()
             }
         }
 
@@ -847,8 +881,12 @@ Item {
         isFullScreen: page.fullScreen
         speedPanelOpen: page.speedPanelOpen
         inspectorOpen: page.inspectorOpen
+        previousEnabled: inspectorModel.canPlayPreviousEpisode
+        nextEnabled: inspectorModel.canPlayNextEpisode
 
         onTogglePlaybackRequested: page.togglePause()
+        onPreviousRequested: page.playPreviousEpisode()
+        onNextRequested: page.playNextEpisode()
         onVolumeChangeRequested: function (value) {
             page.setVolume(value)
         }

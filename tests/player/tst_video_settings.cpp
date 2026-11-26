@@ -57,6 +57,24 @@ private slots:
         QCOMPARE(subtitle_edges(QStringLiteral("off"), 1, 72).outline, 0);
     }
 
+    // B6: videoAutoPlayNext is the durable boolean key. A missing or non-bool
+    // stored value falls back to true, an explicit false survives a reload.
+    void autoPlayNextKey() {
+        QVERIFY(video_settings().value("videoAutoPlayNext").toBool());
+        QVERIFY(
+            !video_settings({{"videoAutoPlayNext", false}}).value("videoAutoPlayNext").toBool());
+        QVERIFY(video_settings({{"videoAutoPlayNext", "no"}}).value("videoAutoPlayNext").toBool());
+        QVERIFY(video_settings({{"videoAutoPlayNext", 0}}).value("videoAutoPlayNext").toBool());
+
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        const auto path = std::filesystem::path(dir.path().toStdString());
+        QVERIFY(store_video_settings(path, {{"videoAutoPlayNext", false}}));
+        QVERIFY(!load_video_settings(path).value("videoAutoPlayNext").toBool());
+        QVERIFY(store_video_settings(path, {{"videoAutoPlayNext", true}}));
+        QVERIFY(load_video_settings(path).value("videoAutoPlayNext").toBool());
+    }
+
     void studySidebarWidth() {
         QTemporaryDir dir;
         QVERIFY(dir.isValid());

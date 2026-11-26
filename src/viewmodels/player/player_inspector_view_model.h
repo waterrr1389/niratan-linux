@@ -12,12 +12,22 @@
 // (`displayName`), HSMpvClient.mm (`emitTracksFromNode:`),
 // PlaybackEngine.swift (`VideoSubtitleTiming`,
 // `VideoPlaybackSpeed`) and VideoPlayerViewModel.swift (`playlistURLs`,
-// `setSubtitleDelay`, `setAudioDelay`, `setSpeed`, `selectTrack`).
+// `setSubtitleDelay`, `setAudioDelay`, `setSpeed`, `selectTrack`,
+// `playPrevious`, `playNext`, `openPlaylistItem`).
 //
 // The model holds a copy of what the page shows; playback state arrives
 // through `setPlaybackState` and tracks through `setTracks`, both taken from
 // the mpv snapshot. Commands are signals the page forwards to the player, so
 // the model never calls mpv, opens a file or writes the playback history.
+//
+// `playPreviousEpisode` and `playNextEpisode` follow VideoPlaylist.previousURL
+// and nextURL: the neighbor at the current index minus or plus one in the
+// same naturally ordered episode list the Inspector shows. Without a current
+// episode or outside the list they are unavailable and do nothing; they never
+// wrap. A successful command emits `episodeRequested` with the neighbor's
+// exact URL, the ordinary episode-open path the page already uses, which
+// leaves the start-from-beginning flag unset and lets the player save the
+// current position.
 // `selectTrack` emits mpv's track type spelling and id, with 0 for Off;
 // audio and subtitle ids are the ones the history stores, never renumbered.
 // Untitled track rows use the capitalized mpv type and ID before adding any
@@ -51,6 +61,8 @@ class PlayerInspectorViewModel : public QObject {
     Q_PROPERTY(QString headerCaption READ header_caption NOTIFY headerCaptionChanged)
     Q_PROPERTY(QVariantList episodes READ episodes NOTIFY episodesChanged)
     Q_PROPERTY(QVariantMap currentEpisode READ current_episode NOTIFY episodesChanged)
+    Q_PROPERTY(bool canPlayPreviousEpisode READ can_play_previous_episode NOTIFY episodesChanged)
+    Q_PROPERTY(bool canPlayNextEpisode READ can_play_next_episode NOTIFY episodesChanged)
     Q_PROPERTY(QVariantList videoTracks READ video_tracks NOTIFY tracksChanged)
     Q_PROPERTY(QVariantList audioTracks READ audio_tracks NOTIFY tracksChanged)
     Q_PROPERTY(QVariantList subtitleTracks READ subtitle_tracks NOTIFY tracksChanged)
@@ -75,6 +87,8 @@ class PlayerInspectorViewModel : public QObject {
     QString header_caption() const;
     QVariantList episodes() const;
     QVariantMap current_episode() const;
+    bool can_play_previous_episode() const;
+    bool can_play_next_episode() const;
     QVariantList video_tracks() const;
     QVariantList audio_tracks() const;
     QVariantList subtitle_tracks() const;
@@ -94,6 +108,8 @@ class PlayerInspectorViewModel : public QObject {
     Q_INVOKABLE void setTracks(const QVariantList& tracks);
     Q_INVOKABLE void setPlaybackState(double speed, double subtitleDelay, double audioDelay);
     Q_INVOKABLE void selectEpisode(int index);
+    Q_INVOKABLE bool playPreviousEpisode();
+    Q_INVOKABLE bool playNextEpisode();
     Q_INVOKABLE void selectTrack(const QString& type, int id);
     Q_INVOKABLE void stepSubtitleMilliseconds(int delta);
     Q_INVOKABLE void setSubtitleMilliseconds(int milliseconds);
@@ -126,6 +142,7 @@ class PlayerInspectorViewModel : public QObject {
 
    private:
     void rebuild_playlist();
+    bool play_relative_episode(int offset);
     void rebuild_tracks();
     void apply_speed(double requested);
     void apply_subtitle_milliseconds(int milliseconds);

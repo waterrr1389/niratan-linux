@@ -27,8 +27,15 @@
 //
 // The page tests open a clip through VideoWindow.openVideo; playback does not
 // start, so the bar is not visible, but its controls still route their signals.
+// Episode navigation and autoplay follow VideoPlaylist.previousURL/nextURL,
+// VideoPlayerViewModel.playPrevious/playNext/openPlaylistItem,
+// VideoPlayerScreen+Shortcuts.swift, VideoShortcutActions.swift
+// previousEpisode/nextEpisode with Niratan-win's Ctrl+Shift mapping, and
+// UserConfig.videoAutoPlayNext through the page's playbackReady seam.
 
 #include "../viewmodels/data_root.h"
+#include "services/player/playback_history.h"
+#include "viewmodels/player/player_inspector_view_model.h"
 #include "viewmodels/player/player_study_view_model.h"
 
 #include <QDir>
@@ -167,6 +174,22 @@ QString make_video(const QString& base) {
     return touch_file(source + QStringLiteral("/Alpha.mp4"), 10);
 }
 
+// Three episodes in one folder, in the Inspector's natural order.
+QString make_episode_folder(const QString& base) {
+    const QString source = base + QStringLiteral("/Episodes");
+    for (const char* name : {"Show 1.mkv", "Show 2.mkv", "Show 3.mkv"}) {
+        const QString path = source + QLatin1Char('/') + QString::fromLatin1(name);
+        if (touch_file(path, 10).isEmpty()) {
+            return {};
+        }
+    }
+    return source;
+}
+
+QUrl episode_url(const QString& folder, const char* name) {
+    return QUrl::fromLocalFile(QDir(folder).filePath(QString::fromLatin1(name)));
+}
+
 class KeyEventProbe : public QObject {
     Q_OBJECT
     Q_PROPERTY(int key READ key CONSTANT)
@@ -219,6 +242,10 @@ class PlayerControlsTest : public QObject {
     void subtitle_shortcuts_navigate_and_align();
     void subtitle_alignment_clamps_delay_and_dismisses_lookup();
     void transcript_toolbar_exists_without_search_matches();
+    void episode_transport_navigation();
+    void episode_open_preserves_resume_history();
+    void episode_shortcuts_navigate_neighbors();
+    void autoplay_consumes_setting_at_eof();
 };
 
 namespace {
@@ -1148,6 +1175,253 @@ void PlayerControlsTest::bar_glyphs_keep_their_size() {
     QTRY_COMPARE(bar->property("density").toString(), QStringLiteral("full"));
     QTRY_VERIFY(std::abs(scene_rect(QStringLiteral("playButton")).center().x() -
                          bar->mapRectToScene(bar->boundingRect()).center().x()) <= 1.0);
+}
+
+// B3: the transport Previous/Next controls follow the Inspector's playlist and
+// route through the same episode-open command, on their sides of Play/Pause.
+void PlayerControlsTest::episode_transport_navigation() {
+    niratan::test::TempDataRoot root;
+    QVERIFY(root.isValid());
+    const QString folder = make_episode_folder(root.path());
+    QVERIFY(!folder.isEmpty());
+
+    QQmlApplicationEngine engine;
+    QQuickWindow* video_window = nullptr;
+    QQuickItem* player = open_video_in_window(
+        engine, episode_url(folder, "Show 2.mkv").toLocalFile(), &video_window);
+    QVERIFY2(player != nullptr, "the Video window did not open the player");
+    QVERIFY(player->setProperty("playbackReady", true));
+    auto* inspector = player->findChild<niratan::viewmodels::PlayerInspectorViewModel*>(
+        QStringLiteral("inspectorModel"));
+    QVERIFY(inspector != nullptr);
+    QTRY_VERIFY(inspector->can_play_previous_episode());
+    QTRY_VERIFY(inspector->can_play_next_episode());
+    QQuickItem* mpv = item_named(video_window->contentItem(), QStringLiteral("mpvItem"));
+    QVERIFY(mpv != nullptr);
+
+    QQuickItem* bar = item_named(player, QStringLiteral("videoControlBar"));
+    QVERIFY(bar != nullptr);
+    QQuickItem* previous = item_named(bar, QStringLiteral("previousButton"));
+    QQuickItem* next = item_named(bar, QStringLiteral("nextButton"));
+    QVERIFY(previous != nullptr);
+    QVERIFY(next != nullptr);
+    QVERIFY(previous->property("enabled").toBool());
+    QVERIFY(next->property("enabled").toBool());
+
+    QSignalSpy spy(inspector, &niratan::viewmodels::PlayerInspectorViewModel::episodeRequested);
+    player->setProperty("chromeVisible", false);
+    click(next);
+    QCOMPARE(spy.count(), 1);
+    QCOMPARE(spy.at(0).at(0).toUrl(), episode_url(folder, "Show 3.mkv"));
+    QVERIFY(player->property("chromeVisible").toBool());
+    QTRY_COMPARE(player->property("videoFile").toUrl(), episode_url(folder, "Show 3.mkv"));
+    QTRY_VERIFY(!next->property("enabled").toBool());
+    QVERIFY(previous->property("enabled").toBool());
+
+    click(previous);
+    QCOMPARE(spy.count(), 2);
+    QCOMPARE(spy.at(1).at(0).toUrl(), episode_url(folder, "Show 2.mkv"));
+    QTRY_COMPARE(player->property("videoFile").toUrl(), episode_url(folder, "Show 2.mkv"));
+
+    // B3: the compact transport carries the same availability and commands.
+    bool stored = false;
+    QVERIFY(QMetaObject::invokeMethod(mpv, "changeVideoSetting", Q_RETURN_ARG(bool, stored),
+                                      Q_ARG(QString, QStringLiteral("videoControlBarLayout")),
+                                      Q_ARG(QVariant, QVariant(QStringLiteral("compactBottom")))));
+    QVERIFY(stored);
+    QTRY_COMPARE(bar->property("layoutMode").toString(), QStringLiteral("compactBottom"));
+    previous = item_named(bar, QStringLiteral("previousButton"));
+    next = item_named(bar, QStringLiteral("nextButton"));
+    QVERIFY(previous != nullptr);
+    QVERIFY(next != nullptr);
+    QVERIFY(previous->property("enabled").toBool());
+    QVERIFY(next->property("enabled").toBool());
+
+    click(previous);
+    QCOMPARE(spy.count(), 3);
+    QCOMPARE(spy.at(2).at(0).toUrl(), episode_url(folder, "Show 1.mkv"));
+    QTRY_COMPARE(player->property("videoFile").toUrl(), episode_url(folder, "Show 1.mkv"));
+    QTRY_VERIFY(!previous->property("enabled").toBool());
+    QTRY_VERIFY(next->property("enabled").toBool());
+}
+
+// B2: the ordinary episode open keeps Show 3's stored 12.0 s resumable state
+// instead of starting from the beginning. Swift prepares the pending restore
+// position on open and consumes it after loading, so the store is the check.
+void PlayerControlsTest::episode_open_preserves_resume_history() {
+    niratan::test::TempDataRoot root;
+    QVERIFY(root.isValid());
+    const QString folder = make_episode_folder(root.path());
+    QVERIFY(!folder.isEmpty());
+    const QUrl third = episode_url(folder, "Show 3.mkv");
+
+    niratan::player::PlaybackHistory history = niratan::player::PlaybackHistory::at_data_root();
+    QVERIFY(history.save(third.toLocalFile(), 12.0, 100.0));
+    QCOMPARE(history.resume_position(third.toLocalFile()).value_or(-1.0), 12.0);
+
+    QQmlApplicationEngine engine;
+    QQuickWindow* video_window = nullptr;
+    QQuickItem* player = open_video_in_window(
+        engine, episode_url(folder, "Show 2.mkv").toLocalFile(), &video_window);
+    QVERIFY2(player != nullptr, "the Video window did not open the player");
+    auto* inspector = player->findChild<niratan::viewmodels::PlayerInspectorViewModel*>(
+        QStringLiteral("inspectorModel"));
+    QVERIFY(inspector != nullptr);
+    QTRY_VERIFY(inspector->can_play_next_episode());
+    QQuickItem* mpv = item_named(video_window->contentItem(), QStringLiteral("mpvItem"));
+    QVERIFY(mpv != nullptr);
+    QVERIFY(mpv->property("videoSettings").toMap().value("videoRememberPlaybackPosition").toBool());
+
+    QSignalSpy spy(inspector, &niratan::viewmodels::PlayerInspectorViewModel::episodeRequested);
+    QQuickItem* bar = item_named(player, QStringLiteral("videoControlBar"));
+    QVERIFY(bar != nullptr);
+    click(item_named(bar, QStringLiteral("nextButton")));
+    QCOMPARE(spy.count(), 1);
+    QCOMPARE(spy.at(0).at(0).toUrl(), third);
+    QTRY_COMPARE(player->property("videoFile").toUrl(), third);
+
+    const auto state = history.state(third.toLocalFile());
+    QVERIFY(state.has_value());
+    QCOMPARE(state->position, 12.0);
+    QVERIFY(state->resumable());
+}
+
+// B4: Ctrl+Shift+Left/Right are Niratan-win's episode bindings: exactly one
+// request per press, no autorepeat, no wrap, and text input keeps the keys.
+void PlayerControlsTest::episode_shortcuts_navigate_neighbors() {
+    niratan::test::TempDataRoot root;
+    QVERIFY(root.isValid());
+    const QString folder = make_episode_folder(root.path());
+    QVERIFY(!folder.isEmpty());
+
+    QQmlApplicationEngine engine;
+    QQuickWindow* video_window = nullptr;
+    QQuickItem* player = open_video_in_window(
+        engine, episode_url(folder, "Show 2.mkv").toLocalFile(), &video_window);
+    QVERIFY2(player != nullptr, "the Video window did not open the player");
+    QVERIFY(player->setProperty("playbackReady", true));
+    auto* inspector = player->findChild<niratan::viewmodels::PlayerInspectorViewModel*>(
+        QStringLiteral("inspectorModel"));
+    QVERIFY(inspector != nullptr);
+    QTRY_VERIFY(inspector->can_play_next_episode());
+    QSignalSpy spy(inspector, &niratan::viewmodels::PlayerInspectorViewModel::episodeRequested);
+
+    KeyEventProbe next(Qt::Key_Right, int(Qt::ControlModifier | Qt::ShiftModifier), false);
+    send_handle_key(player, next);
+    QVERIFY(next.accepted());
+    QCOMPARE(spy.count(), 1);
+    QCOMPARE(spy.at(0).at(0).toUrl(), episode_url(folder, "Show 3.mkv"));
+    QTRY_COMPARE(player->property("videoFile").toUrl(), episode_url(folder, "Show 3.mkv"));
+
+    // The last episode has no next neighbor, so the key is not consumed.
+    KeyEventProbe beyond(Qt::Key_Right, int(Qt::ControlModifier | Qt::ShiftModifier), false);
+    send_handle_key(player, beyond);
+    QVERIFY(!beyond.accepted());
+    QCOMPARE(spy.count(), 1);
+
+    KeyEventProbe previous(Qt::Key_Left, int(Qt::ControlModifier | Qt::ShiftModifier), false);
+    send_handle_key(player, previous);
+    QVERIFY(previous.accepted());
+    QCOMPARE(spy.count(), 2);
+    QCOMPARE(spy.at(1).at(0).toUrl(), episode_url(folder, "Show 2.mkv"));
+    QTRY_COMPARE(player->property("videoFile").toUrl(), episode_url(folder, "Show 2.mkv"));
+
+    // Exact modifiers: repeat, Control alone and Alt added do not navigate.
+    KeyEventProbe repeated(Qt::Key_Right, int(Qt::ControlModifier | Qt::ShiftModifier), true);
+    send_handle_key(player, repeated);
+    QVERIFY(!repeated.accepted());
+    KeyEventProbe control_only(Qt::Key_Right, Qt::ControlModifier, false);
+    send_handle_key(player, control_only);
+    QVERIFY(!control_only.accepted());
+    KeyEventProbe with_alt(Qt::Key_Right,
+                           int(Qt::ControlModifier | Qt::ShiftModifier | Qt::AltModifier), false);
+    send_handle_key(player, with_alt);
+    QVERIFY(!with_alt.accepted());
+    QCOMPARE(spy.count(), 2);
+
+    // The first episode has no previous neighbor.
+    QVERIFY(QMetaObject::invokeMethod(player, "openVideo",
+                                      Q_ARG(QVariant, QVariant(episode_url(folder, "Show 1.mkv"))),
+                                      Q_ARG(QVariant, QVariant(false))));
+    QTRY_COMPARE(player->property("videoFile").toUrl(), episode_url(folder, "Show 1.mkv"));
+    QTRY_VERIFY(!inspector->can_play_previous_episode());
+    KeyEventProbe before(Qt::Key_Left, int(Qt::ControlModifier | Qt::ShiftModifier), false);
+    send_handle_key(player, before);
+    QVERIFY(!before.accepted());
+    QCOMPARE(spy.count(), 2);
+
+    // A focused transcript field keeps the keys for text editing.
+    QVERIFY(QMetaObject::invokeMethod(player, "toggleTranscript"));
+    QQuickItem* sidebar = item_named(video_window->contentItem(), QStringLiteral("studySidebar"));
+    QVERIFY(sidebar != nullptr);
+    sidebar->setProperty("selectedTab", 1);
+    QQuickItem* search = item_named(sidebar, QStringLiteral("transcriptSearchField"));
+    QVERIFY(search != nullptr);
+    search->forceActiveFocus();
+    QTRY_VERIFY(search->hasActiveFocus());
+    KeyEventProbe in_text(Qt::Key_Right, int(Qt::ControlModifier | Qt::ShiftModifier), false);
+    send_handle_key(player, in_text);
+    QVERIFY(!in_text.accepted());
+    QCOMPARE(spy.count(), 2);
+}
+
+// B5, B6: EOF reads videoAutoPlayNext each time; a change applies without
+// reopening, the final episode opens nothing, and manual transport ignores it.
+void PlayerControlsTest::autoplay_consumes_setting_at_eof() {
+    niratan::test::TempDataRoot root;
+    QVERIFY(root.isValid());
+    const QString folder = make_episode_folder(root.path());
+    QVERIFY(!folder.isEmpty());
+
+    QQmlApplicationEngine engine;
+    QQuickWindow* video_window = nullptr;
+    QQuickItem* player = open_video_in_window(
+        engine, episode_url(folder, "Show 2.mkv").toLocalFile(), &video_window);
+    QVERIFY2(player != nullptr, "the Video window did not open the player");
+    auto* inspector = player->findChild<niratan::viewmodels::PlayerInspectorViewModel*>(
+        QStringLiteral("inspectorModel"));
+    QVERIFY(inspector != nullptr);
+    QTRY_VERIFY(inspector->can_play_next_episode());
+    QSignalSpy spy(inspector, &niratan::viewmodels::PlayerInspectorViewModel::episodeRequested);
+
+    QQuickItem* mpv = item_named(video_window->contentItem(), QStringLiteral("mpvItem"));
+    QVERIFY(mpv != nullptr);
+    QVERIFY(mpv->property("videoSettings").toMap().value("videoAutoPlayNext").toBool());
+
+    bool stored = false;
+    QVERIFY(QMetaObject::invokeMethod(mpv, "changeVideoSetting", Q_RETURN_ARG(bool, stored),
+                                      Q_ARG(QString, QStringLiteral("videoAutoPlayNext")),
+                                      Q_ARG(QVariant, QVariant(false))));
+    QVERIFY(stored);
+    QVERIFY(QMetaObject::invokeMethod(mpv, "ended"));
+    QCOMPARE(spy.count(), 0);
+
+    QVERIFY(QMetaObject::invokeMethod(mpv, "changeVideoSetting", Q_RETURN_ARG(bool, stored),
+                                      Q_ARG(QString, QStringLiteral("videoAutoPlayNext")),
+                                      Q_ARG(QVariant, QVariant(true))));
+    QVERIFY(stored);
+    QVERIFY(QMetaObject::invokeMethod(mpv, "ended"));
+    QCOMPARE(spy.count(), 1);
+    QCOMPARE(spy.at(0).at(0).toUrl(), episode_url(folder, "Show 3.mkv"));
+    QTRY_COMPARE(player->property("videoFile").toUrl(), episode_url(folder, "Show 3.mkv"));
+
+    // Last episode: autoplay has no next neighbor to open.
+    QVERIFY(QMetaObject::invokeMethod(mpv, "ended"));
+    QCOMPARE(spy.count(), 1);
+
+    // Manual transport still navigates while autoplay is off.
+    QVERIFY(QMetaObject::invokeMethod(mpv, "changeVideoSetting", Q_RETURN_ARG(bool, stored),
+                                      Q_ARG(QString, QStringLiteral("videoAutoPlayNext")),
+                                      Q_ARG(QVariant, QVariant(false))));
+    QVERIFY(stored);
+    QQuickItem* bar = item_named(player, QStringLiteral("videoControlBar"));
+    QVERIFY(bar != nullptr);
+    QQuickItem* previous = item_named(bar, QStringLiteral("previousButton"));
+    QVERIFY(previous != nullptr);
+    QTRY_VERIFY(previous->property("enabled").toBool());
+    click(previous);
+    QCOMPARE(spy.count(), 2);
+    QCOMPARE(spy.at(1).at(0).toUrl(), episode_url(folder, "Show 2.mkv"));
 }
 
 int main(int argc, char* argv[]) {

@@ -29,7 +29,9 @@
 // The bar owns no playback state: the page supplies the snapshot through the
 // properties below and receives intents as signals. Swift's drag-to-move
 // surface and the screenshot and gap fast-forward controls are not ported
-// (Decisions); `inspectorOpen` marks the Inspector button active.
+// (Decisions); `inspectorOpen` marks the Inspector button active, and
+// `previousEnabled`/`nextEnabled` say whether the episode list has a neighbour
+// on each side.
 //
 // `density` is "full", "condensed" or "minimal"; `interactive` is true only
 // while the bar accepts pointer input; `trackWidth` is the timeline's drawable
@@ -67,6 +69,8 @@ Item {
     property bool isFullScreen: false
     property bool speedPanelOpen: false
     property bool inspectorOpen: false
+    property bool previousEnabled: false
+    property bool nextEnabled: false
     property var chapters: []
 
     readonly property bool compactLayout: bar.layoutMode === "compactBottom"
@@ -294,6 +298,8 @@ Item {
                 isMuted: bar.isMuted
                 volume: bar.volume
                 showVolume: false
+                previousEnabled: bar.previousEnabled
+                nextEnabled: bar.nextEnabled
                 onTogglePlaybackRequested: bar.togglePlaybackRequested()
                 onPreviousRequested: bar.previousRequested()
                 onNextRequested: bar.nextRequested()
@@ -351,6 +357,8 @@ Item {
                 volumeLeads: false
                 showVolume: false
                 onOverlay: true
+                previousEnabled: bar.previousEnabled
+                nextEnabled: bar.nextEnabled
                 onTogglePlaybackRequested: bar.togglePlaybackRequested()
                 onPreviousRequested: bar.previousRequested()
                 onNextRequested: bar.nextRequested()

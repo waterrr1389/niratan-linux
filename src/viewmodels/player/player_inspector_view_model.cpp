@@ -181,6 +181,14 @@ QVariantMap PlayerInspectorViewModel::current_episode() const {
     return episodes().value(current_index_).toMap();
 }
 
+bool PlayerInspectorViewModel::can_play_previous_episode() const {
+    return current_index_ > 0;
+}
+
+bool PlayerInspectorViewModel::can_play_next_episode() const {
+    return current_index_ >= 0 && current_index_ + 1 < episode_urls_.size();
+}
+
 QVariantList PlayerInspectorViewModel::video_tracks() const {
     return video_tracks_;
 }
@@ -284,7 +292,31 @@ void PlayerInspectorViewModel::selectEpisode(int index) {
     if (index < 0 || index >= episode_urls_.size()) {
         return;
     }
-    emit episodeRequested(episode_urls_.at(index));
+    // The page reopens the episode from this signal, which rebuilds the list.
+    const QUrl url = episode_urls_.at(index);
+    emit episodeRequested(url);
+}
+
+bool PlayerInspectorViewModel::playPreviousEpisode() {
+    return play_relative_episode(-1);
+}
+
+bool PlayerInspectorViewModel::playNextEpisode() {
+    return play_relative_episode(1);
+}
+
+bool PlayerInspectorViewModel::play_relative_episode(int offset) {
+    if (current_index_ < 0) {
+        return false;
+    }
+    const int target = current_index_ + offset;
+    if (target < 0 || target >= episode_urls_.size()) {
+        return false;
+    }
+    // The page reopens the episode from this signal, which rebuilds the list.
+    const QUrl url = episode_urls_.at(target);
+    emit episodeRequested(url);
+    return true;
 }
 
 void PlayerInspectorViewModel::selectTrack(const QString& type, int id) {

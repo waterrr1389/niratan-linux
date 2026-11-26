@@ -3,7 +3,9 @@
 // B1-B9 of notes/specs/viewmodels-player-inspector.md: the Inspector's episode
 // list (VideoPlaylist.swift), track rows (VideoInspectorView.trackSection),
 // subtitle timing (VideoSubtitleTiming), audio timing and playback speed
-// (VideoPlaybackSpeed), through PlayerInspectorViewModel.
+// (VideoPlaybackSpeed), through PlayerInspectorViewModel. Episode navigation
+// follows VideoPlaylist.previousURL/nextURL and VideoPlayerViewModel's
+// playPrevious/playNext/openPlaylistItem.
 
 #include "services/video/video_playlist.h"
 #include "viewmodels/player/player_inspector_view_model.h"
@@ -93,6 +95,8 @@ class PlayerInspectorViewModelTest : public QObject {
     void episodeListingFiltersSortsAndLocates();
     void headerCaptionAndDisplayTitle();
     void episodeRowsAndSelection();
+    void adjacentEpisodeNavigation();
+    void adjacentEpisodeNaturalOrder();
     void trackRows();
     void untitledTrackRows();
     void selectingTracksRequestsMpvIds();
@@ -188,6 +192,89 @@ void PlayerInspectorViewModelTest::episodeRowsAndSelection() {
     model.setVideo(local(empty.path(), QStringLiteral("Nothing.mkv")), QString());
     QVERIFY(model.episodes().isEmpty());
     QVERIFY(model.current_episode().isEmpty());
+}
+
+// B1, B2: playPreviousEpisode and playNextEpisode follow VideoPlaylist's
+// previousURL and nextURL in the Inspector's order: one step, exact URL, no
+// wrap, and nothing without a current episode or at either end.
+void PlayerInspectorViewModelTest::adjacentEpisodeNavigation() {
+    auto directory = three_episode_folder();
+    QVERIFY(directory != nullptr);
+
+    PlayerInspectorViewModel model;
+    model.setVideo(local(directory->path(), QStringLiteral("Show 2.mkv")), QString());
+    QVERIFY(model.can_play_previous_episode());
+    QVERIFY(model.can_play_next_episode());
+
+    QSignalSpy spy(&model, &PlayerInspectorViewModel::episodeRequested);
+    QVERIFY(model.playPreviousEpisode());
+    QCOMPARE(spy.count(), 1);
+    QCOMPARE(url_from_signal(spy), local(directory->path(), QStringLiteral("Show 1.mkv")));
+    QVERIFY(model.playNextEpisode());
+    QCOMPARE(spy.count(), 2);
+    QCOMPARE(url_from_signal(spy, 1), local(directory->path(), QStringLiteral("Show 3.mkv")));
+
+    model.setVideo(local(directory->path(), QStringLiteral("Show 1.mkv")), QString());
+    QVERIFY(!model.can_play_previous_episode());
+    QVERIFY(model.can_play_next_episode());
+    spy.clear();
+    QVERIFY(!model.playPreviousEpisode());
+    QCOMPARE(spy.count(), 0);
+    QVERIFY(model.playNextEpisode());
+    QCOMPARE(spy.count(), 1);
+    QCOMPARE(url_from_signal(spy), local(directory->path(), QStringLiteral("Show 2.mkv")));
+
+    model.setVideo(local(directory->path(), QStringLiteral("Show 3.mkv")), QString());
+    QVERIFY(model.can_play_previous_episode());
+    QVERIFY(!model.can_play_next_episode());
+    spy.clear();
+    QVERIFY(!model.playNextEpisode());
+    QCOMPARE(spy.count(), 0);
+    QVERIFY(model.playPreviousEpisode());
+    QCOMPARE(spy.count(), 1);
+    QCOMPARE(url_from_signal(spy), local(directory->path(), QStringLiteral("Show 2.mkv")));
+
+    QTemporaryDir single;
+    QVERIFY(single.isValid());
+    QVERIFY(write_file(single.path(), QStringLiteral("Solo.mkv")));
+    model.setVideo(local(single.path(), QStringLiteral("Solo.mkv")), QString());
+    QVERIFY(!model.can_play_previous_episode());
+    QVERIFY(!model.can_play_next_episode());
+    spy.clear();
+    QVERIFY(!model.playPreviousEpisode());
+    QVERIFY(!model.playNextEpisode());
+    QCOMPARE(spy.count(), 0);
+
+    model.setVideo(local(directory->path(), QStringLiteral("Elsewhere.mkv")), QString());
+    QVERIFY(!model.can_play_previous_episode());
+    QVERIFY(!model.can_play_next_episode());
+    spy.clear();
+    QVERIFY(!model.playPreviousEpisode());
+    QVERIFY(!model.playNextEpisode());
+    QCOMPARE(spy.count(), 0);
+
+    PlayerInspectorViewModel idle;
+    QVERIFY(!idle.can_play_previous_episode());
+    QVERIFY(!idle.can_play_next_episode());
+    QVERIFY(!idle.playPreviousEpisode());
+    QVERIFY(!idle.playNextEpisode());
+}
+
+// B1: neighbors follow Foundation's natural order, not plain byte order.
+void PlayerInspectorViewModelTest::adjacentEpisodeNaturalOrder() {
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    for (const char* name : {"Show 1.mkv", "Show 2.mkv", "Show 10.mkv"}) {
+        QVERIFY(write_file(directory.path(), QString::fromLatin1(name)));
+    }
+
+    PlayerInspectorViewModel model;
+    model.setVideo(local(directory.path(), QStringLiteral("Show 2.mkv")), QString());
+    QSignalSpy spy(&model, &PlayerInspectorViewModel::episodeRequested);
+    QVERIFY(model.playPreviousEpisode());
+    QCOMPARE(url_from_signal(spy), local(directory.path(), QStringLiteral("Show 1.mkv")));
+    QVERIFY(model.playNextEpisode());
+    QCOMPARE(url_from_signal(spy, 1), local(directory.path(), QStringLiteral("Show 10.mkv")));
 }
 
 void PlayerInspectorViewModelTest::trackRows() {
