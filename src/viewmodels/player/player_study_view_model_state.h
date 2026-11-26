@@ -46,6 +46,7 @@ struct PlayerStudyViewModel::State {
     int current_chapter = -1;
     double position = 0.0;
     double delay = 0.0;
+    double chapter_progress = -1.0;
     Cue native{-1.0, -1.0, {}};
     bool ready = false;
     bool visible = true;

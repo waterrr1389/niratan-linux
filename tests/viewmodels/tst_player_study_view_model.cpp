@@ -1,19 +1,20 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
-// B12 of notes/specs/viewmodels-player-lookup.md: PlayerStudyViewModel
-// .setSubtitleDocument decides the format from the source path, through
-// parse_subtitle_document without a hint (SubtitleParser.format(for:) in
-// VideoPlayerScreen+Subtitles.swift), rejects a dotless name such as /tmp/ass,
-// and records the parsed document's raw format in the mining history.
+// B1-B3, B5, B6 of notes/specs/video-v5-transcript-search.md, on top of the
+// V1-V4 study behaviours: VideoStudySearch matching, SubtitleTranscriptView's
+// search results and following resets, and VideoMiningHistorySidebar's current
+// chapter progress over raw playback time.
 
 #include "viewmodels/player/player_study_view_model.h"
 
 #include "data_root.h"
 #include "services/player/mining_history_store.h"
 
+#include <QSignalSpy>
 #include <QUrl>
 #include <QtTest>
 
+#include <functional>
 #include <memory>
 #include <optional>
 #include <string>
@@ -44,6 +45,32 @@ QUrl file(const char* path) {
     return QUrl::fromLocalFile(QString::fromLatin1(path));
 }
 
+// One cue per two seconds, numbered from one, with the given text.
+QByteArray numbered_srt(int count, const std::function<QString(int)>& text) {
+    const auto stamp = [](int seconds) {
+        return QStringLiteral("00:%1:%2,000")
+            .arg(seconds / 60, 2, 10, QLatin1Char('0'))
+            .arg(seconds % 60, 2, 10, QLatin1Char('0'))
+            .toUtf8();
+    };
+    QByteArray out;
+    for (int i = 0; i < count; ++i) {
+        out += QByteArray::number(i + 1) + '\n' + stamp(i * 2) + " --> " + stamp(i * 2 + 1) + '\n' +
+            text(i).toUtf8() + "\n\n";
+    }
+    return out;
+}
+
+QVariantMap chapter_row(int id, const char* title, double start, double duration) {
+    QVariantMap row{{QStringLiteral("id"), id},
+                    {QStringLiteral("title"), QString::fromLatin1(title)},
+                    {QStringLiteral("start"), start}};
+    if (duration >= 0.0) {
+        row.insert(QStringLiteral("duration"), duration);
+    }
+    return row;
+}
+
 }  // namespace
 
 class PlayerStudyViewModelTest : public QObject {
@@ -59,6 +86,11 @@ class PlayerStudyViewModelTest : public QObject {
     void relativeSeek_stopsAtEndedRowAndDoesNotWrap();
     void alignment_usesAdjacentGroupsAndAvailability();
     void transcriptFlags_ignoreSearchResults();
+    void searchListsEveryMatchInOrder();
+    void searchRowsCarryHighlightRanges();
+    void clearedSearchResumesFollowing();
+    void newTranscriptResumesFollowing();
+    void chapterProgressUsesRawPlayback();
 
    private:
     std::unique_ptr<TempDataRoot> root_;
@@ -268,6 +300,140 @@ void PlayerStudyViewModelTest::transcriptFlags_ignoreSearchResults() {
     model.set_search({});
     model.updatePlayback(1.0, 0.0);
     QVERIFY(model.has_transcript_rows());
+}
+
+// B1, B2: a trimmed query lists every match at once, in transcript order, with
+// no window paging; an empty or unmatchable query lists no rows.
+void PlayerStudyViewModelTest::searchListsEveryMatchInOrder() {
+    PlayerStudyViewModel model;
+    model.setSubtitleDocument(file("/tmp/search.srt"),
+                              numbered_srt(200,
+                                           [](int i) {
+                                               return i % 2 == 0
+                                                   ? QStringLiteral("needle %1").arg(i)
+                                                   : QStringLiteral("hay %1").arg(i);
+                                           }),
+                              true);
+    QCOMPARE(model.transcript().size(), qsizetype(80));
+
+    model.set_search(QStringLiteral("  NEEDLE\n"));
+    QVERIFY(model.search_active());
+    QCOMPARE(model.search_match_count(), 100);
+    const QVariantList matches = model.transcript();
+    QCOMPARE(matches.size(), qsizetype(100));
+    QVERIFY(!model.can_show_earlier());
+    QVERIFY(!model.can_show_later());
+    for (qsizetype i = 0; i < matches.size(); ++i) {
+        const QVariantMap row = matches.at(i).toMap();
+        QCOMPARE(row.value(QStringLiteral("index")).toInt(), int(i * 2));
+        QVERIFY(row.value(QStringLiteral("text")).toString().contains(QStringLiteral("needle")));
+    }
+
+    model.set_search(QStringLiteral("absent"));
+    QVERIFY(model.search_active());
+    QCOMPARE(model.search_match_count(), 0);
+    QVERIFY(model.transcript().isEmpty());
+
+    model.set_search(QString());
+    QVERIFY(!model.search_active());
+    QCOMPARE(model.search_match_count(), 0);
+    QCOMPARE(model.transcript().size(), qsizetype(80));
+}
+
+// B4: listed rows carry the highlight ranges in the original cue text.
+void PlayerStudyViewModelTest::searchRowsCarryHighlightRanges() {
+    PlayerStudyViewModel model;
+    model.setSubtitleDocument(file("/tmp/highlight.srt"),
+                              QByteArray("1\n00:00:01,000 --> 00:00:02,000\none two one\n"), true);
+    model.set_search(QStringLiteral("ONE"));
+    const QVariantList rows = model.transcript();
+    QCOMPARE(rows.size(), qsizetype(1));
+    const QVariantList highlights =
+        rows.first().toMap().value(QStringLiteral("highlights")).toList();
+    QCOMPARE(highlights.size(), qsizetype(2));
+    QCOMPARE(highlights.at(0).toMap().value(QStringLiteral("start")).toInt(), 0);
+    QCOMPARE(highlights.at(0).toMap().value(QStringLiteral("length")).toInt(), 3);
+    QCOMPARE(highlights.at(1).toMap().value(QStringLiteral("start")).toInt(), 8);
+    QCOMPARE(highlights.at(1).toMap().value(QStringLiteral("length")).toInt(), 3);
+    QCOMPARE(rows.first().toMap().value(QStringLiteral("text")).toString(),
+             QStringLiteral("one two one"));
+
+    model.set_search({});
+    const QVariantList unfiltered = model.transcript();
+    QVERIFY(unfiltered.first().toMap().value(QStringLiteral("highlights")).toList().isEmpty());
+}
+
+// B5: clearing a query turns following back on and recenters the window, so
+// playback moves the list again.
+void PlayerStudyViewModelTest::clearedSearchResumesFollowing() {
+    PlayerStudyViewModel model;
+    model.setSubtitleDocument(
+        file("/tmp/many.srt"),
+        numbered_srt(200, [](int i) { return QStringLiteral("line %1").arg(i); }), true);
+    model.updatePlayback(241.0, 0.0);
+    QVERIFY(model.current_visible_row() >= 0);
+    model.setTranscriptFollowing(false);
+
+    model.set_search(QStringLiteral("line 1"));
+    QVERIFY(model.search_active());
+    model.set_search({});
+    QVERIFY(!model.search_active());
+    QVERIFY(model.current_visible_row() >= 0);
+    QVERIFY(model.can_show_earlier());
+    QVERIFY(model.can_show_later());
+
+    model.updatePlayback(361.0, 0.0);
+    QVERIFY(!model.can_show_later());
+}
+
+// B5: a new transcript also resumes following.
+void PlayerStudyViewModelTest::newTranscriptResumesFollowing() {
+    PlayerStudyViewModel model;
+    model.setSubtitleDocument(
+        file("/tmp/a.srt"),
+        numbered_srt(200, [](int i) { return QStringLiteral("line %1").arg(i); }), true);
+    model.updatePlayback(21.0, 0.0);
+    model.setTranscriptFollowing(false);
+    model.setSubtitleDocument(
+        file("/tmp/b.srt"),
+        numbered_srt(200, [](int i) { return QStringLiteral("line %1").arg(i); }), true);
+    model.updatePlayback(361.0, 0.0);
+    QVERIFY(!model.can_show_later());
+}
+
+// B6: current-chapter progress uses raw playback time, the next later start or
+// the chapter duration as its end, clamps to 0..1 and is unavailable otherwise.
+void PlayerStudyViewModelTest::chapterProgressUsesRawPlayback() {
+    PlayerStudyViewModel model;
+    model.set_chapters({chapter_row(0, "A", 0, 10), chapter_row(1, "B", 10, 10)});
+    model.updatePlayback(15.0, 3.0);
+    QCOMPARE(model.current_chapter(), 1);
+    QCOMPARE(model.current_chapter_progress(), 0.5);
+
+    QSignalSpy progress(&model, &PlayerStudyViewModel::currentChapterProgressChanged);
+    model.updatePlayback(17.0, 3.0);
+    QCOMPARE(progress.count(), 1);
+    QCOMPARE(model.current_chapter_progress(), 0.7);
+
+    // The next later start wins over a longer chapter duration.
+    model.set_chapters({chapter_row(0, "A", 0, 100), chapter_row(1, "B", 10, 5)});
+    model.updatePlayback(5.0, 0.0);
+    QCOMPARE(model.current_chapter(), 0);
+    QCOMPARE(model.current_chapter_progress(), 0.5);
+
+    model.set_chapters({chapter_row(0, "A", 20, 10)});
+    model.updatePlayback(35.0, 0.0);
+    QCOMPARE(model.current_chapter(), 0);
+    QCOMPARE(model.current_chapter_progress(), 1.0);
+
+    model.set_chapters({chapter_row(0, "A", 0, -1)});
+    model.updatePlayback(5.0, 0.0);
+    QCOMPARE(model.current_chapter(), 0);
+    QCOMPARE(model.current_chapter_progress(), -1.0);
+
+    model.set_chapters({});
+    QCOMPARE(model.current_chapter(), -1);
+    QCOMPARE(model.current_chapter_progress(), -1.0);
 }
 
 QTEST_GUILESS_MAIN(PlayerStudyViewModelTest)

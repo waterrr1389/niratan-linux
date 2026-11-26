@@ -193,6 +193,76 @@ QUrl episode_url(const QString& folder, const char* name) {
     return QUrl::fromLocalFile(QDir(folder).filePath(QString::fromLatin1(name)));
 }
 
+// One cue per two seconds, numbered from one, with the given text.
+QByteArray numbered_cues_srt(int count, const std::function<QString(int)>& text) {
+    const auto stamp = [](int seconds) {
+        return QStringLiteral("00:%1:%2,000")
+            .arg(seconds / 60, 2, 10, QLatin1Char('0'))
+            .arg(seconds % 60, 2, 10, QLatin1Char('0'))
+            .toUtf8();
+    };
+    QByteArray out;
+    for (int i = 0; i < count; ++i) {
+        out += QByteArray::number(i + 1) + '\n' + stamp(i * 2) + " --> " + stamp(i * 2 + 1) + '\n' +
+            text(i).toUtf8() + "\n\n";
+    }
+    return out;
+}
+
+void collect_named_items(QQuickItem* item, const QString& name, QList<QQuickItem*>& found) {
+    if (item->objectName() == name) {
+        found.append(item);
+    }
+    for (QQuickItem* child : item->childItems()) {
+        collect_named_items(child, name, found);
+    }
+}
+
+QList<QQuickItem*> items_named(QQuickItem* root, const QString& name) {
+    QList<QQuickItem*> found;
+    if (root != nullptr) {
+        collect_named_items(root, name, found);
+    }
+    return found;
+}
+
+bool is_ancestor_of(QQuickItem* ancestor, QQuickItem* item) {
+    for (QQuickItem* current = item; current != nullptr; current = current->parentItem()) {
+        if (current == ancestor) {
+            return true;
+        }
+    }
+    return false;
+}
+
+// The study sidebar over a live model, for transcript and chapter wiring.
+QQuickItem* make_study_sidebar(QQmlApplicationEngine& engine,
+                               niratan::viewmodels::PlayerStudyViewModel& model, int tab,
+                               QQuickWindow& window, std::unique_ptr<QObject>& holder) {
+    QString error;
+    holder = create_player_component(
+        engine, QStringLiteral("StudySidebar"),
+        {{QStringLiteral("study"),
+          QVariant::fromValue<niratan::viewmodels::PlayerStudyViewModel*>(&model)},
+         {QStringLiteral("preferredWidth"), 420},
+         {QStringLiteral("playbackReady"), true},
+         {QStringLiteral("selectedTab"), tab}},
+        error);
+    if (holder == nullptr) {
+        return nullptr;
+    }
+    QQuickItem* sidebar = qobject_cast<QQuickItem*>(holder.get());
+    if (sidebar == nullptr) {
+        return nullptr;
+    }
+    sidebar->setParentItem(window.contentItem());
+    sidebar->setWidth(420);
+    sidebar->setHeight(700);
+    window.resize(520, 760);
+    window.show();
+    return sidebar;
+}
+
 class KeyEventProbe : public QObject {
     Q_OBJECT
     Q_PROPERTY(int key READ key CONSTANT)
@@ -250,6 +320,9 @@ class PlayerControlsTest : public QObject {
     void episode_shortcuts_navigate_neighbors();
     void autoplay_consumes_setting_at_eof();
     void gap_fast_forward_toggle_from_button_and_shortcut();
+    void transcript_search_caption_and_highlights();
+    void transcript_search_clearing_resumes_following();
+    void chapter_progress_follows_raw_playback();
 };
 
 namespace {
@@ -1505,6 +1578,157 @@ void PlayerControlsTest::gap_fast_forward_toggle_from_button_and_shortcut() {
     send_handle_key(player, in_text);
     QVERIFY(!in_text.accepted());
     QVERIFY(!gap_enabled());
+}
+
+// B3, B4: search results carry the match count in a caption that scrolls with
+// them, and each row carries the query's ranges in its original cue text.
+void PlayerControlsTest::transcript_search_caption_and_highlights() {
+    niratan::test::TempDataRoot root;
+    QVERIFY(root.isValid());
+    niratan::viewmodels::PlayerStudyViewModel model;
+    model.setSubtitleDocument(QUrl::fromLocalFile(QStringLiteral("/tmp/search.srt")),
+                              QByteArray("1\n00:00:01,000 --> 00:00:02,000\none needle here\n\n"
+                                         "2\n00:00:03,000 --> 00:00:04,000\ntwo\n\n"
+                                         "3\n00:00:05,000 --> 00:00:06,000\nneedle again\n"),
+                              true);
+    model.setPlaybackReady(true);
+    model.updatePlayback(1.5, 0.0);
+
+    QQmlApplicationEngine engine;
+    QQuickWindow window;
+    std::unique_ptr<QObject> holder;
+    QQuickItem* sidebar = make_study_sidebar(engine, model, 1, window, holder);
+    QVERIFY(sidebar != nullptr);
+    QQuickItem* list = item_named(sidebar, QStringLiteral("transcriptList"));
+    QVERIFY2(list != nullptr, "the transcript list is missing");
+    QQuickItem* caption = item_named(sidebar, QStringLiteral("searchMatchCountLabel"));
+    QVERIFY2(caption != nullptr, "the match caption is missing");
+    QVERIFY(!caption->isVisible());
+
+    model.set_search(QStringLiteral("NEEDLE"));
+    QTRY_COMPARE(model.search_match_count(), 2);
+    QTRY_VERIFY((caption = item_named(sidebar, QStringLiteral("searchMatchCountLabel"))) !=
+                nullptr);
+    QTRY_COMPARE(caption->property("text").toString(), QStringLiteral("2 Matches"));
+    QVERIFY(caption->isVisible());
+    QQuickItem* header = list->property("headerItem").value<QQuickItem*>();
+    QVERIFY2(header != nullptr, "the caption is not part of the scrolling results");
+    QVERIFY(is_ancestor_of(header, caption));
+
+    const QVariantList expected =
+        model.transcript().first().toMap().value(QStringLiteral("highlights")).toList();
+    QVERIFY(!expected.isEmpty());
+    QQuickItem* row = nullptr;
+    QTRY_VERIFY((row = item_named(sidebar, QStringLiteral("transcriptRow"))) != nullptr);
+    QTRY_COMPARE(row->property("highlights").toList(), expected);
+
+    model.set_search(QStringLiteral("absent"));
+    QTRY_VERIFY((caption = item_named(sidebar, QStringLiteral("searchMatchCountLabel"))) !=
+                nullptr);
+    QTRY_VERIFY(!caption->isVisible());
+    QQuickItem* empty = item_named(sidebar, QStringLiteral("transcriptEmptyState"));
+    QVERIFY(empty != nullptr);
+    QVERIFY(empty->isVisible());
+}
+
+// B2, B5: clearing a query resumes following and recenters on the current row;
+// while the query is active playback does not move the result list.
+void PlayerControlsTest::transcript_search_clearing_resumes_following() {
+    niratan::test::TempDataRoot root;
+    QVERIFY(root.isValid());
+    niratan::viewmodels::PlayerStudyViewModel model;
+    model.setSubtitleDocument(
+        QUrl::fromLocalFile(QStringLiteral("/tmp/many.srt")),
+        numbered_cues_srt(200, [](int i) { return QStringLiteral("line %1").arg(i); }), true);
+    model.setPlaybackReady(true);
+    model.updatePlayback(241.0, 0.0);
+
+    QQmlApplicationEngine engine;
+    QQuickWindow window;
+    std::unique_ptr<QObject> holder;
+    QQuickItem* sidebar = make_study_sidebar(engine, model, 1, window, holder);
+    QVERIFY(sidebar != nullptr);
+    QQuickItem* resume = item_named(sidebar, QStringLiteral("resumeFollowingButton"));
+    QVERIFY2(resume != nullptr, "the resume-following control is missing");
+
+    sidebar->setProperty("followingTranscript", false);
+    QTRY_VERIFY(resume->isVisible());
+
+    model.set_search(QStringLiteral("line 1"));
+    QTRY_VERIFY(!resume->isVisible());
+    const QVariantList results = model.transcript();
+    model.updatePlayback(361.0, 0.0);
+    QCOMPARE(model.transcript(), results);
+
+    model.set_search({});
+    QTRY_VERIFY(sidebar->property("followingTranscript").toBool());
+    QVERIFY(!resume->isVisible());
+    QVERIFY(model.current_visible_row() >= 0);
+
+    // Typing starts the results at the top; clearing through the field
+    // recenters on the current row instead of jumping to the top.
+    QQuickItem* field = item_named(sidebar, QStringLiteral("transcriptSearchField"));
+    QVERIFY(field != nullptr);
+    QQuickItem* list = item_named(sidebar, QStringLiteral("transcriptList"));
+    QVERIFY(list != nullptr);
+    field->setProperty("text", QStringLiteral("line 1"));
+    QVERIFY(QMetaObject::invokeMethod(field, "textEdited"));
+    QTRY_VERIFY(model.search_active());
+    QTRY_VERIFY(list->property("atYBeginning").toBool());
+
+    field->setProperty("text", QString());
+    QVERIFY(QMetaObject::invokeMethod(field, "textEdited"));
+    QTRY_VERIFY(!model.search_active());
+    QTRY_VERIFY(sidebar->property("followingTranscript").toBool());
+    QTRY_VERIFY(!list->property("atYBeginning").toBool());
+
+    sidebar->setProperty("followingTranscript", false);
+    QTRY_VERIFY(resume->isVisible());
+    model.setSubtitleDocument(
+        QUrl::fromLocalFile(QStringLiteral("/tmp/new.srt")),
+        numbered_cues_srt(3, [](int i) { return QStringLiteral("new %1").arg(i); }), true);
+    QTRY_VERIFY(sidebar->property("followingTranscript").toBool());
+    QVERIFY(!resume->isVisible());
+}
+
+// B6: the current chapter row shows raw playback progress; other rows and
+// chapters without an end show none.
+void PlayerControlsTest::chapter_progress_follows_raw_playback() {
+    niratan::test::TempDataRoot root;
+    QVERIFY(root.isValid());
+    niratan::viewmodels::PlayerStudyViewModel model;
+    const auto chapter = [](int id, const char* title, double start, double duration) {
+        return QVariantMap{{QStringLiteral("id"), id},
+                           {QStringLiteral("title"), QString::fromLatin1(title)},
+                           {QStringLiteral("start"), start},
+                           {QStringLiteral("duration"), duration}};
+    };
+    model.set_chapters({chapter(0, "A", 0.0, 10.0), chapter(1, "B", 10.0, 10.0)});
+    model.updatePlayback(15.0, 3.0);
+
+    QQmlApplicationEngine engine;
+    QQuickWindow window;
+    std::unique_ptr<QObject> holder;
+    QQuickItem* sidebar = make_study_sidebar(engine, model, 2, window, holder);
+    QVERIFY(sidebar != nullptr);
+    QTRY_COMPARE(items_named(sidebar, QStringLiteral("chapterRow")).size(), qsizetype(2));
+
+    const QList<QQuickItem*> rows = items_named(sidebar, QStringLiteral("chapterRow"));
+    QQuickItem* progress = item_named(rows.at(1), QStringLiteral("chapterProgressBar"));
+    QVERIFY2(progress != nullptr, "the current chapter has no progress bar");
+    QVERIFY(progress->isVisible());
+    QCOMPARE(progress->property("value").toDouble(), 0.5);
+
+    QQuickItem* other = item_named(rows.at(0), QStringLiteral("chapterProgressBar"));
+    QVERIFY2(other == nullptr || !other->isVisible(), "a non-current chapter shows a bar");
+
+    // Without an end there is nothing to measure.
+    model.set_chapters({QVariantMap{{QStringLiteral("id"), 0},
+                                    {QStringLiteral("title"), QStringLiteral("A")},
+                                    {QStringLiteral("start"), 0.0}}});
+    model.updatePlayback(5.0, 0.0);
+    QTRY_VERIFY(item_named(sidebar, QStringLiteral("chapterProgressBar")) == nullptr ||
+                !item_named(sidebar, QStringLiteral("chapterProgressBar"))->isVisible());
 }
 
 int main(int argc, char* argv[]) {

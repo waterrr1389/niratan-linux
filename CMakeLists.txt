@@ -147,6 +147,7 @@ qt_add_library(niratan_core STATIC
     src/services/player/video_mining.cpp
     src/services/player/video_mining_store.cpp
     src/services/player/video_settings.cpp
+    src/services/player/video_study_search.cpp
     src/services/profiles/profile_repository.cpp
     src/services/settings/dictionary_settings_watch.cpp
     src/services/settings/dictionary_settings_watch.h

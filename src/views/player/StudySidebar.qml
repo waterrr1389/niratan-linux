@@ -2,6 +2,9 @@
 //
 // Docked tabs follow VideoMiningHistorySidebar.swift; transcript states,
 // active intervals and window growth follow SubtitleTranscriptView.swift.
+// A search lists every match with its "N Matches" caption in the scrolling
+// results and highlighted ranges in each row (VideoStudySearch); the current
+// chapter row shows its raw playback progress (chapterRow).
 
 pragma ComponentBehavior: Bound
 
@@ -266,7 +269,10 @@ Rectangle {
                         selectedTextColor: Theme.popupBackground
                         onTextEdited: {
                             sidebar.study.search = text
-                            transcript.positionViewAtBeginning()
+                            // Only results start at the top; clearing leaves the
+                            // recenter to onSearchChanged/revealTranscriptRow.
+                            if (sidebar.study.searchActive)
+                                transcript.positionViewAtBeginning()
                         }
                         background: Rectangle {
                             color: Theme.cardBackground
@@ -288,6 +294,7 @@ Rectangle {
 
                 Item {
                     id: transcriptEmptyState
+                    objectName: "transcriptEmptyState"
                     Layout.fillWidth: true
                     Layout.fillHeight: true
                     visible: transcript.count === 0
@@ -311,7 +318,7 @@ Rectangle {
                             textFormat: Text.PlainText
                             text: sidebar.extractingTranscript ? qsTr("Reading the selected subtitle track…")
                                 : sidebar.study.transcriptError.length > 0 ? sidebar.study.transcriptError
-                                : sidebar.study.search.trim().length > 0 ? qsTr("No matching cues.")
+                                : sidebar.study.searchActive ? qsTr("No matching cues.")
                                 : trackSelector.embedded ? qsTr("Extract the selected track to see its transcript.")
                                 : qsTr("Select a subtitle track or load an external subtitle file.")
                         }
@@ -319,8 +326,9 @@ Rectangle {
                 }
 
                 SidebarButton {
+                    objectName: "resumeFollowingButton"
                     visible: !sidebar.followingTranscript && transcript.count > 0
-                        && sidebar.study.search.trim() === ""
+                        && !sidebar.study.searchActive
                     text: qsTr("Resume Following")
                     onClicked: {
                         sidebar.followingTranscript = true
@@ -330,6 +338,7 @@ Rectangle {
 
                 ListView {
                     id: transcript
+                    objectName: "transcriptList"
                     property bool programmaticScroll: false
                     Layout.fillWidth: true
                     Layout.fillHeight: true
@@ -337,6 +346,26 @@ Rectangle {
                     clip: true
                     model: sidebar.study.transcript
                     boundsBehavior: Flickable.StopAtBounds
+                    header: Item {
+                        width: transcript.width
+                        height: searchCount.visible
+                            ? searchCount.implicitHeight + Theme.spacingXs : 0
+
+                        StyledLabel {
+                            id: searchCount
+                            objectName: "searchMatchCountLabel"
+                            anchors.left: parent.left
+                            anchors.right: parent.right
+                            anchors.leftMargin: Theme.spacingSm
+                            anchors.rightMargin: Theme.spacingSm
+                            visible: sidebar.study.searchActive
+                                && sidebar.study.searchMatchCount > 0
+                            textStyle: Theme.captionFont
+                            weight: Theme.weightSemibold
+                            secondary: true
+                            text: qsTr("%1 Matches").arg(sidebar.study.searchMatchCount)
+                        }
+                    }
                     ScrollBar.vertical: ScrollBar {
                         onPressedChanged: {
                             if (pressed)
@@ -397,9 +426,11 @@ Rectangle {
 
                         StudyTimelineRow {
                             id: cueRow
+                            objectName: "transcriptRow"
                             Layout.fillWidth: true
                             marker: sidebar.timeLabel(cue.modelData.start)
                             title: cue.modelData.text
+                            highlights: cue.modelData.highlights || []
                             selected: cue.modelData.start <= sidebar.study.adjustedTime
                                 && sidebar.study.adjustedTime <= cue.modelData.end
                             onClicked: sidebar.study.seekToRow(cue.modelData.index)
@@ -439,17 +470,40 @@ Rectangle {
                     boundsBehavior: Flickable.StopAtBounds
                     ScrollBar.vertical: ScrollBar {}
 
-                    delegate: StudyTimelineRow {
-                        id: chapter
+                    delegate: Item {
+                        id: chapterItem
+                        objectName: "chapterRow"
                         required property int index
                         required property var modelData
                         width: chapterList.width - Theme.spacingMd
-                        marker: String(chapter.index + 1)
-                        title: chapter.modelData.title || qsTr("Chapter %1").arg(chapter.index + 1)
-                        detail: sidebar.timeLabel(chapter.modelData.start) + (chapter.modelData.duration > 0
-                            ? " · " + sidebar.timeLabel(chapter.modelData.duration) : "")
-                        selected: chapter.index === sidebar.study.currentChapter
-                        onClicked: sidebar.study.playChapter(chapter.index)
+                        height: chapter.height + (chapterProgress.visible
+                            ? chapterProgress.implicitHeight + Theme.spacingXs : 0)
+
+                        StudyTimelineRow {
+                            id: chapter
+                            width: parent.width
+                            marker: String(chapterItem.index + 1)
+                            title: chapterItem.modelData.title
+                                || qsTr("Chapter %1").arg(chapterItem.index + 1)
+                            detail: sidebar.timeLabel(chapterItem.modelData.start)
+                                + (chapterItem.modelData.duration > 0
+                                    ? " · " + sidebar.timeLabel(chapterItem.modelData.duration) : "")
+                            selected: chapterItem.index === sidebar.study.currentChapter
+                            onClicked: sidebar.study.playChapter(chapterItem.index)
+                        }
+
+                        ProgressTrack {
+                            id: chapterProgress
+                            objectName: "chapterProgressBar"
+                            anchors.left: parent.left
+                            anchors.right: parent.right
+                            anchors.leftMargin: Theme.spacingSm
+                            anchors.rightMargin: Theme.spacingSm
+                            y: chapter.height + Theme.spacingXs
+                            value: sidebar.study.currentChapterProgress
+                            visible: chapterItem.index === sidebar.study.currentChapter
+                                && sidebar.study.currentChapterProgress >= 0
+                        }
                     }
                 }
                 StyledLabel {
@@ -477,6 +531,16 @@ Rectangle {
     Connections {
         target: sidebar.study
         function onCurrentVisibleRowChanged() { sidebar.revealTranscriptRow() }
+        function onTranscriptDocumentChanged() {
+            sidebar.followingTranscript = true
+            sidebar.revealTranscriptRow()
+        }
+        function onSearchChanged() {
+            if (!sidebar.study.searchActive) {
+                sidebar.followingTranscript = true
+                sidebar.revealTranscriptRow()
+            }
+        }
         function onCurrentChapterChanged() {
             if (sidebar.visible && sidebar.selectedTab === 2 && sidebar.study.currentChapter >= 0)
                 chapterList.positionViewAtIndex(sidebar.study.currentChapter, ListView.Contain)

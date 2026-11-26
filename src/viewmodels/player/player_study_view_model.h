@@ -9,6 +9,15 @@
 // SubtitleTranscript.nearestRowIndex: prefer the active cue, then the next
 // cue in gaps, or the last cue after the transcript. Manual scrolling keeps
 // the current window until following resumes. Chapter time is independent.
+// A trimmed search query lists every matching row at once in transcript order,
+// with no earlier/later paging; each row carries the match ranges for
+// highlighting in the original cue text. Clearing the query, or publishing a
+// new transcript, turns following back on and recenters the window on the
+// current or nearest row; playback never moves the result list while a query
+// is active. searchMatchCount is the number of listed rows.
+// The current chapter's progress uses raw playback time: position minus the
+// chapter start over the next later chapter start or the chapter's end, clamped
+// to 0..1; it is -1 when the chapter or its end is unavailable.
 // Previous/next subtitle seeks and adjacent-cue alignment follow
 // Models/Subtitle.swift (rowIndex(containing:), nearestRowIndex,
 // relativeRowIndex), VideoPlayerScreen+Mining.swift (seekRelativeSubtitleCue)
@@ -47,6 +56,8 @@ class PlayerStudyViewModel : public QObject {
     Q_PROPERTY(int currentRow READ current_row NOTIFY currentRowChanged)
     Q_PROPERTY(int currentVisibleRow READ current_visible_row NOTIFY currentVisibleRowChanged)
     Q_PROPERTY(QString search READ search WRITE set_search NOTIFY searchChanged)
+    Q_PROPERTY(bool searchActive READ search_active NOTIFY searchChanged)
+    Q_PROPERTY(int searchMatchCount READ search_match_count NOTIFY transcriptChanged)
     Q_PROPERTY(bool canShowEarlier READ can_show_earlier NOTIFY transcriptChanged)
     Q_PROPERTY(bool canShowLater READ can_show_later NOTIFY transcriptChanged)
     Q_PROPERTY(bool hasTranscriptRows READ has_transcript_rows NOTIFY transcriptChanged)
@@ -57,6 +68,8 @@ class PlayerStudyViewModel : public QObject {
     Q_PROPERTY(QVariantList history READ history NOTIFY historyChanged)
     Q_PROPERTY(QVariantList chapters READ chapters WRITE set_chapters NOTIFY chaptersChanged)
     Q_PROPERTY(int currentChapter READ current_chapter NOTIFY currentChapterChanged)
+    Q_PROPERTY(double currentChapterProgress READ current_chapter_progress NOTIFY
+                   currentChapterProgressChanged)
     Q_PROPERTY(QString lastMiningNotice READ last_mining_notice NOTIFY lastMiningNoticeChanged)
     Q_PROPERTY(int historyLimit READ history_limit NOTIFY historyChanged)
     Q_PROPERTY(bool canMine READ can_mine NOTIFY canMineChanged)
@@ -74,6 +87,8 @@ public:
     int current_row() const;
     int current_visible_row() const;
     QString search() const;
+    bool search_active() const;
+    int search_match_count() const;
     void set_search(const QString& query);
     bool can_show_earlier() const;
     bool can_show_later() const;
@@ -84,6 +99,7 @@ public:
     QVariantList chapters() const;
     void set_chapters(const QVariantList& chapters);
     int current_chapter() const;
+    double current_chapter_progress() const;
     QString last_mining_notice() const;
     int history_limit() const;
     bool can_mine() const;
@@ -115,6 +131,8 @@ public:
 
 signals:
     void transcriptChanged();
+    // A new transcript document replaced the cues; following resets from it.
+    void transcriptDocumentChanged();
     void adjustedTimeChanged();
     void currentRowChanged();
     void currentVisibleRowChanged();
@@ -122,6 +140,7 @@ signals:
     void historyChanged();
     void chaptersChanged();
     void currentChapterChanged();
+    void currentChapterProgressChanged();
     void lastMiningNoticeChanged();
     void canMineChanged();
     void alignmentAvailabilityChanged();

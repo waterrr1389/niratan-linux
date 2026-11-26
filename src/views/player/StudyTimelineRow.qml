@@ -13,9 +13,38 @@ Button {
     required property string title
     property string detail: ""
     property bool selected: false
+    // Transcript search ranges into `title`, in UTF-16 positions and order.
+    property var highlights: []
+    readonly property bool hasHighlights: row.highlights !== undefined
+        && row.highlights !== null && row.highlights.length > 0
     text: row.title
     focusPolicy: Qt.TabFocus
     padding: Theme.spacingSm
+
+    function escapeMarkup(value) {
+        return value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+            .replace(/\n/g, "<br/>")
+    }
+
+    // VideoStudySearch.highlighted: the original characters with the matched
+    // ranges tinted, left to right.
+    function highlightedTitle() {
+        const tint = Theme.videoSearchMatch
+        const background = "rgba(" + Math.round(tint.r * 255) + "," + Math.round(tint.g * 255)
+            + "," + Math.round(tint.b * 255) + "," + tint.a + ")"
+        let markup = ""
+        let cursor = 0
+        for (const range of row.highlights) {
+            const start = Math.min(Math.max(range.start, 0), row.title.length)
+            const end = Math.min(start + Math.max(range.length, 0), row.title.length)
+            markup += row.escapeMarkup(row.title.slice(cursor, start))
+            markup += "<span style=\"background-color:" + background + "\">"
+                + row.escapeMarkup(row.title.slice(start, end)) + "</span>"
+            cursor = end
+        }
+        return markup + row.escapeMarkup(row.title.slice(cursor))
+    }
+
     contentItem: RowLayout {
         spacing: Theme.spacingSm
         StyledLabel {
@@ -34,8 +63,8 @@ Button {
                 weight: row.selected ? Theme.weightSemibold : Theme.weightRegular
                 color: Theme.textPrimary
                 wrapMode: Text.Wrap
-                textFormat: Text.PlainText
-                text: row.title
+                textFormat: row.hasHighlights ? Text.RichText : Text.PlainText
+                text: row.hasHighlights ? row.highlightedTitle() : row.title
             }
             StyledLabel {
                 visible: row.detail.length > 0

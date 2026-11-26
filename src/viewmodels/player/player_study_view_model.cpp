@@ -4,11 +4,11 @@
 
 #include "services/player/mining_history_store.h"
 #include "services/player/subtitle_document.h"
+#include "services/player/video_study_search.h"
 
 #include <QClipboard>
 #include <QDateTime>
 #include <QGuiApplication>
-#include <QRegularExpression>
 #include <QUuid>
 
 #include <algorithm>
@@ -54,11 +54,6 @@ QUrl local_url(const std::string& path) {
     return QUrl::fromLocalFile(QString::fromStdString(path));
 }
 
-QString search_key(const QString& text) {
-    static const QRegularExpression marks(QStringLiteral(R"(\p{M}+)"));
-    return text.normalized(QString::NormalizationForm_KD).toCaseFolded().remove(marks);
-}
-
 }  // namespace
 
 PlayerStudyViewModel::PlayerStudyViewModel(QObject* parent)
@@ -88,21 +83,57 @@ int PlayerStudyViewModel::current_visible_row() const {
     return match != end && *match == state_->focus ? int(match - begin) : -1;
 }
 QString PlayerStudyViewModel::search() const { return state_->search; }
+bool PlayerStudyViewModel::search_active() const {
+    return !player::normalized_study_query(state_->search).isEmpty();
+}
+int PlayerStudyViewModel::search_match_count() const {
+    return search_active() ? int(state_->filtered.size()) : 0;
+}
 bool PlayerStudyViewModel::can_show_earlier() const { return state_->first > 0; }
 bool PlayerStudyViewModel::can_show_later() const { return state_->last < state_->filtered.size(); }
 QVariantList PlayerStudyViewModel::history() const { return state_->history; }
 QVariantList PlayerStudyViewModel::chapters() const { return state_->chapters; }
 int PlayerStudyViewModel::current_chapter() const { return state_->current_chapter; }
+double PlayerStudyViewModel::current_chapter_progress() const {
+    const int index = state_->current_chapter;
+    if (index < 0 || index >= state_->chapters.size()) {
+        return -1.0;
+    }
+    const QVariantMap chapter = state_->chapters.at(index).toMap();
+    const double start = chapter.value(QStringLiteral("start")).toDouble();
+    double end = -1.0;
+    for (const QVariant& entry : state_->chapters) {
+        const double candidate = entry.toMap().value(QStringLiteral("start")).toDouble();
+        if (candidate > start && (end < 0.0 || candidate < end)) {
+            end = candidate;
+        }
+    }
+    if (end < 0.0) {
+        const double duration = chapter.value(QStringLiteral("duration")).toDouble();
+        if (duration > 0.0) {
+            end = start + duration;
+        }
+    }
+    if (end <= start) {
+        return -1.0;
+    }
+    return std::clamp((state_->position - start) / (end - start), 0.0, 1.0);
+}
 QString PlayerStudyViewModel::last_mining_notice() const { return state_->notice; }
 int PlayerStudyViewModel::history_limit() const { return state_->snapshot.limit; }
 bool PlayerStudyViewModel::can_mine() const { return state_->can_mine; }
 
 void PlayerStudyViewModel::set_search(const QString& query) {
-    if (state_->search != query) {
-        state_->search = query;
-        rebuild_filter();
-        emit searchChanged();
+    if (state_->search == query) {
+        return;
     }
+    state_->search = query;
+    if (!search_active()) {
+        // Clearing the query resumes following; the rebuild recenters it.
+        state_->following = true;
+    }
+    rebuild_filter();
+    emit searchChanged();
 }
 
 void PlayerStudyViewModel::set_chapters(const QVariantList& chapters) {
@@ -248,20 +279,30 @@ void PlayerStudyViewModel::publish_transcript() {
     const int current = state_->active_row(adjusted_time());
     if (std::exchange(state_->current, current) != current)
         emit currentRowChanged();
+    // A new transcript resumes following before its window is published.
+    state_->following = true;
     rebuild_filter();
     update_can_mine();
+    emit transcriptDocumentChanged();
 }
 
 void PlayerStudyViewModel::rebuild_filter() {
     state_->filtered.clear();
-    const QString query = search_key(state_->search.trimmed());
+    const bool searching = search_active();
     for (qsizetype i = 0; i < state_->cues.size(); ++i) {
-        if (query.isEmpty() || search_key(state_->cues[i].text).contains(query)) {
+        if (!searching || player::study_search_matches(state_->cues[i].text, state_->search)) {
             state_->filtered.append(int(i));
         }
     }
     state_->focus = state_->nearest_row(adjusted_time());
-    reset_window(query.isEmpty() ? state_->focus : 0);
+    if (searching) {
+        // Every match at once, in transcript order, with no paging.
+        state_->first = 0;
+        state_->last = int(state_->filtered.size());
+        publish_window();
+        return;
+    }
+    reset_window(state_->focus);
 }
 
 void PlayerStudyViewModel::reset_window(int focus) {
@@ -277,13 +318,24 @@ void PlayerStudyViewModel::reset_window(int focus) {
 }
 
 void PlayerStudyViewModel::publish_window() {
+    const bool searching = search_active();
     QVariantList rows;
     rows.reserve(state_->last - state_->first);
     for (int i = state_->first; i < state_->last; ++i) {
         const int index = state_->filtered[i];
         const Cue& cue = state_->cues[index];
-        rows.append(QVariantMap{{QStringLiteral("index"), index}, {QStringLiteral("start"), cue.start},
-                                {QStringLiteral("end"), cue.end}, {QStringLiteral("text"), cue.text}});
+        QVariantList highlights;
+        if (searching) {
+            for (const auto& range : player::study_search_ranges(cue.text, state_->search)) {
+                highlights.append(QVariantMap{{QStringLiteral("start"), int(range.start)},
+                                              {QStringLiteral("length"), int(range.length)}});
+            }
+        }
+        rows.append(QVariantMap{{QStringLiteral("index"), index},
+                                {QStringLiteral("start"), cue.start},
+                                {QStringLiteral("end"), cue.end},
+                                {QStringLiteral("text"), cue.text},
+                                {QStringLiteral("highlights"), highlights}});
     }
     state_->transcript = std::move(rows);
     emit transcriptChanged();
@@ -302,7 +354,7 @@ void PlayerStudyViewModel::showLater() {
 
 void PlayerStudyViewModel::setTranscriptFollowing(bool following) {
     state_->following = following;
-    if (following && state_->search.trimmed().isEmpty() && state_->focus >= 0 &&
+    if (following && !search_active() && state_->focus >= 0 &&
         (state_->focus < state_->first || state_->focus >= state_->last)) {
         reset_window(state_->focus);
     }
@@ -315,7 +367,7 @@ void PlayerStudyViewModel::update_current() {
     const int focus = state_->nearest_row(adjusted_time());
     if (state_->focus != focus) {
         state_->focus = focus;
-        if (state_->following && state_->search.trimmed().isEmpty() &&
+        if (state_->following && !search_active() &&
             (focus < state_->first || focus >= state_->last ||
              (state_->first > 0 && focus < state_->first + kWindowSize / 4) ||
              (can_show_later() && focus >= state_->last - kWindowSize / 4))) {
@@ -337,6 +389,11 @@ void PlayerStudyViewModel::update_current() {
     if (state_->current_chapter != chapter) {
         state_->current_chapter = chapter;
         emit currentChapterChanged();
+    }
+    const double progress = current_chapter_progress();
+    if (state_->chapter_progress != progress) {
+        state_->chapter_progress = progress;
+        emit currentChapterProgressChanged();
     }
     update_alignment_availability();
     update_can_mine();

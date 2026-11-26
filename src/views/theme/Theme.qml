@@ -461,6 +461,8 @@ ThemeMetrics {
     readonly property color readerRowSelected: Qt.alpha(accent, 0.18)
     readonly property color readerRowSelectedPress: Qt.alpha(accent, 0.26)
     readonly property color readerSearchMatch: Qt.alpha(accent, 0.22)
+    // VideoStudySearch.highlighted: Color.accentColor.opacity(0.3).
+    readonly property color videoSearchMatch: Qt.alpha(accent, 0.3)
 
     // Reader gallery: GalleryView.sectionHeader, thumbnail and GalleryImagePreview.
     readonly property int galleryInset: 30
