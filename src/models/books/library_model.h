@@ -137,7 +137,8 @@ std::vector<BookShelf> normalized_shelves(const std::vector<BookShelf>& shelves,
                                           const std::vector<LibraryBook>& books);
 
 // The list moveBook(_:in:before:) works on: append the IDs of fallback_ids the
-// order lacks, then move source_id in front of target_id. A drop on the same
+// order lacks, then move source_id after a later target or before an earlier
+// one (BookReorder.destinationOffset). A drop on the same
 // book, or an ID that is in neither list, only leaves the appended order.
 std::vector<std::string> reorder_ids(std::vector<std::string> order,
                                      std::string_view source_id, std::string_view target_id,
@@ -185,6 +186,11 @@ LibraryShelfSelection resolved_selection(const Library& library,
 // list ignores drops.
 void move_book_before(Library& library, const LibraryShelfSelection& selection, SortOption option,
                       std::string_view source_id, std::string_view target_id);
+
+// BookshelfViewModel.moveShelves: move the selected custom shelf rows in their
+// original order to the insertion offset in the original list (size means
+// the end). Names and book IDs move together. Invalid offsets do not mutate.
+bool move_shelves(std::vector<BookShelf>& shelves, const std::vector<int>& source, int destination);
 
 // markRead(book:). A bookmark that finishes the book: progress 1, the bookinfo
 // character total, the highest spine index the bookinfo names (0 when it names

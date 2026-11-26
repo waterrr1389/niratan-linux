@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "library_view_model.h"
+#include "library_view_model_state.h"
 
 #include <QFileInfo>
 #include <QUrl>
@@ -107,90 +108,84 @@ std::string trim(const std::string& text) {
 
 }  // namespace
 
-struct LibraryViewModel::State {
-    explicit State() : storage(storage::data_root()) {}
+LibraryViewModel::State::State() : storage(storage::data_root()) {}
 
-    BookStorage storage;
-    Library library;
-    std::string selected = "all";
-    books::LibraryPrefs prefs;
-    QString error;
-    bool import_error = false;
-    QVariantList books_view;
-    QVariantList shelves_view;
+LibraryShelfSelection LibraryViewModel::State::selection() const {
+    return parse_selection(selected);
+}
 
-    LibraryShelfSelection selection() const { return parse_selection(selected); }
+SortOption LibraryViewModel::State::sort_option() const {
+    return sort_option_of(prefs.sort_option);
+}
 
-    std::optional<std::size_t> find_book(const std::string& folder) const {
-        for (std::size_t index = 0; index < library.books.size(); ++index) {
-            if (library.books[index].metadata.folder == folder) {
-                return index;
-            }
-        }
-        return std::nullopt;
-    }
-
-    // Reads every book with the two sidecars book_progress and read_bookmark
-    // use, then replaces the stored order and shelves with their normalized
-    // form. Only a changed value is written back.
-    void load() {
-        const std::vector<BookMetadata> metadata = storage.load_all_books();
-        library.books.clear();
-        library.books.reserve(metadata.size());
-        for (const BookMetadata& book : metadata) {
-            LibraryBook entry;
-            entry.metadata = book;
-            entry.bookmark = storage.load_bookmark(book.folder);
-            entry.book_info = storage.load_book_info(book.folder);
-            library.books.push_back(std::move(entry));
-        }
-
-        const std::vector<std::string> ids = library_ids(library.books);
-        const std::vector<std::string> stored_order = storage.load_book_order();
-        library.manual_order = normalized_order(stored_order, ids, ids);
-        if (library.manual_order != stored_order) {
-            storage.save_book_order(library.manual_order);
-        }
-
-        const std::vector<BookShelf> stored_shelves = storage.load_shelves();
-        library.shelves = normalized_shelves(stored_shelves, library.books);
-        if (library.shelves != stored_shelves) {
-            storage.save_shelves(library.shelves);
+std::optional<std::size_t> LibraryViewModel::State::find_book(const std::string& folder) const {
+    for (std::size_t index = 0; index < library.books.size(); ++index) {
+        if (library.books[index].metadata.folder == folder) {
+            return index;
         }
     }
+    return std::nullopt;
+}
 
-    void rebuild_views() {
-        books_view.clear();
-        const std::vector<LibraryBook> section =
-            section_books(library, selection(), sort_option_of(prefs.sort_option));
-        for (const LibraryBook& book : section) {
-            const double value = book_progress(book);
-            QVariantMap entry;
-            entry.insert(QStringLiteral("id"), QString::fromStdString(book.metadata.id));
-            entry.insert(QStringLiteral("folder"), QString::fromStdString(book.metadata.folder));
-            entry.insert(QStringLiteral("title"),
-                         QString::fromStdString(book.metadata.display_title()));
-            entry.insert(QStringLiteral("progress"), value);
-            entry.insert(QStringLiteral("percent"), QString::number(value * 100.0, 'f', 1));
-            entry.insert(QStringLiteral("finished"), value >= kFinished);
-            const auto cover = storage.cover_path(book.metadata);
-            entry.insert(QStringLiteral("cover"),
-                         cover.has_value() ? QUrl::fromLocalFile(
-                                                 QString::fromStdString(cover->string()))
-                                                 .toString()
-                                           : QString());
-            books_view.append(entry);
-        }
-
-        shelves_view.clear();
-        for (const BookShelf& shelf : library.shelves) {
-            const LibraryShelfSelection shelf_selection{LibraryShelf::shelf, shelf.name};
-            shelves_view.append(
-                QVariantMap{{QStringLiteral("name"), QString::fromStdString(shelf.name)},
-                            {QStringLiteral("count"), books::book_count(library, shelf_selection)}});
-        }
+// Reads every book with the two sidecars book_progress and read_bookmark
+// use, then replaces the stored order and shelves with their normalized
+// form. Only a changed value is written back.
+void LibraryViewModel::State::load() {
+    const std::vector<BookMetadata> metadata = storage.load_all_books();
+    library.books.clear();
+    library.books.reserve(metadata.size());
+    for (const BookMetadata& book : metadata) {
+        LibraryBook entry;
+        entry.metadata = book;
+        entry.bookmark = storage.load_bookmark(book.folder);
+        entry.book_info = storage.load_book_info(book.folder);
+        library.books.push_back(std::move(entry));
     }
-};
+
+    const std::vector<std::string> ids = library_ids(library.books);
+    const std::vector<std::string> stored_order = storage.load_book_order();
+    library.manual_order = normalized_order(stored_order, ids, ids);
+    if (library.manual_order != stored_order) {
+        storage.save_book_order(library.manual_order);
+    }
+
+    const std::vector<BookShelf> stored_shelves = storage.load_shelves();
+    library.shelves = normalized_shelves(stored_shelves, library.books);
+    if (library.shelves != stored_shelves) {
+        storage.save_shelves(library.shelves);
+    }
+}
+
+void LibraryViewModel::State::rebuild_views() {
+    books_view.clear();
+    const std::vector<LibraryBook> section =
+        section_books(library, selection(), sort_option_of(prefs.sort_option));
+    for (const LibraryBook& book : section) {
+        const double value = book_progress(book);
+        QVariantMap entry;
+        entry.insert(QStringLiteral("id"), QString::fromStdString(book.metadata.id));
+        entry.insert(QStringLiteral("folder"), QString::fromStdString(book.metadata.folder));
+        entry.insert(QStringLiteral("title"),
+                     QString::fromStdString(book.metadata.display_title()));
+        entry.insert(QStringLiteral("progress"), value);
+        entry.insert(QStringLiteral("percent"), QString::number(value * 100.0, 'f', 1));
+        entry.insert(QStringLiteral("finished"), value >= kFinished);
+        const auto cover = storage.cover_path(book.metadata);
+        entry.insert(QStringLiteral("cover"),
+                     cover.has_value()
+                         ? QUrl::fromLocalFile(QString::fromStdString(cover->string())).toString()
+                         : QString());
+        books_view.append(entry);
+    }
+
+    shelves_view.clear();
+    for (const BookShelf& shelf : library.shelves) {
+        const LibraryShelfSelection shelf_selection{LibraryShelf::shelf, shelf.name};
+        shelves_view.append(
+            QVariantMap{{QStringLiteral("name"), QString::fromStdString(shelf.name)},
+                        {QStringLiteral("count"), books::book_count(library, shelf_selection)}});
+    }
+}
 
 LibraryViewModel::LibraryViewModel(QObject* parent)
     : QObject(parent), state_(std::make_unique<State>()) {

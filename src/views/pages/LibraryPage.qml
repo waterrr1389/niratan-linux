@@ -303,8 +303,44 @@ Item {
         GridView {
             id: grid
 
+            objectName: "libraryBookGrid"
             readonly property int columnSpacing: Theme.shelfGridSpacing
             readonly property int rowSpacing: Theme.shelfGridSpacing
+            property string dragSource: ""
+            property string dragTarget: ""
+            readonly property bool reorderEnabled: library.selectedShelf !== "reading"
+
+            function clearDrag() {
+                dragSource = ""
+                dragTarget = ""
+            }
+
+            function bookAt(scenePosition: point, inset: real, excluded: string): string {
+                const position = mapFromItem(null, scenePosition)
+                if (position.x < 0 || position.x >= width
+                        || position.y < 0 || position.y >= height)
+                    return ""
+                const pos = contentItem.mapFromItem(grid, position)
+                for (let i = 0; i < count; ++i) {
+                    const item = itemAtIndex(i)
+                    const folder = library.books[i].folder
+                    if (item && folder !== excluded
+                            && pos.x >= item.x - inset
+                            && pos.x < item.x + library.coverWidth + inset
+                            && pos.y >= item.y - inset
+                            && pos.y < item.y + cellHeight - rowSpacing + inset)
+                        return folder
+                }
+                return ""
+            }
+
+            function reorderAt(position: point) {
+                if (!reorderEnabled || dragSource.length === 0)
+                    return
+                const next = bookAt(position, Theme.bookDragHitInset, dragSource)
+                if (next.length > 0 && next !== dragTarget && library.reorderBook(dragSource, next))
+                    dragTarget = next
+            }
 
             anchors.top: toolbar.bottom
             anchors.bottom: parent.bottom
@@ -324,6 +360,41 @@ Item {
             model: library.books
 
             ScrollBar.vertical: ScrollBar {}
+
+            Connections {
+                target: library
+                function onSelectionChanged() { grid.clearDrag() }
+            }
+
+            // Keep the grab on the view: changing the order replaces its delegates.
+            DragHandler {
+                id: bookDrag
+
+                parent: grid
+                target: null
+                enabled: grid.reorderEnabled
+                acceptedDevices: PointerDevice.Mouse
+                dragThreshold: Theme.bookDragHitInset
+                onActiveChanged: {
+                    if (active) {
+                        grid.dragSource = grid.bookAt(centroid.scenePressPosition, 0, "")
+                        grid.dragTarget = ""
+                        grid.reorderAt(centroid.scenePosition)
+                    }
+                }
+                onCentroidChanged: {
+                    if (active)
+                        grid.reorderAt(centroid.scenePosition)
+                }
+                onGrabChanged: (transition, point) => {
+                    if (transition === PointerDevice.UngrabExclusive) {
+                        grid.reorderAt(point.scenePosition)
+                        grid.clearDrag()
+                    } else if (transition === PointerDevice.CancelGrabExclusive) {
+                        grid.clearDrag()
+                    }
+                }
+            }
 
             // LibraryShelfDetailHeader, 14 above the grid, and under it
             // LibraryShelfEmptyView, at least 280 tall, when the selection
@@ -384,8 +455,12 @@ Item {
 
                 width: grid.cellWidth
                 height: grid.cellHeight
+                z: bookCard.dragSource ? 2 : bookCard.dragTarget ? 1 : 0
 
                 LibraryBookCard {
+                    id: bookCard
+
+                    objectName: "libraryBookCard"
                     coverWidth: library.coverWidth
                     title: cell.modelData.title
                     cover: cell.modelData.cover
@@ -393,6 +468,8 @@ Item {
                     percent: cell.modelData.percent
                     finished: cell.modelData.finished
                     chosen: page.selecting && page.selectedFolders[cell.modelData.folder] === true
+                    dragSource: grid.dragSource === cell.modelData.folder
+                    dragTarget: grid.dragTarget === cell.modelData.folder
                     onClicked: {
                         if (page.selecting)
                             page.toggleSelection(cell.modelData.folder)

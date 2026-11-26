@@ -51,6 +51,7 @@ Rectangle {
     AlertDialog {
         id: renameShelfDialog
 
+        objectName: "libraryRenameShelfDialog"
         property string fromName
 
         title: qsTr("Rename Shelf")
@@ -110,6 +111,32 @@ Rectangle {
     Flickable {
         id: list
 
+        objectName: "libraryShelfList"
+        property int dragSource: -1
+        property int dragDestination: -1
+
+        function shelfOffset(scenePosition: point, insertion: bool): int {
+            const position = mapFromItem(null, scenePosition)
+            if (position.x < 0 || position.x >= width || position.y < 0 || position.y >= height)
+                return -1
+            const pos = rows.mapFromItem(list, position)
+            const first = customShelves.itemAt(0)
+            if (!first || pos.y < first.y || pos.x < 0 || pos.x >= rows.width)
+                return -1
+            for (let i = 0; i < customShelves.count; ++i) {
+                const row = customShelves.itemAt(i)
+                if (insertion ? pos.y < row.y + row.height / 2
+                              : pos.y >= row.y && pos.y < row.y + row.height)
+                    return i
+            }
+            return insertion ? customShelves.count : -1
+        }
+
+        function clearDrag() {
+            dragSource = -1
+            dragDestination = -1
+        }
+
         anchors.top: parent.top
         anchors.topMargin: column.toolbarHeight
         anchors.bottom: footer.top
@@ -119,6 +146,37 @@ Rectangle {
         boundsBehavior: Flickable.StopAtBounds
 
         ScrollBar.vertical: ScrollBar {}
+
+        DragHandler {
+            id: shelfDrag
+
+            parent: list
+            target: null
+            enabled: !renameShelfDialog.visible
+            acceptedDevices: PointerDevice.Mouse
+            onActiveChanged: {
+                if (active) {
+                    list.dragSource = list.shelfOffset(centroid.scenePressPosition, false)
+                    list.dragDestination = list.shelfOffset(centroid.scenePosition, true)
+                }
+            }
+            onCentroidChanged: {
+                if (active && list.dragSource >= 0)
+                    list.dragDestination = list.shelfOffset(centroid.scenePosition, true)
+            }
+            onGrabChanged: (transition, point) => {
+                if (transition === PointerDevice.UngrabExclusive) {
+                    const source = list.dragSource
+                    const destination = list.shelfOffset(point.scenePosition, true)
+                    list.clearDrag()
+                    if (enabled && source >= 0 && destination >= 0
+                            && destination !== source && destination !== source + 1)
+                        column.model.moveShelves([source], destination)
+                } else if (transition === PointerDevice.CancelGrabExclusive) {
+                    list.clearDrag()
+                }
+            }
+        }
 
         Column {
             id: rows
@@ -137,6 +195,7 @@ Rectangle {
                 delegate: SourceListRow {
                     required property var modelData
 
+                    objectName: "librarySmartShelfRow"
                     width: rows.width
                     symbol: modelData.symbol
                     title: modelData.title
@@ -155,9 +214,15 @@ Rectangle {
             }
 
             Repeater {
+                id: customShelves
+
                 model: column.model.shelves
 
                 delegate: SourceListRow {
+                    id: shelfRow
+
+                    objectName: "libraryCustomShelfRow"
+                    required property int index
                     required property var modelData
 
                     width: rows.width
@@ -173,6 +238,18 @@ Rectangle {
                     onContextMenuRequested: {
                         shelfMenu.shelfName = modelData.name
                         shelfMenu.popup()
+                    }
+
+                    Rectangle {
+                        anchors.left: parent.left
+                        anchors.right: parent.right
+                        y: list.dragDestination === customShelves.count ? parent.height : 0
+                        height: Theme.hairlineWidth
+                        color: Theme.accent
+                        visible: list.dragSource >= 0
+                            && (list.dragDestination === shelfRow.index
+                                || (list.dragDestination === customShelves.count
+                                    && shelfRow.index === customShelves.count - 1))
                     }
                 }
             }

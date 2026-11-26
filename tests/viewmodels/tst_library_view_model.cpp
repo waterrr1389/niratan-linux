@@ -5,6 +5,8 @@
 // drawn as each row's badge) and NativeMac/NativeReuseViews.swift
 // (NativeBookshelfReuseView.shelfSmartRows: All Books, Currently Reading and
 // Unshelved, each counted with BookshelfViewModel.bookCount(for:)).
+// Reordering follows ShelfView.reorderBook and BookshelfViewModel.moveBook,
+// moveShelves, persistManualBookOrder and saveShelves.
 #include "models/books/book.h"
 #include "services/books/book_storage.h"
 #include "services/storage/app_paths.h"
@@ -38,6 +40,14 @@ void add_book(const BookStorage& storage, const std::string& folder, double prog
     QVERIFY(storage.save_bookmark(folder, bookmark));
 }
 
+QStringList entries(const QVariantList& rows, const QString& key) {
+    QStringList values;
+    for (const QVariant& row : rows) {
+        values.append(row.toMap().value(key).toString());
+    }
+    return values;
+}
+
 }  // namespace
 
 class LibraryViewModelTest : public QObject {
@@ -48,6 +58,10 @@ class LibraryViewModelTest : public QObject {
     void smart_counts_change_with_shelf_membership();
     void shelf_for_book_follows_moves();
     void smart_counts_drop_a_book_marked_read();
+    void book_drag_persists_manual_order_data();
+    void book_drag_persists_manual_order();
+    void named_shelf_drag_persists_only_its_order();
+    void shelf_drag_persists_order_without_changing_selection();
 };
 
 // All counts every book, Currently Reading only 0 < progress < 0.999, and
@@ -135,6 +149,111 @@ void LibraryViewModelTest::smart_counts_drop_a_book_marked_read() {
     QVERIFY(changed.count() > 0);
     QCOMPARE(model.property("smartCounts").toMap().value(QStringLiteral("reading")).toInt(), 0);
     QCOMPARE(model.property("smartCounts").toMap().value(QStringLiteral("all")).toInt(), 1);
+}
+
+void LibraryViewModelTest::book_drag_persists_manual_order_data() {
+    QTest::addColumn<QString>("section");
+    QTest::addColumn<int>("starting_sort");
+    QTest::addColumn<QStringList>("displayed");
+    QTest::addColumn<QStringList>("stored");
+    QTest::newRow("all from title") << QStringLiteral("all") << 1 << QStringList{"a", "d", "c", "b"}
+                                    << QStringList{"ID-a", "ID-d", "ID-c", "ID-b"};
+    QTest::newRow("unshelved from recent")
+        << QStringLiteral("unshelved") << 0 << QStringList{"a", "d"}
+        << QStringList{"ID-c", "ID-b", "ID-a", "ID-d"};
+}
+
+void LibraryViewModelTest::book_drag_persists_manual_order() {
+    QFETCH(QString, section);
+    QFETCH(int, starting_sort);
+    QFETCH(QStringList, displayed);
+    QFETCH(QStringList, stored);
+    niratan::test::TempDataRoot root;
+    QVERIFY(root.isValid());
+    const BookStorage storage(niratan::storage::data_root());
+    add_book(storage, "a", 0.2);
+    add_book(storage, "b", 0.2);
+    add_book(storage, "c", 0.0);
+    add_book(storage, "d", 0.0);
+    const std::vector<BookShelf> shelves{{"Shelf", {"ID-b", "ID-c"}}};
+    const std::vector<std::string> original{"ID-d", "ID-c", "ID-b", "ID-a"};
+    QVERIFY(storage.save_shelves(shelves));
+    QVERIFY(storage.save_book_order(original));
+
+    LibraryViewModel model;
+    model.setSortOption(starting_sort);
+    QSignalSpy sorted(&model, &LibraryViewModel::sortChanged);
+    model.setSelectedShelf(QStringLiteral("reading"));
+    QVERIFY(!model.reorderBook(QStringLiteral("a"), QStringLiteral("b")));
+    model.setSelectedShelf(QStringLiteral("unshelved"));
+    QVERIFY(!model.reorderBook(QStringLiteral("a"), QStringLiteral("b")));
+    QVERIFY(!model.reorderBook(QStringLiteral("b"), QStringLiteral("a")));
+    QVERIFY(!model.reorderBook(QStringLiteral("a"), QStringLiteral("a")));
+    QVERIFY(!model.reorderBook(QStringLiteral("a"), QStringLiteral("missing")));
+    QCOMPARE(sorted.count(), 0);
+    QCOMPARE(storage.load_library_prefs().sort_option, starting_sort);
+    QCOMPARE(storage.load_book_order(), original);
+
+    model.setSelectedShelf(section);
+    // The title order would move a after d. Manual order puts a before d.
+    QVERIFY(model.reorderBook(QStringLiteral("a"), QStringLiteral("d")));
+    QCOMPARE(sorted.count(), 1);
+    QCOMPARE(model.sort_option(), 2);
+    QCOMPARE(storage.load_library_prefs().sort_option, 2);
+    QCOMPARE(entries(model.books(), QStringLiteral("folder")), displayed);
+    std::vector<std::string> expected;
+    for (const QString& id : stored) {
+        expected.push_back(id.toStdString());
+    }
+    QCOMPARE(storage.load_book_order(), expected);
+    QCOMPARE(storage.load_shelves(), shelves);
+}
+
+void LibraryViewModelTest::named_shelf_drag_persists_only_its_order() {
+    niratan::test::TempDataRoot root;
+    QVERIFY(root.isValid());
+    const BookStorage storage(niratan::storage::data_root());
+    add_book(storage, "a", 0.0);
+    add_book(storage, "b", 0.0);
+    add_book(storage, "c", 0.0);
+    const std::vector<std::string> global{"ID-c", "ID-b", "ID-a"};
+    QVERIFY(storage.save_book_order(global));
+    QVERIFY(storage.save_shelves(
+        {BookShelf{"Shelf", {"ID-a", "ID-b"}}, BookShelf{"Other", {"ID-c", "ID-a"}}}));
+    LibraryViewModel model;
+    model.setSortOption(1);
+    model.setSelectedShelf(QStringLiteral("shelf:Shelf"));
+    QVERIFY(model.reorderBook(QStringLiteral("a"), QStringLiteral("b")));
+    QCOMPARE(storage.load_library_prefs().sort_option, 2);
+    QCOMPARE(storage.load_book_order(), global);
+    const std::vector<BookShelf> expected{{"Shelf", {"ID-b", "ID-a"}}, {"Other", {"ID-c", "ID-a"}}};
+    QCOMPARE(storage.load_shelves(), expected);
+    QCOMPARE(entries(model.books(), QStringLiteral("folder")), (QStringList{"b", "a"}));
+}
+
+void LibraryViewModelTest::shelf_drag_persists_order_without_changing_selection() {
+    niratan::test::TempDataRoot root;
+    QVERIFY(root.isValid());
+    const BookStorage storage(niratan::storage::data_root());
+    add_book(storage, "a", 0.0);
+    add_book(storage, "b", 0.0);
+    const BookShelf first{"First", {"ID-a"}};
+    const BookShelf second{"Second", {"ID-b"}};
+    const BookShelf third{"Third", {}};
+    QVERIFY(storage.save_shelves({first, second, third}));
+    LibraryViewModel model;
+    model.setSelectedShelf(QStringLiteral("shelf:First"));
+    QSignalSpy shelves_changed(&model, &LibraryViewModel::shelvesChanged);
+    QSignalSpy selection_changed(&model, &LibraryViewModel::selectionChanged);
+    QVERIFY(model.moveShelves({0}, 3));
+    const std::vector<BookShelf> expected{second, third, first};
+    QCOMPARE(storage.load_shelves(), expected);
+    QCOMPARE(entries(model.shelves(), QStringLiteral("name")),
+             (QStringList{"Second", "Third", "First"}));
+    QCOMPARE(entries(model.books(), QStringLiteral("folder")), (QStringList{"a"}));
+    QCOMPARE(model.selected_shelf(), QStringLiteral("shelf:First"));
+    QCOMPARE(shelves_changed.count(), 1);
+    QCOMPARE(selection_changed.count(), 0);
 }
 
 QTEST_GUILESS_MAIN(LibraryViewModelTest)

@@ -90,6 +90,14 @@ class LibraryViewModel : public QObject {
     Q_INVOKABLE void moveBookToShelf(const QString& folder, const QString& shelf);
     Q_INVOKABLE void moveBooksToShelf(const QStringList& folders, const QString& shelf);
 
+    // ShelfView.reorderBook: require two distinct cards in the current full
+    // section, then switch to Manual before persisting the order. The grid
+    // sends only eligible drag hits, not filtered results or repeat hits.
+    Q_INVOKABLE bool reorderBook(const QString& source, const QString& target);
+    // LibraryShelfSidebar.onMove: custom rows only, with an insertion offset
+    // in the original custom list. The sidebar disables this during rename.
+    Q_INVOKABLE bool moveShelves(const QList<int>& source, int destination);
+
    signals:
     void booksChanged();
     void shelvesChanged();

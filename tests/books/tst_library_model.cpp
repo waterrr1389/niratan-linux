@@ -143,6 +143,7 @@ class LibraryModelTest : public QObject {
     void move_book_before_reorders_a_shelf_list();
     void move_book_before_reorders_only_the_manual_slice();
     void move_book_before_ignores_the_reading_section();
+    void move_shelves_uses_original_insertion_offsets();
     void read_bookmark_uses_the_bookinfo_total_and_highest_spine_index();
     void read_bookmark_needs_book_info();
 };
@@ -687,6 +688,22 @@ void LibraryModelTest::move_book_before_reorders_only_the_manual_slice() {
 
     const std::vector<std::string> expected_all{"a", "d", "c", "b"};
     QCOMPARE(all_library.manual_order, expected_all);
+}
+
+// BookshelfViewModel.moveShelves uses Array.move with an IndexSet and an
+// insertion offset in the original shelf list.
+void LibraryModelTest::move_shelves_uses_original_insertion_offsets() {
+    const BookShelf a{"A", {"a"}};
+    const BookShelf b{"B", {"b", "c"}};
+    const BookShelf c{"C", {}};
+    const BookShelf d{"D", {"d"}};
+    std::vector<BookShelf> shelves{a, b, c, d};
+    QVERIFY(niratan::books::move_shelves(shelves, {0, 2}, 4));
+    const std::vector<BookShelf> at_end{b, d, a, c};
+    QCOMPARE(shelves, at_end);
+    QVERIFY(niratan::books::move_shelves(shelves, {1, 3}, 0));
+    const std::vector<BookShelf> at_start{d, c, b, a};
+    QCOMPARE(shelves, at_start);
 }
 
 void LibraryModelTest::move_book_before_ignores_the_reading_section() {

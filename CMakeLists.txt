@@ -85,6 +85,7 @@ qt_add_library(niratan_core STATIC
     src/models/statistics/reader_statistics.cpp
     src/models/books/book.cpp
     src/models/books/library_model.cpp
+    src/models/books/library_shelf_order.cpp
     src/services/books/book_storage.cpp
     src/services/books/library_watch.cpp
     src/services/books/library_watch.h
@@ -200,6 +201,7 @@ qt_add_library(niratan_app STATIC
     src/viewmodels/dictionary/dictionary_settings_view_model_catalog.cpp
     src/viewmodels/dictionary/dictionary_settings_view_model_catalog.h
     src/viewmodels/library/library_view_model.cpp
+    src/viewmodels/library/library_view_model_reorder.cpp
     src/viewmodels/library/library_view_model.h
     src/viewmodels/profiles/profiles_view_model.cpp
     src/viewmodels/profiles/profiles_view_model.h

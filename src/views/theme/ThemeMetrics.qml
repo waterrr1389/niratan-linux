@@ -297,6 +297,17 @@ QtObject {
     readonly property int shelfColumnMaximumWidth: 230
     readonly property real shelfColumnShare: 0.24
     readonly property int shelfGridSpacing: 20
+    // ShelfView's expanded targets and BookView's source and target treatments.
+    readonly property int bookDragHitInset: 8
+    readonly property int bookDragLift: 3
+    readonly property real bookDragSourceScale: 1.035
+    readonly property real bookDragTargetScale: 1.015
+    readonly property real bookDragShadowOpacity: 0.20
+    readonly property real bookDragOutlineOpacity: 0.42
+    readonly property int bookDragOutlineInset: 5
+    readonly property int bookDragOutlineRadius: 10
+    readonly property int bookDragOutlineWidth: 2
+    readonly property int bookDragDuration: 220
     readonly property int shelfHeaderTopInset: 14
     readonly property int shelfHeaderHeight: 36
     readonly property int shelfEmptyMinimumHeight: 280

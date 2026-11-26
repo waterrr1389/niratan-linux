@@ -882,6 +882,18 @@ add_test(NAME qml_load COMMAND tst_qml_load)
 set_tests_properties(qml_load PROPERTIES
     ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QTWEBENGINE_CHROMIUM_FLAGS=--disable-gpu")
 
+qt_add_executable(tst_library_drag
+    qml/tst_library_drag.cpp
+)
+target_include_directories(tst_library_drag PRIVATE ${CMAKE_SOURCE_DIR}/src)
+target_link_libraries(tst_library_drag PRIVATE niratan_app niratan_appplugin niratan_style
+    niratan_styleplugin Qt6::Test
+    Qt6::Quick Qt6::QuickControls2 Qt6::WebEngineQuick)
+target_compile_options(tst_library_drag PRIVATE -Wall -Wextra -Wpedantic -Werror)
+add_test(NAME library_drag COMMAND tst_library_drag)
+set_tests_properties(library_drag PROPERTIES
+    ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QTWEBENGINE_CHROMIUM_FLAGS=--disable-gpu")
+
 qt_add_executable(tst_lookup_audio_menu
     qml/tst_lookup_audio_menu.cpp
 )

@@ -13,6 +13,7 @@
 // cover's bottom trailing corner; while selecting, a chosen book carries the
 // accent check at the top trailing corner instead. A book without a cover
 // shows the grey placeholder.
+// BookView.shelfDragAppearance lifts the source and outlines the target.
 import QtQuick
 import Niratan
 
@@ -26,6 +27,8 @@ Item {
     property bool finished: false
     property bool chosen: false
     property real coverWidth: Theme.bookCoverDefaultWidth
+    property bool dragSource: false
+    property bool dragTarget: false
 
     signal clicked()
     signal contextMenuRequested()
@@ -36,6 +39,11 @@ Item {
 
     width: card.coverWidth
     height: frame.height + Theme.bookTitleSpacing + Theme.bookTitleHeight
+    y: dragSource ? -Theme.bookDragLift : 0
+    scale: dragSource ? Theme.bookDragSourceScale : dragTarget ? Theme.bookDragTargetScale : 1
+
+    Behavior on y { NumberAnimation { duration: Theme.bookDragDuration } }
+    Behavior on scale { NumberAnimation { duration: Theme.bookDragDuration } }
 
     Accessible.role: Accessible.Button
     Accessible.name: card.title
@@ -49,7 +57,8 @@ Item {
         height: frame.height + Theme.bookFrameInset
         radius: Theme.bookFrameRadius + Theme.hairlineWidth
         color: Theme.shadow
-        opacity: Theme.bookShadowOpacity
+        opacity: card.dragSource ? Theme.bookShadowOpacity + Theme.bookDragShadowOpacity
+                                 : Theme.bookShadowOpacity
     }
 
     Rectangle {
@@ -154,6 +163,17 @@ Item {
         wrapMode: Text.Wrap
         elide: Text.ElideRight
         verticalAlignment: Text.AlignTop
+    }
+
+    Rectangle {
+        anchors.fill: parent
+        anchors.margins: -Theme.bookDragOutlineInset
+        radius: Theme.bookDragOutlineRadius
+        opacity: card.dragTarget ? Theme.bookDragOutlineOpacity : 0
+        color: "transparent"
+        border.color: Theme.accent
+        border.width: Theme.bookDragOutlineWidth
+        Behavior on opacity { NumberAnimation { duration: Theme.bookDragDuration } }
     }
 
     TapHandler {
