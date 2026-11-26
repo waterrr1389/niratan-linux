@@ -472,7 +472,9 @@ bool ReaderViewModel::openBook(const QString& folder) {
     state_->error.clear();
     state_->back_history.clear();
     state_->forward_history.clear();
+    state_->bookmark_edited = false;
     setProperty("internalJumpInProgress", false);
+    emit bookmarkEditedChanged();
     emit errorChanged();
     emit historyChanged();
 
@@ -547,6 +549,8 @@ void ReaderViewModel::closeBook() {
     state_->highlights.clear();
     state_->book = books::BookMetadata{};
     state_->has_book = false;
+    const bool was_edited = state_->bookmark_edited;
+    state_->bookmark_edited = false;
     state_->chapter_index = 0;
     state_->chapter_progress = 0.0;
     state_->back_history.clear();
@@ -556,6 +560,9 @@ void ReaderViewModel::closeBook() {
     state_->jump_pending = false;
     emit restoreStateChanged();
     emit historyChanged();
+    if (was_edited) {
+        emit bookmarkEditedChanged();
+    }
     state_->fragment.clear();
     state_->chapter_url.clear();
     state_->spine_page_counts.clear();
@@ -596,8 +603,13 @@ QString ReaderViewModel::pageTurnScript(bool forward) const {
         .arg(forward ? QStringLiteral("forward") : QStringLiteral("backward"), reveal);
 }
 
+// NativeReaderView.updateProgress and onSaveBookmark with persistBookmark:
+// the reported position becomes the bookmark and the reading position. Swift
+// guards only a synced-bookmark restore here, and the page posts progress only
+// after its own restore completes, so a pending chapter load does not drop a
+// report.
 void ReaderViewModel::updateChapterProgress(double progress) {
-    if (!state_->session || state_->restoring || !std::isfinite(progress)) {
+    if (!state_->session || !std::isfinite(progress)) {
         return;
     }
     const double clamped = clamp_progress(progress);
@@ -802,6 +814,10 @@ void ReaderViewModel::persist_bookmark() {
     bookmark.last_modified = previous && previous->character_count == bookmark.character_count
                                  ? previous->last_modified : std::optional{books::reference_now()};
     state_->storage.save_bookmark(state_->book.folder, bookmark);
+    if (!state_->bookmark_edited) {
+        state_->bookmark_edited = true;
+        emit bookmarkEditedChanged();
+    }
 }
 
 std::string ReaderViewModel::shell_document(const std::string& path) {

@@ -266,6 +266,7 @@ qt_add_library(niratan_app STATIC
     src/viewmodels/reader/reader_presentation.h
     src/viewmodels/reader/reader_view_model_state.h
     src/viewmodels/reader/reader_view_model_statistics.cpp
+    src/viewmodels/reader/reader_view_model_sync.cpp
     src/views/player/mpv_item.cpp
     src/views/player/mpv_item.h
     src/views/player/mpv_gap_playback.cpp

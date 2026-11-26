@@ -19,12 +19,14 @@
 // side panel even while the chapter has focus; in the gallery it first closes
 // the preview and then the gallery.
 //
-// Swift's ReaderLyricsModeView, cloud sync-on-open and the Fushi conflict
-// sheet have no Linux backing and are not drawn. The web view keeps the live
-// chapter, restore revision, selection and highlight menu, page turns, lookup
-// anchoring, cue callbacks and the activated-link policy of the WebKit
-// coordinator. A matching same-spine link runs in the open document and
-// reports its progress back as a programmatic destination.
+// Swift's ReaderLyricsModeView and the Fushi conflict sheet have no Linux
+// backing and are not drawn; ッツ auto sync runs on book open and window close
+// through SyncSettingsViewModel, and an imported result reloads the reader and
+// the audiobook position. The web view keeps the live chapter, restore
+// revision, selection and highlight menu, page turns, lookup anchoring, cue
+// callbacks and the activated-link policy of the WebKit coordinator. A matching
+// same-spine link runs in the open document and reports its progress back as a
+// programmatic destination.
 
 pragma ComponentBehavior: Bound
 
@@ -198,6 +200,29 @@ Item {
             sasayakiSettings.reload()
             // Settings may have changed in the main window since the last visit.
             refreshAppearanceSettings()
+        }
+    }
+
+    // ッツ auto sync: each book open runs one import-only sync, and an imported
+    // result reloads the reader (ReaderViewModel.readerSyncFinished) and the
+    // audiobook position this page owns.
+    Connections {
+        target: ReaderViewModel
+
+        function onBookChanged() {
+            if (ReaderViewModel.hasBook)
+                SyncSettingsViewModel.syncReaderOpen(ReaderViewModel.bookFolder)
+        }
+        function onAudiobookReloadRequested() {
+            sasayaki.reloadPlayback()
+        }
+    }
+
+    Connections {
+        target: SyncSettingsViewModel
+
+        function onReaderSyncFinished(folder, imported) {
+            ReaderViewModel.readerSyncFinished(folder, imported)
         }
     }
 

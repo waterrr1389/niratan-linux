@@ -97,7 +97,7 @@
 namespace niratan::sasayaki {
 struct SasayakiCue;
 struct SasayakiMatchData;
-}
+}  // namespace niratan::sasayaki
 
 namespace niratan::viewmodels {
 
@@ -125,8 +125,8 @@ class SasayakiViewModel : public QObject {
     Q_PROPERTY(int inferredCount READ inferred_count NOTIFY matchDataChanged)
     Q_PROPERTY(QString matchRateLabel READ match_rate_label NOTIFY matchDataChanged)
     Q_PROPERTY(QString matchError READ match_error NOTIFY matchErrorChanged)
-    Q_PROPERTY(int matchSearchWindow READ match_search_window WRITE set_match_search_window
-                   RESET reset_match_search_window NOTIFY matchSearchWindowChanged)
+    Q_PROPERTY(int matchSearchWindow READ match_search_window WRITE set_match_search_window RESET
+                   reset_match_search_window NOTIFY matchSearchWindowChanged)
     Q_PROPERTY(QString audiobookTitle READ audiobook_title NOTIFY audiobookMetadataChanged)
     Q_PROPERTY(QString audiobookArtist READ audiobook_artist NOTIFY audiobookMetadataChanged)
     Q_PROPERTY(QByteArray audiobookArtwork READ audiobook_artwork NOTIFY audiobookMetadataChanged)
@@ -223,6 +223,10 @@ class SasayakiViewModel : public QObject {
     // transition was playing. A book without match data leaves every flag
     // untouched.
     Q_INVOKABLE void restoreCompleted(int currentIndex);
+    // SasayakiPlayer.reloadPlayback: re-read the sidecar position, delay and
+    // rate after a sync wrote them, and seek a loaded player. Called by the
+    // reader page when an imported open sync brought a new audiobook position.
+    Q_INVOKABLE void reloadPlayback();
     // Re-reads auto-scroll and auto-pause from the global settings document.
     Q_INVOKABLE void reloadSasayakiSettings();
 

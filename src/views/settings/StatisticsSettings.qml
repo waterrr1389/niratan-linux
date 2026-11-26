@@ -87,4 +87,28 @@ PanelScaffold {
             }
         }
     }
+
+    // StatisticsSettingsView's Sync card, inside the statistics enable and the
+    // sync enable conditions, with the mode Swift's StatisticsSyncMode stores.
+    FormSection {
+        objectName: "statisticsSyncSection"
+        visible: settings.enableStatistics && SyncSettingsViewModel.enabled
+        title: qsTr("Sync")
+        footer: qsTr("Determines if statistics will be merged entry by entry or replaced completely on a sync.")
+
+        FormToggleRow {
+            objectName: "statisticsSyncToggle"
+            label: qsTr("ッツ Sync")
+            checked: SyncSettingsViewModel.syncStatistics
+            onToggled: value => SyncSettingsViewModel.syncStatistics = value
+        }
+
+        FormSegmentedRow {
+            objectName: "statisticsSyncMode"
+            label: qsTr("Sync Behaviour")
+            model: [qsTr("Merge"), qsTr("Replace")]
+            currentIndex: SyncSettingsViewModel.statisticsSyncMode === "Replace" ? 1 : 0
+            onActivated: index => SyncSettingsViewModel.statisticsSyncMode = index === 1 ? "Replace" : "Merge"
+        }
+    }
 }

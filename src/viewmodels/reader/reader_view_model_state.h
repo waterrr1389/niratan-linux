@@ -23,7 +23,9 @@
 
 namespace niratan::viewmodels {
 
-inline std::int64_t now_milliseconds() { return QDateTime::currentMSecsSinceEpoch(); }
+inline std::int64_t now_milliseconds() {
+    return QDateTime::currentMSecsSinceEpoch();
+}
 
 struct ReaderViewModel::State {
     class BookMediaServer {
@@ -104,6 +106,7 @@ struct ReaderViewModel::State {
     QString fragment;
     QString error;
     QString chapter_url;
+    bool bookmark_edited = false;
     bool dark = false;
     bool system_dark = false;
     std::string background;

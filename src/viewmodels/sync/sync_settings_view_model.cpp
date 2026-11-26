@@ -183,6 +183,10 @@ bool SyncSettingsViewModel::syncAudioBook() const {
     return state_->preferences.sasayaki_sync;
 }
 
+QString SyncSettingsViewModel::statisticsSyncMode() const {
+    return QString::fromLatin1(statistics::sync_mode_id(state_->preferences.statistics_mode));
+}
+
 bool SyncSettingsViewModel::statisticsEnabled() const {
     return state_->store.statistics_preferences().preferences.enabled;
 }
@@ -271,6 +275,83 @@ void SyncSettingsViewModel::setSyncAudioBook(bool value) {
                      [this](bool v) { return state_->store.save_sasayaki_enable_sync(v); })) {
         emit syncAudioBookChanged();
     }
+}
+
+void SyncSettingsViewModel::setStatisticsSyncMode(QString value) {
+    const auto mode = value == QStringLiteral("Replace") ? statistics::StatisticsSyncMode::replace
+                                                         : statistics::StatisticsSyncMode::merge;
+    if (state_->save(*this, state_->preferences.statistics_mode, mode,
+                     [this](auto v) { return state_->store.save_statistics_sync_mode(v); })) {
+        emit statisticsSyncModeChanged();
+    }
+}
+
+void SyncSettingsViewModel::syncReaderOpen(const QString& folder) {
+    if (!auto_sync_enabled() || syncing()) {
+        return;
+    }
+    clearSyncError();
+    if (!authenticated()) {
+        state_->set_sync_error(*this, tr("Not authenticated\nPlease sign in"));
+        return;
+    }
+    auto book = state_->books.load_metadata(folder.toStdString());
+    if (!book) {
+        state_->set_sync_error(*this, tr("Book not found"));
+        return;
+    }
+    state_->syncing = true;
+    emit syncingChanged();
+    state_->syncer.sync_book(
+        std::move(*book), std::nullopt, ttu_options(true),
+        [this, guard = QPointer(this), folder](auto result, auto failure) {
+            if (!guard) {
+                return;
+            }
+            state_->syncing = false;
+            emit syncingChanged();
+            if (result) {
+                emit readerSyncFinished(folder, result->kind == sync::TtuResult::Kind::imported);
+            } else {
+                state_->set_sync_error(
+                    *this,
+                    QString::fromStdString(
+                        failure.value_or(sync::GoogleDriveError{}).description()));
+            }
+        });
+}
+
+void SyncSettingsViewModel::syncReaderClose(const QString& folder, bool bookmarkEdited) {
+    if (!auto_sync_enabled() || !bookmarkEdited || syncing()) {
+        return;
+    }
+    clearSyncError();
+    if (!authenticated()) {
+        state_->set_sync_error(*this, tr("Not authenticated\nPlease sign in"));
+        return;
+    }
+    auto book = state_->books.load_metadata(folder.toStdString());
+    if (!book) {
+        state_->set_sync_error(*this, tr("Book not found"));
+        return;
+    }
+    state_->syncing = true;
+    emit syncingChanged();
+    state_->syncer.sync_book(
+        std::move(*book), sync::SyncDirection::export_to_ttu, ttu_options(false),
+        [this, guard = QPointer(this)](auto result, auto failure) {
+            if (!guard) {
+                return;
+            }
+            state_->syncing = false;
+            emit syncingChanged();
+            if (!result) {
+                state_->set_sync_error(
+                    *this,
+                    QString::fromStdString(
+                        failure.value_or(sync::GoogleDriveError{}).description()));
+            }
+        });
 }
 
 void SyncSettingsViewModel::signIn() {
@@ -380,7 +461,7 @@ sync::TtuSyncOptions SyncSettingsViewModel::ttu_options(bool import_only) const 
 }
 
 bool SyncSettingsViewModel::auto_sync_enabled() const {
-    return enabled() && autoSync();
+    return enabled() && autoSync() && state_->preferences.provider == settings::SyncProvider::ttu;
 }
 
 }  // namespace niratan::viewmodels

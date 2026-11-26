@@ -120,6 +120,33 @@
 // same-spine link asks the page to jump in the open document through
 // internalLinkJumpRequested; the page reports the resulting progress through
 // syncProgressAfterProgrammaticJump, which stores it with no history change.
+//
+// ッツ auto sync
+// -------------
+// Following NativeReaderView.swift (syncOnOpenIfNeeded, reloadBookmark,
+// scheduleAutoExport and flushAutoSync), the reader exposes the two facts the
+// sync view model's reader commands need, and the view wires them together:
+//
+// bookmarkEdited is false when a book opens and becomes true when the session
+// persists a bookmark after that, so a window close can tell a session the
+// reader wrote from one that only looked at a page. It stays true after the
+// bookmark is exported; it changes only on the next open.
+//
+// reloadBookmark() applies a bookmark a sync wrote to disk: the stored chapter
+// and progress replace the open position and the chapter reloads at that
+// progress, the statistics history is re-read so an external writer such as
+// the sync shows up in today's totals, and the tracking baseline is anchored at
+// the restored position. It never writes a bookmark and never credits the jump.
+// readerSyncFinished is the page's relay of the sync model's result: an
+// imported result for the open book reloads the bookmark and statistics and
+// emits audiobookReloadRequested, which the page answers with
+// SasayakiViewModel.reloadPlayback(); a synced or skipped result, or another
+// book's folder, changes nothing.
+//
+// prepareForClose is the window close's reader half: it persists the bookmark
+// and the live statistics and consumes the pending export, so the page can
+// read bookmarkEdited before it and a later close without another bookmark
+// write sends nothing. The book stays open for a reopened window.
 
 #pragma once
 
@@ -232,6 +259,9 @@ class ReaderViewModel : public QObject {
     Q_PROPERTY(int forwardTarget READ forward_target NOTIFY historyChanged)
     Q_PROPERTY(QString backTargetText READ back_target_text NOTIFY historyChanged)
     Q_PROPERTY(QString forwardTargetText READ forward_target_text NOTIFY historyChanged)
+    // True once the open session persisted a bookmark; a window close exports
+    // only then.
+    Q_PROPERTY(bool bookmarkEdited READ bookmark_edited NOTIFY bookmarkEditedChanged)
 
    public:
     // Port zero lets isolated readers use an OS-assigned listener.
@@ -345,6 +375,7 @@ class ReaderViewModel : public QObject {
     int forward_target() const;
     QString back_target_text() const;
     QString forward_target_text() const;
+    bool bookmark_edited() const;
     // ReaderGoToView.progressText for a search result's raw character.
     Q_INVOKABLE QString positionTextAt(int rawCharacter) const;
     // The Jump to alert's Go action: a valid display count jumps to its raw
@@ -394,6 +425,15 @@ class ReaderViewModel : public QObject {
     // window.hoshiReader.calculateProgress().
     Q_INVOKABLE void updateChapterProgress(double progress);
     Q_INVOKABLE void saveBookmark();
+    // NativeReaderView.reloadBookmark after an imported open sync: restore the
+    // position and statistics the sync wrote, without a bookmark write.
+    Q_INVOKABLE void reloadBookmark();
+    // The sync model's reader result, relayed by the page.
+    Q_INVOKABLE void readerSyncFinished(const QString& folder, bool imported);
+    // NativeReaderView.prepareForReaderLifecycleClose and the pending auto
+    // export: persist the bookmark and statistics, then consume the pending
+    // export without closing the book.
+    Q_INVOKABLE void prepareForClose();
 
     // The reader page's visibility, matching NativeReaderView's
     // isReaderWindowActive. A hidden page pauses time; the statistics sheet
@@ -435,6 +475,10 @@ class ReaderViewModel : public QObject {
     void galleryChanged();
     // The back or forward target, its text or the displayed profile changed.
     void historyChanged();
+    void bookmarkEditedChanged();
+    // An imported open sync applied a new audiobook position; the page reloads
+    // the Sasayaki sidecar.
+    void audiobookReloadRequested();
     // The page should jump within the open chapter to this decoded fragment.
     // A null fragment restores progress zero; a present fragment, including an
     // empty one, requests a fragment jump.

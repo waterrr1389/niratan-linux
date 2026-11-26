@@ -352,6 +352,29 @@ void SasayakiViewModel::reloadSasayakiSettings() {
     state_->auto_pause = settings.auto_pause;
 }
 
+// SasayakiPlayer.reloadPlayback: re-read the sidecar position, delay and rate
+// after a sync wrote them, and seek a loaded player to the new position.
+void SasayakiViewModel::reloadPlayback() {
+    if (!state_->has_root) {
+        return;
+    }
+    load_playback();
+    state_->pending_seek.reset();
+    state_->seek_stop_time.reset();
+    state_->stop_playback_time.reset();
+    state_->seek_start_playback = false;
+    state_->seek_update_cue = true;
+    if (state_->player != nullptr) {
+        state_->player->setPosition(static_cast<qint64>(std::llround(state_->position * 1000.0)));
+        if (state_->playing) {
+            state_->player->setPlaybackRate(state_->rate);
+        }
+    }
+    emit positionChanged();
+    emit rateChanged();
+    emit delayChanged();
+}
+
 void SasayakiViewModel::load_playback() {
     state_->playback =
         book_storage().load_sasayaki_playback(state_->folder).value_or(SasayakiPlaybackData{});

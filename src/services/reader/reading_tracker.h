@@ -143,8 +143,7 @@ class StatisticsStore {
    public:
     virtual ~StatisticsStore() = default;
 
-    virtual statistics::ReadingSessionRecords load(int reset_minutes,
-                                                   const QTimeZone& zone) = 0;
+    virtual statistics::ReadingSessionRecords load(int reset_minutes, const QTimeZone& zone) = 0;
     virtual bool save(const statistics::ReadingSessionRecords& records, std::string_view title,
                       int reset_minutes, const QTimeZone& zone, std::string* error) = 0;
 };
@@ -208,6 +207,12 @@ class ReadingTracker {
     // happened. The title is retained for later day-rotation saves.
     bool save(std::int64_t now_ms, std::string_view title);
 
+    // NativeReaderView.loadStatistics followed by resetTrackingBaseline:
+    // re-reads the persisted records, applies an external edit to the live
+    // session as save() does, and anchors the baseline at the retained position
+    // and this instant. Writes nothing; a no-op when statistics is disabled.
+    void reload(std::int64_t now_ms);
+
     bool is_tracking() const;
     bool is_paused() const;
     const statistics::ReadingSession& session() const;
@@ -221,8 +226,7 @@ class ReadingTracker {
     QTimeZone zone_;
 
     bool enabled_ = false;
-    statistics::StatisticsAutostartMode autostart_mode_ =
-        statistics::StatisticsAutostartMode::off;
+    statistics::StatisticsAutostartMode autostart_mode_ = statistics::StatisticsAutostartMode::off;
     int reset_minutes_ = 0;
     bool context_active_ = false;
 

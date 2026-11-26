@@ -81,29 +81,49 @@ class SettingsSyncTest : public QObject {
 
     void cleanupTestCase() { qInstallMessageHandler(previous_handler); }
 
-    void init() {
-        window_ = std::make_unique<QQuickWindow>();
-        window_->resize(960, 640);
-        QQmlComponent component(&engine_);
-        component.loadFromModule("Niratan", "SyncSettings");
-        QTRY_VERIFY(!component.isLoading());
-        auto* page = component.beginCreate(engine_.rootContext());
-        QVERIFY2(page, qPrintable(component.errorString()));
-        page->setParent(window_.get());
-        auto* item = qobject_cast<QQuickItem*>(page);
-        QVERIFY(item);
-        item->setParentItem(window_->contentItem());
-        item->setSize(QSizeF(window_->size()));
-        component.completeCreate();
-        QVERIFY2(!component.isError(), qPrintable(component.errorString()));
-        window_->show();
-        QVERIFY(QTest::qWaitForWindowExposed(window_.get()));
-    }
+    void init() { QVERIFY(show_page("SyncSettings")); }
 
     void cleanup() {
         window_.reset();
         const auto report = take_warnings();
         QVERIFY2(report.isEmpty(), qPrintable(report));
+    }
+
+    // B8: StatisticsSettingsView's ッツ Sync card, shown only while sync is on.
+    void statistics_sync_card() {
+        QVERIFY(show_page("StatisticsSettings"));
+        auto* section = find("statisticsSyncSection");
+        QVERIFY(section);
+        QVERIFY(section->property("visible").toBool());
+        QCOMPARE(
+            section->property("footer").toString(),
+            QString::fromUtf8("Determines if statistics will be merged entry by entry or replaced "
+                              "completely on a sync."));
+        auto* toggle = find("statisticsSyncToggle");
+        QVERIFY(toggle);
+        QCOMPARE(toggle->property("label").toString(), QStringLiteral("ッツ Sync"));
+        QVERIFY(toggle->property("checked").toBool());
+        QVERIFY(QMetaObject::invokeMethod(toggle, "toggled", false));
+        QCOMPARE(settings().value("statisticsEnableSync"), QJsonValue(false));
+        QVERIFY(QMetaObject::invokeMethod(toggle, "toggled", true));
+        QCOMPARE(settings().value("statisticsEnableSync"), QJsonValue(true));
+
+        auto* mode = find("statisticsSyncMode");
+        QVERIFY(mode);
+        QCOMPARE(mode->property("label").toString(), QStringLiteral("Sync Behaviour"));
+        QCOMPARE(mode->property("model").toStringList(),
+                 (QStringList{QStringLiteral("Merge"), QStringLiteral("Replace")}));
+        QCOMPARE(mode->property("currentIndex").toInt(), 0);
+        QVERIFY(QMetaObject::invokeMethod(mode, "activated", 1));
+        QCOMPARE(settings().value("statisticsSyncMode").toString(), QStringLiteral("Replace"));
+        QCOMPARE(mode->property("currentIndex").toInt(), 1);
+
+        auto* sync = engine_.singletonInstance<QObject*>("Niratan", "SyncSettingsViewModel");
+        QVERIFY(sync);
+        QVERIFY(sync->setProperty("enabled", false));
+        QTRY_VERIFY(!section->property("visible").toBool());
+        QVERIFY(sync->setProperty("enabled", true));
+        QTRY_VERIFY(section->property("visible").toBool());
     }
 
     void loads_sync_controls_data() {
@@ -492,6 +512,36 @@ class SettingsSyncTest : public QObject {
 
    private:
     QObject* find(const QString& name) const { return window_->findChild<QObject*>(name); }
+
+    bool show_page(const char* module) {
+        window_ = std::make_unique<QQuickWindow>();
+        window_->resize(960, 640);
+        QQmlComponent component(&engine_);
+        component.loadFromModule("Niratan", module);
+        for (int waited = 0; waited < 200 && component.isLoading(); waited += 10) {
+            QTest::qWait(10);
+        }
+        if (component.isLoading()) {
+            return false;
+        }
+        auto* page = component.beginCreate(engine_.rootContext());
+        if (page == nullptr) {
+            return false;
+        }
+        page->setParent(window_.get());
+        auto* item = qobject_cast<QQuickItem*>(page);
+        if (item == nullptr) {
+            return false;
+        }
+        item->setParentItem(window_->contentItem());
+        item->setSize(QSizeF(window_->size()));
+        component.completeCreate();
+        if (component.isError()) {
+            return false;
+        }
+        window_->show();
+        return QTest::qWaitForWindowExposed(window_.get());
+    }
     QJsonObject settings() const {
         QFile file(
             QString::fromStdString((niratan::storage::data_root() / "settings.json").string()));

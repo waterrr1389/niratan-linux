@@ -854,6 +854,57 @@ class TtuSyncTest : public QObject {
                  QStringLiteral("audioBook_1_6_%1_12.5.json").arg(stamp));
     }
 
+    void export_statistics_mode_is_applied_data() {
+        QTest::addColumn<bool>("replace");
+        QTest::newRow("merge") << false;
+        QTest::newRow("replace") << true;
+    }
+
+    // B7: Replace replaces the remote file with the local rows unchanged;
+    // Merge keeps the newer row per date key and adds a local day the remote
+    // does not have.
+    void export_statistics_mode_is_applied() {
+        QFETCH(bool, replace);
+        constexpr auto merge = statistics::StatisticsSyncMode::merge;
+        FakeDriveServer server;
+        QVERIFY(server.start());
+        server.enable_tree();
+        seed_folders(server);
+        seed_media(server);
+        Library library;
+        QVERIFY(library.start());
+        QVERIFY(statistics::import_daily_statistics(
+            library.path(),
+            {row("2023-07-22", remote_ms - 1000, 999), row("2023-07-23", remote_ms - 1000, 111)},
+            merge, 0, QTimeZone::utc()));
+        QVERIFY(library.bookmark(600, remote_ms + 2000));
+        auto transport = transport_for(server);
+        TtuDrive drive(*transport);
+        TtuSync sync(drive, library.storage, {}, 0, QTimeZone::utc());
+        Result<TtuResult> result;
+        sync.sync_book(library.book, SyncDirection::export_to_ttu,
+                       {.sync_stats = true,
+                        .stats_mode = replace ? statistics::StatisticsSyncMode::replace : merge},
+                       result.receive());
+        QTRY_VERIFY(result.done);
+        QCOMPARE(result.value,
+                 (std::optional{TtuResult{TtuResult::Kind::exported, "Display Title", 600}}));
+        const auto* stats = request_at(server, "/upload/drive/v3/files/s", "PATCH");
+        QVERIFY(stats);
+        const auto rows = QJsonDocument::fromJson(stats->media).array();
+        QMap<QString, int> characters;
+        for (const auto item : rows) {
+            const auto object = item.toObject();
+            characters.insert(object.value("dateKey").toString(),
+                              object.value("charactersRead").toInt());
+        }
+        if (replace) {
+            QCOMPARE(characters, (QMap<QString, int>{{"2023-07-22", 999}, {"2023-07-23", 111}}));
+        } else {
+            QCOMPARE(characters, (QMap<QString, int>{{"2023-07-22", 1200}, {"2023-07-23", 111}}));
+        }
+    }
+
     void no_spurious_exports_when_sidecars_are_missing_data() {
         QTest::addColumn<QString>("mode");
         for (const auto* mode : {"no-bookmark", "no-date", "no-info", "zero-length", "valid"}) {

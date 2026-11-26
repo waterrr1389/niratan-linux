@@ -62,7 +62,8 @@ class SyncSettingsViewModelTest : public QObject {
         model.setAutoSync(true);
         QVERIFY(!model.auto_sync_enabled());
         model.setEnabled(true);
-        QVERIFY(model.auto_sync_enabled());
+        // B1: an explicit Google Drive provider never auto-syncs a reader.
+        QVERIFY(!model.auto_sync_enabled());
         QVERIFY(model.statisticsEnabled() && model.sasayakiEnabled());
         model.setSyncStatistics(true);
         model.setSyncAudioBook(true);
@@ -79,6 +80,58 @@ class SyncSettingsViewModelTest : public QObject {
         QCOMPARE(reopened.syncMode(), QStringLiteral("Manual"));
         QVERIFY(reopened.autoSync() && reopened.syncStatistics() && reopened.syncAudioBook());
         QVERIFY(!reopened.enabled() && !reopened.uploadBooks());
+    }
+
+    // B1: auto sync needs sync on, Auto Sync on and the ttu provider; an
+    // explicit Google Drive provider never auto-syncs.
+    void auto_sync_requires_ttu() {
+        oauth_fixture::AuthFixture fixture;
+        QVERIFY(fixture.start());
+        QVERIFY(oauth_fixture::write(fixture.settings(),
+                                     R"({"syncProvider":"gdrive","enableAutoSync":true})"));
+        SyncSettingsViewModel gdrive(config(fixture));
+        gdrive.setEnabled(true);
+        QVERIFY(gdrive.autoSync());
+        QVERIFY(!gdrive.auto_sync_enabled());
+
+        QVERIFY(oauth_fixture::write(fixture.settings(),
+                                     R"({"syncProvider":"ttu","enableAutoSync":true})"));
+        SyncSettingsViewModel ttu(config(fixture));
+        ttu.setEnabled(true);
+        QVERIFY(ttu.auto_sync_enabled());
+        ttu.setAutoSync(false);
+        QVERIFY(!ttu.auto_sync_enabled());
+        ttu.setAutoSync(true);
+        ttu.setEnabled(false);
+        QVERIFY(!ttu.auto_sync_enabled());
+    }
+
+    // B5: StatisticsSyncMode's raw value is read as Merge for a missing or
+    // unknown value, written immediately and passed to ttu_options.
+    void statistics_sync_mode_persists() {
+        using enum statistics::StatisticsSyncMode;
+        oauth_fixture::AuthFixture fixture;
+        QVERIFY(fixture.start());
+        QVERIFY(oauth_fixture::write(fixture.settings(), "{}"));
+        SyncSettingsViewModel model(config(fixture));
+        QCOMPARE(model.statisticsSyncMode(), QStringLiteral("Merge"));
+        QCOMPARE(model.ttu_options(false).stats_mode, merge);
+        QSignalSpy changed(&model, &SyncSettingsViewModel::statisticsSyncModeChanged);
+        model.setStatisticsSyncMode(QStringLiteral("Replace"));
+        QCOMPARE(model.statisticsSyncMode(), QStringLiteral("Replace"));
+        QCOMPARE(changed.size(), 1);
+        QCOMPARE(model.ttu_options(false).stats_mode, replace);
+        QCOMPARE(QJsonDocument::fromJson(oauth_fixture::read(fixture.settings()))
+                     .object()
+                     .value("statisticsSyncMode")
+                     .toString(),
+                 QStringLiteral("Replace"));
+        SyncSettingsViewModel reopened(config(fixture));
+        QCOMPARE(reopened.statisticsSyncMode(), QStringLiteral("Replace"));
+        QCOMPARE(reopened.ttu_options(true).stats_mode, replace);
+        QVERIFY(oauth_fixture::write(fixture.settings(), R"({"statisticsSyncMode":"Sideways"})"));
+        SyncSettingsViewModel unknown(config(fixture));
+        QCOMPARE(unknown.statisticsSyncMode(), QStringLiteral("Merge"));
     }
 
     void write_failure_keeps_property() {

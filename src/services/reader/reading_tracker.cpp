@@ -227,6 +227,17 @@ bool ReadingTracker::save(std::int64_t now_ms, std::string_view title) {
     return true;
 }
 
+void ReadingTracker::reload(std::int64_t now_ms) {
+    if (!enabled_) {
+        return;
+    }
+    reload_history();
+    apply_history(history_, now_ms);
+    // resetTrackingBaseline keeps the retained position, so the interval before
+    // the reload is not credited after it.
+    last_timestamp_ms_ = now_ms;
+}
+
 bool ReadingTracker::is_tracking() const { return tracking_; }
 
 bool ReadingTracker::is_paused() const { return paused_; }

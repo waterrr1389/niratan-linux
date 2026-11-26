@@ -886,6 +886,15 @@ target_link_libraries(tst_reader_navigation_history PRIVATE niratan_app Qt6::Tes
 target_compile_options(tst_reader_navigation_history PRIVATE -Wall -Wextra -Wpedantic -Werror)
 add_test(NAME reader_navigation_history COMMAND tst_reader_navigation_history)
 
+qt_add_executable(tst_reader_open_sync
+    viewmodels/tst_reader_open_sync.cpp
+    fakes/fake_drive_server.cpp
+)
+target_include_directories(tst_reader_open_sync PRIVATE ${CMAKE_SOURCE_DIR}/src ${CMAKE_SOURCE_DIR}/tests)
+target_link_libraries(tst_reader_open_sync PRIVATE niratan_app Qt6::Test)
+target_compile_options(tst_reader_open_sync PRIVATE -Wall -Wextra -Wpedantic -Werror)
+add_test(NAME reader_open_sync COMMAND tst_reader_open_sync)
+
 qt_add_executable(tst_reader_presentation_text
     viewmodels/tst_reader_presentation_text.cpp
 )
@@ -1130,6 +1139,22 @@ target_link_libraries(tst_reader_presentation PRIVATE niratan_app niratan_appplu
 target_compile_options(tst_reader_presentation PRIVATE -Wall -Wextra -Wpedantic -Werror)
 add_test(NAME reader_presentation COMMAND tst_reader_presentation)
 set_tests_properties(reader_presentation PROPERTIES
+    ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QTWEBENGINE_CHROMIUM_FLAGS=--disable-gpu")
+
+qt_add_executable(tst_reader_auto_sync
+    qml/tst_reader_auto_sync.cpp
+)
+target_include_directories(tst_reader_auto_sync PRIVATE
+    ${CMAKE_SOURCE_DIR}/src
+    ${CMAKE_CURRENT_SOURCE_DIR}/viewmodels
+    ${CMAKE_CURRENT_SOURCE_DIR}/flows
+)
+target_link_libraries(tst_reader_auto_sync PRIVATE niratan_app niratan_appplugin niratan_style
+    niratan_styleplugin Qt6::Test
+    Qt6::Quick Qt6::QuickControls2 Qt6::WebEngineQuick)
+target_compile_options(tst_reader_auto_sync PRIVATE -Wall -Wextra -Wpedantic -Werror)
+add_test(NAME reader_auto_sync COMMAND tst_reader_auto_sync)
+set_tests_properties(reader_auto_sync PROPERTIES
     ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QTWEBENGINE_CHROMIUM_FLAGS=--disable-gpu")
 
 find_package(Qt6 REQUIRED COMPONENTS WebEngineWidgets)

@@ -28,15 +28,17 @@ using niratan::statistics::TimestampedSession;
 // double, so no file or clock is touched.
 namespace {
 
-QTimeZone utc_zone() { return QTimeZone(QTimeZone::UTC); }
+QTimeZone utc_zone() {
+    return QTimeZone(QTimeZone::UTC);
+}
 
 std::int64_t ms_at(int year, int month, int day, int hour, int minute, int second = 0) {
     return QDateTime(QDate(year, month, day), QTime(hour, minute, second), utc_zone())
         .toMSecsSinceEpoch();
 }
 
-TimestampedSession stored_session(std::int64_t modified, std::int64_t started_at,
-                                  int characters, double reading_time) {
+TimestampedSession stored_session(std::int64_t modified, std::int64_t started_at, int characters,
+                                  double reading_time) {
     ReadingSession session;
     session.started_at = started_at;
     session.ended_at = started_at + static_cast<std::int64_t>(reading_time * 1000.0);
@@ -96,6 +98,7 @@ class ReadingTrackerTest : public QObject {
     void opening_anchors_the_baseline_at_the_open_position();
     void resume_anchors_the_baseline_at_the_resume_position();
     void reload_after_an_external_mutation_anchors_the_baseline();
+    void reload_reads_an_external_day_without_writing();
     void reset_time_change_keeps_the_baseline_and_the_live_session();
     void autostart_on_starts_at_start();
     void autostart_on_starts_paused_without_context();
@@ -278,6 +281,27 @@ void ReadingTrackerTest::reload_after_an_external_mutation_anchors_the_baseline(
 
     tracker.update_position(160, t0 + 11000);
     QCOMPARE(tracker.session().characters_read, 920);
+}
+
+// B3: reload reads daily records another writer saved without writing itself,
+// and anchors the baseline at the retained position, so the interval before
+// the reload is not credited afterwards.
+void ReadingTrackerTest::reload_reads_an_external_day_without_writing() {
+    MemoryStore store;
+    ReadingTracker tracker(store, utc_zone());
+    const std::int64_t t0 = ms_at(2026, 3, 10, 12, 0);
+    begin_tracking(tracker, t0);
+    tracker.update_position(100, t0);
+    QCOMPARE(tracker.today_total(t0).characters_read, 0);
+
+    store.records["external"] = stored_session(t0 + 1000, t0, 300, 60.0);
+    tracker.reload(t0 + 2000);
+    QCOMPARE(tracker.today_total(t0 + 2000).characters_read, 300);
+    QCOMPARE(store.save_count, 0);
+
+    tracker.update_position(110, t0 + 5000);
+    QCOMPARE(tracker.session().characters_read, 10);
+    QCOMPARE(tracker.session().reading_time, 3.0);
 }
 
 // B4: updateStatisticsResetTime regroups the history and resets the tracking
@@ -712,8 +736,7 @@ void ReadingTrackerTest::totals_add_the_live_session_once() {
     MemoryStore store;
     const std::int64_t today = ms_at(2026, 3, 10, 12, 0);
     store.records["old-today"] = stored_session(100, today - 3600 * 1000, 100, 10.0);
-    store.records["old-yesterday"] =
-        stored_session(101, ms_at(2026, 3, 9, 12, 0), 50, 5.0);
+    store.records["old-yesterday"] = stored_session(101, ms_at(2026, 3, 9, 12, 0), 50, 5.0);
 
     ReadingTracker tracker(store, utc_zone());
     tracker.configure(true, StatisticsAutostartMode::on, 0);

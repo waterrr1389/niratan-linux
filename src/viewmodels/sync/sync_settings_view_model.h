@@ -4,6 +4,31 @@
 // Failed GlobalSettings writes keep the old value and set error.
 // The model owns auth and one shared Drive/sync stack; the app injects
 // the browser opener. Manual sync uses importOnly=false; reader open uses true.
+//
+// Reader auto sync
+// ----------------
+// Following NativeReaderView.configure's autoSyncEnabled and
+// SyncManager.syncBook, auto sync runs only when sync is enabled, Auto Sync is
+// on and the provider is ttu; a Google Drive provider never auto-syncs a
+// reader. syncReaderOpen is NativeReaderModel.syncOnOpenIfNeeded: one
+// import-only sync per open of a book, with the same book data, statistics,
+// statistics mode and audiobook options the settings store holds. Each call is
+// one open of the book; the page calls it once per bookChanged, so a settings
+// change or a page turn never repeats it. It does nothing while sync is
+// disabled, Auto Sync is off or the provider is not ttu. readerSyncFinished
+// reports the result and whether the sync imported something; the page replays
+// it through ReaderViewModel.readerSyncFinished, which reloads only for an
+// import. syncReaderClose is flushAutoSync's export: with auto sync on, the
+// reader having persisted a bookmark and nothing else syncing, it sends the
+// bookmark, statistics and audiobook with exportToTtu. It is skipped while
+// another sync still runs, leaving the remote at its last completed write.
+// Both reader commands report failures through syncError without raising
+// syncFailed, as Swift swallows them, and neither blocks the reader or its
+// window.
+//
+// statisticsSyncMode is StatisticsSyncMode's stored raw value ("Merge" or
+// "Replace"); a change is written immediately and ttu_options passes it for
+// imports and exports.
 
 #pragma once
 
@@ -37,6 +62,8 @@ class SyncSettingsViewModel : public QObject {
                    syncStatisticsChanged)
     Q_PROPERTY(
         bool syncAudioBook READ syncAudioBook WRITE setSyncAudioBook NOTIFY syncAudioBookChanged)
+    Q_PROPERTY(QString statisticsSyncMode READ statisticsSyncMode WRITE setStatisticsSyncMode NOTIFY
+                   statisticsSyncModeChanged)
     Q_PROPERTY(bool statisticsEnabled READ statisticsEnabled NOTIFY statisticsEnabledChanged)
     Q_PROPERTY(bool sasayakiEnabled READ sasayakiEnabled NOTIFY sasayakiEnabledChanged)
     Q_PROPERTY(bool syncing READ syncing NOTIFY syncingChanged)
@@ -69,6 +96,7 @@ class SyncSettingsViewModel : public QObject {
     bool uploadBooks() const;
     bool syncStatistics() const;
     bool syncAudioBook() const;
+    QString statisticsSyncMode() const;
     bool statisticsEnabled() const;
     bool sasayakiEnabled() const;
     bool syncing() const;
@@ -81,6 +109,7 @@ class SyncSettingsViewModel : public QObject {
     void setUploadBooks(bool value);
     void setSyncStatistics(bool value);
     void setSyncAudioBook(bool value);
+    void setStatisticsSyncMode(QString value);
 
     Q_INVOKABLE void signIn();
     Q_INVOKABLE void cancelSignIn();
@@ -90,6 +119,11 @@ class SyncSettingsViewModel : public QObject {
     Q_INVOKABLE void clearSyncError();
     // direction is "", "import" or "export"; "" compares bookmarks.
     Q_INVOKABLE void syncBook(QString folder, QString direction = {});
+    // One import-only sync for the book the reader just opened.
+    Q_INVOKABLE void syncReaderOpen(const QString& folder);
+    // Exports the open book when the reader persisted a bookmark; ignored
+    // while another sync runs.
+    Q_INVOKABLE void syncReaderClose(const QString& folder, bool bookmarkEdited);
 
     sync::TtuSyncOptions ttu_options(bool import_only) const;
     bool auto_sync_enabled() const;
@@ -108,12 +142,16 @@ class SyncSettingsViewModel : public QObject {
     void uploadBooksChanged();
     void syncStatisticsChanged();
     void syncAudioBookChanged();
+    void statisticsSyncModeChanged();
     void statisticsEnabledChanged();
     void sasayakiEnabledChanged();
     void syncingChanged();
     void syncErrorChanged();
     void syncFinished(int kind, QString title, int characterCount);
     void syncFailed(QString message);
+    // The reader open sync finished; imported tells the page to reload the
+    // bookmark, statistics and audiobook position.
+    void readerSyncFinished(QString folder, bool imported);
 
    private:
     bool refresh_provider();

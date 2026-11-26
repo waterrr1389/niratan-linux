@@ -29,5 +29,15 @@ ApplicationWindow {
         onBackRequested: readerWindow.close()
     }
 
-    onClosing: ReaderViewModel.setReaderActive(false)
+    onClosing: {
+        ReaderViewModel.setReaderActive(false)
+        // flushAutoSync: a close after a bookmark write exports through the
+        // sync model; prepareForClose consumes the pending export so a later
+        // close without another write sends nothing.
+        const folder = ReaderViewModel.bookFolder
+        const edited = ReaderViewModel.bookmarkEdited
+        ReaderViewModel.prepareForClose()
+        if (folder.length > 0)
+            SyncSettingsViewModel.syncReaderClose(folder, edited)
+    }
 }
