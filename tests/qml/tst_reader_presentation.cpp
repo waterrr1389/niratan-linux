@@ -701,9 +701,11 @@ void ReaderPresentationTest::tap_outside_dismisses_a_lookup_first() {
     QCOMPARE(page_->property("focusMode").toBool(), false);
 }
 
-// PopupView.body: an opaque card of Theme.popupBackground with an 8 px corner
-// radius and a 1 px hairline of textPrimary at 20%; PopupView.actionBar draws
-// the close in a single bar. The surface itself is never translucent.
+// PopupView.body: an opaque card of Theme.popupBackground with a rounded
+// corner and a 1 px hairline of textPrimary at 20%; PopupView.actionBar draws
+// the close in a single bar. The surface itself is never translucent. The
+// corner is the theme's lookupRadius, which matches the other floating
+// panels where Swift draws 8: the owner asked for one radius across them.
 void ReaderPresentationTest::lookup_popup_is_a_card() {
     auto settings = base_settings();
     settings.popup_action_bar = true;
@@ -715,7 +717,11 @@ void ReaderPresentationTest::lookup_popup_is_a_card() {
     QVERIFY(!surface->isVisible());
     open_lookup();
     QVERIFY(shown(surface));
-    QCOMPARE(surface->property("radius").toReal(), 8.0);
+    QObject* theme =
+        engine_.singletonInstance<QObject*>(QStringLiteral("Niratan"), QStringLiteral("Theme"));
+    QVERIFY(theme != nullptr);
+    QVERIFY(theme->property("lookupRadius").toReal() > 0);
+    QCOMPARE(surface->property("radius").toReal(), theme->property("lookupRadius").toReal());
     QObject* border = surface->property("border").value<QObject*>();
     QVERIFY(border != nullptr);
     QCOMPARE(border->property("width").toReal(), 1.0);

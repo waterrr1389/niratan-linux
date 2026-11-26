@@ -316,9 +316,18 @@ QtObject {
     readonly property int readerInfoSideInset: 96
     readonly property int readerInfoTopInset: 10
 
-    // The reader's lookup surface: its corner, the 48 high control bar and
-    // its 52x32 controls with 16 pt glyphs.
-    readonly property int lookupRadius: 8
+    // The lookup surfaces: their corner, the 48 high control bar and its
+    // 52x32 controls with 16 pt glyphs. PopupView draws an 8 px corner; here
+    // the popup takes the 20 px of the speed panel and the reader's side
+    // panel, so it matches the other floating panels it sits beside.
+    readonly property int lookupRadius: 20
+    // The popup's content stays this far inside its rounded border, so the
+    // rectangular web view leaves the corners round: a corner of an inset
+    // d lies inside the radius-r arc when d >= r (1 - 1/sqrt 2), 5.9 for 20,
+    // and one more pixel keeps it off the 1 px stroke.
+    readonly property int lookupContentInset: 7
+    // Both sides' insets, which the content's width and height give up.
+    readonly property int lookupContentInsets: 2 * lookupContentInset
     readonly property int lookupControlBarHeight: 48
     readonly property int lookupControlWidth: 52
     readonly property int lookupControlHeight: 32

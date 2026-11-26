@@ -230,8 +230,13 @@ Rectangle {
         id: controlsRow
 
         anchors.top: parent.top
-        width: parent.width
-        height: surface.showsControls ? Theme.lookupControlBarHeight : 0
+        anchors.left: parent.left
+        anchors.right: parent.right
+        anchors.margins: Theme.lookupContentInset
+        height: surface.showsControls
+                ? Math.min(Theme.lookupControlBarHeight,
+                           Math.max(0, surface.height - Theme.lookupContentInsets))
+                : 0
 
         Item {
             id: actionBar
@@ -299,7 +304,8 @@ Rectangle {
         id: controlsDivider
 
         anchors.top: controlsRow.bottom
-        width: parent.width
+        anchors.left: controlsRow.left
+        anchors.right: controlsRow.right
         height: surface.showsControls ? Theme.hairlineWidth : 0
         visible: surface.showsControls
         color: Theme.separator
@@ -310,9 +316,12 @@ Rectangle {
         property bool loadingPopupDocument: false
         // A new document must not consume outstanding replies for the old one.
         property int lastMiningRequest: 0
+        // Inside the rounded border, so the corners and the stroke show.
+        // A cramped popup never gives the page a negative size.
         anchors.top: controlsDivider.bottom
-        anchors.bottom: parent.bottom
-        width: parent.width
+        anchors.left: controlsRow.left
+        width: Math.max(0, surface.width - Theme.lookupContentInsets)
+        height: Math.max(0, surface.height - y - Theme.lookupContentInset)
         backgroundColor: Theme.popupBackground
         property real popupScale: ReaderViewModel.popupScale
         onPopupScaleChanged: runJavaScript("document.documentElement.style.zoom = " + popupScale)

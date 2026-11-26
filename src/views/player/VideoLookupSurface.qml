@@ -31,8 +31,15 @@ import QtWebChannel
 import QtWebEngine
 import Niratan
 
-Item {
+// PopupView.body: the opaque card of Theme.popupBackground with an 8 px
+// radius and a 1 px textPrimary hairline, as the reader's surface draws it.
+Rectangle {
     id: surface
+
+    color: Theme.popupBackground
+    radius: Theme.lookupRadius
+    border.width: Theme.hairlineWidth
+    border.color: Qt.rgba(Theme.textPrimary.r, Theme.textPrimary.g, Theme.textPrimary.b, 0.2)
 
     required property DictionaryPopupModel popupModel
     required property MiningViewModel miningModel
@@ -72,7 +79,10 @@ Item {
                         Math.min(surface.viewportHeight - surface.bottomInset
                                  - surface.borderInset - surface.height, top))
     }
-    opacity: ReaderViewModel.popupDisableTransparency ? 1.0 : 0.95
+    // PopupView.body: an opaque card in both popupDisableTransparency states,
+    // as on the reader. The web view does not take an item opacity, so a
+    // translucent frame would only tint the ring around it.
+    opacity: 1.0
 
     function showResults(html: string): void {
         results.loadingPopupDocument = true
@@ -148,8 +158,11 @@ Item {
     Rectangle {
         id: actionBar
         anchors.top: parent.top
-        width: parent.width
-        height: visible ? Math.min(parent.height, closeButton.implicitHeight) : 0
+        anchors.left: parent.left
+        anchors.right: parent.right
+        anchors.margins: Theme.lookupContentInset
+        height: visible ? Math.min(closeButton.implicitHeight,
+                                   Math.max(0, parent.height - Theme.lookupContentInsets)) : 0
         visible: ReaderViewModel.popupActionBar
         color: Theme.popupBackground
         clip: true
@@ -169,9 +182,12 @@ Item {
     WebEngineView {
         id: results
         property bool loadingPopupDocument: false
+        // Inside the rounded border, so the corners and the stroke show.
+        // A cramped popup never gives the page a negative size.
         anchors.top: actionBar.bottom
-        anchors.bottom: parent.bottom
-        width: parent.width
+        anchors.left: actionBar.left
+        width: Math.max(0, surface.width - Theme.lookupContentInsets)
+        height: Math.max(0, surface.height - y - Theme.lookupContentInset)
         backgroundColor: Theme.popupBackground
         property real popupScale: ReaderViewModel.popupScale
         onPopupScaleChanged: runJavaScript("document.documentElement.style.zoom = " + popupScale)
