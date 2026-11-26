@@ -40,6 +40,56 @@ class BookSearchTest : public QObject {
         QCOMPARE(hits.at(1).character, 2);
         QCOMPARE(hits.at(0).snippet, QStringLiteral("狐 A A A"));
     }
+
+    // A named chapter keeps its own label even when the name is empty; only
+    // a spine without any contents entry inherits the label before it.
+    void empty_label_is_not_inherited() {
+        const std::vector<SearchChapter> chapters{
+            {0, 0, QStringLiteral("One"), QStringLiteral("<body>fox</body>")},
+            {1, 3, QString(), QStringLiteral("<body>fox</body>")},
+            {2, 6, std::nullopt, QStringLiteral("<body>fox</body>")},
+        };
+        const auto hits = search_book(chapters, QStringLiteral("fox"));
+        QCOMPARE(hits.size(), 3U);
+        QCOMPARE(hits.at(0).label, QStringLiteral("One"));
+        QCOMPARE(hits.at(1).label, QString());
+        QCOMPARE(hits.at(2).label, QString());
+    }
+
+    // The deepest contents entry naming a spine labels it, the first among
+    // equals; a spine nothing names has no label of its own.
+    void labels_from_contents() {
+        const std::vector<ContentsEntry> contents{
+            {0, 0, "Part One", ""},
+            {0, 1, "Chapter One", ""},
+            {0, 1, "Chapter Two", "two"},
+            {2, 0, "Part Two", ""},
+            {3, 0, "", ""},
+            {-1, 2, "Before", ""},
+            {5, 2, "After", ""},
+        };
+        const auto labels = search_labels(contents, 5);
+        QCOMPARE(labels.size(), 5U);
+        QCOMPARE(labels.at(0), std::optional<QString>(QStringLiteral("Chapter One")));
+        QCOMPARE(labels.at(1), std::optional<QString>());
+        QCOMPARE(labels.at(2), std::optional<QString>(QStringLiteral("Part Two")));
+        QCOMPARE(labels.at(3), std::optional<QString>(QString()));
+        QCOMPARE(labels.at(4), std::optional<QString>());
+        QCOMPARE(search_labels({}, 2),
+                 (std::vector<std::optional<QString>>{std::nullopt, std::nullopt}));
+    }
+
+    // Consecutive hits under one label form one group, even across spines,
+    // so a chapter split into several files reads as one chapter.
+    void group_counts_follow_label_runs() {
+        const auto hit = [](int spine, const char* label) {
+            return SearchHit{spine, 0, QString::fromUtf8(label), {}, 0, 0};
+        };
+        const std::vector<SearchHit> hits{hit(0, "A"), hit(1, "A"), hit(1, "A"), hit(2, "B"),
+                                          hit(3, ""),  hit(4, ""),  hit(5, "A")};
+        QCOMPARE(search_group_counts(hits), (std::vector<int>{3, 0, 0, 1, 2, 0, 1}));
+        QVERIFY(search_group_counts({}).empty());
+    }
 };
 
 QTEST_APPLESS_MAIN(BookSearchTest)

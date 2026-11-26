@@ -66,8 +66,8 @@ std::vector<SearchHit> search_book(const std::vector<SearchChapter>& chapters, c
     std::vector<SearchHit> hits;
     QString label;
     for (const SearchChapter& chapter : chapters) {
-        if (!chapter.label.isEmpty()) {
-            label = chapter.label;
+        if (chapter.label) {
+            label = *chapter.label;
         }
         QString searchable;
         std::vector<qsizetype> search_offsets;
@@ -126,6 +126,35 @@ std::vector<SearchHit> search_book(const std::vector<SearchChapter>& chapters, c
     return hits;
 }
 
+std::vector<std::optional<QString>> search_labels(const std::vector<ContentsEntry>& contents,
+                                                  int spine_count) {
+    std::vector<std::optional<QString>> labels(static_cast<std::size_t>(std::max(spine_count, 0)));
+    std::vector<int> depths(labels.size(), -1);
+    for (const ContentsEntry& entry : contents) {
+        if (entry.spine_index < 0 || entry.spine_index >= spine_count) {
+            continue;
+        }
+        const auto index = static_cast<std::size_t>(entry.spine_index);
+        if (entry.level > depths[index]) {
+            depths[index] = entry.level;
+            labels[index] = QString::fromStdString(entry.title);
+        }
+    }
+    return labels;
+}
+
+std::vector<int> search_group_counts(const std::vector<SearchHit>& hits) {
+    std::vector<int> counts(hits.size(), 0);
+    std::size_t start = 0;
+    for (std::size_t i = 1; i <= hits.size(); ++i) {
+        if (i == hits.size() || hits[i].label != hits[start].label) {
+            counts[start] = static_cast<int>(i - start);
+            start = i;
+        }
+    }
+    return counts;
+}
+
 std::optional<std::vector<SearchHit>> search_epub(std::string_view path,
                                                 const QString& query) {
     // Each worker opens its own archive; the visible reader owns a different
@@ -134,17 +163,7 @@ std::optional<std::vector<SearchHit>> search_epub(std::string_view path,
     if (!session) {
         return std::nullopt;
     }
-    std::vector<QString> labels(static_cast<std::size_t>(session->spine_count()));
-    QString group;
-    for (const auto& entry : session->contents()) {
-        if (entry.level == 0 || group.isEmpty()) {
-            group = QString::fromStdString(entry.title);
-        }
-        auto& label = labels.at(static_cast<std::size_t>(entry.spine_index));
-        if (label.isEmpty() && !session->book().toc().empty()) {
-            label = group;
-        }
-    }
+    const auto labels = search_labels(session->contents(), session->spine_count());
     std::vector<SearchChapter> chapters;
     chapters.reserve(labels.size());
     for (int i = 0; i < session->spine_count(); ++i) {

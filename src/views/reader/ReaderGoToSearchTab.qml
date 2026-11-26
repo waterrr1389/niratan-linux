@@ -87,8 +87,8 @@ Item {
                 spacing: Theme.readerListSpacing
 
                 // groupedSearchResults: results arrive in spine order and the
-                // first of each spine carries groupCount, so a header goes
-                // above it; grouping by label would merge chapters sharing one.
+                // first of each run under one chapter label carries groupCount
+                // (reader::search_group_counts), so a header goes above it.
                 delegate: ColumnLayout {
                     id: searchItem
                     required property var modelData

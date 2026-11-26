@@ -213,22 +213,17 @@ void ReaderViewModel::searchBook(const QString& query) {
         const auto hits = watcher->result();
         state_->search_state = hits ? 2 : 3;
         if (hits) {
-            std::size_t group_end = 0;
+            const std::vector<int> group_counts = reader::search_group_counts(*hits);
             for (std::size_t i = 0; i < hits->size(); ++i) {
                 const auto& hit = hits->at(i);
-                int group_count = 0;
-                if (i == group_end) {
-                    do {
-                        ++group_end;
-                    } while (group_end < hits->size() && hits->at(group_end).spine_index == hit.spine_index);
-                    group_count = static_cast<int>(group_end - i);
-                }
                 state_->search_results.append(QVariantMap{
-                    {QStringLiteral("groupCount"), group_count},
+                    {QStringLiteral("groupCount"), group_counts[i]},
                     {QStringLiteral("character"), hit.character},
                     {QStringLiteral("label"), hit.label},
                     {QStringLiteral("before"), hit.snippet.left(hit.match_start).toHtmlEscaped()},
-                    {QStringLiteral("match"), hit.snippet.mid(hit.match_start, hit.match_end - hit.match_start).toHtmlEscaped()},
+                    {QStringLiteral("match"),
+                     hit.snippet.mid(hit.match_start, hit.match_end - hit.match_start)
+                         .toHtmlEscaped()},
                     {QStringLiteral("after"), hit.snippet.mid(hit.match_end).toHtmlEscaped()},
                 });
             }
