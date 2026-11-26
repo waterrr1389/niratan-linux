@@ -8,7 +8,10 @@
 // viewmodels/anki/video_mining_capture.cpp.
 //
 // The capture is stored in State before start, because start may complete
-// inline. setContext and setVideoContext drop it. The screenshot signal is
+// inline. setContext (a reader context) and the next mine drop it; a new or
+// cleared video context does not, because the page answers a screenshot only
+// after mpv has written it, by which time the cue may have moved on or the
+// popup may have closed. The screenshot signal is
 // emitted from this model; the page writes the still and answers through
 // screenshotFinished(ok).
 

@@ -133,7 +133,8 @@ void MiningViewModel::set_term_dictionaries(std::vector<anki::TermDictionary> di
 }
 
 void MiningViewModel::setVideoContext(const QVariant& video) {
-    state_->capture.reset();
+    // A pending capture keeps running: it copied its request when it started,
+    // and the next cue or a closing popup must not abandon the add.
     const auto value = message_body(video);
     if (value.typeId() != QMetaType::QVariantMap) {
         state_->video.reset();
@@ -160,7 +161,6 @@ void MiningViewModel::setVideoContext(const QVariant& video) {
 }
 
 void MiningViewModel::clearVideoContext() {
-    state_->capture.reset();
     state_->video.reset();
 }
 

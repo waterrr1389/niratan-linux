@@ -219,6 +219,7 @@ class MiningViewModelTest : public QObject {
     void video_invalid_audio_range_fails_the_add();
     void video_screenshot_failure_fails_the_add();
     void video_audio_failure_fails_the_add();
+    void video_capture_survives_context_changes_while_pending();
     void video_capture_falls_back_to_uploads();
     void video_direct_media_is_reused();
     void video_context_fields_use_the_title();
@@ -1009,6 +1010,39 @@ void MiningViewModelTest::video_screenshot_failure_fails_the_add() {
     QCOMPARE(replies.first().at(1).toMap(),
              mining_payload("added", "Added to Anki.", added_id_text));
     QCOMPARE(writer.calls, 2);
+}
+
+// mpv writes the still asynchronously, so the page answers a while after the
+// request. Meanwhile the next cue sets a new video context and closing the
+// popup clears it; the capture already owns its request and must still finish
+// the add it started.
+void MiningViewModelTest::video_capture_survives_context_changes_while_pending() {
+    Fixture f;
+    QTemporaryDir media;
+    QVERIFY(media.isValid());
+    f.anki.responses["getMediaDirPath"] = {{"result", media.path()}};
+    auto& settings = f.config.settings();
+    settings.field_mappings = {{"Word", "{expression}"}, {"Frame", "{video-screenshot}"}};
+    QVERIFY(f.save());
+
+    MiningViewModel model;
+    QString requested;
+    QObject::connect(&model, &MiningViewModel::screenshotRequested, &model,
+                     [&requested](const QString& path) { requested = path; });
+    const QString path = f.data.path() + QStringLiteral("/Show 01.mkv");
+    model.setVideoContext(video_context(path, QStringLiteral("Episode 1")));
+    QSignalSpy replies(&model, &MiningViewModel::replyReady);
+    model.mineEntry(30, content());
+    QTRY_VERIFY_WITH_TIMEOUT(!requested.isEmpty(), 5000);
+
+    model.setVideoContext(video_context(path, QStringLiteral("Episode 1")));
+    model.clearVideoContext();
+    QVERIFY(write_file(requested, QByteArray("frame")));
+    model.screenshotFinished(true);
+
+    QTRY_COMPARE_WITH_TIMEOUT(replies.size(), 1, 5000);
+    QCOMPARE(replies.first().at(1).toMap(),
+             mining_payload("added", "Added to Anki.", added_id_text));
 }
 
 void MiningViewModelTest::video_audio_failure_fails_the_add() {
