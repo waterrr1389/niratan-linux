@@ -42,8 +42,16 @@ Item {
     implicitWidth: size
     implicitHeight: size
 
+    // The glyph keeps its own size, centred: a control may stretch this item
+    // (a ChromeButton's contentItem spans the whole ring), and scaling the
+    // pixmap rendered at `size` up to that would blur it. IconImage padded
+    // instead of scaling up on its own; ColorImage does not, so this does.
     ColorImage {
-        anchors.fill: parent
+        id: glyph
+
+        anchors.centerIn: parent
+        width: Math.min(icon.size, icon.width)
+        height: Math.min(icon.size, icon.height)
         visible: icon.known
         source: icon.source
         color: icon.color
@@ -54,7 +62,7 @@ Item {
 
         transform: Scale {
             xScale: icon.mirrored ? -1 : 1
-            origin.x: icon.width / 2
+            origin.x: glyph.width / 2
         }
     }
 }
