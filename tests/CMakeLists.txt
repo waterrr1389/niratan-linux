@@ -913,6 +913,21 @@ add_test(NAME control_style COMMAND tst_control_style)
 set_tests_properties(control_style PROPERTIES
     ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QTWEBENGINE_CHROMIUM_FLAGS=--disable-gpu")
 
+qt_add_executable(tst_video_lookup_focus
+    qml/tst_video_lookup_focus.cpp
+)
+target_include_directories(tst_video_lookup_focus PRIVATE
+    ${CMAKE_SOURCE_DIR}/src
+    ${CMAKE_CURRENT_SOURCE_DIR}/viewmodels
+)
+target_link_libraries(tst_video_lookup_focus PRIVATE niratan_app niratan_appplugin niratan_style
+    niratan_styleplugin Qt6::Test
+    Qt6::Quick Qt6::QuickControls2 Qt6::WebEngineQuick)
+target_compile_options(tst_video_lookup_focus PRIVATE -Wall -Wextra -Wpedantic -Werror)
+add_test(NAME video_lookup_focus COMMAND tst_video_lookup_focus)
+set_tests_properties(video_lookup_focus PROPERTIES
+    ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QTWEBENGINE_CHROMIUM_FLAGS=--disable-gpu")
+
 qt_add_executable(tst_video_subtitle_lookup
     qml/tst_video_subtitle_lookup.cpp
 )

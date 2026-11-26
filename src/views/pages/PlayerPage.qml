@@ -880,6 +880,27 @@ Item {
         }
     }
 
+    // Whether the last item that held the keyboard was in the lookup popup.
+    property bool lastFocusInLookup: false
+
+    function inLookup(item) {
+        for (let current = item; current; current = current.parent) {
+            if (current === lookupLayer)
+                return true
+        }
+        return false
+    }
+
+    Connections {
+        target: page.Window.window
+
+        function onActiveFocusItemChanged() {
+            const focused = page.Window.activeFocusItem
+            if (focused && focused !== page.Window.contentItem)
+                page.lastFocusInLookup = page.inLookup(focused)
+        }
+    }
+
     Connections {
         target: lookupLayer
 
@@ -888,6 +909,14 @@ Item {
                 page.chromeVisible = true
                 hideTimer.stop()
             } else {
+                // A click in the popup gives its web view the keyboard; once
+                // it hides, the player's shortcuts (Space, T) must work again.
+                // Hiding may already have dropped the focus, so the last item
+                // that held it decides; focus elsewhere is left alone.
+                const focused = page.Window.activeFocusItem
+                const dropped = focused === null || focused === page.Window.contentItem
+                if (page.inLookup(focused) || (dropped && page.lastFocusInLookup))
+                    page.forceActiveFocus()
                 page.scheduleHide()
             }
         }
