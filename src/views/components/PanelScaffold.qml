@@ -83,6 +83,11 @@ Item {
         contentHeight: columnItem.height + scaffold.topPadding + scaffold.bottomPadding
         flickableDirection: Flickable.VerticalFlick
         boundsBehavior: Flickable.StopAtBounds
+        // A desktop scroll view scrolls by wheel, touchpad and scroll bar and
+        // never drags with the mouse. Taking no mouse button also keeps a
+        // press after a wheel scroll from being spent on stopping the scroll,
+        // which left the first click on a row without effect.
+        acceptedButtons: Qt.NoButton
 
         ScrollBar.vertical: ScrollBar {
             id: bar

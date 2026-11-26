@@ -63,6 +63,15 @@ Rectangle {
     border.width: Theme.cardBorderWidth
     border.color: Theme.floatingStroke
 
+    // The panel floats over the stage, whose tap pauses playback or closes
+    // the panel. Its scroll area takes no mouse button, so a click on the
+    // panel, including one a row's tap answers, stops here.
+    MouseArea {
+        anchors.fill: parent
+        z: -1
+        acceptedButtons: Qt.LeftButton
+    }
+
     Column {
         id: chrome
 

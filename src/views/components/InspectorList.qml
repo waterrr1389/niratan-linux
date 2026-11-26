@@ -11,6 +11,9 @@ ListView {
     clip: true
     boundsBehavior: Flickable.StopAtBounds
     flickableDirection: Flickable.VerticalFlick
+    // As in PanelScaffold: no mouse dragging, so a click right after a wheel
+    // scroll reaches the row instead of stopping the scroll.
+    acceptedButtons: Qt.NoButton
 
     ScrollBar.vertical: ScrollBar {
         visible: list.contentHeight > list.height

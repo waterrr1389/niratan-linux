@@ -38,6 +38,7 @@
 #include <QUrl>
 #include <QVariantList>
 #include <QVariantMap>
+#include <QWheelEvent>
 #include <QtQml/qqmlextensionplugin.h>
 #include <QtTest>
 
@@ -241,6 +242,7 @@ class VideoInspectorTest : public QObject {
     void subtitle_file_dialog_loads();
     void subtitle_appearance_writes_keys();
     void transcript_button_opens_the_sidebar();
+    void transcript_row_opens_on_the_first_mouse_click();
     void panel_fits_the_video_window();
 };
 
@@ -808,6 +810,61 @@ void VideoInspectorTest::transcript_button_opens_the_sidebar() {
                      .toInt(),
                  1);
     QTRY_VERIFY(!panel_visible(panel));
+}
+
+// The owner's report: the first real click on Open Transcript did nothing.
+// Drive it with the mouse, not the clicked signal, after scrolling the row
+// into view as a user must.
+void VideoInspectorTest::transcript_row_opens_on_the_first_mouse_click() {
+    niratan::test::TempDataRoot root;
+    QVERIFY(root.isValid());
+    const QString video = make_video(root.path(), QStringLiteral("Alpha.mkv"));
+
+    QQmlApplicationEngine engine;
+    QQuickWindow* window = nullptr;
+    QQuickItem* player = open_player(engine, video, &window);
+    QVERIFY2(player != nullptr, "the Video window did not open the player");
+    QVERIFY(QTest::qWaitForWindowExposed(window));
+    QVERIFY2(show_inspector(window), "the Inspector did not open");
+    QQuickItem* panel = panel_of(window);
+    QQuickItem* row = item_named(panel, QStringLiteral("inspectorOpenTranscript"));
+    QVERIFY2(row != nullptr, "the transcript row is missing");
+
+    QQuickItem* flick = row->parentItem();
+    while (flick != nullptr && !flick->inherits("QQuickFlickable")) {
+        flick = flick->parentItem();
+    }
+    QVERIFY2(flick != nullptr, "the transcript row is not in a scroll area");
+    // Scroll with the wheel, as the owner does, until the row is in view.
+    const QPointF over = flick->mapToScene(QPointF(flick->width() / 2, flick->height() / 2));
+    ulong stamp = 100000;
+    const auto wheel_by = [&](int delta) {
+        QWheelEvent wheel(over, window->mapToGlobal(over), QPoint(), QPoint(0, delta), Qt::NoButton,
+                          Qt::NoModifier, Qt::NoScrollPhase, false);
+        wheel.setTimestamp(stamp += 120);
+        QCoreApplication::sendEvent(window, &wheel);
+    };
+    for (int i = 0; i < 30 && !flick->property("atYEnd").toBool(); ++i) {
+        wheel_by(-120);
+        QTest::qWait(120);
+    }
+    QTRY_VERIFY(flick->property("atYEnd").toBool() && !flick->property("moving").toBool());
+
+    const QPointF centre = row->mapToScene(QPointF(row->width() / 2, row->height() / 2));
+    QVERIFY2(QRectF(QPointF(0, 0), window->size()).contains(centre),
+             "the transcript row is outside the window");
+    // A real pointer arrives over the row first; then one more wheel tick
+    // and a click before the scroll it starts has settled.
+    QTest::mouseMove(window, (centre - QPointF(40, 0)).toPoint());
+    QTest::mouseMove(window, centre.toPoint());
+    wheel_by(120);
+    QVERIFY2(flick->property("moving").toBool(), "the wheel tick did not start a scroll");
+    QTest::mouseClick(window, Qt::LeftButton, {}, centre.toPoint());
+    QTRY_COMPARE(player->property("studyOpen").toBool(), true);
+    QCOMPARE(item_named(window->contentItem(), QStringLiteral("studySidebar"))
+                 ->property("selectedTab")
+                 .toInt(),
+             1);
 }
 
 void VideoInspectorTest::panel_fits_the_video_window() {
