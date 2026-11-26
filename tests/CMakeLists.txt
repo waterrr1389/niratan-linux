@@ -855,6 +855,13 @@ target_link_libraries(tst_reader_sasayaki_navigation PRIVATE niratan_app Qt6::Te
 target_compile_options(tst_reader_sasayaki_navigation PRIVATE -Wall -Wextra -Wpedantic -Werror)
 add_test(NAME reader_sasayaki_navigation COMMAND tst_reader_sasayaki_navigation)
 
+qt_add_executable(tst_reader_navigation_history
+    viewmodels/tst_reader_navigation_history.cpp
+)
+target_link_libraries(tst_reader_navigation_history PRIVATE niratan_app Qt6::Test)
+target_compile_options(tst_reader_navigation_history PRIVATE -Wall -Wextra -Wpedantic -Werror)
+add_test(NAME reader_navigation_history COMMAND tst_reader_navigation_history)
+
 qt_add_executable(tst_reader_presentation_text
     viewmodels/tst_reader_presentation_text.cpp
 )

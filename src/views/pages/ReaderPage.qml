@@ -19,10 +19,12 @@
 // side panel even while the chapter has focus; in the gallery it first closes
 // the preview and then the gallery.
 //
-// Swift's ReaderLyricsModeView, the history back/forward capsules, cloud
-// sync-on-open and the Fushi conflict sheet have no Linux backing and are not
-// drawn. The web view keeps the live chapter, restore revision, selection and
-// highlight menu, page turns, lookup anchoring and cue callbacks.
+// Swift's ReaderLyricsModeView, cloud sync-on-open and the Fushi conflict
+// sheet have no Linux backing and are not drawn. The web view keeps the live
+// chapter, restore revision, selection and highlight menu, page turns, lookup
+// anchoring, cue callbacks and the activated-link policy of the WebKit
+// coordinator. A matching same-spine link runs in the open document and
+// reports its progress back as a programmatic destination.
 
 pragma ComponentBehavior: Bound
 
@@ -34,6 +36,7 @@ import QtQuick.Window
 import QtWebChannel
 import QtWebEngine
 import Niratan
+import "../reader/reader_link.js" as ReaderLink
 
 Item {
     id: page
@@ -46,6 +49,9 @@ Item {
     property string activeTool: ""
     property bool focusMode: false
     property SettingsViewModel appearanceSettingsModel
+    // A QString fragment reaches QML as "" whether the link omitted it or
+    // ended with '#', so the page keeps the activated link's own presence.
+    property bool linkFragmentPresent: false
 
     readonly property bool readerWindowActive: Window.window ? Window.window.active : true
     readonly property bool leadingPanelRequested: activeTool === "goTo"
@@ -111,6 +117,23 @@ Item {
                               if (url === ReaderViewModel.chapterUrl && typeof result === "number")
                                   ReaderViewModel.updateChapterProgress(result)
                           })
+    }
+
+    // WebKit coordinator link policy: a matched spine link stays in the reader
+    // and dismisses a lookup; every other navigation keeps its normal policy.
+    function handleLink(url): bool {
+        if (!ReaderViewModel.hasBook)
+            return false
+        page.linkFragmentPresent = ReaderLink.fragmentPresent(url)
+        if (!ReaderViewModel.jumpToLink(url))
+            return false
+        if (lookupModel.hasResults)
+            page.dismissLookup()
+        return true
+    }
+
+    function jumpWithinChapter(fragment) {
+        web.runJavaScript(ReaderLink.jumpScript(page.linkFragmentPresent, fragment))
     }
 
     // Re-applies the current chapter's cue ranges. The model's JSON is an
@@ -292,6 +315,9 @@ Item {
         function onChapterUrlChanged() {
             lookupModel.clear()
         }
+        function onInternalLinkJumpRequested(fragment) {
+            page.jumpWithinChapter(fragment)
+        }
     }
 
     DictionaryPopupModel {
@@ -386,6 +412,15 @@ Item {
                 request.accepted = true
                 selectionMenu.popup()
             }
+        }
+        // WebKit coordinator link policy: an activated link to a spine
+        // resource stays in the reader and any lookup is dismissed; every
+        // other navigation keeps its normal policy.
+        onNavigationRequested: function(request) {
+            if (request.navigationType !== WebEngineView.LinkClickedNavigation)
+                return
+            if (page.handleLink(request.url))
+                request.reject()
         }
         webChannel: WebChannel {
             id: channel

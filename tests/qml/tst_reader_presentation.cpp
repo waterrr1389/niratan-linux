@@ -35,7 +35,8 @@
 //   and lookupSasayakiJump.
 // - readerTopInfo holding readerTopTitle and readerTopProgress (Text).
 // - readerBottomControls holding readerBottomInfo (readerStatisticsLine,
-//   readerBottomProgress) and the IconButtons readerTrackingButton,
+//   readerBottomProgress), the history capsules readerBackButton and
+//   readerForwardButton, and the IconButtons readerTrackingButton,
 //   readerPlaybackButton, readerGoToButton, readerAppearanceButton,
 //   readerStatisticsButton, readerGalleryButton, readerSasayakiButton.
 // - readerLeadingPanel and readerTrailingPanel: the side panels (Rectangles).
@@ -56,6 +57,7 @@
 #include "views/dictionary/audio_scheme_handler.h"
 #include "views/reader/reader_scheme_handler.h"
 #include "models/profiles/reader_settings.h"
+#include "services/books/book_storage.h"
 #include "services/dictionary/dictionary_store.h"
 #include "services/settings/settings_store.h"
 #include "services/storage/app_paths.h"
@@ -66,6 +68,7 @@
 #include <QFont>
 #include <QGuiApplication>
 #include <QHash>
+#include <QJSValue>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
@@ -79,6 +82,7 @@
 #include <QUrlQuery>
 #include <QUuid>
 #include <QVariantMap>
+#include <QWebEngineProfile>
 #include <QtQml/qqmlextensionplugin.h>
 #include <QtTest>
 #include <QtWebEngineQuick/QtWebEngineQuick>
@@ -161,6 +165,76 @@ bool write_book(const std::filesystem::path& path) {
          "<html><body><p>あいうえおかきくけこ</p><img src=\"pixel.png\"/></body></html>"},
         {"second.xhtml", "<html><body><p>さしすせそたちつあしす</p></body></html>"},
         {"pixel.png", kPixel.toStdString()},
+    };
+    for (const auto& [name, bytes] : entries) {
+        zip_source_t* source = zip_source_buffer(archive, bytes.data(), bytes.size(), 0);
+        if (source == nullptr || zip_file_add(archive, name.c_str(), source, 0) < 0) {
+            if (source != nullptr) {
+                zip_source_free(source);
+            }
+            zip_discard(archive);
+            return false;
+        }
+    }
+    if (zip_close(archive) < 0) {
+        zip_discard(archive);
+        return false;
+    }
+    return true;
+}
+
+// Two chapters; the first puts an anchor after several screens of vertical
+// text, so a same-spine link reaches a nonzero progress. The second is short
+// enough to load without an anchor.
+bool write_link_book(const std::filesystem::path& path) {
+    int error = 0;
+    zip_t* archive = zip_open(path.c_str(), ZIP_CREATE | ZIP_TRUNCATE, &error);
+    if (archive == nullptr) {
+        return false;
+    }
+    const std::string opf =
+        R"XML(<package xmlns="http://www.idpf.org/2007/opf" version="3.0">
+    <metadata xmlns:dc="http://purl.org/dc/elements/1.1/"><dc:title>History Links</dc:title></metadata>
+    <manifest>
+        <item id="first" href="chapter.xhtml" media-type="application/xhtml+xml"/>
+        <item id="second" href="second.xhtml" media-type="application/xhtml+xml"/>
+        <item id="nav" href="nav.xhtml" media-type="application/xhtml+xml" properties="nav"/>
+    </manifest>
+    <spine><itemref idref="first"/><itemref idref="second"/></spine>
+</package>
+)XML";
+    const std::string nav =
+        R"XML(<html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops">
+<body><nav epub:type="toc"><ol>
+<li><a href="chapter.xhtml">Deep</a></li>
+<li><a href="second.xhtml">Second</a></li>
+</ol></nav></body></html>)XML";
+    std::string first = "<html><body><p id=\"links\">"
+                        "<a id=\"link-target\" href=\"reader://book/chapter.xhtml#target\">one</a>"
+                        "<a id=\"link-plain\" href=\"reader://book/chapter.xhtml\">two</a>"
+                        "<a id=\"link-empty\" href=\"reader://book/chapter.xhtml#\">three</a>"
+                        "</p>";
+    for (int paragraph = 0; paragraph < 24; ++paragraph) {
+        first += "<p>";
+        for (int column = 0; column < 120; ++column) {
+            first += "あ";
+        }
+        first += "</p>";
+    }
+    first += "<p id=\"target\">到達点</p></body></html>";
+    const std::vector<std::pair<std::string, std::string>> entries{
+        {"mimetype", "application/epub+zip"},
+        {"META-INF/container.xml",
+         R"XML(<container xmlns="urn:oasis:names:tc:opendocument:xmlns:container" version="1.0">
+    <rootfiles>
+        <rootfile full-path="book.opf" media-type="application/oebps-package+xml"/>
+    </rootfiles>
+</container>
+)XML"},
+        {"book.opf", opf},
+        {"nav.xhtml", nav},
+        {"chapter.xhtml", first},
+        {"second.xhtml", "<html><body><p>二章</p></body></html>"},
     };
     for (const auto& [name, bytes] : entries) {
         zip_source_t* source = zip_source_buffer(archive, bytes.data(), bytes.size(), 0);
@@ -386,6 +460,21 @@ void collect_shown_controls(QQuickItem* item, QList<QQuickItem*>& controls) {
 
 }  // namespace
 
+// Receives the value of a WebEngine runJavaScript callback.
+class JsResultReceiver : public QObject {
+    Q_OBJECT
+
+   public:
+    int request_id = 0;
+    QVariant value;
+
+    Q_INVOKABLE void receive(int id, const QVariant& result) {
+        if (id == request_id) {
+            value = result;
+        }
+    }
+};
+
 class ReaderPresentationTest : public QObject {
     Q_OBJECT
 
@@ -397,6 +486,7 @@ class ReaderPresentationTest : public QObject {
     void web_view_fills_the_reader();
     void web_view_fills_the_minimum_window();
     void focus_mode_hides_the_chrome();
+    void history_controls_follow_targets_and_focus_mode();
     void tap_outside_dismisses_a_lookup_first();
     void lookup_popup_is_a_card();
     void sasayaki_controls_replace_the_action_bar();
@@ -424,6 +514,7 @@ class ReaderPresentationTest : public QObject {
     void sasayaki_button_opens_its_inspector();
     void playback_toggle_follows_audio();
     void disabled_tools_are_hidden();
+    void history_link_wiring();
 
    private:
     bool apply_settings(const niratan::profiles::ReaderProfileSettings& settings);
@@ -445,6 +536,7 @@ class ReaderPresentationTest : public QObject {
     std::unique_ptr<QObject> object_;
     QQuickItem* page_ = nullptr;
     std::optional<niratan::profiles::ReaderProfileSettings> saved_;
+    JsResultReceiver js_receiver_;
 };
 
 void ReaderPresentationTest::initTestCase() {
@@ -674,6 +766,54 @@ void ReaderPresentationTest::focus_mode_hides_the_chrome() {
     QTRY_COMPARE(page_->property("focusMode").toBool(), false);
     QTRY_VERIFY(shown(find("readerTopInfo")));
     QVERIFY(shown(find("readerBottomControls")));
+}
+
+// nativeBottomControls: Back sits on the leading side and Forward before the
+// trailing tools, independently shown only while their target resolves.
+// Focus mode hides the whole bottom overlay; leaving it restores the controls.
+void ReaderPresentationTest::history_controls_follow_targets_and_focus_mode() {
+    reader_->closeBook();
+    QVERIFY(reader_->openBook(folder_));
+    complete_restore(*reader_);
+    reader_->updateChapterProgress(0.4);
+
+    QQuickItem* back = find("readerBackButton");
+    QQuickItem* forward = find("readerForwardButton");
+    QVERIFY(back != nullptr);
+    QVERIFY(forward != nullptr);
+    QVERIFY(!shown(back));
+    QVERIFY(!shown(forward));
+
+    reader_->goToContentsEntry(1, QString());
+    complete_restore(*reader_);
+    QTRY_VERIFY(shown(back));
+    QVERIFY(!shown(forward));
+    QCOMPARE(back->property("text").toString(), QStringLiteral("4"));
+
+    click(back);
+    if (reader_->restoring()) {
+        complete_restore(*reader_);
+    }
+    QTRY_COMPARE(reader_->chapter_index(), 0);
+    QCOMPARE(reader_->chapter_progress(), 0.4);
+    QTRY_VERIFY(!shown(back));
+    QTRY_VERIFY(shown(forward));
+    QCOMPARE(forward->property("text").toString(), QStringLiteral("10"));
+
+    send(*reader_, QStringLiteral("tapOutside"), {{"token", revision(*reader_)}});
+    QTRY_COMPARE(page_->property("focusMode").toBool(), true);
+    QTest::qWait(300);
+    QVERIFY(!shown(forward));
+
+    send(*reader_, QStringLiteral("tapOutside"), {{"token", revision(*reader_)}});
+    QTRY_COMPARE(page_->property("focusMode").toBool(), false);
+    QTRY_VERIFY(shown(forward));
+    click(forward);
+    if (reader_->restoring()) {
+        complete_restore(*reader_);
+    }
+    QTRY_COMPARE(reader_->chapter_index(), 1);
+    QCOMPARE(reader_->chapter_progress(), 0.0);
 }
 
 // onTapOutside with a popup closes the popup only; a text selection never
@@ -1686,6 +1826,179 @@ void ReaderPresentationTest::disabled_tools_are_hidden() {
     QVERIFY(shown(find("readerGoToButton")));
     QVERIFY(shown(find("readerAppearanceButton")));
     QVERIFY(shown(find("readerGalleryButton")));
+}
+
+// jumpToLink wiring through the WebKit coordinator's link policy: anchors in
+// the rendered document are clicked, so interception, lookup dismissal and the
+// browser-side jump all run. A same-spine destination below the first viewport
+// stores the DOM progress it reached; a missing fragment restores zero; a
+// present-empty fragment is observed at the reader's jumpToFragment call.
+// Cross-spine present-empty and missing fragments keep their initial restore
+// expressions.
+void ReaderPresentationTest::history_link_wiring() {
+    const QString source = data_root_.path() + QStringLiteral("/links.epub");
+    QVERIFY(write_link_book(source.toStdString()));
+
+    object_.reset();
+    window_.reset();
+    page_ = nullptr;
+    engine_.globalObject().setProperty(QStringLiteral("hoshiTestReceiver"),
+                                       engine_.newQObject(&js_receiver_));
+    auto* handler = new niratan::ui::ReaderSchemeHandler(QWebEngineProfile::defaultProfile());
+    handler->set_view_model(reader_);
+    QWebEngineProfile::defaultProfile()->installUrlSchemeHandler(QByteArrayLiteral("reader"),
+                                                                 handler);
+    QVERIFY(reader_->importAndOpen(QUrl::fromLocalFile(source)));
+    const QString folder = reader_->book_folder();
+    QVERIFY(create_page(1100, 760));
+    const QString chapter_url = reader_->chapter_url();
+    QVERIFY(!chapter_url.isEmpty());
+
+    QQuickItem* web = find("readerWeb");
+    QVERIFY(web != nullptr);
+
+    // Runs a script in the chapter and returns the callback's value.
+    const auto run_js = [this, web](const QString& script) {
+        js_receiver_.value = QVariant();
+        const int id = ++js_receiver_.request_id;
+        const QJSValue callback = engine_.evaluate(
+            QStringLiteral("(function(result) { hoshiTestReceiver.receive(%1, result); })")
+                .arg(id));
+        if (!QMetaObject::invokeMethod(web, "runJavaScript", Q_ARG(QString, script),
+                                       Q_ARG(QJSValue, callback))) {
+            return QVariant();
+        }
+        for (int waited = 0; waited < 5000; waited += 20) {
+            QTest::qWait(20);
+            if (js_receiver_.value.isValid()) {
+                return js_receiver_.value;
+            }
+        }
+        return QVariant();
+    };
+
+    // create_page can complete the model restore before Chromium loads the chapter.
+    QTRY_VERIFY_WITH_TIMEOUT(
+        run_js(QStringLiteral(
+                   "window.hoshiReaderRestoreToken === '%1' && "
+                   "['link-target', 'link-plain', 'link-empty'].every(id => "
+                   "document.getElementById(id) instanceof HTMLAnchorElement) && "
+                   "['calculateProgress', 'jumpToFragment', 'restoreProgress'].every(method => "
+                   "typeof window.hoshiReader?.[method] === 'function')")
+                   .arg(revision(*reader_)))
+            .toBool(),
+        10000);
+
+    // A user click on an anchor, which the navigation policy sees as a link.
+    const auto click_anchor = [this, web, &run_js](const QString& id) {
+        const QVariant rect =
+            run_js(QStringLiteral("(function() { var r = document.getElementById(\"%1\")"
+                                  ".getBoundingClientRect();"
+                                  " return [r.left + r.width / 2, r.top + r.height / 2]; })()")
+                       .arg(id));
+        const QVariantList point = rect.toList();
+        QVERIFY2(point.size() == 2, qPrintable(id));
+        const QPointF scene =
+            web->mapToScene(QPointF(point.at(0).toDouble(), point.at(1).toDouble()));
+        QTest::mouseClick(window_.get(), Qt::LeftButton, Qt::NoModifier, scene.toPoint());
+        QTest::qWait(50);
+    };
+
+    // The anchors sit at the chapter start; a jump leaves them off-screen.
+    const auto scroll_to_start = [&run_js] {
+        const QVariant value = run_js(QStringLiteral(
+            "window.hoshiReader.setScrollOffset(window.hoshiReader.getScrollContext(), 0); 1"));
+        QVERIFY(value.isValid());
+        QTest::qWait(50);
+    };
+
+    QQuickItem* surface = find("readerLookupSurface");
+    QVERIFY(surface != nullptr);
+    open_lookup();
+    QVERIFY(surface->isVisible());
+
+    click_anchor(QStringLiteral("link-target"));
+    QTRY_VERIFY(!surface->isVisible());
+    QCOMPARE(reader_->chapter_url(), chapter_url);
+    QTRY_VERIFY_WITH_TIMEOUT(reader_->chapter_progress() > 0.0, 10000);
+    QVERIFY(!reader_->property("internalJumpInProgress").toBool());
+    // The stored position is the DOM's own progress after the jump, not the
+    // origin the model recorded before it.
+    const QVariant dom_result = run_js(QStringLiteral("window.hoshiReader.calculateProgress()"));
+    QCOMPARE(dom_result.typeId(), QMetaType::Double);
+    const double dom_progress = dom_result.toDouble();
+    QVERIFY(dom_progress > 0.0);
+    QCOMPARE(reader_->chapter_progress(), dom_progress);
+    auto bookmark = niratan::books::BookStorage(niratan::storage::data_root())
+                        .load_bookmark(folder.toStdString());
+    QVERIFY(bookmark.has_value());
+    QVERIFY(bookmark->progress > 0.0);
+    QCOMPARE(bookmark->progress, dom_progress);
+
+    scroll_to_start();
+    click_anchor(QStringLiteral("link-plain"));
+    QCOMPARE(reader_->chapter_url(), chapter_url);
+    QTRY_COMPARE_WITH_TIMEOUT(reader_->chapter_progress(), 0.0, 10000);
+    bookmark = niratan::books::BookStorage(niratan::storage::data_root())
+                   .load_bookmark(folder.toStdString());
+    QVERIFY(bookmark.has_value());
+    QCOMPARE(bookmark->progress, 0.0);
+
+    // Observe the jumpToFragment and restoreProgress calls the empty-fragment
+    // click actually makes.
+    QVERIFY(run_js(QStringLiteral("window.hoshiObserved = { jump: [], restore: 0 };"
+                                  "var reader = window.hoshiReader;"
+                                  "var jump = reader.jumpToFragment.bind(reader);"
+                                  "reader.jumpToFragment = function(...args) {"
+                                  "  window.hoshiObserved.jump.push(args);"
+                                  "  return jump.apply(this, args); };"
+                                  "var restore = reader.restoreProgress.bind(reader);"
+                                  "reader.restoreProgress = function(...args) {"
+                                  "  window.hoshiObserved.restore += 1;"
+                                  "  return restore.apply(this, args); }; 1"))
+                .isValid());
+    click_anchor(QStringLiteral("link-empty"));
+    QCOMPARE(reader_->chapter_url(), chapter_url);
+    QJsonObject observed;
+    for (int attempt = 0; attempt < 100; ++attempt) {
+        observed =
+            QJsonDocument::fromJson(
+                run_js(QStringLiteral("JSON.stringify(window.hoshiObserved)")).toString().toUtf8())
+                .object();
+        if (!observed.value(QStringLiteral("jump")).toArray().isEmpty() ||
+            observed.value(QStringLiteral("restore")).toInt() > 0) {
+            break;
+        }
+        QTest::qWait(20);
+    }
+    const QJsonArray jumps = observed.value(QStringLiteral("jump")).toArray();
+    QCOMPARE(jumps.size(), 1);
+    QCOMPARE(jumps.at(0).toArray(), QJsonArray{QStringLiteral("")});
+    QCOMPARE(observed.value(QStringLiteral("restore")).toInt(), 0);
+    QTRY_COMPARE_WITH_TIMEOUT(reader_->chapter_progress(), 0.0, 10000);
+
+    QVERIFY(reader_->jumpToLink(QUrl(QStringLiteral("reader://book/second.xhtml#"))));
+    QCOMPARE(reader_->chapter_index(), 1);
+    QCOMPARE(reader_->chapter_progress(), 0.0);
+    const QString empty_fragment_document =
+        QString::fromStdString(reader_->document_for("second.xhtml"));
+    QVERIFY(empty_fragment_document.contains(
+        QStringLiteral("return window.hoshiReader.jumpToFragment(\"\")")));
+    QVERIFY(!empty_fragment_document.contains(
+        QStringLiteral("return window.hoshiReader.restoreProgress(")));
+
+    QTRY_VERIFY_WITH_TIMEOUT(!reader_->restoring(), 10000);
+    reader_->navigateBackwards();
+    QTRY_VERIFY_WITH_TIMEOUT(!reader_->restoring(), 10000);
+    QVERIFY(reader_->jumpToLink(QUrl(QStringLiteral("reader://book/second.xhtml"))));
+    QCOMPARE(reader_->chapter_index(), 1);
+    QCOMPARE(reader_->chapter_progress(), 0.0);
+    const QString absent_fragment_document =
+        QString::fromStdString(reader_->document_for("second.xhtml"));
+    QVERIFY(absent_fragment_document.contains(
+        QStringLiteral("return window.hoshiReader.restoreProgress(0)")));
+    QVERIFY(!absent_fragment_document.contains(
+        QStringLiteral("return window.hoshiReader.jumpToFragment(")));
 }
 
 int main(int argc, char* argv[]) {

@@ -6,10 +6,11 @@
 // with tabular digits, and a trailing row of 34 px glass icon buttons with 16 px
 // symbols, 8 apart, inset 32 from the trailing edge and 18 from the bottom.
 //
-// The order follows Swift: the tracking toggle, the lookup-aware playback
-// toggle, then Go to, Appearance, Statistics, Gallery and Sasayaki, each shown
-// only when its feature is enabled. History back/forward capsules and Lyrics
-// Mode have no Linux backing and are not drawn.
+// The order follows Swift: Back on the leading side, then on the trailing side
+// Forward before the tracking toggle, the lookup-aware playback toggle, Go to,
+// Appearance, Statistics, Gallery and Sasayaki. Each history capsule appears
+// only when its target resolves; Lyrics Mode has no Linux backing and is not
+// drawn.
 
 pragma ComponentBehavior: Bound
 
@@ -69,11 +70,38 @@ Item {
     }
 
     RowLayout {
+        anchors.left: parent.left
+        anchors.leftMargin: Theme.readerToolInsetTrailing
+        anchors.bottom: parent.bottom
+        anchors.bottomMargin: Theme.readerToolInsetBottom
+        spacing: Theme.readerToolSpacing
+
+        ChipButton {
+            objectName: "readerBackButton"
+            visible: ReaderViewModel.backTarget >= 0
+            Layout.preferredHeight: Theme.readerToolDiameter
+            glyph: "arrow.counterclockwise"
+            text: ReaderViewModel.backTargetText
+            onClicked: ReaderViewModel.navigateBackwards()
+        }
+    }
+
+    RowLayout {
         anchors.right: parent.right
         anchors.rightMargin: Theme.readerToolInsetTrailing
         anchors.bottom: parent.bottom
         anchors.bottomMargin: Theme.readerToolInsetBottom
         spacing: Theme.readerToolSpacing
+
+        ChipButton {
+            objectName: "readerForwardButton"
+            visible: ReaderViewModel.forwardTarget >= 0
+            Layout.preferredHeight: Theme.readerToolDiameter
+            glyph: "arrow.clockwise"
+            glyphAfterText: true
+            text: ReaderViewModel.forwardTargetText
+            onClicked: ReaderViewModel.navigateForwards()
+        }
 
         IconButton {
             objectName: "readerTrackingButton"

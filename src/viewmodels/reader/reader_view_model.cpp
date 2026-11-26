@@ -470,7 +470,11 @@ bool ReaderViewModel::openBook(const QString& folder) {
     state_->session = std::move(session);
     state_->has_book = true;
     state_->error.clear();
+    state_->back_history.clear();
+    state_->forward_history.clear();
+    setProperty("internalJumpInProgress", false);
     emit errorChanged();
+    emit historyChanged();
 
     // Statistics is configured for this book, after the session is open so a
     // failed open leaves no tracker behind. The settings file is read on every
@@ -545,9 +549,13 @@ void ReaderViewModel::closeBook() {
     state_->has_book = false;
     state_->chapter_index = 0;
     state_->chapter_progress = 0.0;
+    state_->back_history.clear();
+    state_->forward_history.clear();
+    setProperty("internalJumpInProgress", false);
     state_->restoring = false;
     state_->jump_pending = false;
     emit restoreStateChanged();
+    emit historyChanged();
     state_->fragment.clear();
     state_->chapter_url.clear();
     state_->spine_page_counts.clear();
@@ -636,7 +644,7 @@ void ReaderViewModel::message(const QString& name, const QString& payload) {
     } else if (name == QStringLiteral("restoreCompleted") && state_->restoring) {
         state_->restoring = false;
         emit restoreStateChanged();
-        if (!state_->fragment.isEmpty()) {
+        if (!state_->fragment.isNull()) {
             state_->fragment.clear();
             // An explicit jump records the destination without counting it as read.
             state_->chapter_progress =
@@ -654,11 +662,26 @@ void ReaderViewModel::message(const QString& name, const QString& payload) {
         const bool reveal = std::exchange(state_->reveal_cue_after_restore, false);
         emit documentRestored(reveal);
     } else if (name == QStringLiteral("progressChanged") && !state_->restoring &&
-               state_->settings.continuous_mode) {
-        const double progress = data.value(QStringLiteral("progress")).toDouble(state_->chapter_progress);
+               state_->settings.continuous_mode && !property("internalJumpInProgress").toBool()) {
+        const QJsonValue value = data.value(QStringLiteral("progress"));
+        if (!value.isDouble()) {
+            return;
+        }
+        start_tracking_on_navigation();
+        if (!state_->forward_history.empty()) {
+            state_->forward_history.clear();
+            emit historyChanged();
+        }
+        const double progress = value.toDouble();
         if (std::abs(clamp_progress(progress) - state_->chapter_progress) >= 1e-6) {
-            start_tracking_on_navigation();
             updateChapterProgress(progress);
+        }
+    } else if (name == QStringLiteral("internalJumpCompleted") && !state_->restoring &&
+               property("internalJumpInProgress").toBool()) {
+        setProperty("internalJumpInProgress", false);
+        const QJsonValue progress = data.value(QStringLiteral("progress"));
+        if (progress.isDouble()) {
+            syncProgressAfterProgrammaticJump(progress.toDouble());
         }
     } else if (name == QStringLiteral("pageChanged") && !state_->restoring) {
         const int count = data.value(QStringLiteral("pageCount")).toInt();
@@ -719,6 +742,7 @@ void ReaderViewModel::reload_document(bool reflow) {
     if (!state_->session.has_value()) {
         return;
     }
+    setProperty("internalJumpInProgress", false);
     ++state_->revision;
     state_->restoring = true;
     const std::string path = state_->session->spine_path(state_->chapter_index);
@@ -738,9 +762,10 @@ void ReaderViewModel::reload_document(bool reflow) {
 void ReaderViewModel::reload_settings(bool reflow) {
     const auto settings = state_->settings_watch.read();
     const auto& lookup = state_->settings_watch.lookup_settings;
-    const bool lookup_changed = state_->content_language != state_->settings_watch.content_language ||
-                                state_->scan_length != lookup.scan_length ||
-                                state_->scan_non_japanese != lookup.scan_non_japanese_text;
+    const bool language_changed =
+        state_->content_language != state_->settings_watch.content_language;
+    const bool lookup_changed = language_changed || state_->scan_length != lookup.scan_length ||
+        state_->scan_non_japanese != lookup.scan_non_japanese_text;
     state_->content_language = state_->settings_watch.content_language;
     state_->scan_length = lookup.scan_length;
     state_->scan_non_japanese = lookup.scan_non_japanese_text;
@@ -752,6 +777,9 @@ void ReaderViewModel::reload_settings(bool reflow) {
             state_->settings = *settings;
             update_palette();
         }
+    }
+    if (language_changed) {
+        emit historyChanged();
     }
     if (reader_changed || lookup_changed) {
         emit settingsChanged();
@@ -828,7 +856,7 @@ std::string ReaderViewModel::shell_document(const std::string& path) {
         json.replace("<", "\\u003c");
         input.highlights_json = json.toStdString();
     }
-    if (!state_->fragment.isEmpty()) {
+    if (!state_->fragment.isNull()) {
         input.initial_restore_expression =
             "window.hoshiReader.jumpToFragment(" + script_string(state_->fragment) + ")";
     } else {

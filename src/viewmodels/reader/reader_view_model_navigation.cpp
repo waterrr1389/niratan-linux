@@ -16,20 +16,228 @@
 
 #include "reader_view_model.h"
 
+#include <QStringList>
+#include <QUrl>
 #include <QVariant>
 
 #include <algorithm>
+#include <cmath>
+#include <optional>
+#include <utility>
 
+#include "models/profiles/content_language.h"
 #include "reader_view_model_state.h"
 
 namespace niratan::viewmodels {
 namespace {
 
+using HistoryPosition = std::pair<int, double>;
+using History = std::vector<HistoryPosition>;
+
 double clamp_progress(double progress) {
     return std::min(std::max(progress, 0.0), 1.0);
 }
 
+// NativeReaderModel.characterProgress: the chapter prefix plus the truncated
+// chapter size times progress, only when the spine item has chapter info.
+template <typename State>
+std::optional<int> character_progress(const State& state, const HistoryPosition& position) {
+    if (!state.session.has_value() || position.first < 0 ||
+        position.first >= state.session->spine_count()) {
+        return std::nullopt;
+    }
+    const auto& chapters = state.session->info().chapter_info;
+    const auto chapter = chapters.find(state.session->spine_path(position.first));
+    if (chapter == chapters.end()) {
+        return std::nullopt;
+    }
+    return chapter->second.current_total +
+        static_cast<int>(static_cast<double>(chapter->second.chapter_count) * position.second);
+}
+
+template <typename State>
+std::optional<int> history_target(const State& state, const History& history) {
+    if (history.empty()) {
+        return std::nullopt;
+    }
+    return character_progress(state, history.back());
+}
+
+template <typename State> QString history_target_text(const State& state, const History& history) {
+    const auto target = history_target(state, history);
+    if (!target.has_value()) {
+        return {};
+    }
+    const auto language = state.content_language == "en" ? profiles::ContentLanguage::english
+                                                         : profiles::ContentLanguage::japanese;
+    return QString::number(profiles::display_count(language, *target));
+}
+
+template <typename State> void record_position(State& state) {
+    state.back_history.emplace_back(state.chapter_index, state.chapter_progress);
+    state.forward_history.clear();
+}
+
+template <typename State> bool clear_forward(State& state) {
+    if (state.forward_history.empty()) {
+        return false;
+    }
+    state.forward_history.clear();
+    return true;
+}
+
+// NativeReaderView.jumpToLink's normalizedTarget: the container path of a
+// reader:// URL with query and fragment removed and dot segments resolved.
+std::optional<QString> normalized_resource_path(const QUrl& url) {
+    QStringList segments;
+    for (const QString& segment :
+         url.path(QUrl::FullyDecoded).split(QLatin1Char('/'), Qt::SkipEmptyParts)) {
+        if (segment == QStringLiteral(".")) {
+            continue;
+        }
+        if (segment == QStringLiteral("..")) {
+            if (segments.isEmpty()) {
+                return std::nullopt;
+            }
+            segments.removeLast();
+            continue;
+        }
+        segments.push_back(segment);
+    }
+    return segments.join(QLatin1Char('/'));
+}
+
+std::optional<int> spine_index_for_resource(const reader::BookSession& session, const QUrl& url) {
+    if (url.scheme() != QStringLiteral("reader") || url.host() != QStringLiteral("book")) {
+        return std::nullopt;
+    }
+    const auto path = normalized_resource_path(url);
+    if (!path.has_value()) {
+        return std::nullopt;
+    }
+    for (int index = 0; index < session.spine_count(); ++index) {
+        if (QString::fromStdString(session.spine_path(index)) == *path) {
+            return index;
+        }
+    }
+    return std::nullopt;
+}
+
 }  // namespace
+
+int ReaderViewModel::back_target() const {
+    const auto target = history_target(*state_, state_->back_history);
+    return target.value_or(-1);
+}
+
+int ReaderViewModel::forward_target() const {
+    const auto target = history_target(*state_, state_->forward_history);
+    return target.value_or(-1);
+}
+
+QString ReaderViewModel::back_target_text() const {
+    return history_target_text(*state_, state_->back_history);
+}
+
+QString ReaderViewModel::forward_target_text() const {
+    return history_target_text(*state_, state_->forward_history);
+}
+
+void ReaderViewModel::navigateBackwards() {
+    if (!state_->session.has_value() || state_->back_history.empty()) {
+        return;
+    }
+    const HistoryPosition target = state_->back_history.back();
+    state_->back_history.pop_back();
+    state_->forward_history.emplace_back(state_->chapter_index, state_->chapter_progress);
+    emit historyChanged();
+    if (target.first < 0 || target.first >= state_->session->spine_count()) {
+        return;
+    }
+    const double progress = clamp_progress(target.second);
+    save_statistics();
+    emit chapterTransitionStarted();
+    state_->chapter_index = target.first;
+    state_->chapter_progress = progress;
+    state_->fragment.clear();
+    state_->jump_pending = true;
+    persist_bookmark();
+    load_chapter(target.first, progress);
+}
+
+void ReaderViewModel::navigateForwards() {
+    if (!state_->session.has_value() || state_->forward_history.empty()) {
+        return;
+    }
+    const HistoryPosition target = state_->forward_history.back();
+    state_->forward_history.pop_back();
+    state_->back_history.emplace_back(state_->chapter_index, state_->chapter_progress);
+    emit historyChanged();
+    if (target.first < 0 || target.first >= state_->session->spine_count()) {
+        return;
+    }
+    const double progress = clamp_progress(target.second);
+    save_statistics();
+    emit chapterTransitionStarted();
+    state_->chapter_index = target.first;
+    state_->chapter_progress = progress;
+    state_->fragment.clear();
+    state_->jump_pending = true;
+    persist_bookmark();
+    load_chapter(target.first, progress);
+}
+
+bool ReaderViewModel::jumpToLink(const QUrl& url) {
+    if (!state_->session.has_value()) {
+        return false;
+    }
+    const auto spine_index = spine_index_for_resource(*state_->session, url);
+    if (!spine_index.has_value()) {
+        return false;
+    }
+
+    record_position(*state_);
+    emit historyChanged();
+    save_statistics();
+
+    const bool has_fragment = url.hasFragment();
+    QString fragment;
+    if (has_fragment) {
+        fragment = url.fragment(QUrl::FullyDecoded);
+        if (fragment.isNull()) {
+            fragment = QStringLiteral("");
+        }
+    }
+    if (*spine_index == state_->chapter_index) {
+        // QString loses its null/empty distinction across QML, so the page
+        // reads fragment presence from the activated URL itself and reports
+        // the settled progress back as an internalJumpCompleted message.
+        setProperty("internalJumpInProgress", true);
+        emit internalLinkJumpRequested(fragment);
+        return true;
+    }
+
+    emit chapterTransitionStarted();
+    state_->chapter_index = *spine_index;
+    state_->chapter_progress = 0.0;
+    state_->jump_pending = true;
+    persist_bookmark();
+    load_chapter(*spine_index, 0.0, fragment);
+    return true;
+}
+
+void ReaderViewModel::syncProgressAfterProgrammaticJump(double progress) {
+    if (!state_->session.has_value() || !std::isfinite(progress)) {
+        return;
+    }
+    state_->chapter_progress = clamp_progress(progress);
+    persist_bookmark();
+    if (state_->tracker) {
+        state_->tracker->reset_position(character_offset(), now_milliseconds());
+    }
+    emit progressChanged();
+    refresh_statistics();
+}
 
 void ReaderViewModel::goToChapter(int index) {
     if (!state_->session.has_value()) {
@@ -48,6 +256,8 @@ void ReaderViewModel::goToContentsEntry(int index, const QString& fragment) {
     if (!state_->session || index < 0 || index >= state_->session->spine_count()) {
         return;
     }
+    record_position(*state_);
+    emit historyChanged();
     persist_bookmark();
     save_statistics();
     emit chapterTransitionStarted();
@@ -68,6 +278,8 @@ void ReaderViewModel::jumpToCharacter(int character) {
         return;
     }
     if (const auto position = state_->session->position_for_character(character)) {
+        record_position(*state_);
+        emit historyChanged();
         persist_bookmark();
         save_statistics();
         emit chapterTransitionStarted();
@@ -134,8 +346,11 @@ void ReaderViewModel::handlePageTurnResult(bool forward, const QVariant& result)
         return;
     }
     // NativeReaderView's onPageTurn: Page Turn mode starts here, before the
-    // result moves the position.
+    // result moves the position, and a manual turn invalidates forward history.
     start_tracking_on_navigation();
+    if (clear_forward(*state_)) {
+        emit historyChanged();
+    }
     if (result.typeId() == QMetaType::Double || result.typeId() == QMetaType::Int) {
         updateChapterProgress(result.toDouble());
         return;

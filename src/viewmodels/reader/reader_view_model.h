@@ -101,6 +101,25 @@
 // URL is the same either way. Rect fields must be JSON numbers: a boolean,
 // which Swift's cgFloatValue reads as 0 or 1, is rejected, as no reader
 // script sends one.
+//
+// Jump history
+// ------------
+// Following NativeReaderView.swift's backHistory and forwardHistory, each
+// opened book starts with both stacks empty. A valid chapter, character or
+// matching internal-link jump records the current chapter and progress, then
+// clears the forward stack; an invalid chapter or an unmatched link changes
+// neither. backTarget and forwardTarget are the top entry's global raw
+// character offset, or -1 when there is no resolvable entry; zero is a valid
+// target. Their Text properties apply the active profile's display count to
+// that offset, without grouping. Back and forward pop in LIFO order, push the
+// current exact position onto the other stack and restore the popped entry
+// without a fragment at progress clamped to 0…1. A restore uses the
+// programmatic destination path, so reading statistics get no credit for the
+// jump. Manual page turns and continuous scrolling clear only the forward
+// stack; programmatic restores and synced bookmarks do not. A matching
+// same-spine link asks the page to jump in the open document through
+// internalLinkJumpRequested; the page reports the resulting progress through
+// syncProgressAfterProgrammaticJump, which stores it with no history change.
 
 #pragma once
 
@@ -139,7 +158,8 @@ class ReaderViewModel : public QObject {
     Q_PROPERTY(double logicalChapterProgress READ logical_chapter_progress NOTIFY progressChanged)
     Q_PROPERTY(int lookupOffset READ lookup_offset NOTIFY lookupOffsetChanged)
     Q_PROPERTY(int characterOffset READ character_offset NOTIFY progressChanged)
-    Q_PROPERTY(int chapterCharactersRemaining READ chapter_characters_remaining NOTIFY progressChanged)
+    Q_PROPERTY(
+        int chapterCharactersRemaining READ chapter_characters_remaining NOTIFY progressChanged)
     Q_PROPERTY(int pageCount READ page_count NOTIFY paginationChanged)
     Q_PROPERTY(int pageIndex READ page_index NOTIFY paginationChanged)
     Q_PROPERTY(int chapterPageCount READ chapter_page_count NOTIFY paginationChanged)
@@ -181,22 +201,23 @@ class ReaderViewModel : public QObject {
     Q_PROPERTY(QColor infoColor READ info_color NOTIFY paletteChanged)
     Q_PROPERTY(bool usesCustomInfoColor READ uses_custom_info_color NOTIFY paletteChanged)
     Q_PROPERTY(bool restoring READ restoring NOTIFY restoreStateChanged)
-    Q_PROPERTY(bool verticalWriting READ vertical_writing WRITE setVerticalWriting NOTIFY
-                   settingsChanged)
+    Q_PROPERTY(
+        bool verticalWriting READ vertical_writing WRITE setVerticalWriting NOTIFY settingsChanged)
     Q_PROPERTY(int fontSize READ font_size WRITE setFontSize NOTIFY settingsChanged)
     Q_PROPERTY(int horizontalPadding READ horizontal_padding WRITE setHorizontalPadding NOTIFY
                    settingsChanged)
-    Q_PROPERTY(int verticalPadding READ vertical_padding WRITE setVerticalPadding NOTIFY
-                   settingsChanged)
-    Q_PROPERTY(int statisticsTodayCharacters READ statistics_today_characters NOTIFY
-                   statisticsChanged)
+    Q_PROPERTY(
+        int verticalPadding READ vertical_padding WRITE setVerticalPadding NOTIFY settingsChanged)
+    Q_PROPERTY(
+        int statisticsTodayCharacters READ statistics_today_characters NOTIFY statisticsChanged)
     Q_PROPERTY(int statisticsTodaySeconds READ statistics_today_seconds NOTIFY statisticsChanged)
     Q_PROPERTY(int statisticsSessionSpeed READ statistics_session_speed NOTIFY statisticsChanged)
-    Q_PROPERTY(int statisticsSessionMinutes READ statistics_session_minutes NOTIFY statisticsChanged)
+    Q_PROPERTY(
+        int statisticsSessionMinutes READ statistics_session_minutes NOTIFY statisticsChanged)
     Q_PROPERTY(bool statisticsEnabled READ statistics_enabled NOTIFY statisticsChanged)
     Q_PROPERTY(bool tracking READ tracking NOTIFY statisticsChanged)
-    Q_PROPERTY(QVariantMap statisticsInspector READ statistics_inspector NOTIFY
-                   statisticsInspectorChanged)
+    Q_PROPERTY(
+        QVariantMap statisticsInspector READ statistics_inspector NOTIFY statisticsInspectorChanged)
     // The reader overlays' text, following NativeReaderView.progressString and
     // statisticsString, and ReaderGoToView.progressText for the current
     // position. reader_presentation.h owns the wording; these supply the
@@ -205,6 +226,12 @@ class ReaderViewModel : public QObject {
     Q_PROPERTY(QString progressText READ progress_text NOTIFY infoTextChanged)
     Q_PROPERTY(QString statisticsText READ statistics_text NOTIFY infoTextChanged)
     Q_PROPERTY(QString positionText READ position_text NOTIFY infoTextChanged)
+    // The top history entry's raw global character offset, or -1 when none is
+    // available, and its display count under the active profile.
+    Q_PROPERTY(int backTarget READ back_target NOTIFY historyChanged)
+    Q_PROPERTY(int forwardTarget READ forward_target NOTIFY historyChanged)
+    Q_PROPERTY(QString backTargetText READ back_target_text NOTIFY historyChanged)
+    Q_PROPERTY(QString forwardTargetText READ forward_target_text NOTIFY historyChanged)
 
    public:
     // Port zero lets isolated readers use an OS-assigned listener.
@@ -270,7 +297,7 @@ class ReaderViewModel : public QObject {
     QVariantList highlights() const;
     Q_INVOKABLE QString highlightScript(const QString& color) const;
     Q_INVOKABLE void addHighlight(const QString& script_url, const QString& color,
-                                 const QVariant& creation);
+                                  const QVariant& creation);
     Q_INVOKABLE void removeHighlight(const QString& id);
     QString error() const;
     bool has_book() const;
@@ -314,6 +341,10 @@ class ReaderViewModel : public QObject {
     QString progress_text() const;
     QString statistics_text() const;
     QString position_text() const;
+    int back_target() const;
+    int forward_target() const;
+    QString back_target_text() const;
+    QString forward_target_text() const;
     // ReaderGoToView.progressText for a search result's raw character.
     Q_INVOKABLE QString positionTextAt(int rawCharacter) const;
     // The Jump to alert's Go action: a valid display count jumps to its raw
@@ -333,6 +364,15 @@ class ReaderViewModel : public QObject {
     Q_INVOKABLE void goToChapter(int index);
     Q_INVOKABLE void goToContentsEntry(int index, const QString& fragment);
     Q_INVOKABLE void goToProgress(double progress);
+    // NativeReaderView.navigateBackwards and navigateForwards.
+    Q_INVOKABLE void navigateBackwards();
+    Q_INVOKABLE void navigateForwards();
+    // NativeReaderView.jumpToLink: true for a chapter link, which this model
+    // handles internally, and false for any other navigation.
+    Q_INVOKABLE bool jumpToLink(const QUrl& url);
+    // The progress the open document reached after a same-spine link jump;
+    // NativeReaderView.syncProgressAfterProgrammaticJump.
+    Q_INVOKABLE void syncProgressAfterProgrammaticJump(double progress);
     // The reader half of NativeReaderView.loadChapterForSasayaki: statistics
     // are flushed at the old position, then the destination chapter and
     // progress are stored with their bookmark before the document reloads.
@@ -393,6 +433,12 @@ class ReaderViewModel : public QObject {
     void searchChanged();
     void highlightsChanged();
     void galleryChanged();
+    // The back or forward target, its text or the displayed profile changed.
+    void historyChanged();
+    // The page should jump within the open chapter to this decoded fragment.
+    // A null fragment restores progress zero; a present fragment, including an
+    // empty one, requests a fragment jump.
+    void internalLinkJumpRequested(const QString& fragment);
     // progressText, statisticsText or positionText may have changed.
     void infoTextChanged();
     // The page should run navigation for this direction ("forward"/"backward").

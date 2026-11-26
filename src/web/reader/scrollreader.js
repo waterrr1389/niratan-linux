@@ -417,7 +417,7 @@ window.hoshiReader = {
         await document.fonts.ready;
         var target = fragment && (document.getElementById(fragment) || document.getElementsByName(fragment)[0]);
         
-        if (!target?.getClientRects().length) {
+        if (!target || !target.getClientRects().length) {
             this.notifyRestoreComplete();
             return false;
         }

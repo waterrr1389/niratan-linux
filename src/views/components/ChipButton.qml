@@ -13,8 +13,9 @@ Button {
     id: chip
 
     property bool selected: false
-    // An SF Symbol name drawn before the text.
+    // An SF Symbol name, drawn before the text unless requested otherwise.
     property string glyph
+    property bool glyphAfterText: false
 
     implicitWidth: Math.max(implicitBackgroundWidth, implicitContentWidth + leftPadding + rightPadding)
     implicitHeight: Theme.chipHeight
@@ -43,6 +44,7 @@ Button {
 
             anchors.centerIn: parent
             spacing: Theme.chipGlyphSpacing
+            layoutDirection: chip.glyphAfterText ? Qt.RightToLeft : Qt.LeftToRight
 
             Icon {
                 anchors.verticalCenter: parent.verticalCenter

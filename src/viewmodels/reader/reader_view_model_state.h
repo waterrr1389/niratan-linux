@@ -86,6 +86,10 @@ struct ReaderViewModel::State {
     bool tracking = false;
     int chapter_index = 0;
     double chapter_progress = 0.0;
+    // NativeReaderModel's backHistory and forwardHistory: the exact chapter
+    // and progress to return to, newest last.
+    std::vector<std::pair<int, double>> back_history;
+    std::vector<std::pair<int, double>> forward_history;
     int page_width = 800;
     int page_height = 600;
     int page_count = 0;

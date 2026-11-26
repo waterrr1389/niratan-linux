@@ -486,6 +486,7 @@ qt_add_qml_module(niratan_app
         src/views/reader/SasayakiChaptersTab.qml
         src/views/reader/ReaderAppearancePanel.qml
         src/views/reader/ReaderBottomControls.qml
+        src/views/reader/reader_link.js
         src/views/reader/ReaderGoToChaptersTab.qml
         src/views/reader/ReaderGoToHighlightsTab.qml
         src/views/reader/ReaderGoToPanel.qml

@@ -945,7 +945,7 @@ window.hoshiReader = {
         var target = fragment && (document.getElementById(fragment) || document.getElementsByName(fragment)[0]);
         
         // A missing or non-rendered anchor leaves a fresh chapter at its start.
-        if (context.pageSize <= 0 || !target?.getClientRects().length) {
+        if (context.pageSize <= 0 || !target || !target.getClientRects().length) {
             this.registerSnapScroll(0);
             this.notifyRestoreComplete();
             return false;

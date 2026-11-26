@@ -150,6 +150,7 @@ constexpr const char* kScrollProgress = R"js(    if (!window.hoshiNativeProgress
         var hoshiNativeLastProgressPost = 0;
         const postNativeProgress = () => {
             hoshiNativeProgressFrame = null;
+            if (window.hoshiInternalJumpCount > 0) { return; }
             const now = Date.now();
             if (now - hoshiNativeLastProgressPost < 250) { return; }
             hoshiNativeLastProgressPost = now;
@@ -159,7 +160,7 @@ constexpr const char* kScrollProgress = R"js(    if (!window.hoshiNativeProgress
             }
         };
         window.addEventListener('scroll', () => {
-            if (hoshiNativeProgressFrame === null) {
+            if (hoshiNativeProgressFrame === null && !(window.hoshiInternalJumpCount > 0)) {
                 hoshiNativeProgressFrame = requestAnimationFrame(postNativeProgress);
             }
         }, { passive: true });
