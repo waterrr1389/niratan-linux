@@ -31,6 +31,9 @@ Item {
         section.delegate: ListSectionHeader {
             required property string section
             width: ListView.view.width
+            // highlightsTab draws no header for an unnamed chapter.
+            visible: section.length > 0
+            height: visible ? implicitHeight : 0
             compact: true
             title: section
         }

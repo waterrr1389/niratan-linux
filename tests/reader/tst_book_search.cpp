@@ -79,6 +79,19 @@ class BookSearchTest : public QObject {
                  (std::vector<std::optional<QString>>{std::nullopt, std::nullopt}));
     }
 
+    // A spine resolves to its own label or the nearest one before it, the
+    // label highlights and search share.
+    void label_at_inherits_backwards() {
+        const std::vector<std::optional<QString>> labels{std::nullopt, QStringLiteral("One"),
+                                                         std::nullopt, QString(), std::nullopt};
+        QCOMPARE(search_label_at(labels, 0), QString());
+        QCOMPARE(search_label_at(labels, 1), QStringLiteral("One"));
+        QCOMPARE(search_label_at(labels, 2), QStringLiteral("One"));
+        QCOMPARE(search_label_at(labels, 4), QString());
+        QCOMPARE(search_label_at(labels, 9), QString());
+        QCOMPARE(search_label_at(labels, -1), QString());
+    }
+
     // Consecutive hits under one label form one group, even across spines,
     // so a chapter split into several files reads as one chapter.
     void group_counts_follow_label_runs() {

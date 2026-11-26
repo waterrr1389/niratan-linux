@@ -246,6 +246,10 @@ QVariantList ReaderViewModel::highlights() const {
     }
     const auto entries = books::highlights_in_range(
         state_->highlights, 0, state_->session->info().character_count);
+    // The same chapter labels as search, so a passage sits under one header
+    // in both tabs (reader::search_labels, search_label_at).
+    const auto labels =
+        reader::search_labels(state_->session->contents(), state_->session->spine_count());
     for (const auto& hit : entries) {
         const auto position = state_->session->position_for_character(hit.character);
         if (!position) {
@@ -254,7 +258,7 @@ QVariantList ReaderViewModel::highlights() const {
         rows.append(QVariantMap{
             {QStringLiteral("id"), QString::fromStdString(hit.id)},
             {QStringLiteral("spine"), position->first},
-            {QStringLiteral("label"), QString::fromStdString(state_->session->chapter_title(position->first))},
+            {QStringLiteral("label"), reader::search_label_at(labels, position->first)},
             {QStringLiteral("text"), QString::fromStdString(hit.text).trimmed()},
             {QStringLiteral("character"), hit.character},
             {QStringLiteral("color"), QString::fromStdString(hit.color)},

@@ -143,6 +143,18 @@ std::vector<std::optional<QString>> search_labels(const std::vector<ContentsEntr
     return labels;
 }
 
+QString search_label_at(const std::vector<std::optional<QString>>& labels, int spine_index) {
+    if (spine_index < 0 || static_cast<std::size_t>(spine_index) >= labels.size()) {
+        return {};
+    }
+    for (auto index = static_cast<std::size_t>(spine_index) + 1; index-- > 0;) {
+        if (labels[index]) {
+            return *labels[index];
+        }
+    }
+    return {};
+}
+
 std::vector<int> search_group_counts(const std::vector<SearchHit>& hits) {
     std::vector<int> counts(hits.size(), 0);
     std::size_t start = 0;

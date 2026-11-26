@@ -53,6 +53,9 @@ std::vector<SearchHit> search_book(const std::vector<SearchChapter>& chapters, c
 // the first among entries at that depth; nullopt where no entry names it.
 std::vector<std::optional<QString>> search_labels(const std::vector<ContentsEntry>& contents,
                                                   int spine_count);
+// The label shown for a spine: its own label, else the nearest one before it,
+// else empty. Out-of-range spines are empty. The highlights list uses it too.
+QString search_label_at(const std::vector<std::optional<QString>>& labels, int spine_index);
 // Per hit: the size of the group it starts, or 0 when it continues the group
 // before it. A group is a run of consecutive hits with the same label.
 std::vector<int> search_group_counts(const std::vector<SearchHit>& hits);
