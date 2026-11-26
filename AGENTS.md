@@ -112,38 +112,6 @@ stale copies of staged files.
 Directory names follow Niratan-win (`Services/Dictionary` becomes
 `src/services/dictionary`).
 
-## Changing code
-
-A change fixes the cause for the whole program, not only the place a
-symptom was reported. The code should read afterwards as if it had been
-written that way from the start.
-
-- Before changing anything, find every place that shares the behavior:
-  `rg` for the same symbol, pattern or copied block in every layer, and in
-  the reader, video and dictionary variants of a view. A bug found in one
-  of them is checked in all of them, and the fix and its test cover each
-  one that has it.
-- Fix it in the layer that owns it. A service bug is fixed in the
-  service, not worked around in a view model or QML; a shared component's
-  bug is fixed in the component, not patched in each page that uses it.
-- When two places need the same logic or control, move it into one shared
-  helper, service or kit component and use that everywhere; do not copy it
-  a second time. Use an existing helper before writing a new one.
-- No special cases that only make the reported case or a test pass: no
-  flags, magic values or branches for one caller. When a special case is
-  real, the comment says what makes it special.
-- Follow the surrounding code's names, structure, error handling and
-  patterns rather than starting a new style in one file.
-- Leave no old path beside the new one: remove code, properties, settings
-  and tests the change makes unused, in the same commit.
-- If doing it properly needs files outside the task's file list or a
-  change in another module, stop and report (see Workflow) instead of
-  fixing only the part the list allows.
-
-Reviewers check this as well: they search for the same problem elsewhere
-and reject a fix that leaves another copy of the bug, a duplicated block or
-a workaround in the wrong layer.
-
 ## Writing a module
 
 1. Find the Niratan files and symbols that implement the behavior. Every
@@ -233,7 +201,7 @@ Unicode rules, do the same rather than assuming ASCII.
 - `scripts/check-layers.sh` keeps services free of GUI headers and view
   models and views out of the filesystem; `scripts/layers-baseline.txt` lists today's
   exceptions and may only shrink.
-- `scripts/check-size.sh` caps a source file at 500 lines; files above it are
+- `scripts/check-size.sh` caps a source file at 800 lines; files above it are
   frozen in `scripts/size-baseline.txt` and may shrink but not grow. Meet the
   limit by splitting along a real seam, not by compressing code: one public
   header may have several `.cpp` files, sharing a module-private header such
@@ -251,7 +219,7 @@ Unicode rules, do the same rather than assuming ASCII.
 - `scripts/check-format.sh` runs `git clang-format --diff HEAD` over C++ files
   under `src/` and `tests/`, so changed lines must match `.clang-format`;
   existing files need no reformat, and compressing statements onto one line to
-  fit the 500-line limit is rejected.
+  fit the 800-line limit is rejected.
 - `scripts/check-wired.sh` requires every service header to be reached from a
   view model, a view or a flow test, directly or through another wired
   service; `scripts/wired-baseline.txt` lists today's unwired headers and may

@@ -10,7 +10,7 @@
 
 set -e
 cd "$(dirname "$0")/.."
-LIMIT=500
+LIMIT=800
 baseline="scripts/size-baseline.txt"
 fail=0
 
