@@ -30,13 +30,17 @@ RowLayout {
         case 4: return statistics
         case 5: return sasayaki
         case 6: return wordAudio
-        case 7: return syncSettings
+        case 7: return videoSettings
+        case 8: return syncSettings
         default: return null
         }
     }
 
     // False between leave() and enter(), while another section shows.
     property bool shown: true
+
+    // Forwarded by the Video form so MainWindow can reload an open player.
+    signal videoSettingsChanged()
 
     objectName: "settingsPage"
     spacing: 0
@@ -126,5 +130,12 @@ RowLayout {
     Component { id: statistics; StatisticsSettings {} }
     Component { id: sasayaki; SasayakiSettingsForm {} }
     Component { id: wordAudio; WordAudioSettings {} }
+    Component {
+        id: videoSettings
+
+        VideoSettings {
+            onVideoSettingsChanged: page.videoSettingsChanged()
+        }
+    }
     Component { id: syncSettings; SyncSettings {} }
 }

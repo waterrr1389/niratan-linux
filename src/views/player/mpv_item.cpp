@@ -625,6 +625,12 @@ bool MpvItem::resetSubtitleAppearance() {
     return save_video_settings(niratan::player::subtitle_appearance_defaults());
 }
 
+void MpvItem::reloadVideoSettings() {
+    video_settings_ = niratan::player::load_video_settings(niratan::storage::data_root());
+    apply_video_settings();
+    emit videoSettingsChanged();
+}
+
 bool MpvItem::save_video_settings(const QJsonObject& changes) {
     const auto root = niratan::storage::data_root();
     if (!niratan::player::store_video_settings(root, changes)) {

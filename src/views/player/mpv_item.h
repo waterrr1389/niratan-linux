@@ -170,6 +170,9 @@ class MpvItem : public QQuickFramebufferObject {
 
     QVariantMap videoSettings() const;
     Q_INVOKABLE bool changeVideoSetting(const QString& key, const QVariant& value);
+    // Re-reads settings.json after another surface wrote it, applies the map
+    // again and notifies the page.
+    Q_INVOKABLE void reloadVideoSettings();
     Q_INVOKABLE bool resetSubtitleAppearance();
     // The primary transcript cues, in subtitle order, for the gap policy.
     Q_INVOKABLE void setPrimaryCues(const QVariantList& cues);

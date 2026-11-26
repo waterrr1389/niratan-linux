@@ -963,6 +963,15 @@ add_test(NAME settings_appearance COMMAND tst_settings_appearance)
 set_tests_properties(settings_appearance PROPERTIES
     ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QTWEBENGINE_CHROMIUM_FLAGS=--disable-gpu")
 
+qt_add_executable(tst_settings_video qml/tst_settings_video.cpp)
+target_include_directories(tst_settings_video PRIVATE ${CMAKE_SOURCE_DIR}/src)
+target_link_libraries(tst_settings_video PRIVATE niratan_app niratan_appplugin niratan_style
+    niratan_styleplugin Qt6::Test Qt6::Quick Qt6::QuickControls2 Qt6::WebEngineQuick)
+target_compile_options(tst_settings_video PRIVATE -Wall -Wextra -Wpedantic -Werror)
+add_test(NAME settings_video COMMAND tst_settings_video)
+set_tests_properties(settings_video PROPERTIES
+    ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QTWEBENGINE_CHROMIUM_FLAGS=--disable-gpu")
+
 qt_add_executable(tst_settings_sync qml/tst_settings_sync.cpp)
 target_include_directories(tst_settings_sync PRIVATE ${CMAKE_SOURCE_DIR}/src)
 target_link_libraries(tst_settings_sync PRIVATE niratan_app niratan_appplugin niratan_style

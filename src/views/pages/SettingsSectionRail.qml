@@ -21,6 +21,7 @@ Rectangle {
         { key: "statistics", title: qsTr("Statistics"), symbol: "chart.xyaxis.line" },
         { key: "sasayaki", title: qsTr("Sasayaki (Audiobooks)"), symbol: "waveform" },
         { key: "wordAudio", title: qsTr("Word Audio"), symbol: "speaker.wave.2.fill" },
+        { key: "video", title: qsTr("Video"), symbol: "play.rectangle" },
         { key: "sync", title: qsTr("Syncing"), symbol: "cloud" },
         { key: "report", title: qsTr("Report an Issue"), symbol: "exclamationmark.bubble" }
     ]
@@ -66,9 +67,12 @@ Rectangle {
                     width: rows.width
 
                     SourceListCaption {
-                        visible: entry.index === 0 || entry.index === 4 || entry.modelData.key === "sync"
+                        visible: entry.index === 0 || entry.index === 4
+                            || entry.modelData.key === "video" || entry.modelData.key === "sync"
                         text: entry.index === 0 ? qsTr("Library")
-                            : entry.index === 4 ? qsTr("Reader") : qsTr("Sync & Data")
+                            : entry.index === 4 ? qsTr("Reader")
+                            : entry.modelData.key === "video" ? qsTr("Video")
+                            : qsTr("Sync & Data")
                     }
 
                     Item {

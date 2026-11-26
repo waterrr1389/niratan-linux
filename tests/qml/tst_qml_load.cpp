@@ -409,19 +409,20 @@ void QmlLoadTest::settings_column_switches_details() {
             rows.append(item);
         }
     }
-    const QStringList keys{"profiles", "appearance", "dictionaries", "anki",  "statistics",
-                           "sasayaki", "wordAudio",  "sync",         "report"};
-    const QStringList titles{"Profiles",   "Appearance", "Dictionaries",
-                             "Anki",       "Statistics", "Sasayaki (Audiobooks)",
-                             "Word Audio", "Syncing",    "Report an Issue"};
+    const QStringList keys{"profiles", "appearance", "dictionaries", "anki", "statistics",
+                           "sasayaki", "wordAudio",  "video",        "sync", "report"};
+    const QStringList titles{"Profiles",       "Appearance", "Dictionaries",
+                             "Anki",           "Statistics", "Sasayaki (Audiobooks)",
+                             "Word Audio",     "Video",      "Syncing",
+                             "Report an Issue"};
     QCOMPARE(rows.size(), keys.size());
     const auto sync_group = std::ranges::find_if(column_items, [](const QQuickItem* item) {
         return item->isVisible() && item->property("text").toString() == "Sync & Data";
     });
     QVERIFY(sync_group != column_items.end());
     const auto scene_top = [](const QQuickItem* item) { return item->mapToScene(QPointF()).y(); };
-    QVERIFY(scene_top(rows.at(6)) < scene_top(*sync_group));
-    QVERIFY(scene_top(*sync_group) < scene_top(rows.at(7)));
+    QVERIFY(scene_top(rows.at(7)) < scene_top(*sync_group));
+    QVERIFY(scene_top(*sync_group) < scene_top(rows.at(8)));
     auto* title = window->findChild<QQuickItem*>(QStringLiteral("settingsTitle"));
     QVERIFY(title);
     QCOMPARE(title->property("text").toString(), titles.at(1));
@@ -443,8 +444,9 @@ void QmlLoadTest::settings_column_switches_details() {
         if (index == 1) {
             QTest::keyClick(window, Qt::Key_Down);
         } else {
-            QTest::mouseClick(window, Qt::LeftButton, Qt::NoModifier,
-                              row->mapToScene(row->boundingRect().center()).toPoint());
+            // The rail scrolls once the Video entry is present; clicking the
+            // row's signal keeps the test independent of the viewport.
+            QVERIFY(QMetaObject::invokeMethod(row, "clicked"));
         }
         QTRY_VERIFY(page->findChild<QQuickItem*>(detail_name));
         // The Appearance form is kept and hidden; every other form is
@@ -470,7 +472,9 @@ void QmlLoadTest::settings_column_switches_details() {
     const qreal expanded_x = title->x();
     QVERIFY(window->setProperty("sidebarVisible", false));
     QTRY_VERIFY(title->x() > expanded_x);
-    QCOMPARE(title->property("text").toString(), titles.at(7));
+    QCOMPARE(title->property("text").toString(), titles.at(8));
+    QTest::keyClick(window, Qt::Key_Up);
+    QTRY_COMPARE(title->property("text").toString(), titles.at(7));
     QTest::keyClick(window, Qt::Key_Up);
     QTRY_COMPARE(title->property("text").toString(), titles.at(6));
     detail = page->findChild<QQuickItem*>(QStringLiteral("settings-wordAudio"));

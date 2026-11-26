@@ -253,6 +253,8 @@ qt_add_library(niratan_app STATIC
     src/viewmodels/settings/settings_audio.cpp
     src/viewmodels/settings/settings_view_model.h
     src/viewmodels/settings/settings_view_model_state.h
+    src/viewmodels/settings/video_settings_view_model.cpp
+    src/viewmodels/settings/video_settings_view_model.h
     src/viewmodels/sync/sync_settings_view_model.cpp
     src/viewmodels/sync/sync_settings_view_model.h
     src/viewmodels/reader/reader_view_model.cpp
@@ -497,6 +499,7 @@ qt_add_qml_module(niratan_app
         src/views/settings/WordAudioSettings.qml
         src/views/settings/DictionaryLibraryList.qml
         src/views/settings/SyncSettings.qml
+        src/views/settings/VideoSettings.qml
         src/views/reader/SasayakiChaptersTab.qml
         src/views/reader/ReaderAppearancePanel.qml
         src/views/reader/ReaderBottomControls.qml

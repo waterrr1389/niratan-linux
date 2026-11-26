@@ -495,6 +495,10 @@ Item {
         videoErrorDialog.showError(qsTr("Could not load the subtitle file."))
     }
 
+    function reloadVideoSettings() {
+        mpv.reloadVideoSettings()
+    }
+
     // VideoPlayerScreen+Mining.navigateToHistoryItem restores the play state
     // after the resolved seek, including when the jump opens another video.
     function jumpToHistory(id) {

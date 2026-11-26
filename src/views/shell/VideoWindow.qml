@@ -79,6 +79,10 @@ ApplicationWindow {
         videoWindow.requestActivate()
     }
 
+    function reloadVideoSettings() {
+        player.reloadVideoSettings()
+    }
+
     // VideoWindowPresenter.defaultVideoWindowFrame: scale both axes together
     // to fit the screen and centre the frame.
     function applyDefaultGeometry() {

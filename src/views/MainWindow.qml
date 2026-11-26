@@ -142,6 +142,12 @@ ApplicationWindow {
                 sourceComponent: settingsDetail
             }
 
+            Connections {
+                target: settingsLoader.item
+
+                function onVideoSettingsChanged() { videoWindow.reloadVideoSettings() }
+            }
+
             ToolbarButton {
                 x: Theme.sourceListTitleTrailing
                 y: (window.toolbarHeight - height) / 2
