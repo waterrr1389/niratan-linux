@@ -19,6 +19,7 @@
 
 #include "../viewmodels/data_root.h"
 
+#include <QAccessible>
 #include <QColor>
 #include <QDir>
 #include <QFile>
@@ -81,6 +82,44 @@ QList<QQuickItem*> named_items(QQuickItem* root, const QString& name) {
         collect_named(root, name, found);
     }
     return found;
+}
+
+void collect_items(QQuickItem* item, QList<QQuickItem*>& found) {
+    found.append(item);
+    for (QQuickItem* child : item->childItems()) {
+        collect_items(child, found);
+    }
+}
+
+// B2: no visible or accessible text names the unported Anime4K control.
+bool names_anime4k(QQuickItem* root) {
+    if (root == nullptr) {
+        return false;
+    }
+    const QVariant text = root->property("text");
+    if (text.isValid() &&
+        text.toString().contains(QStringLiteral("Anime4K"), Qt::CaseInsensitive)) {
+        return true;
+    }
+    const QVariant accessible = root->property("Accessible.name");
+    if (accessible.isValid() &&
+        accessible.toString().contains(QStringLiteral("Anime4K"), Qt::CaseInsensitive)) {
+        return true;
+    }
+#if QT_CONFIG(accessibility)
+    if (QAccessibleInterface* interface = QAccessible::queryAccessibleInterface(root);
+        interface != nullptr &&
+        interface->text(QAccessible::Name)
+            .contains(QStringLiteral("Anime4K"), Qt::CaseInsensitive)) {
+        return true;
+    }
+#endif
+    for (QQuickItem* child : root->childItems()) {
+        if (names_anime4k(child)) {
+            return true;
+        }
+    }
+    return false;
 }
 
 bool shown(QQuickItem* root, const QString& name) {
@@ -484,6 +523,33 @@ void VideoInspectorTest::video_tab_enhancement_and_equalizer() {
     QQuickItem* panel = panel_of(window);
     QObject* mpv = engine_of(panel);
     click(tab_item(panel, QStringLiteral("video")));
+
+    // B2: Anime4K is not ported; the Video Enhancement section shows only its
+    // three toggles and no visible or accessible text names the preset.
+    QQuickItem* enhancement = nullptr;
+    for (QQuickItem* section : named_items(panel, QStringLiteral("inspectorSection"))) {
+        if (section->property("sectionTitle").toString() == QStringLiteral("Video Enhancement")) {
+            enhancement = section;
+        }
+    }
+    QVERIFY2(enhancement != nullptr, "the Video Enhancement section is missing");
+    QStringList enhancement_labels;
+    QList<QQuickItem*> enhancement_items;
+    collect_items(enhancement, enhancement_items);
+    for (QQuickItem* item : enhancement_items) {
+        const QString label = item->property("label").toString();
+        if (!label.isEmpty()) {
+            enhancement_labels.append(label);
+        }
+    }
+    QCOMPARE(enhancement_labels,
+             (QStringList{QStringLiteral("Hardware Decoding"), QStringLiteral("Deinterlace"),
+                          QStringLiteral("HDR")}));
+    QVERIFY(!names_anime4k(panel));
+    QVERIFY(item_named(panel, QStringLiteral("inspectorAnime4KPreset")) == nullptr);
+    // The stored preset stays inert: no engine property applies a shader.
+    QVERIFY(!mpv->property("videoShaderPreset").isValid());
+    QVERIFY(!mpv->property("glslShaders").isValid());
 
     const QList<QPair<QString, QString>> toggles{
         {QStringLiteral("inspectorHardwareToggle"), QStringLiteral("videoHardwareDecodingEnabled")},

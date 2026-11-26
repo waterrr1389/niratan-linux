@@ -35,6 +35,41 @@ private slots:
         QCOMPARE(limits.value("videoSubtitleMaskMode").toString(), QStringLiteral("Blur"));
     }
 
+    // B1: VideoShaderPreset raw values; absent, null or unknown reads off.
+    void shaderPresetKey() {
+        QCOMPARE(video_settings().value("videoShaderPreset").toString(), QStringLiteral("off"));
+        QCOMPARE(video_settings({{"videoShaderPreset", QJsonValue(QJsonValue::Null)}})
+                     .value("videoShaderPreset")
+                     .toString(),
+                 QStringLiteral("off"));
+        QCOMPARE(video_settings({{"videoShaderPreset", "unknown"}})
+                     .value("videoShaderPreset")
+                     .toString(),
+                 QStringLiteral("off"));
+        QCOMPARE(video_settings({{"videoShaderPreset", 1}}).value("videoShaderPreset").toString(),
+                 QStringLiteral("off"));
+        QCOMPARE(video_settings({{"videoShaderPreset", "anime4KFast"}})
+                     .value("videoShaderPreset")
+                     .toString(),
+                 QStringLiteral("anime4KFast"));
+        QCOMPARE(video_settings({{"videoShaderPreset", "anime4KHighQuality"}})
+                     .value("videoShaderPreset")
+                     .toString(),
+                 QStringLiteral("anime4KHighQuality"));
+
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        const auto path = std::filesystem::path(dir.path().toStdString());
+        QVERIFY(store_video_settings(path, {{"videoShaderPreset", "anime4KHighQuality"}}));
+        QCOMPARE(load_video_settings(path).value("videoShaderPreset").toString(),
+                 QStringLiteral("anime4KHighQuality"));
+        QCOMPARE(niratan::storage::read_json_file(path / "settings.json")
+                     .document.object()
+                     .value("videoShaderPreset")
+                     .toString(),
+                 QStringLiteral("anime4KHighQuality"));
+    }
+
     void legacyAndColor() {
         const auto old = video_settings({{"videoSubtitleVerticalPosition", 100},
                                          {"videoSubtitleShadowRadius", 7},
