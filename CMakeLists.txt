@@ -7,6 +7,13 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
+# Debug executables carry hundreds of megabytes of Qt and QML objects. LLD
+# links them several times faster than GNU ld, which matters for every test.
+find_program(LLD_PROGRAM ld.lld)
+if(LLD_PROGRAM)
+    add_link_options(-fuse-ld=lld)
+endif()
+
 # Worktrees and branch switches rebuild the same sources; ccache shares the
 # objects between build directories when it is installed.
 find_program(CCACHE_PROGRAM ccache)

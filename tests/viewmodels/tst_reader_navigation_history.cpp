@@ -85,7 +85,6 @@ namespace {
 const QString kFolder = QStringLiteral("History");
 const QString kEmptyFolder = QStringLiteral("Empty");
 constexpr int kFirstCharacters = 10;
-constexpr int kSecondCharacters = 10;
 constexpr int kThirdCharacters = 1200;
 
 bool write_epub(const std::filesystem::path& path) {
