@@ -265,10 +265,31 @@ Item {
         property real lastX: 0
         property real lastY: 0
 
+        // glyphIndex(for:in:) answers the character whose box holds the
+        // point; positionAt answers the nearest caret position, which is the
+        // next character's for the right half of a glyph.
+        // A point right of a line's end lands on that line's last character,
+        // as glyphIndex answers the nearest glyph.
         function offsetAt(x, y) {
             const point = mouseArea.mapToItem(offsetter, x, y)
-            const offset = offsetter.positionAt(point.x, point.y)
-            return Math.max(0, offset)
+            let offset = Math.max(0, offsetter.positionAt(point.x, point.y))
+            if (offset > 0) {
+                const previous = previousScalar(offset)
+                const before = offsetter.positionToRectangle(previous)
+                const caret = offsetter.positionToRectangle(offset)
+                const sameLine = point.y >= before.y && point.y < before.y + before.height
+                if (sameLine && point.x >= before.x && (caret.y !== before.y || point.x < caret.x
+                                                        || offsetter.text[offset] === "\n"))
+                    offset = previous
+            }
+            const end = offsetter.text.length
+            return offset > 0 && offset >= end ? previousScalar(end) : offset
+        }
+
+        // The UTF-16 offset of the scalar before offset, so a step back never
+        // lands inside a surrogate pair.
+        function previousScalar(offset) {
+            return offset - (/[\uDC00-\uDFFF]/.test(offsetter.text.charAt(offset - 1)) ? 2 : 1)
         }
 
         Timer {
@@ -277,8 +298,7 @@ Item {
             onTriggered: {
                 if (!row.lookupModel.pointerMoved())
                     return
-                const point = mouseArea.mapToItem(offsetter, mouseArea.lastX, mouseArea.lastY)
-                const offset = Math.max(0, offsetter.positionAt(point.x, point.y))
+                const offset = mouseArea.offsetAt(mouseArea.lastX, mouseArea.lastY)
                 row.clicked(offset, row.characterRect(offset))
             }
         }
