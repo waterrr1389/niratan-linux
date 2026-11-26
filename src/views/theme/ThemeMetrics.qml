@@ -164,6 +164,9 @@ QtObject {
     readonly property int studyLoopMarkerSize: 20
     readonly property int videoWindowMinimumWidth: 285
     readonly property int videoWindowMinimumHeight: 120
+    // While the Inspector is open, Linux keeps enough height for its fixed
+    // header and tabs, a scrolling viewport and the playback bar below it.
+    readonly property int videoWindowInspectorMinimumHeight: 360
 
     // The trailing reader inspector scales with the window, after the
     // playerPanelWidth clamp of NativeReaderView.swift, so it stays usable in

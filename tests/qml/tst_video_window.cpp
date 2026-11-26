@@ -293,6 +293,20 @@ void VideoWindowTest::video_window_geometry_follows_swift() {
         std::abs(video->position().y() + video->height() / 2.0 - screenCenter.y()) <=
             centerTolerance,
         qPrintable(QStringLiteral("window is not centred: y %1").arg(video->position().y())));
+
+    // The closed window keeps Swift's minimum. Opening the Inspector grows a
+    // shorter window to the Linux reachability minimum; closing restores only
+    // the minimum, not the user's previous height.
+    auto* player = video->findChild<QQuickItem*>(QStringLiteral("videoPlayerPage"));
+    QVERIFY(player != nullptr);
+    video->setHeight(120);
+    QTRY_COMPARE(video->height(), 120);
+    QVERIFY(QMetaObject::invokeMethod(player, "toggleInspector"));
+    QTRY_COMPARE(video->minimumHeight(), 360);
+    QTRY_COMPARE(video->height(), 360);
+    QVERIFY(QMetaObject::invokeMethod(player, "toggleInspector"));
+    QTRY_COMPARE(video->minimumHeight(), 120);
+    QCOMPARE(video->height(), 360);
 }
 
 // B2: a from-beginning open carries the flag through the window request.

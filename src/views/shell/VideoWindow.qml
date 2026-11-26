@@ -19,7 +19,11 @@
 //
 // Geometry follows Swift: default 1132x637 scaled down on both axes together
 // when the screen is smaller than that, centred on the desktop's available
-// area, minimum 285x120 and no maximum. The Linux title bar and window-manager
+// area, minimum 285x120 and no maximum. While the Inspector is open Linux
+// raises the minimum height to 360 and grows a shorter window, keeping its
+// fixed controls and a scrolling viewport above the playback bar; closing the
+// Inspector restores the 120 minimum without shrinking the window. The Linux
+// title bar and window-manager
 // behaviour are the desktop's; the transparent titlebar, traffic-light fading
 // and aspect-locked live resizing are not ported (Decisions).
 pragma ComponentBehavior: Bound
@@ -35,7 +39,8 @@ ApplicationWindow {
     objectName: "videoWindow"
     title: qsTr("Video")
     minimumWidth: Theme.videoWindowMinimumWidth
-    minimumHeight: Theme.videoWindowMinimumHeight
+    minimumHeight: player.inspectorOpen ? Theme.videoWindowInspectorMinimumHeight
+                                        : Theme.videoWindowMinimumHeight
     visible: false
     color: Theme.videoBackground
 
@@ -51,6 +56,11 @@ ApplicationWindow {
     // VideoWindowPresenter uses NSApp.keyWindow?.screen; the shell hands in
     // the main window's screen so the frame lands on the same display.
     property var ownerScreen
+
+    onMinimumHeightChanged: {
+        if (videoWindow.height < videoWindow.minimumHeight)
+            videoWindow.height = videoWindow.minimumHeight
+    }
 
     onVisibleChanged: {
         if (videoWindow.visible && !videoWindow.placed) {
