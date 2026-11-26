@@ -231,6 +231,8 @@ qt_add_library(niratan_app STATIC
     src/viewmodels/player/player_lookup_view_model.h
     src/viewmodels/player/player_study_view_model.cpp
     src/viewmodels/player/player_study_view_model.h
+    src/viewmodels/player/player_study_view_model_navigation.cpp
+    src/viewmodels/player/player_study_view_model_state.h
     src/viewmodels/settings/settings_dictionary_preferences.cpp
     src/viewmodels/settings/settings_popup_settings.cpp
     src/viewmodels/settings/settings_reader_colors.cpp
@@ -504,6 +506,7 @@ qt_add_qml_module(niratan_app
         src/views/player/VideoErrorDialog.qml
         src/views/player/StudySidebar.qml
         src/views/player/StudyLoopMarker.qml
+        src/views/player/TranscriptAlignToolbar.qml
         src/views/player/StudyTimelineRow.qml
         src/views/player/VideoOpenMenu.qml
         src/views/player/PlayerEmptyState.qml

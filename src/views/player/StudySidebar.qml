@@ -255,6 +255,7 @@ Rectangle {
 
                 RowLayout {
                     TextField {
+                        objectName: "transcriptSearchField"
                         Layout.fillWidth: true
                         Layout.minimumWidth: Theme.studySearchMinimumWidth
                         placeholderText: qsTr("Search transcript")
@@ -278,6 +279,11 @@ Rectangle {
                         enabled: sidebar.playbackReady
                         onClicked: subtitleDialog.open()
                     }
+                }
+
+                TranscriptAlignToolbar {
+                    Layout.fillWidth: true
+                    study: sidebar.study
                 }
 
                 Item {

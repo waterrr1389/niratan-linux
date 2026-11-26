@@ -29,6 +29,16 @@ const QByteArray kAss = QByteArray(
     "Dialogue: 0,0:00:01.00,0:00:02.00,Default,,0,0,0,,星\n");
 const QByteArray kSrt = QByteArray("1\n00:00:01,000 --> 00:00:02,000\n星\n");
 const QByteArray kVtt = QByteArray("WEBVTT\n\n00:00.500 --> 00:02.000\n星\n");
+const QByteArray kNavigation = QByteArray("1\n00:00:00,000 --> 00:00:01,500\nfirst\n\n"
+                                          "2\n00:00:02,000 --> 00:00:04,000\nsecond\n\n"
+                                          "3\n00:00:05,000 --> 00:00:07,000\nthird\n");
+const QByteArray kTiedCues = QByteArray("1\n00:00:00,000 --> 00:00:01,000\nA\n\n"
+                                        "2\n00:00:00,500 --> 00:00:01,000\nB\n\n"
+                                        "3\n00:00:02,000 --> 00:00:03,000\nC\n\n"
+                                        "4\n00:00:02,000 --> 00:00:02,500\nD\n");
+const QByteArray kEndedRowHidesEarlierOverlap =
+    QByteArray("1\n00:00:00,000 --> 00:00:10,000\nlong\n\n"
+               "2\n00:00:02,000 --> 00:00:03,000\nshort\n");
 
 QUrl file(const char* path) {
     return QUrl::fromLocalFile(QString::fromLatin1(path));
@@ -45,6 +55,10 @@ class PlayerStudyViewModelTest : public QObject {
     void validSrtGivesCues();
     void garbageAndUnreadableReportTheirErrors();
     void minedFormatComesFromTheParsedDocument();
+    void relativeSeek_usesFullTranscriptAtDelayedPlayback();
+    void relativeSeek_stopsAtEndedRowAndDoesNotWrap();
+    void alignment_usesAdjacentGroupsAndAvailability();
+    void transcriptFlags_ignoreSearchResults();
 
    private:
     std::unique_ptr<TempDataRoot> root_;
@@ -124,6 +138,136 @@ void PlayerStudyViewModelTest::minedFormatComesFromTheParsedDocument() {
     const auto embedded_items = MiningHistoryStore::at_data_root().load_snapshot().items;
     QCOMPARE(embedded_items.size(), 1u);
     QCOMPARE(embedded_items.front().subtitle_format, std::optional<std::string>("embedded"));
+}
+
+void PlayerStudyViewModelTest::relativeSeek_usesFullTranscriptAtDelayedPlayback() {
+    PlayerStudyViewModel model;
+    QSignalSpy seeks(&model, &PlayerStudyViewModel::seekRequested);
+    model.setVideo(file("/tmp/navigation.mkv"));
+    model.setPlaybackReady(true);
+    model.setSubtitleDocument(file("/tmp/navigation.srt"), kNavigation, true);
+
+    model.updatePlayback(3.25, 0.0);
+    QCOMPARE(model.current_row(), 1);
+    QVERIFY(model.seekPreviousSubtitleCue());
+    QCOMPARE(seeks.size(), 1);
+    QCOMPARE(seeks.takeFirst().front().toDouble(), 0.0);
+    QVERIFY(model.seekNextSubtitleCue());
+    QCOMPARE(seeks.size(), 1);
+    QCOMPARE(seeks.takeFirst().front().toDouble(), 5.0);
+
+    // In a gap the anchor is the next cue, so +1 moves past it.
+    model.updatePlayback(1.75, 0.0);
+    QVERIFY(model.seekNextSubtitleCue());
+    QCOMPARE(seeks.size(), 1);
+    QCOMPARE(seeks.takeFirst().front().toDouble(), 5.0);
+
+    // Filtering and the visible window never change which cue is adjacent.
+    model.set_search(QStringLiteral("third"));
+    QVERIFY(model.transcript().size() == 1);
+    model.updatePlayback(3.75, 0.5);
+    QVERIFY(model.seekPreviousSubtitleCue());
+    QCOMPARE(seeks.size(), 1);
+    QCOMPARE(seeks.takeFirst().front().toDouble(), 0.5);
+
+    // Both cue endpoints are inclusive.
+    model.set_search({});
+    model.updatePlayback(4.0, 0.0);
+    QCOMPARE(model.current_row(), 1);
+    QVERIFY(model.seekPreviousSubtitleCue());
+    QCOMPARE(seeks.size(), 1);
+    QCOMPARE(seeks.takeFirst().front().toDouble(), 0.0);
+
+    PlayerStudyViewModel empty;
+    QSignalSpy empty_seeks(&empty, &PlayerStudyViewModel::seekRequested);
+    QVERIFY(!empty.seekPreviousSubtitleCue());
+    QVERIFY(!empty.seekNextSubtitleCue());
+    QCOMPARE(empty_seeks.size(), 0);
+}
+
+void PlayerStudyViewModelTest::relativeSeek_stopsAtEndedRowAndDoesNotWrap() {
+    PlayerStudyViewModel model;
+    QSignalSpy seeks(&model, &PlayerStudyViewModel::seekRequested);
+    model.setVideo(file("/tmp/overlap.mkv"));
+    model.setPlaybackReady(true);
+    model.setSubtitleDocument(file("/tmp/overlap.srt"), kEndedRowHidesEarlierOverlap, true);
+    model.updatePlayback(4.0, 0.0);
+
+    // The examined short cue ended before 4.0, so the earlier long overlap is
+    // not the containing row (Subtitle.rowIndex(containing:)).
+    QVERIFY(model.seekPreviousSubtitleCue());
+    QCOMPARE(seeks.size(), 1);
+    QCOMPARE(seeks.takeFirst().front().toDouble(), 0.0);
+    QVERIFY(!model.seekNextSubtitleCue());
+    QCOMPARE(seeks.size(), 0);
+
+    model.setSubtitleDocument(file("/tmp/navigation.srt"), kNavigation, true);
+    model.updatePlayback(0.5, 0.0);
+    QVERIFY(!model.seekPreviousSubtitleCue());
+    model.updatePlayback(7.5, 0.0);
+    QVERIFY(!model.seekNextSubtitleCue());
+    QVERIFY(model.seekPreviousSubtitleCue());
+    QCOMPARE(seeks.size(), 1);
+    QCOMPARE(seeks.takeFirst().front().toDouble(), 2.0);
+}
+
+void PlayerStudyViewModelTest::alignment_usesAdjacentGroupsAndAvailability() {
+    PlayerStudyViewModel model;
+    QSignalSpy alignments(&model, &PlayerStudyViewModel::subtitleAlignmentRequested);
+    QSignalSpy seeks(&model, &PlayerStudyViewModel::seekRequested);
+    model.setVideo(file("/tmp/ties.mkv"));
+    model.setPlaybackReady(true);
+    model.setSubtitleDocument(file("/tmp/ties.srt"), kTiedCues, true);
+    model.updatePlayback(1.5, 0.0);
+
+    QVERIFY(model.can_align_previous_subtitle());
+    QVERIFY(model.can_align_next_subtitle());
+    QVERIFY(model.alignPreviousSubtitleToCurrentTime());
+    QCOMPARE(alignments.size(), 1);
+    QCOMPARE(alignments.takeFirst().front().toDouble(), 1.0);
+    QVERIFY(model.alignNextSubtitleToCurrentTime());
+    QCOMPARE(alignments.size(), 1);
+    QCOMPARE(alignments.takeFirst().front().toDouble(), -0.5);
+    QCOMPARE(seeks.size(), 0);
+
+    model.updatePlayback(0.0, 0.0);
+    QVERIFY(!model.can_align_previous_subtitle());
+    QVERIFY(model.can_align_next_subtitle());
+    QVERIFY(!model.alignPreviousSubtitleToCurrentTime());
+    QCOMPARE(alignments.size(), 0);
+    QVERIFY(model.alignNextSubtitleToCurrentTime());
+    QCOMPARE(alignments.size(), 1);
+    QCOMPARE(alignments.takeFirst().front().toDouble(), -0.5);
+
+    model.updatePlayback(8.0, 0.0);
+    QVERIFY(model.can_align_previous_subtitle());
+    QVERIFY(!model.can_align_next_subtitle());
+    QVERIFY(model.alignPreviousSubtitleToCurrentTime());
+    QCOMPARE(alignments.size(), 1);
+    QCOMPARE(alignments.takeFirst().front().toDouble(), 6.0);
+    QVERIFY(!model.alignNextSubtitleToCurrentTime());
+    QCOMPARE(alignments.size(), 0);
+
+    // The adjacent cue is found at playback minus subtitle delay, but the
+    // emitted delay is playback time minus that cue's start.
+    model.updatePlayback(3.75, 0.5);
+    QVERIFY(model.alignPreviousSubtitleToCurrentTime());
+    QCOMPARE(alignments.size(), 1);
+    QCOMPARE(alignments.takeFirst().front().toDouble(), 1.75);
+}
+
+void PlayerStudyViewModelTest::transcriptFlags_ignoreSearchResults() {
+    PlayerStudyViewModel model;
+    model.setSubtitleDocument(file("/tmp/navigation.srt"), kNavigation, true);
+    QVERIFY(model.has_transcript_rows());
+
+    model.set_search(QStringLiteral("no match"));
+    QVERIFY(model.transcript().isEmpty());
+    QVERIFY(model.has_transcript_rows());
+
+    model.set_search({});
+    model.updatePlayback(1.0, 0.0);
+    QVERIFY(model.has_transcript_rows());
 }
 
 QTEST_GUILESS_MAIN(PlayerStudyViewModelTest)

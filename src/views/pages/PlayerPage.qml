@@ -55,6 +55,10 @@ Item {
         ? page.Window.window.visibility === Window.FullScreen
         : false
 
+    // The readiness the shortcut and delay actions use. It normally follows
+    // mpv; keeping it as a page property lets headless tests exercise the key
+    // handlers without an OpenGL render context.
+    property bool playbackReady: mpv.loaded
     property bool chromeVisible: true
     property bool barHovered: false
     property bool scrubbing: false
@@ -217,7 +221,7 @@ Item {
     }
 
     function setSubtitleDelay(value) {
-        if (!mpv.loaded)
+        if (!page.playbackReady)
             return
         var delay = Math.max(-60, Math.min(60, value))
         mpv.subtitleDelay = delay
@@ -487,7 +491,7 @@ Item {
             page.exitFullScreen()
             return
         }
-        if (!mpv.loaded || page.textFieldFocused())
+        if (!page.playbackReady || page.textFieldFocused())
             return
 
         var alt = (event.modifiers & Qt.AltModifier) !== 0
@@ -507,7 +511,19 @@ Item {
 
         var handled = true
         var plain = !alt && !shift
-        if (event.key === Qt.Key_Space && plain) {
+        if (event.key === Qt.Key_Left && alt && !shift) {
+            if (event.isAutoRepeat || !studyModel.seekPreviousSubtitleCue())
+                handled = false
+        } else if (event.key === Qt.Key_Right && alt && !shift) {
+            if (event.isAutoRepeat || !studyModel.seekNextSubtitleCue())
+                handled = false
+        } else if (event.key === Qt.Key_Left && shift && !alt) {
+            if (event.isAutoRepeat || !studyModel.alignPreviousSubtitleToCurrentTime())
+                handled = false
+        } else if (event.key === Qt.Key_Right && shift && !alt) {
+            if (event.isAutoRepeat || !studyModel.alignNextSubtitleToCurrentTime())
+                handled = false
+        } else if (event.key === Qt.Key_Space && plain) {
             if (!event.isAutoRepeat)
                 page.togglePause()
         } else if (event.key === Qt.Key_Left && plain) {
@@ -588,6 +604,11 @@ Item {
         id: studyModel
         chapters: mpv.chapters
         onSeekRequested: function(seconds) { mpv.seek(seconds) }
+        onSubtitleAlignmentRequested: function(delay) {
+            if (lookupLayer.hasPopup)
+                lookupLayer.closeLookup()
+            page.setSubtitleDelay(delay)
+        }
         onChapterRequested: function(id) { mpv.seekToChapter(id) }
         onVideoRequested: function(file) { page.openVideo(file) }
         onHistorySubtitleRequested: function(file, trackId, seconds) {

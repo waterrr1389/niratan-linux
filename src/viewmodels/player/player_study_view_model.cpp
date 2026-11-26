@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#include "player_study_view_model.h"
+#include "player_study_view_model_state.h"
 
 #include "services/player/mining_history_store.h"
 #include "services/player/subtitle_document.h"
@@ -25,12 +25,6 @@ using player::MiningHistoryItem;
 constexpr double kFoundationEpoch = 978307200.0;
 constexpr int kWindowSize = 80;
 constexpr int kWindowExtension = 40;
-
-struct Cue {
-    double start;
-    double end;
-    QString text;
-};
 
 // SubtitleFormat raw values, as the mining history stores them.
 QString subtitle_format_value(player::SubtitleFormat format) {
@@ -66,62 +60,6 @@ QString search_key(const QString& text) {
 }
 
 }  // namespace
-
-struct PlayerStudyViewModel::State {
-    player::MiningHistoryStore history_store = player::MiningHistoryStore::at_data_root();
-    QUrl video;
-    QUrl subtitle_file;
-    QString subtitle_format;
-    QString transcript_error;
-    QString notice;
-    QString search;
-    QList<Cue> cues;
-    QList<double> end_prefix;
-    QList<int> filtered;
-    int first = 0;
-    int last = 0;
-    int current = -1;
-    int focus = -1;
-    int current_chapter = -1;
-    double position = 0.0;
-    double delay = 0.0;
-    Cue native{-1.0, -1.0, {}};
-    bool ready = false;
-    bool visible = true;
-    bool can_mine = false;
-    bool following = true;
-    QVariantList transcript;
-    QVariantList history;
-    QVariantList chapters;
-    QVariantMap track;
-    player::MiningHistoryStore::Snapshot snapshot;
-    std::optional<MiningHistoryItem> pending_jump;
-
-    auto first_after(double time) const {
-        return std::upper_bound(cues.cbegin(), cues.cend(), time,
-                                [](double time, const Cue& cue) { return time < cue.start; });
-    }
-
-    int active_row(double time) const {
-        for (qsizetype i = first_after(time) - cues.cbegin(); i > 0 && end_prefix[i - 1] >= time;) {
-            --i;
-            if (cues[i].end >= time) {
-                return int(i);
-            }
-        }
-        return -1;
-    }
-
-    int nearest_row(double time) const {
-        return current >= 0 || cues.isEmpty() ? current
-            : int(std::min(first_after(time) - cues.cbegin(), cues.size() - 1));
-    }
-
-    auto find_item(const QString& id) const {
-        const std::string key = id.toStdString();
-        return std::ranges::find(snapshot.items, key, &MiningHistoryItem::id);
-    }
-};
 
 PlayerStudyViewModel::PlayerStudyViewModel(QObject* parent)
     : QObject(parent), state_(std::make_unique<State>()) {
@@ -289,6 +227,15 @@ void PlayerStudyViewModel::publish_transcript() {
         latest = std::max(latest, cue.end);
         state_->end_prefix.append(latest);
     }
+    player::SubtitleDocument document;
+    document.source = state_->subtitle_file;
+    document.cues.reserve(state_->cues.size());
+    for (qsizetype i = 0; i < state_->cues.size(); ++i) {
+        const Cue& cue = state_->cues[i];
+        document.cues.append({QString::number(i), cue.start, cue.end, cue.text});
+    }
+    state_->alignment_store.emplace(std::move(document));
+    update_alignment_availability();
     const int current = state_->active_row(adjusted_time());
     if (std::exchange(state_->current, current) != current)
         emit currentRowChanged();
@@ -382,6 +329,7 @@ void PlayerStudyViewModel::update_current() {
         state_->current_chapter = chapter;
         emit currentChapterChanged();
     }
+    update_alignment_availability();
     update_can_mine();
 }
 
@@ -398,10 +346,14 @@ void PlayerStudyViewModel::playChapter(int index) {
 }
 
 void PlayerStudyViewModel::update_can_mine() {
+    // Mining uses every cue covering adjusted time, so an ended overlapping row
+    // must not hide an earlier cue that still runs (SubtitleCueStore.cues_at).
+    const bool has_active_cue =
+        state_->alignment_store && !state_->alignment_store->cues_at(adjusted_time()).isEmpty();
     const bool can_mine = state_->ready && state_->visible && state_->snapshot.limit > 0 &&
-        !state_->video.isEmpty() && (state_->cues.isEmpty()
-            ? !state_->native.text.isEmpty() && state_->native.start >= 0.0
-            : state_->current >= 0);
+        !state_->video.isEmpty() &&
+        (state_->cues.isEmpty() ? !state_->native.text.isEmpty() && state_->native.start >= 0.0
+                                : has_active_cue);
     if (state_->can_mine != can_mine) {
         state_->can_mine = can_mine;
         emit canMineChanged();

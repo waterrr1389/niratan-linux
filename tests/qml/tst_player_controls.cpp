@@ -29,6 +29,7 @@
 // start, so the bar is not visible, but its controls still route their signals.
 
 #include "../viewmodels/data_root.h"
+#include "viewmodels/player/player_study_view_model.h"
 
 #include <QDir>
 #include <QFile>
@@ -166,6 +167,35 @@ QString make_video(const QString& base) {
     return touch_file(source + QStringLiteral("/Alpha.mp4"), 10);
 }
 
+class KeyEventProbe : public QObject {
+    Q_OBJECT
+    Q_PROPERTY(int key READ key CONSTANT)
+    Q_PROPERTY(int modifiers READ modifiers CONSTANT)
+    Q_PROPERTY(bool isAutoRepeat READ is_auto_repeat CONSTANT)
+    Q_PROPERTY(bool accepted READ accepted WRITE set_accepted)
+
+   public:
+    KeyEventProbe(int key, int modifiers, bool auto_repeat)
+        : key_(key), modifiers_(modifiers), auto_repeat_(auto_repeat) {}
+
+    int key() const { return key_; }
+    int modifiers() const { return modifiers_; }
+    bool is_auto_repeat() const { return auto_repeat_; }
+    bool accepted() const { return accepted_; }
+    void set_accepted(bool accepted) { accepted_ = accepted; }
+
+   private:
+    int key_ = 0;
+    int modifiers_ = 0;
+    bool auto_repeat_ = false;
+    bool accepted_ = false;
+};
+
+void send_handle_key(QQuickItem* player, KeyEventProbe& event) {
+    QMetaObject::invokeMethod(player, "handleKey",
+                              Q_ARG(QVariant, QVariant::fromValue<QObject*>(&event)));
+}
+
 }  // namespace
 
 class PlayerControlsTest : public QObject {
@@ -186,6 +216,9 @@ class PlayerControlsTest : public QObject {
     void page_hosts_the_bar_and_wires_the_actions();
     void legacy_controls_are_gone();
     void bar_glyphs_keep_their_size();
+    void subtitle_shortcuts_navigate_and_align();
+    void subtitle_alignment_clamps_delay_and_dismisses_lookup();
+    void transcript_toolbar_exists_without_search_matches();
 };
 
 namespace {
@@ -777,6 +810,190 @@ QQuickItem* open_video_in_window(QQmlApplicationEngine& engine, const QString& v
 }
 
 }  // namespace
+
+namespace {
+
+const QByteArray kNavigationSrt = QByteArray("1\n00:00:00,000 --> 00:00:01,500\nfirst\n\n"
+                                             "2\n00:00:02,000 --> 00:00:04,000\nsecond\n\n"
+                                             "3\n00:00:05,000 --> 00:00:07,000\nthird\n");
+const QByteArray kLongSrt = QByteArray("1\n00:00:00,000 --> 00:00:01,000\nfirst\n\n"
+                                       "2\n00:02:20,000 --> 00:02:21,000\nsecond\n");
+
+}  // namespace
+
+// B1, B3, B5: Alt+Left/Right seek the adjacent primary cue; Shift+Left/Right
+// align it through the study model, and only actionable, non-autorepeat
+// modified arrows are consumed.
+void PlayerControlsTest::subtitle_shortcuts_navigate_and_align() {
+    niratan::test::TempDataRoot root;
+    QVERIFY(root.isValid());
+    const QString video = make_video(root.path());
+
+    QQmlApplicationEngine engine;
+    QQuickWindow* video_window = nullptr;
+    QQuickItem* player = open_video_in_window(engine, video, &video_window);
+    QVERIFY2(player != nullptr, "the Video window did not open the player");
+    QVERIFY(player->setProperty("playbackReady", true));
+    auto* study = player->findChild<niratan::viewmodels::PlayerStudyViewModel*>();
+    QVERIFY(study != nullptr);
+    study->setVideo(QUrl::fromLocalFile(video));
+    study->setPlaybackReady(true);
+    study->setSubtitleDocument(QUrl::fromLocalFile(QStringLiteral("/tmp/navigation.srt")),
+                               kNavigationSrt, true);
+    study->updatePlayback(3.25, 0.0);
+    QSignalSpy seeks(study, &niratan::viewmodels::PlayerStudyViewModel::seekRequested);
+
+    // An active transcript text field keeps the arrow in the text editor.
+    QVERIFY(QMetaObject::invokeMethod(player, "toggleTranscript"));
+    QQuickItem* sidebar = item_named(video_window->contentItem(), QStringLiteral("studySidebar"));
+    QVERIFY(sidebar != nullptr);
+    sidebar->setProperty("selectedTab", 1);
+    QQuickItem* search = item_named(sidebar, QStringLiteral("transcriptSearchField"));
+    QVERIFY(search != nullptr);
+    search->forceActiveFocus();
+    QTRY_VERIFY(video_window->activeFocusItem() == search ||
+                (video_window->activeFocusItem() != nullptr &&
+                 search->isAncestorOf(video_window->activeFocusItem())));
+    KeyEventProbe in_text(Qt::Key_Right, Qt::AltModifier, false);
+    send_handle_key(player, in_text);
+    QVERIFY(!in_text.accepted());
+    QCOMPARE(seeks.size(), 0);
+
+    // With the player focused, Alt+Right seeks the next line and is consumed.
+    player->forceActiveFocus();
+    QTRY_VERIFY(!search->hasActiveFocus());
+    KeyEventProbe next(Qt::Key_Right, Qt::AltModifier, false);
+    send_handle_key(player, next);
+    QVERIFY(next.accepted());
+    QCOMPARE(seeks.size(), 1);
+    QCOMPARE(seeks.takeFirst().front().toDouble(), 5.0);
+
+    study->updatePlayback(3.25, 0.0);
+    KeyEventProbe previous(Qt::Key_Left, Qt::AltModifier, false);
+    send_handle_key(player, previous);
+    QVERIFY(previous.accepted());
+    QCOMPARE(seeks.size(), 1);
+    QCOMPARE(seeks.takeFirst().front().toDouble(), 0.0);
+
+    QSignalSpy alignments(study,
+                          &niratan::viewmodels::PlayerStudyViewModel::subtitleAlignmentRequested);
+    study->updatePlayback(3.25, 0.0);
+    KeyEventProbe align_previous(Qt::Key_Left, Qt::ShiftModifier, false);
+    send_handle_key(player, align_previous);
+    QVERIFY(align_previous.accepted());
+    QCOMPARE(alignments.size(), 1);
+    QCOMPARE(alignments.takeFirst().front().toDouble(), 3.25);
+    study->updatePlayback(3.25, 0.0);
+    KeyEventProbe align_next(Qt::Key_Right, Qt::ShiftModifier, false);
+    send_handle_key(player, align_next);
+    QVERIFY(align_next.accepted());
+    QCOMPARE(alignments.size(), 1);
+    QCOMPARE(alignments.takeFirst().front().toDouble(), -1.75);
+
+    KeyEventProbe repeated(Qt::Key_Right, Qt::AltModifier, true);
+    send_handle_key(player, repeated);
+    QVERIFY(!repeated.accepted());
+    KeyEventProbe plain(Qt::Key_Right, Qt::NoModifier, false);
+    send_handle_key(player, plain);
+    QVERIFY(plain.accepted());
+    KeyEventProbe both(Qt::Key_Right, int(Qt::AltModifier | Qt::ShiftModifier), false);
+    send_handle_key(player, both);
+    QVERIFY(!both.accepted());
+    QCOMPARE(seeks.size(), 0);
+    QCOMPARE(alignments.size(), 0);
+}
+
+// B5: the page applies the alignment delay through the engine and its existing
+// clamp, without seeking.
+void PlayerControlsTest::subtitle_alignment_clamps_delay_and_dismisses_lookup() {
+    niratan::test::TempDataRoot root;
+    QVERIFY(root.isValid());
+    const QString video = make_video(root.path());
+
+    QQmlApplicationEngine engine;
+    QQuickWindow* video_window = nullptr;
+    QQuickItem* player = open_video_in_window(engine, video, &video_window);
+    QVERIFY2(player != nullptr, "the Video window did not open the player");
+    QVERIFY(player->setProperty("playbackReady", true));
+    QQuickItem* mpv = item_named(video_window->contentItem(), QStringLiteral("mpvItem"));
+    QVERIFY(mpv != nullptr);
+    auto* study = player->findChild<niratan::viewmodels::PlayerStudyViewModel*>();
+    QVERIFY(study != nullptr);
+    study->setVideo(QUrl::fromLocalFile(video));
+    study->setPlaybackReady(true);
+    study->setSubtitleDocument(QUrl::fromLocalFile(QStringLiteral("/tmp/long.srt")), kLongSrt,
+                               true);
+    study->updatePlayback(70.0, 0.0);
+    mpv->setProperty("subtitleDelay", 0.0);
+    QSignalSpy seeks(study, &niratan::viewmodels::PlayerStudyViewModel::seekRequested);
+
+    KeyEventProbe previous(Qt::Key_Left, Qt::ShiftModifier, false);
+    send_handle_key(player, previous);
+    QVERIFY(previous.accepted());
+    QTRY_COMPARE(mpv->property("subtitleDelay").toDouble(), 60.0);
+
+    mpv->setProperty("subtitleDelay", 0.0);
+    study->updatePlayback(70.0, 0.0);
+    KeyEventProbe next(Qt::Key_Right, Qt::ShiftModifier, false);
+    send_handle_key(player, next);
+    QVERIFY(next.accepted());
+    QTRY_COMPARE(mpv->property("subtitleDelay").toDouble(), -60.0);
+    QCOMPARE(seeks.size(), 0);
+}
+
+// B6: the transcript toolbar appears from the unfiltered cue list, even when
+// the active search matches nothing, and its buttons share the study commands.
+void PlayerControlsTest::transcript_toolbar_exists_without_search_matches() {
+    niratan::test::TempDataRoot root;
+    QVERIFY(root.isValid());
+    const QString video = make_video(root.path());
+
+    QQmlApplicationEngine engine;
+    QQuickWindow* video_window = nullptr;
+    QQuickItem* player = open_video_in_window(engine, video, &video_window);
+    QVERIFY2(player != nullptr, "the Video window did not open the player");
+    auto* study = player->findChild<niratan::viewmodels::PlayerStudyViewModel*>();
+    QVERIFY(study != nullptr);
+    study->setVideo(QUrl::fromLocalFile(video));
+    study->setPlaybackReady(true);
+    study->setSubtitleDocument(QUrl::fromLocalFile(QStringLiteral("/tmp/navigation.srt")),
+                               kNavigationSrt, true);
+    study->updatePlayback(0.0, 0.0);
+    study->set_search(QStringLiteral("no match"));
+    QVERIFY(study->transcript().isEmpty());
+
+    QQuickItem* sidebar = item_named(video_window->contentItem(), QStringLiteral("studySidebar"));
+    QVERIFY(sidebar != nullptr);
+    QVERIFY(QMetaObject::invokeMethod(player, "toggleTranscript"));
+    QTRY_VERIFY(sidebar->isVisible());
+    sidebar->setProperty("selectedTab", 1);
+
+    QQuickItem* toolbar = item_named(sidebar, QStringLiteral("transcriptAlignToolbar"));
+    QVERIFY2(toolbar != nullptr, "the transcript toolbar is missing");
+    QTRY_VERIFY(toolbar->isVisible());
+    QQuickItem* previous = item_named(toolbar, QStringLiteral("alignPreviousSubtitleButton"));
+    QQuickItem* next = item_named(toolbar, QStringLiteral("alignNextSubtitleButton"));
+    QVERIFY(previous != nullptr);
+    QVERIFY(next != nullptr);
+    QVERIFY(!previous->property("enabled").toBool());
+    QVERIFY(next->property("enabled").toBool());
+
+    QSignalSpy alignments(study,
+                          &niratan::viewmodels::PlayerStudyViewModel::subtitleAlignmentRequested);
+    QVERIFY(QMetaObject::invokeMethod(next, "clicked"));
+    QCOMPARE(alignments.size(), 1);
+    QCOMPARE(alignments.takeFirst().front().toDouble(), -2.0);
+
+    study->updatePlayback(7.5, 0.0);
+    QTRY_VERIFY(previous->property("enabled").toBool());
+    QTRY_VERIFY(!next->property("enabled").toBool());
+    QVERIFY(QMetaObject::invokeMethod(previous, "clicked"));
+    QCOMPARE(alignments.size(), 1);
+    QCOMPARE(alignments.takeFirst().front().toDouble(), 2.5);
+
+    study->setSubtitleDocument({}, {}, false);
+    QTRY_VERIFY(!toolbar->isVisible());
+}
 
 // B4, B6, B9: the page hosts the bar and every control reaches a page action.
 void PlayerControlsTest::page_hosts_the_bar_and_wires_the_actions() {
