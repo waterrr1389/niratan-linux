@@ -68,6 +68,7 @@ Item {
 
     QtObject {
         id: dictionaryBridge
+        objectName: "dictionaryBridge"
         WebChannel.id: "dictionaryBridge"
         signal replyReady(int requestId, var payload)
 
@@ -176,39 +177,9 @@ Item {
             background: Rectangle { color: Theme.windowBackground }
         }
 
-        Menu {
-            id: audioMenu
-            parent: view
-            property list<string> sourceNames
-            property int selectedSource: -1
-            property int entryIndex: -1
-
-            MenuItem {
-                visible: audioMenu.sourceNames.length === 0
-                height: visible ? implicitHeight : 0
-                enabled: false
-                text: qsTr("No audio found")
-            }
-
-            Instantiator {
-                model: audioMenu.sourceNames
-                delegate: MenuItem {
-                    id: sourceItem
-                    required property string modelData
-                    required property int index
-                    contentItem: Label {
-                        text: sourceItem.text
-                        textFormat: Text.PlainText
-                        elide: Text.ElideRight
-                    }
-                    text: modelData
-                    checkable: true
-                    checked: index === audioMenu.selectedSource
-                    onTriggered: model.selectAudioSource(audioMenu.entryIndex, index)
-                }
-                onObjectAdded: (index, object) => audioMenu.insertItem(index + 1, object)
-                onObjectRemoved: (index, object) => audioMenu.removeItem(object)
-            }
+        AudioSourceMenu {
+            popupModel: model
+            webView: view
         }
 
         StyledLabel {
@@ -225,23 +196,12 @@ Item {
             target: model
 
             function onHtmlChanged() {
-                audioMenu.close()
                 if (model.html.length > 0) {
                     view.loadingPopupDocument = true
                     view.loadHtml(model.html, "about:blank")
                 }
             }
 
-            function onAudioSourceMenuRequested(names, selected, x, y, entryIndex) {
-                audioMenu.sourceNames = names
-                audioMenu.selectedSource = selected
-                audioMenu.entryIndex = entryIndex
-                audioMenu.popup(view, Qt.point(x * view.zoomFactor, y * view.zoomFactor))
-            }
-
-            function onAudioSourceSelected(entryIndex, sourceIndex) {
-                view.runJavaScript("playEntryAudio(" + entryIndex + ", " + sourceIndex + ");")
-            }
         }
     }
 

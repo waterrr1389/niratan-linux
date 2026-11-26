@@ -91,11 +91,16 @@ Item {
 
     QtObject {
         id: dictionaryBridge
+        objectName: "dictionaryBridge"
         WebChannel.id: "dictionaryBridge"
         signal replyReady(int requestId, var payload)
 
         function playWordAudio(url: string): void {
             surface.popupModel.playWordAudio(url)
+        }
+
+        function showAudioSourceMenu(data: var): void {
+            surface.popupModel.showAudioSourceMenu(data)
         }
 
         function mineEntry(requestId: int, content: var): void {
@@ -209,5 +214,10 @@ Item {
                 }
             }
         }
+    }
+
+    AudioSourceMenu {
+        popupModel: surface.popupModel
+        webView: results
     }
 }

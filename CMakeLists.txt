@@ -302,6 +302,7 @@ qt_add_qml_module(niratan_app
         src/views/components/FormSliderRow.qml
         src/views/components/FormStepperRow.qml
         src/views/components/FormToggleRow.qml
+        src/views/components/AudioSourceMenu.qml
         src/views/components/ChipButton.qml
         src/views/components/CheckBadge.qml
         src/views/components/ChromeButton.qml

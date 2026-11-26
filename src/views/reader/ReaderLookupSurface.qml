@@ -153,11 +153,16 @@ Rectangle {
 
     QtObject {
         id: dictionaryBridge
+        objectName: "dictionaryBridge"
         WebChannel.id: "dictionaryBridge"
         signal replyReady(int requestId, var payload)
 
         function playWordAudio(url: string): void {
             surface.popupModel.playWordAudio(url)
+        }
+
+        function showAudioSourceMenu(data: var): void {
+            surface.popupModel.showAudioSourceMenu(data)
         }
 
         function mineEntry(requestId: int, content: var): void {
@@ -350,6 +355,11 @@ Rectangle {
                 }
             }
         }
+    }
+
+    AudioSourceMenu {
+        popupModel: surface.popupModel
+        webView: results
     }
 
     // One lookup control: a 52x32 hit area with a secondary 16 pt glyph.
