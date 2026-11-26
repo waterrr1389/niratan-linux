@@ -31,7 +31,10 @@
 // VideoPlayerViewModel.playPrevious/playNext/openPlaylistItem,
 // VideoPlayerScreen+Shortcuts.swift, VideoShortcutActions.swift
 // previousEpisode/nextEpisode with Niratan-win's Ctrl+Shift mapping, and
-// UserConfig.videoAutoPlayNext through the page's playbackReady seam.
+// UserConfig.videoAutoPlayNext through the page's playbackReady seam. The
+// subtitle gap fast-forward toggle follows VideoControlsView.swift
+// subtitleGapFastForwardButton, VideoShortcutActions.swift
+// toggleSubtitleGapFastForward and UserConfig.videoSubtitleGapFastForwardEnabled.
 
 #include "../viewmodels/data_root.h"
 #include "services/player/playback_history.h"
@@ -246,6 +249,7 @@ class PlayerControlsTest : public QObject {
     void episode_open_preserves_resume_history();
     void episode_shortcuts_navigate_neighbors();
     void autoplay_consumes_setting_at_eof();
+    void gap_fast_forward_toggle_from_button_and_shortcut();
 };
 
 namespace {
@@ -256,17 +260,18 @@ struct BarCase {
 };
 
 const QStringList kUtilityButtons{
-    QStringLiteral("miningHistoryButton"), QStringLiteral("openVideoButton"),
-    QStringLiteral("mineSubtitleButton"),  QStringLiteral("inspectorButton"),
-    QStringLiteral("fullScreenButton"),
+    QStringLiteral("gapFastForwardButton"), QStringLiteral("miningHistoryButton"),
+    QStringLiteral("openVideoButton"),      QStringLiteral("mineSubtitleButton"),
+    QStringLiteral("inspectorButton"),      QStringLiteral("fullScreenButton"),
 };
 
 const QStringList kFullDensityButtons{
-    QStringLiteral("miningHistoryButton"), QStringLiteral("openVideoButton"),
-    QStringLiteral("mineSubtitleButton"),  QStringLiteral("inspectorButton"),
-    QStringLiteral("fullScreenButton"),    QStringLiteral("volumeButton"),
-    QStringLiteral("previousButton"),      QStringLiteral("nextButton"),
-    QStringLiteral("playButton"),          QStringLiteral("speedButton"),
+    QStringLiteral("gapFastForwardButton"), QStringLiteral("miningHistoryButton"),
+    QStringLiteral("openVideoButton"),      QStringLiteral("mineSubtitleButton"),
+    QStringLiteral("inspectorButton"),      QStringLiteral("fullScreenButton"),
+    QStringLiteral("volumeButton"),         QStringLiteral("previousButton"),
+    QStringLiteral("nextButton"),           QStringLiteral("playButton"),
+    QStringLiteral("speedButton"),
 };
 
 void verify_density_cases(QQmlApplicationEngine& engine, const QString& layout,
@@ -335,21 +340,23 @@ void PlayerControlsTest::floating_groups_follow_the_density() {
         named_in_order(bar,
                        {QStringLiteral("volumeButton"), QStringLiteral("previousButton"),
                         QStringLiteral("playButton"), QStringLiteral("nextButton"),
-                        QStringLiteral("speedButton"), QStringLiteral("miningHistoryButton"),
-                        QStringLiteral("openVideoButton"), QStringLiteral("mineSubtitleButton"),
-                        QStringLiteral("inspectorButton"), QStringLiteral("fullScreenButton")}) ==
+                        QStringLiteral("speedButton"), QStringLiteral("gapFastForwardButton"),
+                        QStringLiteral("miningHistoryButton"), QStringLiteral("openVideoButton"),
+                        QStringLiteral("mineSubtitleButton"), QStringLiteral("inspectorButton"),
+                        QStringLiteral("fullScreenButton")}) ==
             QStringList({QStringLiteral("volumeButton"), QStringLiteral("previousButton"),
                          QStringLiteral("playButton"), QStringLiteral("nextButton"),
-                         QStringLiteral("speedButton"), QStringLiteral("miningHistoryButton"),
-                         QStringLiteral("openVideoButton"), QStringLiteral("mineSubtitleButton"),
-                         QStringLiteral("inspectorButton"), QStringLiteral("fullScreenButton")}),
+                         QStringLiteral("speedButton"), QStringLiteral("gapFastForwardButton"),
+                         QStringLiteral("miningHistoryButton"), QStringLiteral("openVideoButton"),
+                         QStringLiteral("mineSubtitleButton"), QStringLiteral("inspectorButton"),
+                         QStringLiteral("fullScreenButton")}),
         "the lower row clusters are out of order");
     for (const QString& name : kFullDensityButtons) {
         QVERIFY2(shown(bar, name), qPrintable(name + QStringLiteral(" is missing at full")));
     }
     for (const QString& name :
          {QStringLiteral("screenshotButton"), QStringLiteral("cycleSubtitlesButton"),
-          QStringLiteral("videoSettingsButton"), QStringLiteral("gapFastForwardButton")}) {
+          QStringLiteral("videoSettingsButton")}) {
         QVERIFY2(item_named(bar, name) == nullptr, qPrintable(name + QStringLiteral(" is built")));
     }
 
@@ -364,7 +371,7 @@ void PlayerControlsTest::floating_groups_follow_the_density() {
     }
     for (const QString& name :
          {QStringLiteral("volumeButton"), QStringLiteral("miningHistoryButton"),
-          QStringLiteral("mineSubtitleButton")}) {
+          QStringLiteral("mineSubtitleButton"), QStringLiteral("gapFastForwardButton")}) {
         QVERIFY2(!shown(bar, name), qPrintable(name + QStringLiteral(" stays condensed")));
     }
 
@@ -380,7 +387,8 @@ void PlayerControlsTest::floating_groups_follow_the_density() {
     for (const QString& name :
          {QStringLiteral("speedButton"), QStringLiteral("openVideoButton"),
           QStringLiteral("volumeButton"), QStringLiteral("miningHistoryButton"),
-          QStringLiteral("mineSubtitleButton"), QStringLiteral("inspectorButton")}) {
+          QStringLiteral("mineSubtitleButton"), QStringLiteral("inspectorButton"),
+          QStringLiteral("gapFastForwardButton")}) {
         QVERIFY2(!shown(bar, name), qPrintable(name + QStringLiteral(" stays minimal")));
     }
 }
@@ -403,12 +411,12 @@ void PlayerControlsTest::compact_groups_follow_the_density() {
 
     QTRY_COMPARE(bar->property("density").toString(), QStringLiteral("full"));
     const QStringList compact_row{
-        QStringLiteral("previousButton"),      QStringLiteral("playButton"),
-        QStringLiteral("nextButton"),          QStringLiteral("volumeButton"),
-        QStringLiteral("compactTime"),         QStringLiteral("speedButton"),
-        QStringLiteral("miningHistoryButton"), QStringLiteral("openVideoButton"),
-        QStringLiteral("mineSubtitleButton"),  QStringLiteral("inspectorButton"),
-        QStringLiteral("fullScreenButton"),
+        QStringLiteral("previousButton"),       QStringLiteral("playButton"),
+        QStringLiteral("nextButton"),           QStringLiteral("volumeButton"),
+        QStringLiteral("compactTime"),          QStringLiteral("speedButton"),
+        QStringLiteral("gapFastForwardButton"), QStringLiteral("miningHistoryButton"),
+        QStringLiteral("openVideoButton"),      QStringLiteral("mineSubtitleButton"),
+        QStringLiteral("inspectorButton"),      QStringLiteral("fullScreenButton"),
     };
     QVERIFY2(named_in_order(bar, compact_row) == compact_row,
              "the compact full row is out of order");
@@ -432,6 +440,8 @@ void PlayerControlsTest::compact_groups_follow_the_density() {
     }
     QVERIFY2(!shown(bar, QStringLiteral("volumeButton")),
              "the volume track stays in the compact full row");
+    QVERIFY2(!shown(bar, QStringLiteral("gapFastForwardButton")),
+             "the gap fast-forward button stays in the compact condensed row");
 
     bar->setProperty("availableWidth", 389.0);
     QTRY_COMPARE(bar->property("density").toString(), QStringLiteral("minimal"));
@@ -440,7 +450,8 @@ void PlayerControlsTest::compact_groups_follow_the_density() {
         QVERIFY2(shown(bar, name),
                  qPrintable(name + QStringLiteral(" is missing compact minimal")));
     }
-    for (const QString& name : {QStringLiteral("speedButton"), QStringLiteral("inspectorButton")}) {
+    for (const QString& name : {QStringLiteral("speedButton"), QStringLiteral("inspectorButton"),
+                                QStringLiteral("gapFastForwardButton")}) {
         QVERIFY2(!shown(bar, name), qPrintable(name + QStringLiteral(" stays in compact minimal")));
     }
 }
@@ -597,7 +608,8 @@ void PlayerControlsTest::utility_group_order_and_signals() {
         create_player_component(engine, QStringLiteral("VideoUtilityControls"),
                                 {{QStringLiteral("density"), QStringLiteral("full")},
                                  {QStringLiteral("studyOpen"), true},
-                                 {QStringLiteral("canMine"), true}},
+                                 {QStringLiteral("canMine"), true},
+                                 {QStringLiteral("gapFastForwardEnabled"), true}},
                                 error);
     QVERIFY2(object != nullptr, qPrintable(error));
     QQuickWindow window;
@@ -605,6 +617,14 @@ void PlayerControlsTest::utility_group_order_and_signals() {
     QVERIFY(utility != nullptr);
 
     QCOMPARE(named_in_order(utility, kUtilityButtons), kUtilityButtons);
+    QQuickItem* gap_button = item_named(utility, QStringLiteral("gapFastForwardButton"));
+    QVERIFY(gap_button != nullptr);
+    QCOMPARE(gap_button->property("tip").toString(), QStringLiteral("Fast-forward Subtitle Gaps"));
+    QVERIFY(gap_button->property("active").toBool());
+    utility->setProperty("gapFastForwardEnabled", false);
+    QTRY_VERIFY(!gap_button->property("active").toBool());
+    utility->setProperty("gapFastForwardEnabled", true);
+    QTRY_VERIFY(gap_button->property("active").toBool());
     QVERIFY(QMetaObject::invokeMethod(item_named(utility, QStringLiteral("miningHistoryButton")),
                                       "clicked"));
     QVERIFY(
@@ -623,15 +643,18 @@ void PlayerControlsTest::utility_group_order_and_signals() {
     QSignalSpy mine_spy(utility, SIGNAL(mineSubtitleRequested()));
     QSignalSpy inspector_spy(utility, SIGNAL(toggleInspectorRequested()));
     QSignalSpy full_screen_spy(utility, SIGNAL(toggleFullScreenRequested()));
+    QSignalSpy gap_spy(utility, SIGNAL(toggleGapFastForwardRequested()));
 
     click(item_named(utility, QStringLiteral("miningHistoryButton")));
     click(item_named(utility, QStringLiteral("openVideoButton")));
     click(item_named(utility, QStringLiteral("mineSubtitleButton")));
     click(item_named(utility, QStringLiteral("inspectorButton")));
+    click(gap_button);
     QCOMPARE(study_spy.count(), 1);
     QCOMPARE(open_spy.count(), 1);
     QCOMPARE(mine_spy.count(), 1);
     QCOMPARE(inspector_spy.count(), 1);
+    QCOMPARE(gap_spy.count(), 1);
 
     utility->setProperty("inspectorOpen", true);
     QTRY_VERIFY(
@@ -1422,6 +1445,66 @@ void PlayerControlsTest::autoplay_consumes_setting_at_eof() {
     click(previous);
     QCOMPARE(spy.count(), 2);
     QCOMPARE(spy.at(1).at(0).toUrl(), episode_url(folder, "Show 2.mkv"));
+}
+
+// B6: the utility toggle and Shift+F (VideoShortcutActions.swift) change the
+// durable preference and its button state; a repeat or a focused text field
+// leaves the preference alone.
+void PlayerControlsTest::gap_fast_forward_toggle_from_button_and_shortcut() {
+    niratan::test::TempDataRoot root;
+    QVERIFY(root.isValid());
+    const QString video = make_video(root.path());
+
+    QQmlApplicationEngine engine;
+    QQuickWindow* video_window = nullptr;
+    QQuickItem* player = open_video_in_window(engine, video, &video_window);
+    QVERIFY2(player != nullptr, "the Video window did not open the player");
+    QVERIFY(player->setProperty("playbackReady", true));
+    QQuickItem* mpv = item_named(video_window->contentItem(), QStringLiteral("mpvItem"));
+    QVERIFY(mpv != nullptr);
+    QQuickItem* bar = item_named(player, QStringLiteral("videoControlBar"));
+    QVERIFY(bar != nullptr);
+    QQuickItem* button = item_named(bar, QStringLiteral("gapFastForwardButton"));
+    QVERIFY2(button != nullptr, "the gap fast-forward button is missing");
+    QCOMPARE(button->property("tip").toString(), QStringLiteral("Fast-forward Subtitle Gaps"));
+
+    const auto gap_enabled = [mpv] {
+        return mpv->property("videoSettings")
+            .toMap()
+            .value("videoSubtitleGapFastForwardEnabled")
+            .toBool();
+    };
+    QVERIFY(!gap_enabled());
+    QVERIFY(!button->property("active").toBool());
+
+    click(button);
+    QTRY_VERIFY(gap_enabled());
+    QTRY_VERIFY(button->property("active").toBool());
+
+    KeyEventProbe toggle(Qt::Key_F, Qt::ShiftModifier, false);
+    send_handle_key(player, toggle);
+    QVERIFY(toggle.accepted());
+    QTRY_VERIFY(!gap_enabled());
+    QTRY_VERIFY(!button->property("active").toBool());
+
+    KeyEventProbe repeated(Qt::Key_F, Qt::ShiftModifier, true);
+    send_handle_key(player, repeated);
+    QVERIFY(!repeated.accepted());
+    QVERIFY(!gap_enabled());
+
+    // A focused transcript field keeps the key for text editing.
+    QVERIFY(QMetaObject::invokeMethod(player, "toggleTranscript"));
+    QQuickItem* sidebar = item_named(video_window->contentItem(), QStringLiteral("studySidebar"));
+    QVERIFY(sidebar != nullptr);
+    sidebar->setProperty("selectedTab", 1);
+    QQuickItem* search = item_named(sidebar, QStringLiteral("transcriptSearchField"));
+    QVERIFY(search != nullptr);
+    search->forceActiveFocus();
+    QTRY_VERIFY(search->hasActiveFocus());
+    KeyEventProbe in_text(Qt::Key_F, Qt::ShiftModifier, false);
+    send_handle_key(player, in_text);
+    QVERIFY(!in_text.accepted());
+    QVERIFY(!gap_enabled());
 }
 
 int main(int argc, char* argv[]) {

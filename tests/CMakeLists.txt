@@ -512,6 +512,14 @@ target_link_libraries(tst_video_settings PRIVATE niratan_core Qt6::Test)
 target_compile_options(tst_video_settings PRIVATE -Wall -Wextra -Wpedantic -Werror)
 add_test(NAME video_settings COMMAND tst_video_settings)
 
+qt_add_executable(tst_subtitle_gap_playback
+    player/tst_subtitle_gap_playback.cpp
+)
+target_include_directories(tst_subtitle_gap_playback PRIVATE ${CMAKE_SOURCE_DIR}/src)
+target_link_libraries(tst_subtitle_gap_playback PRIVATE niratan_core Qt6::Test)
+target_compile_options(tst_subtitle_gap_playback PRIVATE -Wall -Wextra -Wpedantic -Werror)
+add_test(NAME subtitle_gap_playback COMMAND tst_subtitle_gap_playback)
+
 qt_add_executable(tst_library_catalog
     video/tst_library_catalog.cpp
 )

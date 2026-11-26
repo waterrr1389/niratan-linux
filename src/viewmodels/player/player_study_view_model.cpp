@@ -69,6 +69,15 @@ PlayerStudyViewModel::PlayerStudyViewModel(QObject* parent)
 PlayerStudyViewModel::~PlayerStudyViewModel() = default;
 
 QVariantList PlayerStudyViewModel::transcript() const { return state_->transcript; }
+QVariantList PlayerStudyViewModel::primary_cues() const {
+    QVariantList rows;
+    rows.reserve(state_->cues.size());
+    for (const Cue& cue : state_->cues) {
+        rows.append(
+            QVariantMap{{QStringLiteral("start"), cue.start}, {QStringLiteral("end"), cue.end}});
+    }
+    return rows;
+}
 QString PlayerStudyViewModel::transcript_error() const { return state_->transcript_error; }
 double PlayerStudyViewModel::adjusted_time() const { return state_->position - state_->delay; }
 int PlayerStudyViewModel::current_row() const { return state_->current; }

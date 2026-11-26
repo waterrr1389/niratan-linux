@@ -55,8 +55,9 @@ void MpvItem::save_playback_position() {
         return;
     }
     const auto options = niratan::player::capture_resume_options(
-        get_double("speed", speed_), get_double("sub-delay", subtitle_delay_),
-        get_double("audio-delay", audio_delay_), niratan::player::audio_tracks(current_track_fields()));
+        gap_playback_.persistence_speed(get_double("speed", speed_)),
+        get_double("sub-delay", subtitle_delay_), get_double("audio-delay", audio_delay_),
+        niratan::player::audio_tracks(current_track_fields()));
     playback_history_.save(local_video_path_, position, duration_, options);
 }
 

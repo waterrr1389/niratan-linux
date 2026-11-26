@@ -169,6 +169,7 @@ void MpvItem::setPaused(bool paused) {
     paused_ = paused;
     set_property("pause", paused_);
     emit pausedChanged();
+    update_gap_playback();
 }
 
 bool MpvItem::loaded() const {
@@ -206,16 +207,6 @@ qreal MpvItem::speed() const {
     return speed_;
 }
 
-void MpvItem::setSpeed(qreal speed) {
-    const qreal normalized = niratan::player::normalized_speed(speed);
-    if (speed_ == normalized) {
-        return;
-    }
-    speed_ = normalized;
-    set_property("speed", static_cast<double>(speed_));
-    emit speedChanged();
-}
-
 qreal MpvItem::loopStart() const { return ab_loop_.start().value_or(-1.0); }
 qreal MpvItem::loopEnd() const { return ab_loop_.end().value_or(-1.0); }
 
@@ -231,6 +222,7 @@ void MpvItem::setSubtitleDelay(qreal delay) {
     subtitle_delay_ = clamped;
     set_property("sub-delay", static_cast<double>(subtitle_delay_));
     emit subtitleDelayChanged();
+    update_gap_playback();
 }
 
 qreal MpvItem::audioDelay() const {
@@ -335,6 +327,7 @@ void MpvItem::replace_file(const QUrl& file, bool from_beginning) {
         ? QFileInfo(file.toLocalFile()).absoluteFilePath() : QString{};
     // Persist the outgoing file before the path changes.
     save_playback_position();
+    restore_gap_speed();
     local_video_path_ = next_path;
     pending_playback_ = playback_history_.prepare_open(local_video_path_,
         video_settings_.value("videoRememberPlaybackPosition").toBool(), from_beginning);
@@ -438,6 +431,7 @@ void MpvItem::seek(qreal seconds) {
     if (handle_ == nullptr) {
         return;
     }
+    restore_gap_speed();
 
     // duration is unavailable until mpv parsed the file; clamping to it then
     // would collapse every seek to zero.
@@ -597,7 +591,9 @@ void MpvItem::stepSpeed(int direction) {
         return;
     }
     const double step = direction > 0 ? kSpeedStep : -kSpeedStep;
-    setSpeed(speed_ + step);
+    if (const auto applied = gap_playback_.adjust_user_speed(step, speed_)) {
+        apply_speed(*applied);
+    }
 }
 
 void MpvItem::resetSpeed() {
@@ -683,6 +679,10 @@ void MpvItem::apply_video_settings() {
     set_property("sub-border-size", edges.outline);
     set_property("sub-shadow-offset", edges.shadow);
     set_property("sub-scale-by-window", false);
+
+    // VideoPlayerScreen's preference handlers apply the gap settings, then
+    // reevaluate the current position.
+    apply_gap_settings();
 }
 
 void MpvItem::refresh_chapters() {
@@ -947,6 +947,9 @@ void MpvItem::poll() {
             save_playback_position();
         }
     }
+
+    // VideoPlayerScreen's currentTime, subtitleDelay and isPlaying handlers.
+    update_gap_playback();
 }
 
 void MpvItem::command(const QByteArray& name) {

@@ -207,7 +207,9 @@ Item {
         if (!mpv.loaded)
             return
         mpv.speed = value
-        page.showOSD(qsTr("Speed"), page.formatSpeed(mpv.speed))
+        // Swift shows the normalized request; while a subtitle gap accelerates,
+        // the engine keeps the temporary speed and only the base moves.
+        page.showOSD(qsTr("Speed"), page.formatSpeed(value))
     }
 
     function adjustSpeed(delta) {
@@ -462,6 +464,13 @@ Item {
         return true
     }
 
+    // VideoPlayerScreen.swift toggleSubtitleGapFastForward: flip the durable
+    // preference; the engine reloads it and reevaluates the current position.
+    function toggleSubtitleGapFastForward() {
+        mpv.changeVideoSetting("videoSubtitleGapFastForwardEnabled",
+                               !mpv.videoSettings.videoSubtitleGapFastForwardEnabled)
+    }
+
     function toggleTranscript() {
         if (page.studyOpen && studySidebar.selectedTab === 1) {
             page.studyOpen = false
@@ -537,6 +546,15 @@ Item {
         }
         if (control || meta)
             return
+
+        // VideoShortcutActions.swift toggleSubtitleGapFastForward is Shift+F;
+        // a repeat does not flip the preference twice.
+        if (event.key === Qt.Key_F && shift && !alt) {
+            event.accepted = !event.isAutoRepeat
+            if (!event.isAutoRepeat)
+                page.toggleSubtitleGapFastForward()
+            return
+        }
 
         var handled = true
         var plain = !alt && !shift
@@ -649,6 +667,16 @@ Item {
             }
             mpv.subtitlesVisible = true
             mpv.seek(seconds)
+        }
+    }
+
+    // The gap policy runs in the engine against the primary transcript the
+    // study model parsed, never the filtered window.
+    Connections {
+        target: studyModel
+
+        function onTranscriptChanged() {
+            mpv.setPrimaryCues(studyModel.primaryCues)
         }
     }
 
@@ -883,6 +911,7 @@ Item {
         inspectorOpen: page.inspectorOpen
         previousEnabled: inspectorModel.canPlayPreviousEpisode
         nextEnabled: inspectorModel.canPlayNextEpisode
+        gapFastForwardEnabled: mpv.videoSettings.videoSubtitleGapFastForwardEnabled
 
         onTogglePlaybackRequested: page.togglePause()
         onPreviousRequested: page.playPreviousEpisode()
@@ -912,6 +941,7 @@ Item {
         onMineSubtitleRequested: studyModel.mineCurrentSubtitle()
         onToggleInspectorRequested: page.toggleInspector()
         onToggleFullScreenRequested: page.toggleFullScreen()
+        onToggleGapFastForwardRequested: page.toggleSubtitleGapFastForward()
         onScrubStarted: function (seconds) {
             page.scrubbing = true
             page.scrubTime = seconds

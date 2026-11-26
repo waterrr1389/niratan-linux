@@ -37,6 +37,8 @@
 #include "services/player/playback_controls.h"
 #include "services/player/playback_history.h"
 #include "services/player/subtitle_default.h"
+#include "services/player/subtitle_document.h"
+#include "services/player/subtitle_gap_playback.h"
 #include "services/player/transcript_extractor.h"
 
 #include <QQuickFramebufferObject>
@@ -52,6 +54,8 @@
 #include <QtQml/qqmlregistration.h>
 
 #include <mpv/client.h>
+
+#include <optional>
 
 class MpvItem : public QQuickFramebufferObject {
     Q_OBJECT
@@ -167,6 +171,8 @@ class MpvItem : public QQuickFramebufferObject {
     QVariantMap videoSettings() const;
     Q_INVOKABLE bool changeVideoSetting(const QString& key, const QVariant& value);
     Q_INVOKABLE bool resetSubtitleAppearance();
+    // The primary transcript cues, in subtitle order, for the gap policy.
+    Q_INVOKABLE void setPrimaryCues(const QVariantList& cues);
 
    signals:
     void positionChanged();
@@ -205,6 +211,10 @@ class MpvItem : public QQuickFramebufferObject {
     void save_playback_position();
     void record_finished_playback();
     void restore_playback_position();
+    void apply_speed(double speed);
+    void apply_gap_settings();
+    void update_gap_playback();
+    void restore_gap_speed();
     void restore_subtitle_selection();
     void reset_subtitle_selection_state();
     void refresh_tracks_and_embedded_default();
@@ -262,6 +272,8 @@ class MpvItem : public QQuickFramebufferObject {
     double resume_position_ = 0.0;
     niratan::player::PlaybackOpenState pending_playback_;
     niratan::player::PlaybackHistory playback_history_ = niratan::player::PlaybackHistory::at_data_root();
+    niratan::player::SubtitleGapPlayback gap_playback_;
+    std::optional<niratan::player::SubtitleCueStore> primary_store_;
     int selected_subtitle_id_ = -1;
     int last_subtitle_id_ = -1;
     bool subtitle_restore_pending_ = false;

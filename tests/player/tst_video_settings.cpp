@@ -10,6 +10,8 @@
 #include <QTemporaryDir>
 #include <QtTest>
 
+#include <limits>
+
 using namespace niratan::player;
 
 class VideoSettingsTest : public QObject {
@@ -73,6 +75,47 @@ private slots:
         QVERIFY(!load_video_settings(path).value("videoAutoPlayNext").toBool());
         QVERIFY(store_video_settings(path, {{"videoAutoPlayNext", true}}));
         QVERIFY(load_video_settings(path).value("videoAutoPlayNext").toBool());
+    }
+
+    // V4 B5: the subtitle gap fast-forward keys keep Swift's defaults and
+    // bounds; storage does not round the configured speed.
+    void subtitleGapFastForwardKeys() {
+        const auto defaults = video_settings();
+        QVERIFY(!defaults.value("videoSubtitleGapFastForwardEnabled").toBool());
+        QCOMPARE(defaults.value("videoSubtitleGapFastForwardSpeed").toDouble(), 2.7);
+        QVERIFY(video_settings({{"videoSubtitleGapFastForwardEnabled", true}})
+                    .value("videoSubtitleGapFastForwardEnabled")
+                    .toBool());
+        QVERIFY(!video_settings({{"videoSubtitleGapFastForwardEnabled", "on"}})
+                     .value("videoSubtitleGapFastForwardEnabled")
+                     .toBool());
+        QCOMPARE(video_settings({{"videoSubtitleGapFastForwardSpeed", 0.5}})
+                     .value("videoSubtitleGapFastForwardSpeed")
+                     .toDouble(),
+                 1.1);
+        QCOMPARE(video_settings({{"videoSubtitleGapFastForwardSpeed", 9.0}})
+                     .value("videoSubtitleGapFastForwardSpeed")
+                     .toDouble(),
+                 5.0);
+        QCOMPARE(video_settings({{"videoSubtitleGapFastForwardSpeed", 2.73}})
+                     .value("videoSubtitleGapFastForwardSpeed")
+                     .toDouble(),
+                 2.73);
+        QCOMPARE(video_settings({{"videoSubtitleGapFastForwardSpeed",
+                                  std::numeric_limits<double>::infinity()}})
+                     .value("videoSubtitleGapFastForwardSpeed")
+                     .toDouble(),
+                 2.7);
+
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        const auto path = std::filesystem::path(dir.path().toStdString());
+        QVERIFY(store_video_settings(path,
+                                     {{"videoSubtitleGapFastForwardEnabled", true},
+                                      {"videoSubtitleGapFastForwardSpeed", 2.73}}));
+        const auto stored = load_video_settings(path);
+        QVERIFY(stored.value("videoSubtitleGapFastForwardEnabled").toBool());
+        QCOMPARE(stored.value("videoSubtitleGapFastForwardSpeed").toDouble(), 2.73);
     }
 
     void studySidebarWidth() {

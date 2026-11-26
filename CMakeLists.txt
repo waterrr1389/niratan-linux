@@ -140,6 +140,7 @@ qt_add_library(niratan_core STATIC
     src/services/player/resume_options.cpp
     src/services/player/subtitle_default.cpp
     src/services/player/subtitle_document.cpp
+    src/services/player/subtitle_gap_playback.cpp
     src/services/player/subtitle_ass.cpp
     src/services/player/transcript_extractor.cpp
     src/services/player/transcript_extractor.h
@@ -266,6 +267,7 @@ qt_add_library(niratan_app STATIC
     src/viewmodels/reader/reader_view_model_statistics.cpp
     src/views/player/mpv_item.cpp
     src/views/player/mpv_item.h
+    src/views/player/mpv_gap_playback.cpp
     src/views/player/mpv_playback_history.cpp
     src/views/player/mpv_subtitles.cpp
     src/views/player/mpv_renderer.cpp

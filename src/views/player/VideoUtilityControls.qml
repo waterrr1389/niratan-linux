@@ -5,20 +5,22 @@
 // `mineCurrentSubtitleButton`, `fullScreenButton`, `condensedControlGroup` and
 // `minimalControlGroup`, with `VideoPlayerScreen.toggleFullScreen`.
 //
-// Order at full density: Mining History, Open Video, Mine Current Subtitle,
-// Inspector, Full Screen. Condensed keeps the episode group (drawn by
-// VideoTransportControls), the speed pill, Open Video, Inspector and Full
-// Screen; minimal drops all but the episode group and Full Screen, so the
-// Inspector button is absent there, as in Swift's `minimalControlGroup`.
-// Swift's screenshot and subtitle gap fast-forward buttons are not built.
-// Mining History is active while the study sidebar is open; Mine Current
-// Subtitle follows `canMine`; Inspector is active while its panel is open.
+// Order at full density: Fast-forward Subtitle Gaps, Mining History, Open
+// Video, Mine Current Subtitle, Inspector, Full Screen. Condensed keeps the
+// episode group (drawn by VideoTransportControls), the speed pill, Open Video,
+// Inspector and Full Screen; minimal drops all but the episode group and Full
+// Screen, so the Inspector button is absent there, as in Swift's
+// `minimalControlGroup`. Swift's screenshot button is not built.
+// Mining History is active while the study sidebar is open; Fast-forward
+// Subtitle Gaps is active while the preference is on; Mine Current Subtitle
+// follows `canMine`; Inspector is active while its panel is open.
 // The full-screen glyph enters from windowed and leaves from full screen.
 //
-// Object names: miningHistoryButton, openVideoButton, mineSubtitleButton,
-// inspectorButton, fullScreenButton; the full-screen glyph is fullScreenIcon
-// and switches between arrows-out and arrows-in. Every button carries a `tip`
-// string; Mining History and Inspector expose `active`.
+// Object names: gapFastForwardButton, miningHistoryButton, openVideoButton,
+// mineSubtitleButton, inspectorButton, fullScreenButton; the full-screen glyph
+// is fullScreenIcon and switches between arrows-out and arrows-in. Every button
+// carries a `tip` string; Mining History, Fast-forward Subtitle Gaps and
+// Inspector expose `active`.
 pragma ComponentBehavior: Bound
 
 import QtQuick
@@ -35,6 +37,7 @@ Item {
     property bool canMine: false
     property bool isFullScreen: false
     property bool inspectorOpen: false
+    property bool gapFastForwardEnabled: false
 
     implicitWidth: row.implicitWidth
     implicitHeight: row.implicitHeight
@@ -44,6 +47,7 @@ Item {
     signal mineSubtitleRequested()
     signal toggleInspectorRequested()
     signal toggleFullScreenRequested()
+    signal toggleGapFastForwardRequested()
 
     component UtilityButton: ChromeButton {
         diameter: Theme.chromeToolDiameter
@@ -53,6 +57,15 @@ Item {
         id: row
 
         spacing: Theme.chromeToolSpacing
+
+        UtilityButton {
+            objectName: "gapFastForwardButton"
+            tip: qsTr("Fast-forward Subtitle Gaps")
+            symbol: "forward.fill"
+            active: utility.gapFastForwardEnabled
+            visible: utility.density === "full"
+            onClicked: utility.toggleGapFastForwardRequested()
+        }
 
         UtilityButton {
             objectName: "miningHistoryButton"

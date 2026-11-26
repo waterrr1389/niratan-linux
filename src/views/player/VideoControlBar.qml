@@ -28,10 +28,10 @@
 //
 // The bar owns no playback state: the page supplies the snapshot through the
 // properties below and receives intents as signals. Swift's drag-to-move
-// surface and the screenshot and gap fast-forward controls are not ported
-// (Decisions); `inspectorOpen` marks the Inspector button active, and
+// surface and the screenshot control are not ported (Decisions);
+// `inspectorOpen` marks the Inspector button active,
 // `previousEnabled`/`nextEnabled` say whether the episode list has a neighbour
-// on each side.
+// on each side, and `gapFastForwardEnabled` marks the subtitle gap toggle.
 //
 // `density` is "full", "condensed" or "minimal"; `interactive` is true only
 // while the bar accepts pointer input; `trackWidth` is the timeline's drawable
@@ -71,6 +71,7 @@ Item {
     property bool inspectorOpen: false
     property bool previousEnabled: false
     property bool nextEnabled: false
+    property bool gapFastForwardEnabled: false
     property var chapters: []
 
     readonly property bool compactLayout: bar.layoutMode === "compactBottom"
@@ -115,6 +116,7 @@ Item {
     signal mineSubtitleRequested()
     signal toggleInspectorRequested()
     signal toggleFullScreenRequested()
+    signal toggleGapFastForwardRequested()
     signal barHoverChanged(bool hovered)
     signal speedPanelHoverChanged(bool hovered)
 
@@ -328,11 +330,13 @@ Item {
                     canMine: bar.canMine
                     isFullScreen: bar.isFullScreen
                     inspectorOpen: bar.inspectorOpen
+                    gapFastForwardEnabled: bar.gapFastForwardEnabled
                     onToggleStudyRequested: bar.toggleStudyRequested()
                     onOpenVideoRequested: bar.openVideoRequested()
                     onMineSubtitleRequested: bar.mineSubtitleRequested()
                     onToggleInspectorRequested: bar.toggleInspectorRequested()
                     onToggleFullScreenRequested: bar.toggleFullScreenRequested()
+                    onToggleGapFastForwardRequested: bar.toggleGapFastForwardRequested()
                 }
             }
         }
@@ -405,11 +409,13 @@ Item {
                 canMine: bar.canMine
                 isFullScreen: bar.isFullScreen
                 inspectorOpen: bar.inspectorOpen
+                gapFastForwardEnabled: bar.gapFastForwardEnabled
                 onToggleStudyRequested: bar.toggleStudyRequested()
                 onOpenVideoRequested: bar.openVideoRequested()
                 onMineSubtitleRequested: bar.mineSubtitleRequested()
                 onToggleInspectorRequested: bar.toggleInspectorRequested()
                 onToggleFullScreenRequested: bar.toggleFullScreenRequested()
+                onToggleGapFastForwardRequested: bar.toggleGapFastForwardRequested()
             }
         }
     }

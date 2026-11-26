@@ -41,6 +41,7 @@ class PlayerStudyViewModel : public QObject {
     Q_OBJECT
     QML_ELEMENT
     Q_PROPERTY(QVariantList transcript READ transcript NOTIFY transcriptChanged)
+    Q_PROPERTY(QVariantList primaryCues READ primary_cues NOTIFY transcriptChanged)
     Q_PROPERTY(QString transcriptError READ transcript_error NOTIFY transcriptChanged)
     Q_PROPERTY(double adjustedTime READ adjusted_time NOTIFY adjustedTimeChanged)
     Q_PROPERTY(int currentRow READ current_row NOTIFY currentRowChanged)
@@ -65,6 +66,9 @@ public:
     ~PlayerStudyViewModel() override;
 
     QVariantList transcript() const;
+    // The unfiltered primary cues for the playback gap policy, in subtitle
+    // order, as {start, end} maps.
+    QVariantList primary_cues() const;
     QString transcript_error() const;
     double adjusted_time() const;
     int current_row() const;
