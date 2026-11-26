@@ -15,6 +15,7 @@
 #include <QGuiApplication>
 #include <QQmlComponent>
 #include <QQmlEngine>
+#include <QPointer>
 #include <QQmlError>
 #include <QQuickItem>
 #include <QQuickStyle>
@@ -103,10 +104,37 @@ void DictionaryReorderTest::dragging_a_handle_onto_a_row_moves_the_dictionary_th
     QTRY_COMPARE(titles(library).size(), 3);
     const QStringList before = titles(library);
 
+    // Every move rebuilds the rows, and a new row sits at the list's top until
+    // the column lays it out. A drag starts only once the handles are the
+    // current rows' and stand one below another, so a slow machine cannot
+    // press where a row used to be.
     QList<QQuickItem*> handles;
-    QTRY_VERIFY((handles.clear(),
-                 collect_named(page, QStringLiteral("dictionaryReorderHandle"), handles),
-                 handles.size() == 3));
+    // Guarded copies taken while the rows are alive: a rebuilt row deletes
+    // its handle, which a plain pointer would not notice.
+    QList<QPointer<QQuickItem>> guarded;
+    const auto settle_handles = [&handles, &guarded, page] {
+        const QList<QPointer<QQuickItem>> old = guarded;
+        const auto laid_out = [&] {
+            for (const QPointer<QQuickItem>& item : old) {
+                if (handles.contains(item.data())) {
+                    return false;
+                }
+            }
+            for (qsizetype i = 1; i < handles.size(); ++i) {
+                if (handles.at(i)->mapToScene(QPointF(0, 0)).y() <=
+                    handles.at(i - 1)->mapToScene(QPointF(0, 0)).y()) {
+                    return false;
+                }
+            }
+            return handles.size() == 3;
+        };
+        QTRY_VERIFY((handles.clear(),
+                     collect_named(page, QStringLiteral("dictionaryReorderHandle"), handles),
+                     laid_out()));
+        guarded = QList<QPointer<QQuickItem>>(handles.cbegin(), handles.cend());
+    };
+    settle_handles();
+    QVERIFY(!QTest::currentTestFailed());
 
     // Bring the list into view, as a user scrolls to it.
     auto* flick = qvariant_cast<QQuickItem*>(page->property("flickable"));
@@ -140,16 +168,16 @@ void DictionaryReorderTest::dragging_a_handle_onto_a_row_moves_the_dictionary_th
     drag(from, {to});
     const QStringList expected{before.at(1), before.at(2), before.at(0)};
     QTRY_COMPARE(titles(library), expected);
+    settle_handles();
+    QVERIFY(!QTest::currentTestFailed());
 
     // Back up: the last row onto the first restores the order.
-    drag(to, {from});
+    drag(centre(handles.last()), {centre(handles.first())});
     QTRY_COMPARE(titles(library), before);
+    settle_handles();
+    QVERIFY(!QTest::currentTestFailed());
 
     // A slip across a row edge, shorter than the drag distance, moves nothing.
-    // Every move rebuilds the rows, so the handles are looked up again.
-    handles.clear();
-    collect_named(page, QStringLiteral("dictionaryReorderHandle"), handles);
-    QCOMPARE(handles.size(), 3);
     const QRectF first_handle =
         handles.first()->mapRectToScene(QRectF(QPointF(0, 0), handles.first()->size()));
     const QPoint edge(qRound(first_handle.center().x()), qRound(first_handle.bottom()) - 1);
