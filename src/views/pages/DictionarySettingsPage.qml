@@ -1,8 +1,10 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Features/Settings/DictionaryView.swift: body, DictionaryBehaviorSettingsSections,
 // dictionaryTypePicker and DictionaryCategoryPicker.
-// Local imports are synchronous; recommendations are read-only and reordering
-// uses menu actions. The library does not expose revision captions.
+// Local imports are synchronous and recommendations are read-only. Rows
+// reorder by dragging their handle (dictionaryReorderGesture), and the row
+// menu keeps Move Up and Move Down for the keyboard. The library does not
+// expose revision captions.
 //
 // The Lookup card follows DictionaryBehaviorSettingsSections in order:
 // Frequency Sorting writes one of LookupFrequencySortOrder's raw strings, and
@@ -302,71 +304,11 @@ PanelScaffold {
             onActivated: index => library.selectType(page.types[index])
         }
 
-        Repeater {
-            model: library.rows
-
-            delegate: Column {
-                id: entry
-
-                required property var modelData
-                required property int index
-
-                width: parent ? parent.width : 0
-
-                FormDivider { visible: entry.index > 0 }
-
-                FormRow {
-                    label: entry.modelData.title
-
-                    MenuPicker {
-                        visible: library.dictionaryType === "Term"
-                        Accessible.name: qsTr("Category")
-                        model: [qsTr("No Category"), qsTr("Monolingual"), qsTr("Bilingual"), qsTr("Exclude")]
-                        currentIndex: page.categories.indexOf(entry.modelData.category)
-                        onActivated: index => library.setCategory(entry.modelData.title, page.categories[index])
-                    }
-
-                    ToggleSwitch {
-                        anchors.verticalCenter: parent ? parent.verticalCenter : undefined
-                        Accessible.name: entry.modelData.title
-                        checked: entry.modelData.enabled
-                        onToggled: library.setEnabled(entry.modelData.title, checked)
-                    }
-
-                    GlyphButton {
-                        id: actions
-
-                        glyph: "ellipsis"
-                        filled: false
-                        diameter: Theme.smallGlyphButtonDiameter
-                        Accessible.name: qsTr("Dictionary Actions")
-                        onClicked: actionsMenu.popup(actions)
-
-                        Menu {
-                            id: actionsMenu
-
-                            MenuItem {
-                                text: qsTr("Move Up")
-                                enabled: entry.index > 0
-                                onTriggered: library.move(entry.modelData.title, library.rows[entry.index - 1].title)
-                            }
-
-                            MenuItem {
-                                text: qsTr("Move Down")
-                                enabled: entry.index + 1 < library.rows.length
-                                onTriggered: library.move(entry.modelData.title, library.rows[entry.index + 1].title)
-                            }
-
-                            MenuSeparator {}
-
-                            MenuItem {
-                                text: qsTr("Delete")
-                                onTriggered: library.remove(entry.modelData.title)
-                            }
-                        }
-                    }
-                }
-            }
+        DictionaryLibraryList {
+            width: parent ? parent.width : 0
+            libraryModel: library
+            flickable: page.flickable
+            categories: page.categories
         }
     }
 }

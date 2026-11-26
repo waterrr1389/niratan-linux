@@ -478,6 +478,7 @@ qt_add_qml_module(niratan_app
         src/views/settings/ReaderDisplayCard.qml
         src/views/settings/StatisticsSettings.qml
         src/views/settings/WordAudioSettings.qml
+        src/views/settings/DictionaryLibraryList.qml
         src/views/settings/SyncSettings.qml
         src/views/reader/SasayakiChaptersTab.qml
         src/views/reader/ReaderAppearancePanel.qml
