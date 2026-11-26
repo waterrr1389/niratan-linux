@@ -147,6 +147,19 @@
 // and the live statistics and consumes the pending export, so the page can
 // read bookmarkEdited before it and a later close without another bookmark
 // write sends nothing. The book stays open for a reopened window.
+//
+// Imported fonts
+// --------------
+// Following Core/FontManager.swift (fontfaceCSS, cssFontName, resourceName),
+// font_face_css is the stylesheet's @font-face block for the fonts imported
+// into <data root>/Fonts; services/fonts/font_store.h holds the file, import
+// and serving rules. The block is inserted at the start of the reader's style
+// block, and with no imported fonts it is empty.
+//
+// font_resource serves one stored font file by its exact file name for the
+// reader://font host, with the font MIME type by extension. The scheme handler
+// answers that host with it; a name that is not a stored font resource, a path
+// with a separator or an unknown extension has no resource.
 
 #pragma once
 
@@ -447,6 +460,10 @@ class ReaderViewModel : public QObject {
     // when path is one of the spine entries, else an empty string.
     std::string document_for(const std::string& path);
     std::optional<niratan::reader::SessionResource> resource(const std::string& path);
+    // The @font-face block for the imported fonts, and one stored font's
+    // bytes for reader://font/<file name>.
+    QString font_face_css() const;
+    std::optional<niratan::reader::SessionResource> font_resource(const std::string& file_name);
     bool is_open() const;
 
    signals:

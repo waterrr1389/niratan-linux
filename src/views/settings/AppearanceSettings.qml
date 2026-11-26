@@ -11,6 +11,7 @@
 pragma ComponentBehavior: Bound
 
 import QtQuick
+import QtQuick.Dialogs
 import Niratan
 
 PanelScaffold {
@@ -22,10 +23,25 @@ PanelScaffold {
     readonly property list<string> themeLabels: [qsTr("System"), qsTr("Light"), qsTr("Dark"), qsTr("Sepia"), qsTr("Custom")]
     readonly property list<string> furiganaModes: ["Off", "Dimmed", "Toggle", "Hidden"]
     readonly property list<string> furiganaLabels: [qsTr("Show"), qsTr("Dimmed"), qsTr("Tap to Reveal"), qsTr("Hidden")]
-    readonly property list<string> fonts: FontFamilies.installed
+    readonly property var importedFontNames: form.settingsModel.importedFonts
+    readonly property var fonts: form.uniqueFonts(FontFamilies.installed.concat(form.importedFontNames))
     readonly property bool paginated: !form.settingsModel.continuousMode
     readonly property bool paragraph: paginated && form.settingsModel.paragraphMode
     readonly property bool spreadsAvailable: paginated && !form.settingsModel.verticalWriting && !form.settingsModel.paragraphMode
+    // The imported font the delete confirmation asks about.
+    property string fontToDelete
+
+    // AppearanceView.availableFonts through uniqueFonts: installed families,
+    // then each imported font once; a family installed and imported both
+    // appears in the installed position.
+    function uniqueFonts(values) {
+        const seen = []
+        for (let index = 0; index < values.length; ++index) {
+            if (seen.indexOf(values[index]) < 0)
+                seen.push(values[index])
+        }
+        return seen
+    }
 
     function formatted(value, decimals, suffix) {
         return Number(value).toLocaleString(Qt.locale(), "f", decimals) + suffix
@@ -153,6 +169,28 @@ PanelScaffold {
                    ? form.fonts : [form.settingsModel.selectedFont].concat(form.fonts)
             currentIndex: Math.max(0, model.indexOf(form.settingsModel.selectedFont))
             onActivated: index => form.settingsModel.selectedFont = model[index]
+
+            // AppearanceView's Font row: a red trash for the selected imported
+            // font, and the plus that opens Import Font.
+            GlyphButton {
+                objectName: "appearanceFontDelete"
+                glyph: "trash"
+                glyphColor: Theme.popupDanger
+                filled: false
+                visible: form.importedFontNames.includes(form.settingsModel.selectedFont)
+                Accessible.name: qsTr("Delete")
+                onClicked: {
+                    form.fontToDelete = form.settingsModel.selectedFont
+                    fontDeleteDialog.open()
+                }
+            }
+
+            GlyphButton {
+                objectName: "appearanceFontImport"
+                glyph: "plus"
+                Accessible.name: qsTr("Import Font")
+                onClicked: fontImportDialog.open()
+            }
         }
 
         FormDivider {}
@@ -403,5 +441,30 @@ PanelScaffold {
             value: form.settingsModel.popupSwipeThreshold
             onMoved: value => form.settingsModel.popupSwipeThreshold = value
         }
+    }
+
+    // AppearanceView's delete confirmation: title hidden, the message names the
+    // font, Delete is destructive.
+    AlertDialog {
+        id: fontDeleteDialog
+
+        objectName: "appearanceFontDeleteDialog"
+        message: qsTr("Delete \"%1\"?").arg(form.fontToDelete)
+        acceptText: qsTr("Delete")
+        rejectText: qsTr("Cancel")
+        acceptDestructive: true
+        onAccepted: form.settingsModel.deleteFont(form.fontToDelete)
+    }
+
+    // AppearanceView's fileImporter for [.font]: the Linux picker offers the
+    // font extensions the reader can serve.
+    FileDialog {
+        id: fontImportDialog
+
+        objectName: "appearanceFontDialog"
+        title: qsTr("Import Font")
+        fileMode: FileDialog.OpenFile
+        nameFilters: [qsTr("Font files (*.ttf *.otf *.ttc)")]
+        onAccepted: form.settingsModel.importFont(selectedFile)
     }
 }

@@ -895,6 +895,27 @@ target_link_libraries(tst_reader_open_sync PRIVATE niratan_app Qt6::Test)
 target_compile_options(tst_reader_open_sync PRIVATE -Wall -Wextra -Wpedantic -Werror)
 add_test(NAME reader_open_sync COMMAND tst_reader_open_sync)
 
+qt_add_executable(tst_font_store
+    fonts/tst_font_store.cpp
+)
+target_include_directories(tst_font_store PRIVATE ${CMAKE_SOURCE_DIR}/src
+    ${CMAKE_CURRENT_SOURCE_DIR}/viewmodels)
+target_link_libraries(tst_font_store PRIVATE niratan_core Qt6::Test)
+target_compile_options(tst_font_store PRIVATE -Wall -Wextra -Wpedantic -Werror)
+add_test(NAME font_store COMMAND tst_font_store)
+
+qt_add_executable(tst_reader_fonts
+    viewmodels/tst_reader_fonts.cpp
+)
+target_include_directories(tst_reader_fonts PRIVATE
+    ${CMAKE_SOURCE_DIR}/src
+    ${CMAKE_CURRENT_SOURCE_DIR}/viewmodels
+    ${CMAKE_CURRENT_SOURCE_DIR}/flows
+)
+target_link_libraries(tst_reader_fonts PRIVATE niratan_app Qt6::Test)
+target_compile_options(tst_reader_fonts PRIVATE -Wall -Wextra -Wpedantic -Werror)
+add_test(NAME reader_fonts COMMAND tst_reader_fonts)
+
 qt_add_executable(tst_reader_presentation_text
     viewmodels/tst_reader_presentation_text.cpp
 )

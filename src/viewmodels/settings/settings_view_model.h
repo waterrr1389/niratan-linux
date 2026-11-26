@@ -97,6 +97,7 @@ class SettingsViewModel : public QObject {
     Q_PROPERTY(bool systemLightSepia READ systemLightSepia WRITE setSystemLightSepia NOTIFY readerChanged)
     Q_PROPERTY(bool verticalWriting READ verticalWriting WRITE setVerticalWriting NOTIFY readerChanged)
     Q_PROPERTY(QString selectedFont READ selectedFont WRITE setSelectedFont NOTIFY readerChanged)
+    Q_PROPERTY(QStringList importedFonts READ importedFonts NOTIFY importedFontsChanged)
     Q_PROPERTY(int fontSize READ fontSize WRITE setFontSize NOTIFY readerChanged)
     Q_PROPERTY(QString furiganaMode READ furiganaMode WRITE setFuriganaMode NOTIFY readerChanged)
     Q_PROPERTY(bool continuousMode READ continuousMode WRITE setContinuousMode NOTIFY readerChanged)
@@ -188,6 +189,15 @@ class SettingsViewModel : public QObject {
     void setSelectedFont(const QString& value);
     int fontSize() const;
     void setFontSize(int value);
+    // FontManager.storedFonts' names under <app>/Fonts: the imported fonts the
+    // Appearance Font row appends after the installed families.
+    QStringList importedFonts() const;
+    // FontManager.importFont and deleteFont: the chosen file is copied into
+    // Fonts/, a delete removes the selected imported font and resets the
+    // selection to the default. Both refresh importedFonts; a failure leaves
+    // the list unchanged and sets error.
+    Q_INVOKABLE bool importFont(const QUrl& file);
+    Q_INVOKABLE bool deleteFont(const QString& name);
     // Reader gestures share the Appearance stepper's persisted font size.
     // A wheel notch is 120 angle units; shortcuts do not spend the remainder.
     Q_INVOKABLE void adjustFontSizeFromWheel(int angleDelta);
@@ -306,6 +316,7 @@ class SettingsViewModel : public QObject {
     void sectionChanged();
     void errorChanged();
     void readerChanged();
+    void importedFontsChanged();
     void dictionaryChanged();
     void statisticsChanged();
 

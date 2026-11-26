@@ -44,6 +44,7 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QSignalSpy>
+#include <QUrl>
 #include <QtTest>
 
 #include <filesystem>
@@ -111,6 +112,7 @@ class SettingsViewModelTest : public QObject {
     Q_OBJECT
 
    private slots:
+    void imported_fonts_import_and_delete();
     void fontSize_keeps_its_stepper_range();
     void textSpeed_rounds_to_the_step_and_clamps();
     void horizontalPadding_keeps_swift_range();
@@ -822,6 +824,53 @@ void SettingsViewModelTest::dictionary_edit_after_a_profile_switch_keeps_the_oth
     QCOMPARE(stored_first->scan_length, 12);
     QCOMPARE(stored_second->max_results, 30);
     QCOMPARE(stored_second->scan_length, 24);
+}
+
+// FontManager.storedFonts and AppearanceView's Font row: imported fonts are
+// listed by name, an import copies the file into Fonts, deleting the selected
+// imported font resets the selection to the default, and a failure sets the
+// page's error line while the list stays unchanged.
+void SettingsViewModelTest::imported_fonts_import_and_delete() {
+    TempDataRoot data;
+    QVERIFY(data.isValid());
+    const auto app = niratan::storage::data_root();
+    std::error_code error;
+    std::filesystem::create_directories(app / "Fonts", error);
+    QFile existing(QString::fromStdString((app / "Fonts/Existing.ttf").string()));
+    QVERIFY(existing.open(QIODevice::WriteOnly));
+    QCOMPARE(existing.write("existing"), qint64(8));
+    existing.close();
+    QFile source(QString::fromStdString((app / "Imported Font.otf").string()));
+    QVERIFY(source.open(QIODevice::WriteOnly));
+    QCOMPARE(source.write("imported"), qint64(8));
+    source.close();
+
+    SettingsViewModel model;
+    QCOMPARE(model.importedFonts(), QStringList{QStringLiteral("Existing")});
+    QSignalSpy fontsChanged(&model, &SettingsViewModel::importedFontsChanged);
+    QVERIFY(model.importFont(
+        QUrl::fromLocalFile(QString::fromStdString((app / "Imported Font.otf").string()))));
+    QVERIFY(!fontsChanged.isEmpty());
+    QCOMPARE(model.importedFonts(),
+             (QStringList{QStringLiteral("Existing"), QStringLiteral("Imported Font")}));
+    QVERIFY(std::filesystem::exists(app / "Fonts/Imported Font.otf"));
+
+    model.setSelectedFont(QStringLiteral("Imported Font"));
+    QCOMPARE(model.selectedFont(), QStringLiteral("Imported Font"));
+    QVERIFY(model.deleteFont(QStringLiteral("Imported Font")));
+    QVERIFY(!std::filesystem::exists(app / "Fonts/Imported Font.otf"));
+    QCOMPARE(model.selectedFont(), QStringLiteral("Hiragino Mincho ProN"));
+    QCOMPARE(model.importedFonts(), QStringList{QStringLiteral("Existing")});
+
+    QVERIFY(model.deleteFont(QStringLiteral("Missing")));
+    QVERIFY(model.deleteFont(QStringLiteral("Hiragino Mincho ProN")));
+    QCOMPARE(model.importedFonts(), QStringList{QStringLiteral("Existing")});
+    QVERIFY(model.error().isEmpty());
+
+    QVERIFY(!model.importFont(
+        QUrl::fromLocalFile(QString::fromStdString((app / "missing.ttf").string()))));
+    QVERIFY(!model.error().isEmpty());
+    QCOMPARE(model.importedFonts(), QStringList{QStringLiteral("Existing")});
 }
 
 QTEST_APPLESS_MAIN(SettingsViewModelTest)

@@ -38,7 +38,27 @@ void ReaderSchemeHandler::requestStarted(QWebEngineUrlRequestJob* job) {
         path.erase(path.begin());
     }
 
-    if (view_model_ == nullptr || url.host() != QLatin1String("book") || path.empty()) {
+    if (view_model_ == nullptr) {
+        job->fail(QWebEngineUrlRequestJob::UrlNotFound);
+        return;
+    }
+
+    // reader://font/<file name> answers a font imported into Fonts/, the way
+    // Swift's local-resources:/// answers a stored font for @font-face.
+    if (url.host() == QLatin1String("font")) {
+        const auto font = view_model_->font_resource(path);
+        if (!font.has_value()) {
+            job->fail(QWebEngineUrlRequestJob::UrlNotFound);
+            return;
+        }
+        auto* buffer = new QBuffer(job);
+        buffer->setData(QByteArray::fromStdString(font->bytes));
+        buffer->open(QIODevice::ReadOnly);
+        job->reply(QByteArray::fromStdString(font->mime_type), buffer);
+        return;
+    }
+
+    if (url.host() != QLatin1String("book") || path.empty()) {
         job->fail(QWebEngineUrlRequestJob::UrlNotFound);
         return;
     }

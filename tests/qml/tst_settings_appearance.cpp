@@ -28,12 +28,14 @@
 // values persist in the profile's reader settings.
 
 #include "../viewmodels/data_root.h"
+#include "services/storage/app_paths.h"
 #include "viewmodels/sasayaki/sasayaki_settings_view_model.h"
 #include "viewmodels/settings/settings_view_model.h"
 #include "views/dictionary/audio_scheme_handler.h"
 #include "views/reader/reader_scheme_handler.h"
 
 #include <QColor>
+#include <QFile>
 #include <QGuiApplication>
 #include <QQmlApplicationEngine>
 #include <QQmlComponent>
@@ -46,6 +48,7 @@
 #include <QtWebEngineQuick/QtWebEngineQuick>
 
 #include <clocale>
+#include <filesystem>
 #include <memory>
 
 Q_IMPORT_QML_PLUGIN(NiratanPlugin)
@@ -203,6 +206,7 @@ class SettingsAppearanceTest : public QObject {
     void theme_custom_color_rows_write_their_setting();
     void layout_wheel_page_turn_follows_swift_order();
     void display_statistics_rows_follow_statistics();
+    void font_row_lists_and_deletes_imported_fonts();
 
    private:
     QQmlApplicationEngine engine_;
@@ -681,6 +685,82 @@ void SettingsAppearanceTest::display_statistics_rows_follow_statistics() {
                  qPrintable(separators.at(index) +
                             QStringLiteral(" is visible while statistics is off")));
     }
+
+    const QString warnings = take_warnings();
+    QVERIFY2(warnings.isEmpty(), qPrintable(warnings));
+}
+
+// B7: the Appearance Font row lists the imported font after the installed
+// families, shows the delete control only for it, confirms Delete "name"? and
+// opens the picker for Import Font (AppearanceView.swift 127-179).
+void SettingsAppearanceTest::font_row_lists_and_deletes_imported_fonts() {
+    niratan::test::TempDataRoot data;
+    QVERIFY(data.isValid());
+    const auto fonts = niratan::storage::data_root() / "Fonts";
+    std::error_code error;
+    std::filesystem::create_directories(fonts, error);
+    const auto imported = fonts / "Imported.ttf";
+    {
+        QFile file(QString::fromStdString(imported.string()));
+        QVERIFY(file.open(QIODevice::WriteOnly | QIODevice::Truncate));
+        QCOMPARE(file.write("font-bytes"), qint64(10));
+    }
+    QQuickWindow* window = nullptr;
+    std::unique_ptr<QObject> object = create_settings_window(engine_, 1400, window);
+    QVERIFY2(object != nullptr, "AppearanceSettings was not created");
+    QQuickItem* appearance = appearance_detail(window);
+    QVERIFY(appearance);
+    QTest::qWait(50);
+
+    QQuickItem* picker = find_item(appearance, QStringLiteral("appearanceFont"));
+    QVERIFY(picker);
+    QStringList fonts_model = picker->property("model").toStringList();
+    QVERIFY(fonts_model.contains(QStringLiteral("Imported")));
+    QVERIFY(fonts_model.indexOf(QStringLiteral("Imported")) > 0);
+
+    auto* remove = find_item(appearance, QStringLiteral("appearanceFontDelete"));
+    QVERIFY(remove);
+    QVERIFY(!remove->isVisible());
+
+    const int imported_index = fonts_model.indexOf(QStringLiteral("Imported"));
+    QVERIFY(imported_index >= 0);
+    QVERIFY(QMetaObject::invokeMethod(picker, "activated", Q_ARG(int, imported_index)));
+    {
+        niratan::viewmodels::SettingsViewModel fresh;
+        QTRY_COMPARE(fresh.selectedFont(), QStringLiteral("Imported"));
+    }
+    QTRY_VERIFY(remove->isVisible());
+
+    QVERIFY(QMetaObject::invokeMethod(remove, "clicked"));
+    auto* confirmation = window->findChild<QObject*>(QStringLiteral("appearanceFontDeleteDialog"));
+    QVERIFY(confirmation);
+    QTRY_VERIFY(confirmation->property("visible").toBool());
+    QCOMPARE(confirmation->property("message").toString(), QStringLiteral("Delete \"Imported\"?"));
+    QVERIFY(confirmation->property("acceptDestructive").toBool());
+    QVERIFY(QMetaObject::invokeMethod(confirmation, "accepted"));
+    QTRY_VERIFY(!std::filesystem::exists(imported));
+    {
+        niratan::viewmodels::SettingsViewModel fresh;
+        QCOMPARE(fresh.selectedFont(), QStringLiteral("Hiragino Mincho ProN"));
+        QVERIFY(fresh.importedFonts().isEmpty());
+    }
+    QTRY_VERIFY(!remove->isVisible());
+
+    {
+        QFile file(QString::fromStdString(imported.string()));
+        QVERIFY(file.open(QIODevice::WriteOnly | QIODevice::Truncate));
+        QCOMPARE(file.write("font-bytes"), qint64(10));
+    }
+    auto* add = find_item(appearance, QStringLiteral("appearanceFontImport"));
+    QVERIFY(add);
+    QVERIFY(QMetaObject::invokeMethod(add, "clicked"));
+    auto* dialog = window->findChild<QObject*>(QStringLiteral("appearanceFontDialog"));
+    QVERIFY(dialog);
+    QTRY_VERIFY(dialog->property("visible").toBool());
+    const QString filters = dialog->property("nameFilters").toStringList().join(QLatin1Char(' '));
+    QVERIFY(filters.contains(QStringLiteral("ttf")));
+    QVERIFY(filters.contains(QStringLiteral("otf")));
+    QVERIFY(filters.contains(QStringLiteral("ttc")));
 
     const QString warnings = take_warnings();
     QVERIFY2(warnings.isEmpty(), qPrintable(warnings));

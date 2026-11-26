@@ -5,6 +5,7 @@
 #include "settings_view_model_state.h"
 
 #include <QStringList>
+#include <QUrl>
 
 #include <algorithm>
 #include <cmath>
@@ -16,8 +17,10 @@
 #include "models/profiles/dictionary_settings.h"
 #include "models/profiles/reader_settings.h"
 #include "models/statistics/statistics.h"
+#include "services/fonts/font_store.h"
 #include "services/settings/global_settings.h"
 #include "services/settings/settings_store.h"
+#include "services/storage/app_paths.h"
 
 namespace niratan::viewmodels {
 namespace {
@@ -78,8 +81,9 @@ void SettingsViewModel::setSection(int value) {
 
 QString SettingsViewModel::error() const {
     QStringList errors;
-    for (const auto* message : {&state_->profile_error, &state_->reader_error,
-                                &state_->dictionary_error, &state_->statistics_error}) {
+    for (const auto* message :
+         {&state_->profile_error, &state_->reader_error, &state_->dictionary_error,
+          &state_->statistics_error, &state_->font_error}) {
         if (!message->isEmpty()) {
             errors.append(*message);
         }
@@ -415,6 +419,61 @@ void SettingsViewModel::setStatisticsResetTime(int value) {
         }
         emit statisticsChanged();
     }
+}
+
+QStringList SettingsViewModel::importedFonts() const {
+    QStringList names;
+    for (const std::string& name : fonts::FontStore(storage::data_root()).stored_font_names()) {
+        names.append(QString::fromStdString(name));
+    }
+    return names;
+}
+
+bool SettingsViewModel::importFont(const QUrl& file) {
+    const QString local = file.toLocalFile();
+    std::string error;
+    const bool imported = !local.isEmpty() &&
+        fonts::FontStore(storage::data_root()).import_font(local.toStdString(), &error);
+    if (!imported) {
+        const QString message = tr("Could not import the font: %1")
+                                    .arg(error.empty() ? tr("the file could not be read")
+                                                       : QString::fromStdString(error));
+        if (state_->font_error != message) {
+            state_->font_error = message;
+            emit errorChanged();
+        }
+        return false;
+    }
+    if (!state_->font_error.isEmpty()) {
+        state_->font_error.clear();
+        emit errorChanged();
+    }
+    emit importedFontsChanged();
+    return true;
+}
+
+bool SettingsViewModel::deleteFont(const QString& name) {
+    std::string error;
+    const bool deleted =
+        fonts::FontStore(storage::data_root()).delete_font(name.toStdString(), &error);
+    // Swift's delete action removes the file and then selects the first
+    // default font, whether or not a stored file had that name.
+    setSelectedFont(QString::fromStdString(std::string(fonts::FontStore::default_fonts().front())));
+    if (deleted) {
+        if (!state_->font_error.isEmpty()) {
+            state_->font_error.clear();
+            emit errorChanged();
+        }
+    } else {
+        const QString message =
+            tr("Could not delete the font: %1").arg(QString::fromStdString(error));
+        if (state_->font_error != message) {
+            state_->font_error = message;
+            emit errorChanged();
+        }
+    }
+    emit importedFontsChanged();
+    return deleted;
 }
 
 }  // namespace niratan::viewmodels

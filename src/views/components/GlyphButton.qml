@@ -2,8 +2,9 @@
 //
 // A round glyph-only button, following Features/Video/VideoInspectorView.swift
 // `VideoInspectorIconButtonStyle`: a circle of `diameter` with the faint chip
-// fill when `filled`, bare otherwise, and the SF Symbol centred in the primary
-// colour (stepper steps, Rotate and the per-slider reset).
+// fill when `filled`, bare otherwise, and the SF Symbol centred in `glyphColor`
+// (stepper steps, Rotate and the per-slider reset; destructive glyphs pass the
+// danger colour).
 
 import QtQuick
 import QtQuick.Controls
@@ -17,6 +18,7 @@ Button {
     property int diameter: Theme.glyphButtonDiameter
     property real glyphSize: Theme.glyphSize
     property bool filled: true
+    property color glyphColor: Theme.textPrimary
 
     implicitWidth: diameter
     implicitHeight: diameter
@@ -35,7 +37,7 @@ Button {
             anchors.centerIn: parent
             name: step.glyph
             size: step.glyphSize
-            color: Theme.textPrimary
+            color: step.glyphColor
         }
     }
 }

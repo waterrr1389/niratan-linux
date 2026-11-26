@@ -840,6 +840,9 @@ std::string ReaderViewModel::shell_document(const std::string& path) {
     input.appearance.blur_images = state_->settings.blur_images;
     input.appearance.selected_font = state_->settings.selected_font;
     input.appearance.font_size = state_->settings.font_size;
+    // FontManager.fontfaceCSS: the @font-face blocks of the imported fonts,
+    // read per document build so an import shows without reopening the book.
+    input.font_face_css = font_face_css().toStdString();
     input.appearance.horizontal_padding = state_->settings.horizontal_padding;
     input.appearance.vertical_padding = state_->settings.vertical_padding;
     input.appearance.line_height = state_->settings.line_height;

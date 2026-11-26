@@ -31,6 +31,7 @@ struct SettingsViewModel::State {
     QString reader_error;
     QString dictionary_error;
     QString statistics_error;
+    QString font_error;
 
     std::shared_ptr<settings::SettingsStore> store;
     std::optional<settings::GlobalSettings> global;

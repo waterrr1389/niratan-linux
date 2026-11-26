@@ -96,6 +96,8 @@ qt_add_library(niratan_core STATIC
     src/services/books/book_storage.cpp
     src/services/books/library_watch.cpp
     src/services/books/library_watch.h
+    src/services/fonts/font_store.cpp
+    src/services/fonts/font_store.h
     src/models/books/book.h
     src/models/color/color_hex.cpp
     src/models/profiles/content_language.cpp
@@ -268,6 +270,7 @@ qt_add_library(niratan_app STATIC
     src/viewmodels/reader/reader_presentation.h
     src/viewmodels/reader/reader_view_model_state.h
     src/viewmodels/reader/reader_view_model_statistics.cpp
+    src/viewmodels/reader/reader_view_model_fonts.cpp
     src/viewmodels/reader/reader_view_model_sync.cpp
     src/views/player/mpv_item.cpp
     src/views/player/mpv_item.h
