@@ -8,15 +8,20 @@
 // BookshelfView.swift with BookshelfViewModel.syncBook and handleSyncResult
 // (the Syncing... overlay, the error alert and the result alert). Sync is a
 // single item in Auto mode and an Import/Export submenu in Manual mode, and
-// only shown while sync is enabled. The Export entry is out of scope.
+// only shown while sync is enabled. The book's own Export entry follows
+// BookCell.bookExportURL: it exists only when an EPUB file name is stored,
+// sits after Rename and before Delete, and opens Niratan-win's save dialog
+// (NovelLibraryPageViewModel.ExportNovelAsync).
 //
 // Decision: the Move submenu also checks the book's current shelf (None when
 // it is on no shelf); Swift only disables that row, and the owner asked to see
 // where the book is.
 pragma ComponentBehavior: Bound
 
+import QtCore
 import QtQuick
 import QtQuick.Controls
+import QtQuick.Dialogs
 import Niratan
 import "../icons/icon_map.js" as IconMap
 
@@ -38,7 +43,41 @@ Item {
         dialogs.bookTitle = title
         dialogs.currentBookShelf = dialogs.model.shelfForBook(folder)
         dialogs.placeSyncEntry()
+        dialogs.placeExportEntry()
         bookMenu.popup()
+    }
+
+    // BookCell adds the Export button only when the book stores an EPUB name,
+    // between Rename and Delete. It is inserted afresh for each popup so the
+    // menu's item count matches the entries Swift builds.
+    property QtObject exportEntry: null
+
+    function placeExportEntry() {
+        bookMenu.currentIndex = -1
+        if (dialogs.exportEntry)
+            bookMenu.removeItem(dialogs.exportEntry)
+        dialogs.exportEntry = null
+        if (!dialogs.model.canExportBook(dialogs.folder))
+            return
+        const item = exportItemComponent.createObject(dialogs) as MenuItem
+        bookMenu.insertItem(bookMenu.count - 1, item)
+        dialogs.exportEntry = item
+    }
+
+    Component {
+        id: exportItemComponent
+
+        MenuItem {
+            objectName: "bookExportItem"
+
+            text: qsTr("Export")
+            icon.source: IconMap.source("square.and.arrow.up")
+            onTriggered: {
+                exportDialog.folder = dialogs.folder
+                exportDialog.currentFile = dialogs.exportPath(dialogs.folder)
+                exportDialog.open()
+            }
+        }
     }
 
     // BookCell shows one ッツ Sync entry, chosen by syncMode, right after Move.
@@ -76,6 +115,16 @@ Item {
     function confirmBulkDelete(folders) {
         bulkDeleteDialog.folders = folders
         bulkDeleteDialog.open()
+    }
+
+    // NovelLibraryPageViewModel.ExportNovelAsync: the save dialog starts in
+    // Downloads with the display title's base name and the .epub extension.
+    function exportPath(folder) {
+        const downloads = StandardPaths.writableLocation(StandardPaths.DownloadsLocation)
+        const directory = downloads.length > 0
+            ? downloads
+            : StandardPaths.writableLocation(StandardPaths.HomeLocation)
+        return "file://" + directory + "/" + dialogs.model.exportBaseName(folder) + ".epub"
     }
 
     Component {
@@ -194,6 +243,18 @@ Item {
         acceptText: qsTr("Confirm")
         rejectText: qsTr("Cancel")
         onAccepted: dialogs.model.markRead(dialogs.folder)
+    }
+
+    FileDialog {
+        id: exportDialog
+
+        property string folder
+
+        title: qsTr("Export EPUB")
+        fileMode: FileDialog.SaveFile
+        nameFilters: [qsTr("EPUB books (*.epub)")]
+        defaultSuffix: "epub"
+        onAccepted: dialogs.model.exportBook(exportDialog.folder, exportDialog.selectedFile)
     }
 
     LoadingOverlay {

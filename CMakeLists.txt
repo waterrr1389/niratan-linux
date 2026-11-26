@@ -444,6 +444,7 @@ qt_add_qml_module(niratan_app
         src/views/icons/phosphor/regular/timer.svg
         src/views/icons/phosphor/regular/trash.svg
         src/views/icons/phosphor/regular/tray-arrow-down.svg
+        src/views/icons/phosphor/regular/export.svg
         src/views/icons/phosphor/regular/waveform.svg
         src/views/icons/phosphor/regular/x.svg
         src/views/icons/phosphor/regular/video.svg

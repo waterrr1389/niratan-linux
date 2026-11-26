@@ -23,6 +23,11 @@
 // bookinfo. A folder that already exists is reported as a duplicate and left
 // alone. A failure removes whatever this import created.
 //
+// Export follows Niratan-win's NovelLibraryService.ExportEpubAsync and
+// NovelExportFileName.CreateBaseName: a chosen destination ending in ".epub"
+// that differs from the private file and sits in an existing directory
+// receives the EPUB bytes; every other destination is refused without writing.
+//
 // Folders and stored paths are confined to the app directory with
 // storage::resolve_within; a metadata file that cannot be decoded is skipped,
 // not repaired. The cover reference is stored relative to the app directory,
@@ -47,6 +52,29 @@
 namespace niratan::books {
 
 std::string sanitize_file_name(std::string_view name);
+
+// NovelExportFileName.CreateBaseName from Niratan-win: trim surrounding
+// whitespace, strip every trailing ".epub" case-insensitively, replace the
+// characters Windows forbids in a file name and control characters with "_",
+// trim again, drop trailing dots, and fall back to "book" when nothing is
+// left. The result never contains a path separator.
+std::string export_base_name(std::string_view title);
+
+enum class ExportOutcome {
+    exported,
+    invalid_extension,
+    missing_source,
+    same_as_source,
+    missing_directory,
+};
+
+struct ExportResult {
+    ExportOutcome outcome = ExportOutcome::exported;
+    // Empty on success; the reason for a refusal otherwise.
+    std::string error;
+
+    bool operator==(const ExportResult&) const = default;
+};
 
 // Seconds since 2001-01-01T00:00:00Z, the reference date Foundation's JSON
 // date strategy uses.
@@ -120,6 +148,12 @@ class BookStorage {
     void save_library_prefs(const LibraryPrefs& prefs) const;
 
     ImportResult import_book(std::string_view source) const;
+
+    // NovelLibraryService.ExportEpubAsync: copy the book's private EPUB to a
+    // destination ending in ".epub" that differs from the source and sits in
+    // an existing directory. Nothing is written when refused.
+    ExportResult export_epub(const BookMetadata& book,
+                             const std::filesystem::path& destination) const;
 
    private:
     std::filesystem::path app_directory_;

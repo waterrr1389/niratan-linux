@@ -32,6 +32,7 @@ var icons = {
     "chevron.up.chevron.down": { weight: "regular", name: "caret-up-down" },
     "arrow.up.arrow.down": { weight: "regular", name: "arrows-down-up" },
     "square.resize": { weight: "regular", name: "arrows-out-simple" },
+    "square.and.arrow.up": { weight: "regular", name: "export" },
     "photo": { weight: "regular", name: "image" },
     "clock": { weight: "regular", name: "clock" },
     "clock.arrow.circlepath": { weight: "regular", name: "clock-counter-clockwise" },

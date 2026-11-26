@@ -19,8 +19,13 @@
 // empty library shows "No Books"; an empty selection shows the empty-shelf
 // copy for its kind.
 //
+// BookshelfFileDropTarget wraps the shelf: a drag with at least one EPUB is
+// accepted as a copy and its files are imported, while other drags are
+// refused. importBooksProgress follows BookshelfViewModel.importBooks: a
+// blocking overlay shows "Importing k / n..." during a multi-file batch.
+//
 // Out of scope: the search field (the view model does not filter by title
-// yet), Google Drive rows and refresh, Z-Library, sync actions and Export.
+// yet), Google Drive rows and refresh, Z-Library and sync actions.
 pragma ComponentBehavior: Bound
 
 import QtQuick
@@ -115,6 +120,7 @@ Item {
     LibraryDialogs {
         id: dialogs
 
+        objectName: "libraryDialogs"
         model: library
         onBulkDeleted: page.clearSelection()
     }
@@ -492,5 +498,32 @@ Item {
             title: qsTr("No Books")
             message: qsTr("Import an EPUB using the toolbar button to start reading.")
         }
+    }
+
+    // BookshelfFileDropTarget: at least one EPUB in the drag makes it a copy;
+    // otherwise the drop is refused and no import runs.
+    DropArea {
+        objectName: "libraryDropArea"
+
+        anchors.fill: parent
+
+        onEntered: (drag) => {
+            if (library.acceptsDrop(drag.urls))
+                drag.accept(Qt.CopyAction)
+        }
+        onDropped: (drop) => {
+            if (library.acceptsDrop(drop.urls)) {
+                drop.accept(Qt.CopyAction)
+                library.importDroppedEPUBs(drop.urls)
+            }
+        }
+    }
+
+    // BookshelfView's LoadingOverlay(importBooksProgress).
+    LoadingOverlay {
+        objectName: "libraryImportOverlay"
+        messageObjectName: "libraryImportProgress"
+        message: library.importProgress
+        active: library.importProgress.length > 0
     }
 }

@@ -12,9 +12,11 @@
 #include "services/storage/app_paths.h"
 #include "viewmodels/library/library_view_model.h"
 
+#include <QFile>
 #include <QSignalSpy>
 #include <QtTest>
 
+#include "../flows/epub_fixture.h"
 #include "data_root.h"
 
 using niratan::books::BookInfo;
@@ -58,6 +60,10 @@ class LibraryViewModelTest : public QObject {
     void smart_counts_change_with_shelf_membership();
     void shelf_for_book_follows_moves();
     void smart_counts_drop_a_book_marked_read();
+    void drop_accepts_a_mixed_epub_drag();
+    void drop_imports_only_epub_files();
+    void drop_skips_duplicates_and_reports_failures_by_name();
+    void export_commands_copy_and_report();
     void book_drag_persists_manual_order_data();
     void book_drag_persists_manual_order();
     void named_shelf_drag_persists_only_its_order();
@@ -149,6 +155,111 @@ void LibraryViewModelTest::smart_counts_drop_a_book_marked_read() {
     QVERIFY(changed.count() > 0);
     QCOMPARE(model.property("smartCounts").toMap().value(QStringLiteral("reading")).toInt(), 0);
     QCOMPARE(model.property("smartCounts").toMap().value(QStringLiteral("all")).toInt(), 1);
+}
+
+// BookshelfFileDropTarget.accepts accepts a mixed drag when at least one file
+// is an EPUB, whatever the case of its extension.
+void LibraryViewModelTest::drop_accepts_a_mixed_epub_drag() {
+    niratan::test::TempDataRoot root;
+    QVERIFY(root.isValid());
+    LibraryViewModel model;
+    QVERIFY(model.acceptsDrop({QUrl::fromLocalFile(QStringLiteral("/tmp/A.EPUB")),
+                               QUrl::fromLocalFile(QStringLiteral("/tmp/notes.txt"))}));
+    QVERIFY(!model.acceptsDrop({QUrl::fromLocalFile(QStringLiteral("/tmp/notes.txt"))}));
+    QVERIFY(!model.acceptsDrop({}));
+    QVERIFY(!model.acceptsDrop({QUrl::fromLocalFile(QStringLiteral("/tmp/plain-epub"))}));
+}
+
+// importDroppedEPUBs keeps the EPUB URLs in dropped order and does nothing
+// when none remain.
+void LibraryViewModelTest::drop_imports_only_epub_files() {
+    niratan::test::TempDataRoot root;
+    QVERIFY(root.isValid());
+    const QString first = root.path() + QStringLiteral("/First.epub");
+    const QString second = root.path() + QStringLiteral("/Second.epub");
+    QVERIFY(niratan::test::write_epub(first.toStdString(), "First", "一", "二"));
+    QVERIFY(niratan::test::write_epub(second.toStdString(), "Second", "三", "四"));
+    const QString notes = root.path() + QStringLiteral("/notes.txt");
+    QFile notes_file(notes);
+    QVERIFY(notes_file.open(QIODevice::WriteOnly));
+    notes_file.write("not an epub");
+    notes_file.close();
+
+    LibraryViewModel model;
+    QSignalSpy errors(&model, &LibraryViewModel::errorChanged);
+    QVERIFY(model.importDroppedEPUBs(
+        {QUrl::fromLocalFile(notes), QUrl::fromLocalFile(first), QUrl::fromLocalFile(second)}));
+    QCOMPARE(model.property("bookCount").toInt(), 2);
+    QCOMPARE(errors.count(), 0);
+    QVERIFY(!model.importDroppedEPUBs({QUrl::fromLocalFile(notes)}));
+    QCOMPARE(model.property("bookCount").toInt(), 2);
+    QCOMPARE(errors.count(), 0);
+}
+
+// processImport skips an existing title silently; a real failure is reported
+// by file name after the other files were attempted.
+void LibraryViewModelTest::drop_skips_duplicates_and_reports_failures_by_name() {
+    niratan::test::TempDataRoot root;
+    QVERIFY(root.isValid());
+    const QString same = root.path() + QStringLiteral("/Same.epub");
+    const QString good = root.path() + QStringLiteral("/Good.epub");
+    QVERIFY(niratan::test::write_epub(same.toStdString(), "Same", "一", "二"));
+    QVERIFY(niratan::test::write_epub(good.toStdString(), "Good", "三", "四"));
+    const QString broken = root.path() + QStringLiteral("/broken.epub");
+    QFile broken_file(broken);
+    QVERIFY(broken_file.open(QIODevice::WriteOnly));
+    broken_file.write("not an epub");
+    broken_file.close();
+
+    LibraryViewModel model;
+    QVERIFY(model.importDroppedEPUBs({QUrl::fromLocalFile(same), QUrl::fromLocalFile(same)}));
+    QCOMPARE(model.property("bookCount").toInt(), 1);
+    QCOMPARE(model.error(), QString());
+
+    QVERIFY(model.importDroppedEPUBs({QUrl::fromLocalFile(broken), QUrl::fromLocalFile(good)}));
+    QCOMPARE(model.property("bookCount").toInt(), 2);
+    QVERIFY(model.error().contains(QStringLiteral("broken.epub")));
+    QVERIFY(model.isImportError());
+}
+
+// ExportNovelAsync names the file from the display title, copies the EPUB and
+// reports success; a refused destination reports an error and changes nothing.
+void LibraryViewModelTest::export_commands_copy_and_report() {
+    niratan::test::TempDataRoot root;
+    QVERIFY(root.isValid());
+    const BookStorage storage(niratan::storage::data_root());
+    const QString source = root.path() + QStringLiteral("/Story.epub");
+    QVERIFY(niratan::test::write_epub(source.toStdString(), "Story", "一", "二"));
+    QVERIFY(storage.import_book(source.toStdString()).book.has_value());
+    auto metadata = storage.load_metadata("Story");
+    QVERIFY(metadata.has_value());
+    metadata->renamed_title = "\u3000Renamed\u3000";
+    QVERIFY(storage.save_metadata(*metadata));
+    add_book(storage, "plain", 0.0);
+
+    LibraryViewModel model;
+    QVERIFY(model.canExportBook(QStringLiteral("Story")));
+    QVERIFY(!model.canExportBook(QStringLiteral("plain")));
+    QVERIFY(!model.canExportBook(QStringLiteral("missing")));
+    QCOMPARE(model.exportBaseName(QStringLiteral("Story")), QStringLiteral("Renamed"));
+
+    const QVariantList before = model.books();
+    const QString destination = root.path() + QStringLiteral("/out.epub");
+    QSignalSpy exported(&model, &LibraryViewModel::bookExported);
+    model.exportBook(QStringLiteral("Story"), QUrl::fromLocalFile(destination));
+    QCOMPARE(exported.count(), 1);
+    QCOMPARE(exported.at(0).at(0).toString(), destination);
+    QVERIFY(QFile::exists(destination));
+    QCOMPARE(model.books(), before);
+    QVERIFY(storage.load_shelves().empty());
+
+    const QString invalid = root.path() + QStringLiteral("/missing/out.epub");
+    QSignalSpy errors(&model, &LibraryViewModel::errorChanged);
+    model.exportBook(QStringLiteral("Story"), QUrl::fromLocalFile(invalid));
+    QCOMPARE(exported.count(), 1);
+    QVERIFY(!model.error().isEmpty());
+    QVERIFY(errors.count() > 0);
+    QCOMPARE(model.books(), before);
 }
 
 void LibraryViewModelTest::book_drag_persists_manual_order_data() {

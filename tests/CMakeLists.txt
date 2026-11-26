@@ -404,6 +404,14 @@ target_link_libraries(tst_book_storage PRIVATE niratan_core Qt6::Test)
 target_compile_options(tst_book_storage PRIVATE -Wall -Wextra -Wpedantic -Werror)
 add_test(NAME book_storage COMMAND tst_book_storage)
 
+qt_add_executable(tst_book_export
+    books/tst_book_export.cpp
+)
+target_include_directories(tst_book_export PRIVATE ${CMAKE_SOURCE_DIR}/src)
+target_link_libraries(tst_book_export PRIVATE niratan_core Qt6::Test)
+target_compile_options(tst_book_export PRIVATE -Wall -Wextra -Wpedantic -Werror)
+add_test(NAME book_export COMMAND tst_book_export)
+
 qt_add_executable(tst_library_watch
     books/tst_library_watch.cpp
 )
@@ -900,6 +908,18 @@ target_link_libraries(tst_library_drag PRIVATE niratan_app niratan_appplugin nir
 target_compile_options(tst_library_drag PRIVATE -Wall -Wextra -Wpedantic -Werror)
 add_test(NAME library_drag COMMAND tst_library_drag)
 set_tests_properties(library_drag PROPERTIES
+    ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QTWEBENGINE_CHROMIUM_FLAGS=--disable-gpu")
+
+qt_add_executable(tst_library_import_progress
+    qml/tst_library_import_progress.cpp
+)
+target_include_directories(tst_library_import_progress PRIVATE ${CMAKE_SOURCE_DIR}/src)
+target_link_libraries(tst_library_import_progress PRIVATE niratan_app niratan_appplugin
+    niratan_style niratan_styleplugin Qt6::Test
+    Qt6::Quick Qt6::QuickControls2 Qt6::WebEngineQuick)
+target_compile_options(tst_library_import_progress PRIVATE -Wall -Wextra -Wpedantic -Werror)
+add_test(NAME library_import_progress COMMAND tst_library_import_progress)
+set_tests_properties(library_import_progress PROPERTIES
     ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QTWEBENGINE_CHROMIUM_FLAGS=--disable-gpu")
 
 qt_add_executable(tst_lookup_audio_menu

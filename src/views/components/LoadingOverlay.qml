@@ -13,6 +13,8 @@ Popup {
 
     property string message: qsTr("Loading...")
     property bool active: false
+    // Names the message label for a page test; empty leaves it anonymous.
+    property string messageObjectName
 
     parent: Overlay.overlay
     anchors.centerIn: parent
@@ -37,6 +39,7 @@ Popup {
         }
 
         StyledLabel {
+            objectName: overlay.messageObjectName
             anchors.horizontalCenter: parent.horizontalCenter
             text: overlay.message
             textStyle: Theme.bodyFont

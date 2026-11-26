@@ -117,6 +117,32 @@ std::string sanitize_file_name(std::string_view name) {
     return to_utf8(sanitized.trimmed());
 }
 
+std::string export_base_name(std::string_view title) {
+    QString value = from_utf8(title).trimmed();
+    // Every trailing ".epub" goes, not only the last one.
+    const QString suffix = QStringLiteral(".epub");
+    while (value.endsWith(suffix, Qt::CaseInsensitive)) {
+        value.chop(suffix.size());
+    }
+    // Windows' invalid file-name characters and the control range are what
+    // Path.GetInvalidFileNameChars returns, which is what Niratan-win uses.
+    static const QString forbidden = QStringLiteral("\"<>|:*?\\/");
+    QString sanitized;
+    sanitized.reserve(value.size());
+    for (const QChar character : value) {
+        const bool invalid = forbidden.contains(character) || character.unicode() < 0x20;
+        sanitized.append(invalid ? QLatin1Char('_') : character);
+    }
+    value = sanitized.trimmed();
+    while (value.endsWith(QLatin1Char('.'))) {
+        value.chop(1);
+    }
+    if (value.trimmed().isEmpty()) {
+        return "book";
+    }
+    return to_utf8(value);
+}
+
 double reference_now() {
     const double seconds = std::chrono::duration<double>(
                                std::chrono::system_clock::now().time_since_epoch())
@@ -459,6 +485,64 @@ ImportResult BookStorage::import_book(std::string_view source_path) const {
     }
 
     return {book, "", false};
+}
+
+ExportResult BookStorage::export_epub(const BookMetadata& book,
+                                      const std::filesystem::path& destination) const {
+    const QString target_text = QString::fromStdString(destination.string()).trimmed();
+    const QString extension = QString::fromStdString(destination.extension().string());
+    if (target_text.isEmpty() ||
+        extension.compare(QStringLiteral(".epub"), Qt::CaseInsensitive) != 0) {
+        return {ExportOutcome::invalid_extension, "Choose a valid .epub destination."};
+    }
+
+    const std::optional<std::filesystem::path> source = epub_path(book);
+    std::error_code error;
+    if (!source.has_value() || !std::filesystem::is_regular_file(*source, error)) {
+        return {ExportOutcome::missing_source, "The private EPUB file no longer exists."};
+    }
+
+    // Path.GetFullPath makes both sides absolute; the comparison is
+    // case-insensitive, as on Windows.
+    error.clear();
+    const std::filesystem::path absolute_source =
+        std::filesystem::absolute(*source, error).lexically_normal();
+    if (error) {
+        return {ExportOutcome::missing_source, "The private EPUB file no longer exists."};
+    }
+    error.clear();
+    const std::filesystem::path absolute_target =
+        std::filesystem::absolute(destination, error).lexically_normal();
+    if (error) {
+        return {ExportOutcome::invalid_extension, "Choose a valid .epub destination."};
+    }
+    if (QString::fromStdString(absolute_source.string())
+            .compare(QString::fromStdString(absolute_target.string()), Qt::CaseInsensitive) == 0) {
+        return {ExportOutcome::same_as_source,
+                "The export destination must differ from the private EPUB."};
+    }
+
+    error.clear();
+    const std::filesystem::path directory = absolute_target.parent_path();
+    if (directory.empty() || !std::filesystem::is_directory(directory, error)) {
+        return {ExportOutcome::missing_directory, "The export folder does not exist."};
+    }
+
+    std::ifstream input(*source, std::ios::binary);
+    if (!input) {
+        return {ExportOutcome::missing_source, "The private EPUB file no longer exists."};
+    }
+    std::ofstream output(absolute_target, std::ios::binary | std::ios::trunc);
+    if (!output) {
+        return {ExportOutcome::missing_directory, "The EPUB could not be written to that folder."};
+    }
+    output << input.rdbuf();
+    output.close();
+    if (!output) {
+        std::filesystem::remove(absolute_target, error);
+        return {ExportOutcome::missing_directory, "The EPUB could not be written to that folder."};
+    }
+    return {ExportOutcome::exported, ""};
 }
 
 }  // namespace niratan::books

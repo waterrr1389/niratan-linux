@@ -106,6 +106,13 @@ std::string trim(const std::string& text) {
     return QString::fromStdString(text).trimmed().toStdString();
 }
 
+// URL.pathExtension.lowercased() == "epub": the extension of the local path.
+bool is_epub_file(const QUrl& url) {
+    const QString path = url.toLocalFile();
+    return !path.isEmpty() &&
+        QFileInfo(path).suffix().compare(QStringLiteral("epub"), Qt::CaseInsensitive) == 0;
+}
+
 }  // namespace
 
 LibraryViewModel::State::State() : storage(storage::data_root()) {}
@@ -245,6 +252,10 @@ QString LibraryViewModel::error() const { return state_->error; }
 
 bool LibraryViewModel::isImportError() const { return state_->import_error; }
 
+QString LibraryViewModel::import_progress() const {
+    return import_progress_;
+}
+
 void LibraryViewModel::clearError() {
     if (state_->error.isEmpty()) {
         return;
@@ -284,9 +295,24 @@ void LibraryViewModel::refresh() {
 }
 
 void LibraryViewModel::importBooks(const QList<QUrl>& files) {
+    // BookshelfViewModel.importBooks: one file imports directly; several show
+    // the next 1-based file while the batch runs.
+    const bool show_progress = files.size() > 1;
+    const auto update_progress = [this](const QString& text) {
+        if (import_progress_ == text) {
+            return;
+        }
+        import_progress_ = text;
+        emit importProgressChanged();
+    };
+    if (show_progress) {
+        update_progress(tr("Importing %1 / %2...").arg(1).arg(files.size()));
+    }
+
     bool imported = false;
     QStringList failures;
-    for (const QUrl& file : files) {
+    for (qsizetype index = 0; index < files.size(); ++index) {
+        const QUrl& file = files.at(index);
         const books::ImportResult result =
             state_->storage.import_book(file.toLocalFile().toStdString());
         if (result.book.has_value()) {
@@ -294,6 +320,12 @@ void LibraryViewModel::importBooks(const QList<QUrl>& files) {
         } else if (!result.already_exists) {
             failures.append(QFileInfo(file.toLocalFile()).fileName());
         }
+        if (show_progress && index + 1 < files.size()) {
+            update_progress(tr("Importing %1 / %2...").arg(index + 2).arg(files.size()));
+        }
+    }
+    if (show_progress) {
+        update_progress({});
     }
     if (imported) {
         refresh();
@@ -304,6 +336,60 @@ void LibraryViewModel::importBooks(const QList<QUrl>& files) {
         state_->import_error = true;
         emit errorChanged();
     }
+}
+
+bool LibraryViewModel::acceptsDrop(const QList<QUrl>& files) const {
+    return std::ranges::any_of(files, is_epub_file);
+}
+
+bool LibraryViewModel::importDroppedEPUBs(const QList<QUrl>& files) {
+    QList<QUrl> epubs;
+    for (const QUrl& file : files) {
+        if (is_epub_file(file)) {
+            epubs.append(file);
+        }
+    }
+    if (epubs.isEmpty()) {
+        return false;
+    }
+    importBooks(epubs);
+    return true;
+}
+
+bool LibraryViewModel::canExportBook(const QString& folder) const {
+    const auto index = state_->find_book(folder.toStdString());
+    if (!index.has_value()) {
+        return false;
+    }
+    return state_->library.books[*index].metadata.epub.has_value();
+}
+
+QString LibraryViewModel::exportBaseName(const QString& folder) const {
+    const auto index = state_->find_book(folder.toStdString());
+    if (!index.has_value()) {
+        return {};
+    }
+    return QString::fromStdString(
+        books::export_base_name(state_->library.books[*index].metadata.display_title()));
+}
+
+void LibraryViewModel::exportBook(const QString& folder, const QUrl& destination) {
+    const auto index = state_->find_book(folder.toStdString());
+    if (!index.has_value()) {
+        state_->error = tr("Book not found.");
+        state_->import_error = false;
+        emit errorChanged();
+        return;
+    }
+    const books::ExportResult result = state_->storage.export_epub(
+        state_->library.books[*index].metadata, destination.toLocalFile().toStdString());
+    if (result.outcome != books::ExportOutcome::exported) {
+        state_->error = QString::fromStdString(result.error);
+        state_->import_error = false;
+        emit errorChanged();
+        return;
+    }
+    emit bookExported(destination.toLocalFile());
 }
 
 void LibraryViewModel::openBook(const QString& folder) {

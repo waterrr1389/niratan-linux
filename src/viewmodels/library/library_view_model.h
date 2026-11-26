@@ -2,8 +2,12 @@
 //
 // State and commands for the bookshelf, following
 // Features/Bookshelf/BookshelfViewModel.swift (loadBooks, sortBooks,
-// shelfSections, shelf naming, import, delete, mark read) and
-// Features/Bookshelf/BookView.swift (BookshelfLayout).
+// shelfSections, shelf naming, import, delete, mark read, importDroppedEPUBs),
+// Features/Bookshelf/BookshelfDropSupport.swift (BookshelfFileDropTarget),
+// Features/Bookshelf/BookCell.swift (bookExportURL) and, for the save dialog,
+// Niratan-win's NovelLibraryPageViewModel.ExportNovelAsync with
+// NovelExportFileName.CreateBaseName and NovelLibraryService.ExportEpubAsync.
+// Features/Bookshelf/BookView.swift supplies BookshelfLayout.
 //
 // The model lists the books under Books/ with their cover, progress and shelf
 // membership. Progress is the bookmark's character count over bookinfo.json's
@@ -47,6 +51,9 @@ class LibraryViewModel : public QObject {
     Q_PROPERTY(int coverWidth READ cover_width WRITE setCoverWidth NOTIFY layoutChanged)
     Q_PROPERTY(QString error READ error NOTIFY errorChanged)
     Q_PROPERTY(bool importError READ isImportError NOTIFY errorChanged)
+    // BookshelfViewModel.importBooksProgress: "Importing k / n..." while a
+    // batch imports, empty for a single file and after the batch.
+    Q_PROPERTY(QString importProgress READ import_progress NOTIFY importProgressChanged)
     Q_PROPERTY(int bookCount READ book_count NOTIFY booksChanged)
     // The badges of the shelf column's smart rows, LibraryShelfSidebar's
     // LibraryShelfSmartRow.count: "all", "reading" and "unshelved", each the
@@ -68,6 +75,7 @@ class LibraryViewModel : public QObject {
     void setCoverWidth(int width);
     QString error() const;
     bool isImportError() const;
+    QString import_progress() const;
     int book_count() const;
 
     Q_INVOKABLE void refresh();
@@ -79,6 +87,19 @@ class LibraryViewModel : public QObject {
     Q_INVOKABLE void deleteBook(const QString& folder);
     Q_INVOKABLE bool isLocalBook(const QString& folder) const;
     Q_INVOKABLE void markRead(const QString& folder);
+    // BookshelfFileDropTarget.accepts: at least one URL ends in ".epub",
+    // case-insensitively. A mixed drop is accepted.
+    Q_INVOKABLE bool acceptsDrop(const QList<QUrl>& files) const;
+    // BookshelfViewModel.importDroppedEPUBs: keep only ".epub" URLs and
+    // import them in order; false when none remain.
+    Q_INVOKABLE bool importDroppedEPUBs(const QList<QUrl>& files);
+    // BookCell.bookExportURL: true only when the book stores an EPUB name.
+    Q_INVOKABLE bool canExportBook(const QString& folder) const;
+    // NovelExportFileName.CreateBaseName for the book's display title.
+    Q_INVOKABLE QString exportBaseName(const QString& folder) const;
+    // NovelLibraryService.ExportEpubAsync after the save dialog. Success
+    // reports bookExported; a refusal sets error without changing the library.
+    Q_INVOKABLE void exportBook(const QString& folder, const QUrl& destination);
 
     Q_INVOKABLE QString createShelf(const QString& name);
     Q_INVOKABLE bool renameShelf(const QString& from, const QString& to);
@@ -107,10 +128,14 @@ class LibraryViewModel : public QObject {
     void errorChanged();
     void bookOpened(const QString& folder);
     void dictionaryRequested();
+    // A completed export, naming the destination that received the EPUB.
+    void bookExported(const QString& destination);
+    void importProgressChanged();
 
    private:
     struct State;
     std::unique_ptr<State> state_;
+    QString import_progress_;
 };
 
 }  // namespace niratan::viewmodels
