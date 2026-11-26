@@ -130,6 +130,7 @@ qt_add_library(niratan_core STATIC
     src/services/player/playback_controls.cpp
     src/services/player/playback_history.cpp
     src/services/player/resume_options.cpp
+    src/services/player/subtitle_default.cpp
     src/services/player/subtitle_document.cpp
     src/services/player/subtitle_ass.cpp
     src/services/player/transcript_extractor.cpp

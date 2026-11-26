@@ -573,6 +573,14 @@ target_link_libraries(tst_resume_options PRIVATE niratan_core Qt6::Test)
 target_compile_options(tst_resume_options PRIVATE -Wall -Wextra -Wpedantic -Werror)
 add_test(NAME resume_options COMMAND tst_resume_options)
 
+qt_add_executable(tst_subtitle_default
+    player/tst_subtitle_default.cpp
+)
+target_include_directories(tst_subtitle_default PRIVATE ${CMAKE_SOURCE_DIR}/src)
+target_link_libraries(tst_subtitle_default PRIVATE niratan_core Qt6::Test)
+target_compile_options(tst_subtitle_default PRIVATE -Wall -Wextra -Wpedantic -Werror)
+add_test(NAME subtitle_default COMMAND tst_subtitle_default)
+
 qt_add_executable(tst_subtitle_document
     player/tst_subtitle_document.cpp
 )

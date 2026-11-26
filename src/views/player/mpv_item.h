@@ -36,6 +36,7 @@
 
 #include "services/player/playback_controls.h"
 #include "services/player/playback_history.h"
+#include "services/player/subtitle_default.h"
 #include "services/player/transcript_extractor.h"
 
 #include <QQuickFramebufferObject>
@@ -205,6 +206,10 @@ class MpvItem : public QQuickFramebufferObject {
     void record_finished_playback();
     void restore_playback_position();
     void restore_subtitle_selection();
+    void reset_subtitle_selection_state();
+    void refresh_tracks_and_embedded_default();
+    void apply_pending_embedded_subtitle_default();
+    QList<niratan::player::VideoTrack> video_tracks() const;
     void remember_subtitle_selection(const niratan::player::SubtitleSelection& selection);
     bool load_external_subtitle(const QUrl& file, bool remember);
     void disable_subtitles(bool remember);
@@ -259,6 +264,8 @@ class MpvItem : public QQuickFramebufferObject {
     niratan::player::PlaybackHistory playback_history_ = niratan::player::PlaybackHistory::at_data_root();
     int selected_subtitle_id_ = -1;
     int last_subtitle_id_ = -1;
+    bool subtitle_restore_pending_ = false;
+    niratan::player::EmbeddedSubtitleDefault embedded_subtitle_default_;
     niratan::player::TranscriptExtractor transcript_extractor_{
         niratan::player::TranscriptExtractor::default_cache_directory()};
     bool chapters_dirty_ = true;

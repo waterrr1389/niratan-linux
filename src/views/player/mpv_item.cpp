@@ -375,7 +375,7 @@ void MpvItem::replace_file(const QUrl& file, bool from_beginning) {
     set_subtitle_cue({}, -1.0, -1.0);
     set_property("video-rotate", 0);
     set_property("video-aspect-override", aspect_ratio_);
-    set_property("sid", QStringLiteral("no"));
+    reset_subtitle_selection_state();
     setSubtitlesVisible(true);
 
     if (position_ != 0.0) {
@@ -883,7 +883,7 @@ void MpvItem::poll() {
         }
         if (tracks_dirty_) {
             tracks_dirty_ = false;
-            refresh_tracks();
+            refresh_tracks_and_embedded_default();
         }
         const QString text = get_string("sub-text");
         const double start = text.isEmpty() ? -1.0 : get_double("sub-start", -1.0);
