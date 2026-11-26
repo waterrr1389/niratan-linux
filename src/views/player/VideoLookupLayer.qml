@@ -57,6 +57,8 @@ Item {
     property string highlightedCueId: ""
     property var lookupHighlight: null
     property rect lookupAnchor
+    // The mining screenshot mpv is writing; its screenshotSaved answers the capture.
+    property url pendingScreenshot
 
     function closeLookup() {
         playerLookup.closeLookup()
@@ -256,9 +258,27 @@ Item {
     Connections {
         target: layer.miningModel
 
+        // The capture is answered when mpv has written the file, not when the
+        // request is queued: the mining capture moves the file right away.
         function onScreenshotRequested(path) {
-            layer.miningModel.screenshotFinished(
-                layer.engine.screenshot(layer.fileUrl(path)))
+            const file = layer.fileUrl(path)
+            layer.pendingScreenshot = file
+            if (!layer.engine.screenshot(file)) {
+                layer.pendingScreenshot = ""
+                layer.miningModel.screenshotFinished(false)
+            }
+        }
+    }
+
+    Connections {
+        target: layer.engine
+
+        function onScreenshotSaved(file, ok) {
+            if (layer.pendingScreenshot.toString() === ""
+                    || file.toString() !== layer.pendingScreenshot.toString())
+                return
+            layer.pendingScreenshot = ""
+            layer.miningModel.screenshotFinished(ok)
         }
     }
 

@@ -342,6 +342,12 @@ void MpvItem::replace_file(const QUrl& file, bool from_beginning) {
     resume_save_timer_.invalidate();
     const quint64 generation = ++load_generation_;
     waiting_for_context_ = !file.isEmpty();
+    // Replies for the outgoing file may be drained or skipped while the next
+    // one loads; its pending stills fail now instead of never answering.
+    const auto abandoned = std::exchange(pending_screenshots_, {});
+    for (const QUrl& still : abandoned) {
+        emit screenshotSaved(still, false);
+    }
 
     // A-B loop and chapter belong to the previous file until mpv reports the
     // new ones, and a stale loop would immediately cut the new file.
@@ -506,7 +512,13 @@ bool MpvItem::screenshot(const QUrl& file) {
     const QByteArray path = file.toLocalFile().toUtf8();
     const char* args[] = {"screenshot-to-file", path.constData(), "video", nullptr};
     // A capture can wait for the render thread; do not block the GUI thread.
-    return mpv_command_async(handle_, 0, args) >= 0;
+    // The file exists only once mpv replies, so the reply reports completion.
+    const quint64 reply = next_screenshot_reply_++;
+    if (mpv_command_async(handle_, reply, args) < 0) {
+        return false;
+    }
+    pending_screenshots_.insert(reply, file);
+    return true;
 }
 
 void MpvItem::selectTrack(const QString& type, int id) {
@@ -821,6 +833,13 @@ void MpvItem::poll() {
                 }
                 break;
             }
+            case MPV_EVENT_COMMAND_REPLY:
+                if (const auto file = pending_screenshots_.take(event->reply_userdata);
+                    !file.isEmpty()) {
+                    const QFileInfo written(file.toLocalFile());
+                    emit screenshotSaved(file, event->error >= 0 && written.size() > 0);
+                }
+                break;
             case MPV_EVENT_PROPERTY_CHANGE:
                 if (event->reply_userdata == kTracksObservation) {
                     tracks_dirty_ = true;

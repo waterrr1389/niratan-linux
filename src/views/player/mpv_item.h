@@ -41,6 +41,7 @@
 #include <QQuickFramebufferObject>
 #include <QByteArray>
 #include <QElapsedTimer>
+#include <QHash>
 #include <QJsonObject>
 #include <QSize>
 #include <QString>
@@ -143,7 +144,8 @@ class MpvItem : public QQuickFramebufferObject {
     Q_INVOKABLE void selectTrack(const QString& type, int id);
     Q_INVOKABLE void extractTranscript();
     Q_INVOKABLE void disableSubtitles();
-    // Reports whether mpv accepted the asynchronous request.
+    // Reports whether mpv accepted the asynchronous request; screenshotSaved
+    // follows once mpv has finished writing (or failed to write) the file.
     Q_INVOKABLE bool screenshot(const QUrl& file);
     // Returns the selected ID, 0 for Off, or -1 if there are no tracks.
     Q_INVOKABLE int cycleSubtitles();
@@ -192,6 +194,8 @@ class MpvItem : public QQuickFramebufferObject {
     void subtitlesVisibleChanged();
     void nativeSubtitleRenderingChanged();
     void subtitleDocumentChanged(const QUrl& file, const QByteArray& bytes, bool readable);
+    // ok when mpv's screenshot-to-file command succeeded and the file is not empty.
+    void screenshotSaved(const QUrl& file, bool ok);
 
    private:
     void poll();
@@ -241,6 +245,10 @@ class MpvItem : public QQuickFramebufferObject {
     niratan::player::ABLoop ab_loop_;
     int chapter_index_ = -1;
     quint64 load_generation_ = 0;
+    // Screenshot commands awaiting mpv's reply, by reply_userdata. The ids
+    // start above the property observation ids.
+    QHash<quint64, QUrl> pending_screenshots_;
+    quint64 next_screenshot_reply_ = 1000;
     bool waiting_for_context_ = false;
     bool file_ready_ = false;
     bool ended_ = false;
