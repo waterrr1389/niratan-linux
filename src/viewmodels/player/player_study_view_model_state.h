@@ -36,6 +36,7 @@ struct PlayerStudyViewModel::State {
     QString transcript_error;
     QString notice;
     QString search;
+    QString history_search;
     QList<Cue> cues;
     QList<double> end_prefix;
     QList<int> filtered;
@@ -56,11 +57,12 @@ struct PlayerStudyViewModel::State {
     bool can_align_next = false;
     QVariantList transcript;
     QVariantList history;
+    QVariantList history_sections;
     QVariantList chapters;
     QVariantMap track;
     player::MiningHistoryStore::Snapshot snapshot;
     std::optional<player::SubtitleCueStore> alignment_store;
-    std::optional<player::MiningHistoryItem> pending_jump;
+    std::optional<player::MiningHistoryDestination> pending_jump;
 
     auto first_after(double time) const {
         return std::upper_bound(cues.cbegin(), cues.cend(), time,

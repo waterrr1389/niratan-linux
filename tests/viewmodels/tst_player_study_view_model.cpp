@@ -8,17 +8,24 @@
 #include "viewmodels/player/player_study_view_model.h"
 
 #include "data_root.h"
+#include "services/player/mining_history.h"
 #include "services/player/mining_history_store.h"
 
+#include <QFile>
+#include <QFileInfo>
 #include <QSignalSpy>
+#include <QTemporaryDir>
 #include <QUrl>
 #include <QtTest>
 
+#include <filesystem>
 #include <functional>
 #include <memory>
 #include <optional>
 #include <string>
+#include <system_error>
 
+using niratan::player::MiningHistoryItem;
 using niratan::player::MiningHistoryStore;
 using niratan::test::TempDataRoot;
 using niratan::viewmodels::PlayerStudyViewModel;
@@ -61,6 +68,21 @@ QByteArray numbered_srt(int count, const std::function<QString(int)>& text) {
     return out;
 }
 
+// One mining history record; video_title and video_file_name share the title.
+niratan::player::MiningHistoryItem history_item(const char* id, double created_at,
+                                                const char* title, const char* text) {
+    niratan::player::MiningHistoryItem item;
+    item.id = id;
+    item.created_at = created_at;
+    item.video_file_name = title;
+    item.video_title = title;
+    item.subtitle_source_name = title;
+    item.subtitle_text = text;
+    item.cue_start = 1.0;
+    item.cue_end = 2.0;
+    return item;
+}
+
 QVariantMap chapter_row(int id, const char* title, double start, double duration) {
     QVariantMap row{{QStringLiteral("id"), id},
                     {QStringLiteral("title"), QString::fromLatin1(title)},
@@ -91,6 +113,9 @@ class PlayerStudyViewModelTest : public QObject {
     void clearedSearchResumesFollowing();
     void newTranscriptResumesFollowing();
     void chapterProgressUsesRawPlayback();
+    void historySearchFiltersAndGroupsSections();
+    void historyJumpReportsResolvedDestinations();
+    void historyJumpReportsMissingSources();
 
    private:
     std::unique_ptr<TempDataRoot> root_;
@@ -434,6 +459,287 @@ void PlayerStudyViewModelTest::chapterProgressUsesRawPlayback() {
     model.set_chapters({});
     QCOMPARE(model.current_chapter(), -1);
     QCOMPARE(model.current_chapter_progress(), -1.0);
+}
+
+// B1, B2, B4: the history query is separate from the transcript search,
+// matches subtitle text or video title, keeps newest-first order and groups
+// only consecutive runs of the same video title; rows carry their ranges.
+void PlayerStudyViewModelTest::historySearchFiltersAndGroupsSections() {
+    auto store = MiningHistoryStore::at_data_root();
+    QVERIFY(store.clear());
+    QVERIFY(store.add(history_item("a-old", 100.0, "A.mkv", "alpha needle"), 25));
+    QVERIFY(store.add(history_item("b", 200.0, "B.mkv", "beta"), 25));
+    QVERIFY(store.add(history_item("a-new", 300.0, "A.mkv", "alpha again"), 25));
+
+    PlayerStudyViewModel model;
+    QCOMPARE(model.history_search(), QString());
+    QVERIFY(!model.history_search_active());
+    QVariantList sections = model.history_sections();
+    QCOMPARE(sections.size(), qsizetype(3));
+    QCOMPARE(sections.at(0).toMap().value(QStringLiteral("title")).toString(),
+             QStringLiteral("A.mkv"));
+    QCOMPARE(sections.at(1).toMap().value(QStringLiteral("title")).toString(),
+             QStringLiteral("B.mkv"));
+    QCOMPARE(sections.at(2).toMap().value(QStringLiteral("title")).toString(),
+             QStringLiteral("A.mkv"));
+    for (const QVariant& section : sections) {
+        QCOMPARE(section.toMap().value(QStringLiteral("count")).toInt(), 1);
+    }
+    QCOMPARE(sections.at(0)
+                 .toMap()
+                 .value(QStringLiteral("items"))
+                 .toList()
+                 .at(0)
+                 .toMap()
+                 .value(QStringLiteral("id"))
+                 .toString(),
+             QStringLiteral("a-new"));
+
+    // A text match highlights the original characters.
+    QSignalSpy sections_changed(&model, &PlayerStudyViewModel::historySectionsChanged);
+    model.set_history_search(QStringLiteral("  needle "));
+    QCOMPARE(sections_changed.count(), 1);
+    QCOMPARE(model.history_search(), QStringLiteral("  needle "));
+    QVERIFY(model.history_search_active());
+    sections = model.history_sections();
+    QCOMPARE(sections.size(), qsizetype(1));
+    QCOMPARE(sections.at(0).toMap().value(QStringLiteral("title")).toString(),
+             QStringLiteral("A.mkv"));
+    const QVariantMap row =
+        sections.at(0).toMap().value(QStringLiteral("items")).toList().first().toMap();
+    QCOMPARE(row.value(QStringLiteral("id")).toString(), QStringLiteral("a-old"));
+    QCOMPARE(row.value(QStringLiteral("text")).toString(), QStringLiteral("alpha needle"));
+    const QVariantList highlights = row.value(QStringLiteral("highlights")).toList();
+    QCOMPARE(highlights.size(), qsizetype(1));
+    QCOMPARE(highlights.at(0).toMap().value(QStringLiteral("start")).toInt(), 6);
+    QCOMPARE(highlights.at(0).toMap().value(QStringLiteral("length")).toInt(), 6);
+
+    // A title match removes the other video between the two A records, so the
+    // filtered records form one section.
+    model.set_history_search(QStringLiteral(" a.mkv "));
+    QVERIFY(model.history_search_active());
+    sections = model.history_sections();
+    QCOMPARE(sections.size(), qsizetype(1));
+    QCOMPARE(sections.at(0).toMap().value(QStringLiteral("count")).toInt(), 2);
+    const QVariantList title_items = sections.at(0).toMap().value(QStringLiteral("items")).toList();
+    QCOMPARE(title_items.at(0).toMap().value(QStringLiteral("id")).toString(),
+             QStringLiteral("a-new"));
+    QCOMPARE(title_items.at(1).toMap().value(QStringLiteral("id")).toString(),
+             QStringLiteral("a-old"));
+    // The query matched the video title, so no subtitle text is highlighted.
+    for (const QVariant& item : title_items) {
+        QVERIFY(item.toMap().value(QStringLiteral("highlights")).toList().isEmpty());
+    }
+
+    // No match leaves the unfiltered history alone but shows no sections.
+    model.set_history_search(QStringLiteral("missing"));
+    QVERIFY(model.history_search_active());
+    QVERIFY(model.history_sections().isEmpty());
+    QCOMPARE(model.history().size(), qsizetype(3));
+
+    // Whitespace clears the filter.
+    model.set_history_search(QStringLiteral("   "));
+    QVERIFY(!model.history_search_active());
+    QCOMPARE(model.history_sections().size(), qsizetype(3));
+
+    // The transcript query is independent.
+    model.set_search(QStringLiteral("needle"));
+    QCOMPARE(model.history_sections().size(), qsizetype(3));
+    QVERIFY(!model.history_search_active());
+}
+
+// B5, B6: a ready record requests the stored video when it is not open, then
+// the resolved subtitle or embedded track and the delayed seek time.
+void PlayerStudyViewModelTest::historyJumpReportsResolvedDestinations() {
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    const QString video = directory.filePath(QStringLiteral("Episode 1.mkv"));
+    const QString subtitle = directory.filePath(QStringLiteral("Episode 1.ja.srt"));
+    for (const QString& path : {video, subtitle}) {
+        QFile file(path);
+        QVERIFY(file.open(QIODevice::WriteOnly));
+        file.write(QByteArrayLiteral("x"));
+    }
+    const QString canonical_video = QFileInfo(video).canonicalFilePath();
+    const QString canonical_subtitle = QFileInfo(subtitle).canonicalFilePath();
+
+    auto store = MiningHistoryStore::at_data_root();
+    QVERIFY(store.clear());
+    MiningHistoryItem ready = history_item("ready", 100.0, "Episode 1.mkv", "ready text");
+    ready.video_path = canonical_video.toStdString();
+    ready.subtitle_source_path = canonical_subtitle.toStdString();
+    ready.subtitle_source_name = "Episode 1.ja.srt";
+    ready.subtitle_format = "srt";
+    ready.cue_start = 12.5;
+    QVERIFY(store.add(ready, 25));
+    MiningHistoryItem embedded = history_item("embedded", 200.0, "Episode 1.mkv", "embedded text");
+    embedded.video_path = canonical_video.toStdString();
+    // An embedded format carries no subtitle file even when a path is stored.
+    embedded.subtitle_source_path = canonical_subtitle.toStdString();
+    embedded.subtitle_format = "embedded";
+    embedded.embedded_subtitle_track_id = 4;
+    embedded.cue_start = 3.0;
+    QVERIFY(store.add(embedded, 25));
+    MiningHistoryItem legacy = history_item("legacy", 300.0, "Episode 1.mkv", "legacy text");
+    legacy.cue_start = 12.5;
+    QVERIFY(store.add(legacy, 25));
+
+    PlayerStudyViewModel model;
+    QSignalSpy video_requests(&model, &PlayerStudyViewModel::videoRequested);
+    QSignalSpy subtitle_requests(&model, &PlayerStudyViewModel::historySubtitleRequested);
+
+    model.updatePlayback(0.0, 0.5);
+    model.jumpToHistory(QStringLiteral("ready"));
+    QCOMPARE(video_requests.size(), 1);
+    QCOMPARE(video_requests.takeFirst().front().toUrl(), QUrl::fromLocalFile(canonical_video));
+    QCOMPARE(subtitle_requests.size(), 0);
+    model.setVideo(QUrl::fromLocalFile(canonical_video));
+    model.setPlaybackReady(true);
+    QCOMPARE(subtitle_requests.size(), 1);
+    QList<QVariant> request = subtitle_requests.takeFirst();
+    QCOMPARE(request.at(0).toUrl(), QUrl::fromLocalFile(canonical_subtitle));
+    QCOMPARE(request.at(1).toInt(), -1);
+    QCOMPARE(request.at(2).toDouble(), 13.0);
+    QVERIFY(model.last_mining_notice().isEmpty());
+
+    // The same video jumps in place.
+    model.updatePlayback(0.0, 0.5);
+    model.jumpToHistory(QStringLiteral("ready"));
+    QCOMPARE(video_requests.size(), 0);
+    QCOMPARE(subtitle_requests.size(), 1);
+    request = subtitle_requests.takeFirst();
+    QCOMPARE(request.at(0).toUrl(), QUrl::fromLocalFile(canonical_subtitle));
+    QCOMPARE(request.at(1).toInt(), -1);
+    QCOMPARE(request.at(2).toDouble(), 13.0);
+
+    // A current video spelled with a redundant segment or opened through a
+    // symlink is the same media, so the jump does not request a reopen.
+    const QString other_video = directory.filePath(QStringLiteral("Other.mkv"));
+    {
+        QFile file(other_video);
+        QVERIFY(file.open(QIODevice::WriteOnly));
+        file.write(QByteArrayLiteral("x"));
+    }
+    const QString link = directory.filePath(QStringLiteral("Episode 1 link.mkv"));
+    std::error_code link_error;
+    std::filesystem::create_symlink(std::filesystem::path(canonical_video.toStdString()),
+                                    std::filesystem::path(link.toStdString()), link_error);
+    QVERIFY(!link_error);
+
+    model.setVideo(QUrl::fromLocalFile(directory.filePath(QStringLiteral("./Episode 1.mkv"))));
+    model.setPlaybackReady(true);
+    model.updatePlayback(0.0, 0.5);
+    model.jumpToHistory(QStringLiteral("ready"));
+    QCOMPARE(video_requests.size(), 0);
+    QCOMPARE(subtitle_requests.size(), 1);
+    subtitle_requests.clear();
+
+    model.setVideo(QUrl::fromLocalFile(link));
+    model.setPlaybackReady(true);
+    model.updatePlayback(0.0, 0.5);
+    model.jumpToHistory(QStringLiteral("ready"));
+    QCOMPARE(video_requests.size(), 0);
+    QCOMPARE(subtitle_requests.size(), 1);
+    subtitle_requests.clear();
+
+    // With another video open, the reopen keeps the pending jump when the same
+    // file arrives under a symlink path.
+    model.setVideo(QUrl::fromLocalFile(other_video));
+    model.setPlaybackReady(true);
+    model.updatePlayback(0.0, 0.5);
+    model.jumpToHistory(QStringLiteral("ready"));
+    QCOMPARE(video_requests.size(), 1);
+    video_requests.clear();
+    QCOMPARE(subtitle_requests.size(), 0);
+    model.setVideo(QUrl::fromLocalFile(link));
+    model.setPlaybackReady(true);
+    QCOMPARE(subtitle_requests.size(), 1);
+    QCOMPARE(subtitle_requests.takeFirst().at(2).toDouble(), 13.0);
+
+    // An embedded record carries its track id and no subtitle file.
+    model.jumpToHistory(QStringLiteral("embedded"));
+    QCOMPARE(video_requests.size(), 0);
+    QCOMPARE(subtitle_requests.size(), 1);
+    request = subtitle_requests.takeFirst();
+    QCOMPARE(request.at(0).toUrl(), QUrl());
+    QCOMPARE(request.at(1).toInt(), 4);
+    QCOMPARE(request.at(2).toDouble(), 3.5);
+
+    // A pathless record with the current file name jumps in this video.
+    model.setVideo(QUrl::fromLocalFile(canonical_video));
+    model.setPlaybackReady(true);
+    model.updatePlayback(0.0, 0.5);
+    model.jumpToHistory(QStringLiteral("legacy"));
+    QCOMPARE(video_requests.size(), 0);
+    QCOMPARE(subtitle_requests.size(), 1);
+    request = subtitle_requests.takeFirst();
+    QCOMPARE(request.at(0).toUrl(), QUrl());
+    QCOMPARE(request.at(1).toInt(), -1);
+    QCOMPARE(request.at(2).toDouble(), 13.0);
+}
+
+// B5, B6: missing and legacy sources set the exact notice and request no
+// playback; a remote record keeps its existing notice.
+void PlayerStudyViewModelTest::historyJumpReportsMissingSources() {
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    const QString video = directory.filePath(QStringLiteral("Episode 1.mkv"));
+    const QString subtitle = directory.filePath(QStringLiteral("Episode 1.ja.srt"));
+    for (const QString& path : {video, subtitle}) {
+        QFile file(path);
+        QVERIFY(file.open(QIODevice::WriteOnly));
+        file.write(QByteArrayLiteral("x"));
+    }
+    const QString canonical_video = QFileInfo(video).canonicalFilePath();
+
+    auto store = MiningHistoryStore::at_data_root();
+    QVERIFY(store.clear());
+    MiningHistoryItem missing_video = history_item("missing-video", 100.0, "Episode 1.mkv", "text");
+    missing_video.video_path = directory.filePath(QStringLiteral("Missing.mkv")).toStdString();
+    missing_video.subtitle_source_path = QFileInfo(subtitle).canonicalFilePath().toStdString();
+    missing_video.subtitle_format = "srt";
+    QVERIFY(store.add(missing_video, 25));
+    MiningHistoryItem missing_subtitle =
+        history_item("missing-subtitle", 200.0, "Episode 1.mkv", "text");
+    missing_subtitle.video_path = canonical_video.toStdString();
+    missing_subtitle.subtitle_source_path =
+        directory.filePath(QStringLiteral("Missing.srt")).toStdString();
+    missing_subtitle.subtitle_format = "srt";
+    QVERIFY(store.add(missing_subtitle, 25));
+    MiningHistoryItem legacy = history_item("legacy", 300.0, "Other.mkv", "text");
+    QVERIFY(store.add(legacy, 25));
+    MiningHistoryItem remote = history_item("remote", 400.0, "Remote.mkv", "text");
+    MiningHistoryItem::RemoteVideoIdentity identity;
+    identity.provider_id = "youtube";
+    identity.remote_id = "dQw4w9WgXcQ";
+    identity.original_url = "https://www.youtube.com/watch?v=dQw4w9WgXcQ";
+    identity.title = "Remote";
+    remote.remote_video_identity = identity;
+    QVERIFY(store.add(remote, 25));
+
+    PlayerStudyViewModel model;
+    model.setVideo(QUrl::fromLocalFile(canonical_video));
+    model.setPlaybackReady(true);
+    QSignalSpy video_requests(&model, &PlayerStudyViewModel::videoRequested);
+    QSignalSpy subtitle_requests(&model, &PlayerStudyViewModel::historySubtitleRequested);
+
+    model.jumpToHistory(QStringLiteral("missing-video"));
+    QCOMPARE(model.last_mining_notice(),
+             QStringLiteral("The saved video file is no longer available. Open it again to "
+                            "continue."));
+    model.jumpToHistory(QStringLiteral("missing-subtitle"));
+    QCOMPARE(model.last_mining_notice(),
+             QStringLiteral("The saved subtitle file is no longer available. Open it again to "
+                            "continue."));
+    model.jumpToHistory(QStringLiteral("legacy"));
+    QCOMPARE(model.last_mining_notice(),
+             QStringLiteral("Open the matching video before using this older Mining History "
+                            "item."));
+    model.jumpToHistory(QStringLiteral("remote"));
+    QCOMPARE(model.last_mining_notice(),
+             QStringLiteral("This remote video cannot be reopened from history."));
+    QCOMPARE(video_requests.size(), 0);
+    QCOMPARE(subtitle_requests.size(), 0);
 }
 
 QTEST_GUILESS_MAIN(PlayerStudyViewModelTest)

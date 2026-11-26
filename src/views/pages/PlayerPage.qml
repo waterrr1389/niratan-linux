@@ -76,6 +76,8 @@ Item {
     property real osdMeter: -1
     // The loaded local video, for the video mining context.
     property url videoFile
+    // The play state captured before a history jump, restored after its seek.
+    property bool historyJumpWasPlaying: true
     // VideoPlayerScreen.model.currentURL != nil: a Video session is open from
     // the open request until unloadVideo, and the library suspends thumbnail
     // generation for its whole lifetime (Decisions D9, D10).
@@ -493,6 +495,13 @@ Item {
         videoErrorDialog.showError(qsTr("Could not load the subtitle file."))
     }
 
+    // VideoPlayerScreen+Mining.navigateToHistoryItem restores the play state
+    // after the resolved seek, including when the jump opens another video.
+    function jumpToHistory(id) {
+        page.historyJumpWasPlaying = !mpv.paused
+        studyModel.jumpToHistory(id)
+    }
+
     function textFieldFocused() {
         var item = page.Window.activeFocusItem
         while (item) {
@@ -667,6 +676,7 @@ Item {
             }
             mpv.subtitlesVisible = true
             mpv.seek(seconds)
+            mpv.paused = !page.historyJumpWasPlaying
         }
     }
 
@@ -699,6 +709,7 @@ Item {
         loopEnd: mpv.loopEnd
         onLoopStartRequested: function(time) { page.setLoopA(time) }
         onLoopEndRequested: function(time) { page.setLoopB(time) }
+        onHistoryJumpRequested: function(id) { page.jumpToHistory(id) }
         onSubtitleFileRequested: function(file) { page.loadSubtitle(file) }
         onSubtitleTrackRequested: function(trackId, extract) {
             if (trackId > 0) {

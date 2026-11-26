@@ -3,7 +3,9 @@
 #include "services/player/mining_history.h"
 
 #include <QByteArray>
+#include <QDir>
 #include <QFile>
+#include <QFileInfo>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
@@ -22,12 +24,15 @@
 #include <utility>
 #include <vector>
 
-using niratan::player::MiningHistoryItem;
 using niratan::player::add;
 using niratan::player::clear;
 using niratan::player::load;
 using niratan::player::mining_history_path;
+using niratan::player::MiningHistoryItem;
+using niratan::player::MiningHistoryMediaKind;
+using niratan::player::MiningHistoryNavigationStatus;
 using niratan::player::remove;
+using niratan::player::resolve_mining_history_navigation;
 using niratan::player::save;
 
 // Features/Video/VideoMiningHistoryStore.swift and the cases in
@@ -81,6 +86,32 @@ MiningHistoryItem full_item() {
     item.subtitle_source_path = "/media/Episode 1.ja.srt";
     item.subtitle_format = "webVTT";
     item.embedded_subtitle_track_id = 7;
+    return item;
+}
+
+// Writes a file and returns its standardized absolute path, the form the
+// resolver reports.
+QString create_file(const std::filesystem::path& path) {
+    QDir().mkpath(QString::fromStdString(path.parent_path().string()));
+    QFile file(QString::fromStdString(path.string()));
+    if (file.open(QIODevice::WriteOnly)) {
+        file.write(QByteArrayLiteral("x"));
+        file.close();
+    }
+    return QFileInfo(QString::fromStdString(path.string())).canonicalFilePath();
+}
+
+MiningHistoryItem resolver_item(const std::filesystem::path& video,
+                                const std::filesystem::path& subtitle) {
+    MiningHistoryItem item = base_item("resolver", 0.0);
+    item.video_file_name = video.filename().string();
+    item.video_title = item.video_file_name;
+    item.video_path = video.string();
+    item.subtitle_source_name = subtitle.filename().string();
+    item.subtitle_source_path = subtitle.string();
+    item.subtitle_format = "srt";
+    item.cue_start = 12.5;
+    item.cue_end = 14.0;
     return item;
 }
 
@@ -191,6 +222,10 @@ class MiningHistoryTest : public QObject {
     void a_missing_file_reads_as_an_empty_list();
     void a_damaged_or_foreign_document_reads_as_an_empty_list();
     void named_history_date_thresholds();
+    void resolver_reports_a_ready_local_destination();
+    void resolver_reports_missing_video_and_subtitle();
+    void resolver_returns_a_remote_destination();
+    void resolver_pathless_record_uses_the_current_video();
 };
 
 // VideoMiningHistorySidebar.historyRow uses a named relative date.
@@ -621,6 +656,175 @@ void MiningHistoryTest::a_damaged_or_foreign_document_reads_as_an_empty_list() {
     records.append(record);
     QVERIFY(write_records(path, records));
     QVERIFY(load(root).empty());
+}
+
+// VideoMiningHistoryNavigation.swift: an existing video and external subtitle
+// resolve to local media, the standardized paths and the delayed seek time.
+void MiningHistoryTest::resolver_reports_a_ready_local_destination() {
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    const std::filesystem::path root(directory.path().toStdString());
+    const QString video = create_file(root / "Episode 1.mkv");
+    const QString subtitle = create_file(root / "Episode 1.ja.srt");
+    QVERIFY(!video.isEmpty());
+    QVERIFY(!subtitle.isEmpty());
+
+    const MiningHistoryItem item = resolver_item(video.toStdString(), subtitle.toStdString());
+    const auto resolution = resolve_mining_history_navigation(item, QString(), 0.5);
+    QVERIFY(resolution.status == MiningHistoryNavigationStatus::ready);
+    QVERIFY(resolution.destination.media.kind == MiningHistoryMediaKind::local_file);
+    QCOMPARE(resolution.destination.media.path, video);
+    QCOMPARE(resolution.destination.subtitle_path.value_or(QString()), subtitle);
+    QVERIFY(!resolution.destination.embedded_subtitle_track_id.has_value());
+    QCOMPARE(resolution.destination.seek_time, 13.0);
+
+    // The reported paths are absolute even when the record stores relative
+    // ones, as URL.standardizedFileURL is.
+    MiningHistoryItem relative = item;
+    relative.video_path = std::filesystem::relative(std::filesystem::path(item.video_path.value()),
+                                                    std::filesystem::current_path())
+                              .string();
+    const auto relative_resolution = resolve_mining_history_navigation(relative, QString(), 0.0);
+    QVERIFY(relative_resolution.status == MiningHistoryNavigationStatus::ready);
+    QCOMPARE(relative_resolution.destination.media.path, video);
+
+    // A record with no subtitle source is ready without one.
+    MiningHistoryItem silent = item;
+    silent.subtitle_source_path.reset();
+    silent.subtitle_format.reset();
+    const auto silent_resolution = resolve_mining_history_navigation(silent, QString(), 0.0);
+    QVERIFY(silent_resolution.status == MiningHistoryNavigationStatus::ready);
+    QVERIFY(!silent_resolution.destination.subtitle_path.has_value());
+    QCOMPARE(silent_resolution.destination.seek_time, 12.5);
+
+    // The embedded track travels with a ready destination and has no file,
+    // even when a subtitle path is stored but missing.
+    MiningHistoryItem embedded = item;
+    embedded.subtitle_source_path = (root / "Missing.srt").string();
+    embedded.subtitle_format = "embedded";
+    embedded.embedded_subtitle_track_id = 7;
+    const auto embedded_resolution = resolve_mining_history_navigation(embedded, QString(), 0.0);
+    QVERIFY(embedded_resolution.status == MiningHistoryNavigationStatus::ready);
+    QVERIFY(!embedded_resolution.destination.subtitle_path.has_value());
+    QCOMPARE(embedded_resolution.destination.embedded_subtitle_track_id.value_or(-1), 7);
+}
+
+// VideoMiningHistoryNavigationResolver.resolve reports each missing source
+// before any ready destination, in its guard order.
+void MiningHistoryTest::resolver_reports_missing_video_and_subtitle() {
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    const std::filesystem::path root(directory.path().toStdString());
+    const QString video = create_file(root / "Episode 1.mkv");
+    const QString subtitle = create_file(root / "Episode 1.ja.srt");
+    const MiningHistoryItem item = resolver_item(video.toStdString(), subtitle.toStdString());
+
+    MiningHistoryItem missing_video = item;
+    missing_video.video_path = (root / "Missing.mkv").string();
+    QVERIFY(resolve_mining_history_navigation(missing_video, QString(), 0.0).status ==
+            MiningHistoryNavigationStatus::missing_video);
+
+    MiningHistoryItem missing_subtitle = item;
+    missing_subtitle.subtitle_source_path = (root / "Missing.srt").string();
+    QVERIFY(resolve_mining_history_navigation(missing_subtitle, QString(), 0.0).status ==
+            MiningHistoryNavigationStatus::missing_subtitle);
+
+    // A named format with no stored file cannot be restored either.
+    MiningHistoryItem format_only = item;
+    format_only.subtitle_source_path.reset();
+    format_only.subtitle_format = "srt";
+    QVERIFY(resolve_mining_history_navigation(format_only, QString(), 0.0).status ==
+            MiningHistoryNavigationStatus::missing_subtitle);
+
+    // The video is checked before the subtitle.
+    MiningHistoryItem both_missing = missing_subtitle;
+    both_missing.video_path = (root / "Missing.mkv").string();
+    QVERIFY(resolve_mining_history_navigation(both_missing, QString(), 0.0).status ==
+            MiningHistoryNavigationStatus::missing_video);
+}
+
+// A remote identity resolves to remote media without filesystem checks and
+// without a subtitle file.
+void MiningHistoryTest::resolver_returns_a_remote_destination() {
+    MiningHistoryItem item = base_item("remote", 0.0);
+    item.video_path.reset();
+    item.subtitle_source_path.reset();
+    item.subtitle_format.reset();
+    item.cue_start = 12.5;
+
+    MiningHistoryItem::RemoteVideoIdentity identity;
+    identity.provider_id = "youtube";
+    identity.remote_id = "dQw4w9WgXcQ";
+    identity.original_url = "https://www.youtube.com/watch?v=dQw4w9WgXcQ";
+    identity.canonical_url = identity.original_url;
+    identity.title = "Remote Episode";
+    identity.duration = 42.5;
+    item.remote_video_identity = identity;
+
+    const auto resolution = resolve_mining_history_navigation(item, QString(), 0.5);
+    QVERIFY(resolution.status == MiningHistoryNavigationStatus::ready);
+    QVERIFY(resolution.destination.media.kind == MiningHistoryMediaKind::remote);
+    QVERIFY(resolution.destination.media.remote == identity);
+    QVERIFY(!resolution.destination.subtitle_path.has_value());
+    QVERIFY(!resolution.destination.embedded_subtitle_track_id.has_value());
+    QCOMPARE(resolution.destination.seek_time, 13.0);
+
+    // Remote media wins over stored local sources, which are not checked.
+    MiningHistoryItem with_paths = item;
+    with_paths.video_path = "/does/not/exist.mkv";
+    with_paths.subtitle_source_path = "/does/not/exist.srt";
+    with_paths.subtitle_format = "srt";
+    const auto with_paths_resolution =
+        resolve_mining_history_navigation(with_paths, QString(), 0.0);
+    QVERIFY(with_paths_resolution.status == MiningHistoryNavigationStatus::ready);
+    QVERIFY(with_paths_resolution.destination.media.kind == MiningHistoryMediaKind::remote);
+    QVERIFY(!with_paths_resolution.destination.subtitle_path.has_value());
+}
+
+// A pathless older record jumps inside a currently open video with the same
+// file name; any other current video is the legacy source.
+void MiningHistoryTest::resolver_pathless_record_uses_the_current_video() {
+    QTemporaryDir first;
+    QTemporaryDir second;
+    QVERIFY(first.isValid());
+    QVERIFY(second.isValid());
+    const QString current =
+        create_file(std::filesystem::path(first.path().toStdString()) / "Episode 1.mkv");
+    const QString same_name =
+        create_file(std::filesystem::path(second.path().toStdString()) / "Episode 1.mkv");
+    const QString other =
+        create_file(std::filesystem::path(second.path().toStdString()) / "Other.mkv");
+
+    MiningHistoryItem item = base_item("legacy", 0.0);
+    item.video_path.reset();
+    item.subtitle_source_path.reset();
+    item.subtitle_format.reset();
+    item.cue_start = 12.5;
+
+    const auto same = resolve_mining_history_navigation(item, current, -20.0);
+    QVERIFY(same.status == MiningHistoryNavigationStatus::ready);
+    QCOMPARE(same.destination.media.path, current);
+    QCOMPARE(same.destination.seek_time, 0.0);
+
+    // Only the file name is compared; the current file can live elsewhere.
+    const auto elsewhere = resolve_mining_history_navigation(item, same_name, 0.0);
+    QVERIFY(elsewhere.status == MiningHistoryNavigationStatus::ready);
+    QCOMPARE(elsewhere.destination.media.path, same_name);
+
+    // The current video is not required to exist; only its file name is
+    // compared, and its standardized path is reported.
+    const QString absent_current =
+        QDir::cleanPath(QFileInfo(QStringLiteral("%1/Missing/Episode 1.mkv").arg(second.path()))
+                            .absoluteFilePath());
+    QVERIFY(!QFileInfo::exists(absent_current));
+    const auto absent = resolve_mining_history_navigation(item, absent_current, 0.0);
+    QVERIFY(absent.status == MiningHistoryNavigationStatus::ready);
+    QCOMPARE(absent.destination.media.path, absent_current);
+
+    QVERIFY(resolve_mining_history_navigation(item, other, 0.0).status ==
+            MiningHistoryNavigationStatus::legacy_source_unavailable);
+    QVERIFY(resolve_mining_history_navigation(item, QString(), 0.0).status ==
+            MiningHistoryNavigationStatus::legacy_source_unavailable);
 }
 
 QTEST_APPLESS_MAIN(MiningHistoryTest)

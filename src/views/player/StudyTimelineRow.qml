@@ -13,6 +13,8 @@ Button {
     required property string title
     property string detail: ""
     property bool selected: false
+    // 0 keeps every line; a positive limit elides like Swift's lineLimit.
+    property int titleLineLimit: 0
     // Transcript search ranges into `title`, in UTF-16 positions and order.
     property var highlights: []
     readonly property bool hasHighlights: row.highlights !== undefined
@@ -63,6 +65,8 @@ Button {
                 weight: row.selected ? Theme.weightSemibold : Theme.weightRegular
                 color: Theme.textPrimary
                 wrapMode: Text.Wrap
+                maximumLineCount: row.titleLineLimit > 0 ? row.titleLineLimit : -1
+                elide: row.titleLineLimit > 0 ? Text.ElideRight : Text.ElideNone
                 textFormat: row.hasHighlights ? Text.RichText : Text.PlainText
                 text: row.hasHighlights ? row.highlightedTitle() : row.title
             }

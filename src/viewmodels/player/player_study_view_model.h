@@ -18,6 +18,21 @@
 // The current chapter's progress uses raw playback time: position minus the
 // chapter start over the next later chapter start or the chapter's end, clamped
 // to 0..1; it is -1 when the chapter or its end is unavailable.
+// The mining history has its own query, separate from the transcript search.
+// It is displayed raw, compared trimmed, and matches a record when its subtitle
+// text or its video title contains the query under the shared VideoStudySearch
+// comparison (video_study_search.h). Matching records keep newest-first order
+// and are grouped into consecutive runs of the same video title, each carrying
+// its record count and each row its match ranges. A blank subtitle keeps empty
+// text; the row labels it. historySections is empty when the query matches
+// nothing, while history stays the unfiltered newest-first list.
+// A history jump resolves through resolve_mining_history_navigation (B5): a
+// remote identity keeps the existing remote notice; a missing stored video,
+// missing subtitle or pathless record that does not match the current video's
+// file name sets the exact Swift notice and changes no playback state. A ready
+// destination opens the stored video when it differs from the current one, then
+// requests the resolved subtitle or embedded track and the clamped seek time,
+// where the page makes subtitles visible and seeks.
 // Previous/next subtitle seeks and adjacent-cue alignment follow
 // Models/Subtitle.swift (rowIndex(containing:), nearestRowIndex,
 // relativeRowIndex), VideoPlayerScreen+Mining.swift (seekRelativeSubtitleCue)
@@ -66,6 +81,10 @@ class PlayerStudyViewModel : public QObject {
     Q_PROPERTY(
         bool canAlignNextSubtitle READ can_align_next_subtitle NOTIFY alignmentAvailabilityChanged)
     Q_PROPERTY(QVariantList history READ history NOTIFY historyChanged)
+    Q_PROPERTY(QString historySearch READ history_search WRITE set_history_search NOTIFY
+                   historySearchChanged)
+    Q_PROPERTY(bool historySearchActive READ history_search_active NOTIFY historySearchChanged)
+    Q_PROPERTY(QVariantList historySections READ history_sections NOTIFY historySectionsChanged)
     Q_PROPERTY(QVariantList chapters READ chapters WRITE set_chapters NOTIFY chaptersChanged)
     Q_PROPERTY(int currentChapter READ current_chapter NOTIFY currentChapterChanged)
     Q_PROPERTY(double currentChapterProgress READ current_chapter_progress NOTIFY
@@ -96,6 +115,10 @@ public:
     bool can_align_previous_subtitle() const;
     bool can_align_next_subtitle() const;
     QVariantList history() const;
+    QString history_search() const;
+    bool history_search_active() const;
+    QVariantList history_sections() const;
+    void set_history_search(const QString& query);
     QVariantList chapters() const;
     void set_chapters(const QVariantList& chapters);
     int current_chapter() const;
@@ -138,6 +161,8 @@ signals:
     void currentVisibleRowChanged();
     void searchChanged();
     void historyChanged();
+    void historySearchChanged();
+    void historySectionsChanged();
     void chaptersChanged();
     void currentChapterChanged();
     void currentChapterProgressChanged();

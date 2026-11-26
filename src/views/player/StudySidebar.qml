@@ -2,6 +2,9 @@
 //
 // Docked tabs follow VideoMiningHistorySidebar.swift; transcript states,
 // active intervals and window growth follow SubtitleTranscriptView.swift.
+// The history tab has its own search, groups consecutive records under a
+// video section with a count, highlights subtitle matches and separates the
+// empty, disabled and no-results states (VideoMiningHistorySidebar).
 // A search lists every match with its "N Matches" caption in the scrolling
 // results and highlighted ranges in each row (VideoStudySearch); the current
 // chapter row shows its raw playback progress (chapterRow).
@@ -34,6 +37,7 @@ Rectangle {
     signal subtitleFileRequested(url file)
     signal subtitleTrackRequested(int trackId, bool extract)
     signal transcriptRequested()
+    signal historyJumpRequested(string id)
     signal loopStartRequested(real time)
     signal loopEndRequested(real time)
 
@@ -117,25 +121,110 @@ Rectangle {
             ColumnLayout {
                 spacing: Theme.spacingXs
 
-                RowLayout {
-                    SidebarButton {
-                        text: qsTr("Mine Current Subtitle")
-                        enabled: sidebar.study.canMine
-                        onClicked: sidebar.study.mineCurrentSubtitle()
-                    }
-                    Item { Layout.fillWidth: true }
-                    SidebarButton {
-                        text: qsTr("Clear")
-                        enabled: sidebar.study.historyLimit > 0 && history.count > 0
-                        onClicked: clearDialog.open()
+                Loader {
+                    id: historyToolbar
+                    Layout.fillWidth: true
+                    active: sidebar.study.historyLimit > 0 && sidebar.study.history.length > 0
+                    visible: active
+                    sourceComponent: RowLayout {
+                        spacing: Theme.spacingSm
+
+                        TextField {
+                            id: historySearchField
+                            objectName: "historySearchField"
+                            Layout.fillWidth: true
+                            Layout.minimumWidth: Theme.studySearchMinimumWidth
+                            placeholderText: qsTr("Search Mining History")
+                            text: sidebar.study.historySearch
+                            color: Theme.textPrimary
+                            placeholderTextColor: Theme.textSecondary
+                            selectionColor: Theme.accent
+                            selectedTextColor: Theme.popupBackground
+                            onTextEdited: sidebar.study.historySearch = text
+                            Keys.onEscapePressed: function(event) {
+                                sidebar.study.historySearch = ""
+                                historySearchField.focus = false
+                                event.accepted = true
+                            }
+                            background: Rectangle {
+                                color: Theme.cardBackground
+                                border.color: parent.activeFocus ? Theme.accent : Theme.cardStroke
+                                radius: Theme.controlRadius
+                            }
+                        }
+                        IconButton {
+                            objectName: "historySearchClearButton"
+                            visible: sidebar.study.historySearch.length > 0
+                            icon: "xmark"
+                            diameter: Theme.closeButtonDiameter
+                            iconSize: Theme.closeButtonGlyph
+                            accessibleName: qsTr("Clear search")
+                            onClicked: sidebar.study.historySearch = ""
+                        }
+                        SidebarButton {
+                            text: qsTr("Mine Current Subtitle")
+                            enabled: sidebar.study.canMine
+                            onClicked: sidebar.study.mineCurrentSubtitle()
+                        }
+                        SidebarButton {
+                            text: qsTr("Clear")
+                            enabled: sidebar.study.historyLimit > 0
+                                && sidebar.study.history.length > 0
+                            onClicked: clearDialog.open()
+                        }
                     }
                 }
 
-                EmptyLabel {
-                    visible: sidebar.study.historyLimit === 0 || history.count === 0
-                    text: sidebar.study.historyLimit === 0
-                        ? qsTr("Mining history is disabled.")
-                        : qsTr("Saved subtitles will appear here.")
+                ColumnLayout {
+                    objectName: "historyEmptyState"
+                    Layout.fillWidth: true
+                    Layout.fillHeight: true
+                    spacing: Theme.spacingSm
+                    visible: sidebar.study.historyLimit === 0
+                        || sidebar.study.history.length === 0
+
+                    Item { Layout.fillHeight: true }
+                    StyledLabel {
+                        Layout.fillWidth: true
+                        horizontalAlignment: Text.AlignHCenter
+                        textStyle: Theme.headlineFont
+                        wrapMode: Text.Wrap
+                        text: sidebar.study.historyLimit === 0
+                            ? qsTr("Mining History is disabled in Video Settings.")
+                            : qsTr("Mining History Empty")
+                    }
+                    StyledLabel {
+                        Layout.fillWidth: true
+                        visible: sidebar.study.historyLimit > 0
+                        horizontalAlignment: Text.AlignHCenter
+                        secondary: true
+                        textStyle: Theme.bodyFont
+                        wrapMode: Text.Wrap
+                        text: qsTr("Mined video subtitles will appear here.")
+                    }
+                    Item { Layout.fillHeight: true }
+                }
+
+                ColumnLayout {
+                    objectName: "historyNoResults"
+                    Layout.fillWidth: true
+                    Layout.fillHeight: true
+                    spacing: Theme.spacingSm
+                    visible: sidebar.study.historyLimit > 0
+                        && sidebar.study.history.length > 0
+                        && sidebar.study.historySearchActive
+                        && sidebar.study.historySections.length === 0
+
+                    Item { Layout.fillHeight: true }
+                    StyledLabel {
+                        Layout.fillWidth: true
+                        horizontalAlignment: Text.AlignHCenter
+                        textStyle: Theme.headlineFont
+                        wrapMode: Text.Wrap
+                        text: qsTr("No Results for \"%1\"")
+                            .arg(sidebar.study.historySearch.trim())
+                    }
+                    Item { Layout.fillHeight: true }
                 }
 
                 ListView {
@@ -144,78 +233,91 @@ Rectangle {
                     Layout.fillHeight: true
                     visible: sidebar.study.historyLimit > 0 && count > 0
                     clip: true
-                    model: sidebar.study.history
+                    model: sidebar.study.historySections
                     boundsBehavior: Flickable.StopAtBounds
                     ScrollBar.vertical: ScrollBar {}
 
-                    delegate: Item {
-                        id: record
+                    delegate: Column {
+                        id: historySection
+                        required property int index
                         required property var modelData
                         width: history.width - Theme.spacingMd
-                        height: summary.implicitHeight + Theme.spacingMd
 
-                        HoverHandler { id: recordHover }
-
-                        MouseArea {
-                            anchors.fill: parent
-                            onClicked: sidebar.study.jumpToHistory(record.modelData.id)
+                        ListSectionHeader {
+                            objectName: "historySectionHeader"
+                            width: parent.width
+                            compact: true
+                            title: historySection.modelData.title
+                            countText: String(historySection.modelData.count)
                         }
 
-                        ColumnLayout {
-                            id: summary
-                            anchors.left: parent.left
-                            anchors.right: parent.right
-                            anchors.verticalCenter: parent.verticalCenter
-                            anchors.leftMargin: Theme.spacingSm
-                            spacing: Theme.spacingXs
+                        Repeater {
+                            model: historySection.modelData.items
+                            delegate: RowLayout {
+                                id: historyRecord
+                                required property var modelData
+                                width: historySection.width
+                                spacing: Theme.spacingSm
 
-                            StyledLabel {
-                                Layout.fillWidth: true
-                                secondary: true
-                                textStyle: Theme.captionFont
-                                textFormat: Text.PlainText
-                                elide: Text.ElideRight
-                                text: record.modelData.videoTitle
-                            }
-                            StyledLabel {
-                                Layout.fillWidth: true
-                                textStyle: Theme.bodyFont
-                                textFormat: Text.PlainText
-                                wrapMode: Text.Wrap
-                                maximumLineCount: 3
-                                elide: Text.ElideRight
-                                text: record.modelData.text
-                            }
-                            StyledLabel {
-                                Layout.fillWidth: true
-                                secondary: true
-                                textStyle: Theme.captionFont
-                                text: qsTr("%1, %2").arg(sidebar.timeLabel(record.modelData.start))
-                                                    .arg(record.modelData.relativeDate)
-                            }
-                            RowLayout {
-                                SidebarButton {
-                                    text: qsTr("Jump")
-                                    onClicked: sidebar.study.jumpToHistory(record.modelData.id)
+                                StudyTimelineRow {
+                                    objectName: "historyRow"
+                                    Layout.fillWidth: true
+                                    marker: sidebar.timeLabel(historyRecord.modelData.start)
+                                    title: historyRecord.modelData.text.length > 0
+                                        ? historyRecord.modelData.text : qsTr("Blank Subtitle")
+                                    detail: historyRecord.modelData.relativeDate
+                                    highlights: historyRecord.modelData.highlights || []
+                                    titleLineLimit: 3
+                                    onClicked: sidebar.historyJumpRequested(
+                                        historyRecord.modelData.id)
+
+                                    TapHandler {
+                                        acceptedButtons: Qt.RightButton
+                                        onTapped: historyContextMenu.popup()
+                                    }
                                 }
                                 RowLayout {
-                                    visible: recordHover.hovered
+                                    Layout.alignment: Qt.AlignTop
+                                    spacing: Theme.spacingXs
                                     SidebarButton {
+                                        objectName: "copyHistoryButton"
                                         text: qsTr("Copy")
-                                        onClicked: sidebar.study.copyHistory(record.modelData.id)
+                                        onClicked: sidebar.study.copyHistory(
+                                            historyRecord.modelData.id)
                                     }
                                     SidebarButton {
+                                        objectName: "deleteHistoryButton"
                                         text: qsTr("Delete")
-                                        onClicked: sidebar.study.removeHistory(record.modelData.id)
+                                        onClicked: sidebar.study.removeHistory(
+                                            historyRecord.modelData.id)
+                                    }
+                                }
+
+                                Menu {
+                                    id: historyContextMenu
+                                    objectName: "historyContextMenu"
+
+                                    MenuItem {
+                                        objectName: "historyJumpMenuItem"
+                                        text: qsTr("Jump to Subtitle")
+                                        onTriggered: sidebar.historyJumpRequested(
+                                            historyRecord.modelData.id)
+                                    }
+                                    MenuItem {
+                                        objectName: "historyCopyMenuItem"
+                                        text: qsTr("Copy Subtitle")
+                                        onTriggered: sidebar.study.copyHistory(
+                                            historyRecord.modelData.id)
+                                    }
+                                    MenuSeparator {}
+                                    MenuItem {
+                                        objectName: "historyDeleteMenuItem"
+                                        text: qsTr("Delete")
+                                        onTriggered: sidebar.study.removeHistory(
+                                            historyRecord.modelData.id)
                                     }
                                 }
                             }
-                        }
-                        Rectangle {
-                            anchors.bottom: parent.bottom
-                            width: parent.width
-                            height: Theme.cardBorderWidth
-                            color: Theme.cardStroke
                         }
                     }
                 }

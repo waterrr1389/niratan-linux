@@ -37,10 +37,15 @@
 // toggleSubtitleGapFastForward and UserConfig.videoSubtitleGapFastForwardEnabled.
 
 #include "../viewmodels/data_root.h"
+#include "services/player/mining_history.h"
+#include "services/player/mining_history_store.h"
 #include "services/player/playback_history.h"
+#include "services/player/video_settings.h"
+#include "services/storage/app_paths.h"
 #include "viewmodels/player/player_inspector_view_model.h"
 #include "viewmodels/player/player_study_view_model.h"
 
+#include <QClipboard>
 #include <QDir>
 #include <QFile>
 #include <QGuiApplication>
@@ -294,6 +299,20 @@ void send_handle_key(QQuickItem* player, KeyEventProbe& event) {
 
 }  // namespace
 
+// Stands in for PlayerPage's historyJumpRequested handler in sidebar tests.
+class HistoryJumpRelay : public QObject {
+    Q_OBJECT
+
+   public:
+    explicit HistoryJumpRelay(niratan::viewmodels::PlayerStudyViewModel& model) : model_(model) {}
+
+   public slots:
+    void jump(const QString& id) { model_.jumpToHistory(id); }
+
+   private:
+    niratan::viewmodels::PlayerStudyViewModel& model_;
+};
+
 class PlayerControlsTest : public QObject {
     Q_OBJECT
 
@@ -323,6 +342,8 @@ class PlayerControlsTest : public QObject {
     void transcript_search_caption_and_highlights();
     void transcript_search_clearing_resumes_following();
     void chapter_progress_follows_raw_playback();
+    void history_search_sections_and_highlights();
+    void history_jump_preserves_pause();
 };
 
 namespace {
@@ -1729,6 +1750,318 @@ void PlayerControlsTest::chapter_progress_follows_raw_playback() {
     model.updatePlayback(5.0, 0.0);
     QTRY_VERIFY(item_named(sidebar, QStringLiteral("chapterProgressBar")) == nullptr ||
                 !item_named(sidebar, QStringLiteral("chapterProgressBar"))->isVisible());
+}
+
+// B3, B4: the history tab has its own search field, groups consecutive
+// same-title records under a section header with a count, highlights matches
+// in the row and distinguishes the no-results state from an empty history.
+void PlayerControlsTest::history_search_sections_and_highlights() {
+    niratan::test::TempDataRoot root;
+    QVERIFY(root.isValid());
+    const auto add = [](const char* id, double created_at, const char* title, const char* text) {
+        niratan::player::MiningHistoryItem item;
+        item.id = id;
+        item.created_at = created_at;
+        item.video_file_name = title;
+        item.video_title = title;
+        item.subtitle_source_name = title;
+        item.subtitle_text = text;
+        item.cue_start = 1.0;
+        item.cue_end = 2.0;
+        return niratan::player::MiningHistoryStore::at_data_root().add(item, 25);
+    };
+    auto store = niratan::player::MiningHistoryStore::at_data_root();
+    QVERIFY(store.clear());
+    QVERIFY(add("a-old", 100.0, "A.mkv", "alpha needle"));
+    QVERIFY(add("b", 200.0, "B.mkv", "beta"));
+    QVERIFY(add("b-blank", 250.0, "B.mkv", ""));
+    QVERIFY(add("a-new", 300.0, "A.mkv", "alpha again"));
+
+    niratan::viewmodels::PlayerStudyViewModel model;
+    model.refreshHistory();
+
+    QQmlApplicationEngine engine;
+    QQuickWindow window;
+    std::unique_ptr<QObject> holder;
+    QQuickItem* sidebar = make_study_sidebar(engine, model, 0, window, holder);
+    QVERIFY(sidebar != nullptr);
+    // PlayerPage routes this signal to studyModel.jumpToHistory and restores
+    // the play state after the seek.
+    HistoryJumpRelay relay(model);
+    QObject::connect(sidebar, SIGNAL(historyJumpRequested(QString)), &relay, SLOT(jump(QString)));
+
+    QQuickItem* field = item_named(sidebar, QStringLiteral("historySearchField"));
+    QVERIFY2(field != nullptr, "the history search field is missing");
+    QCOMPARE(field->property("placeholderText").toString(),
+             QStringLiteral("Search Mining History"));
+
+    const auto header_titles = [sidebar]() {
+        QStringList titles;
+        for (QQuickItem* header : items_named(sidebar, QStringLiteral("historySectionHeader"))) {
+            titles.append(header->property("title").toString());
+        }
+        return titles;
+    };
+    QTRY_COMPARE(
+        header_titles(),
+        (QStringList{QStringLiteral("A.mkv"), QStringLiteral("B.mkv"), QStringLiteral("A.mkv")}));
+    const QList<QQuickItem*> headers = items_named(sidebar, QStringLiteral("historySectionHeader"));
+    const QStringList counts{QStringLiteral("1"), QStringLiteral("2"), QStringLiteral("1")};
+    for (qsizetype i = 0; i < headers.size(); ++i) {
+        QCOMPARE(headers.at(i)->property("countText").toString(), counts.at(i));
+    }
+
+    // A blank subtitle keeps its row and is labelled instead of highlighted.
+    QStringList row_titles;
+    for (QQuickItem* history_row : items_named(sidebar, QStringLiteral("historyRow"))) {
+        row_titles.append(history_row->property("title").toString());
+    }
+    QVERIFY(row_titles.contains(QStringLiteral("Blank Subtitle")));
+
+    field = item_named(sidebar, QStringLiteral("historySearchField"));
+    QVERIFY(field != nullptr);
+    field->setProperty("text", QStringLiteral("needle"));
+    QVERIFY(QMetaObject::invokeMethod(field, "textEdited"));
+    QTRY_COMPARE(model.history_search(), QStringLiteral("needle"));
+    QTRY_COMPARE(header_titles(), QStringList{QStringLiteral("A.mkv")});
+    QCOMPARE(items_named(sidebar, QStringLiteral("historyRow")).size(), qsizetype(1));
+    QQuickItem* row = items_named(sidebar, QStringLiteral("historyRow")).first();
+    QCOMPARE(row->property("title").toString(), QStringLiteral("alpha needle"));
+    const QVariantList highlights = row->property("highlights").toList();
+    QCOMPARE(highlights.size(), qsizetype(1));
+    QCOMPARE(highlights.at(0).toMap().value(QStringLiteral("start")).toInt(), 6);
+    QCOMPARE(highlights.at(0).toMap().value(QStringLiteral("length")).toInt(), 6);
+
+    // B4: the row carries its cue time, relative date and actions, and the
+    // video title appears only in the section header.
+    const QStringList row_texts = visual_texts(row);
+    QVERIFY(row_texts.contains(QStringLiteral("0:01")));
+    const QString relative_date = row->property("detail").toString();
+    QVERIFY(!relative_date.isEmpty());
+    QVERIFY(row_texts.contains(relative_date));
+    QVERIFY(!row_texts.join(QLatin1Char('\n')).contains(QStringLiteral("A.mkv")));
+    QQuickItem* copy_button = item_named(sidebar, QStringLiteral("copyHistoryButton"));
+    QVERIFY2(copy_button != nullptr, "the history copy action is missing");
+    QQuickItem* delete_button = item_named(sidebar, QStringLiteral("deleteHistoryButton"));
+    QVERIFY2(delete_button != nullptr, "the history delete action is missing");
+
+    // B6: a pathless record with the current video's file name requests its
+    // cue with the subtitle delay; another current video is the legacy source.
+    QSignalSpy history_requests(
+        &model, &niratan::viewmodels::PlayerStudyViewModel::historySubtitleRequested);
+    model.setVideo(QUrl::fromLocalFile(QStringLiteral("/tmp/A.mkv")));
+    model.setPlaybackReady(true);
+    model.updatePlayback(0.0, 0.5);
+    QTRY_VERIFY((row = item_named(sidebar, QStringLiteral("historyRow"))) != nullptr);
+    QVERIFY(QMetaObject::invokeMethod(row, "clicked"));
+    QCOMPARE(history_requests.size(), 1);
+    QList<QVariant> request = history_requests.takeFirst();
+    QCOMPARE(request.at(0).toUrl(), QUrl());
+    QCOMPARE(request.at(1).toInt(), -1);
+    QCOMPARE(request.at(2).toDouble(), 1.5);
+
+    model.setVideo(QUrl::fromLocalFile(QStringLiteral("/tmp/Other.mkv")));
+    model.setPlaybackReady(true);
+    QTRY_VERIFY((row = item_named(sidebar, QStringLiteral("historyRow"))) != nullptr);
+    QVERIFY(QMetaObject::invokeMethod(row, "clicked"));
+    QCOMPARE(model.last_mining_notice(),
+             QStringLiteral("Open the matching video before using this older Mining History "
+                            "item."));
+    QCOMPARE(history_requests.size(), 0);
+
+    QGuiApplication::clipboard()->setText(QStringLiteral("before"));
+    QTRY_VERIFY((copy_button = item_named(sidebar, QStringLiteral("copyHistoryButton"))) !=
+                nullptr);
+    QVERIFY(QMetaObject::invokeMethod(copy_button, "clicked"));
+    QCOMPARE(QGuiApplication::clipboard()->text(), QStringLiteral("alpha needle"));
+
+    // B3: the clear button and Escape empty the field and restore all groups.
+    QTRY_VERIFY((field = item_named(sidebar, QStringLiteral("historySearchField"))) != nullptr);
+    QQuickItem* clear_button = nullptr;
+    QTRY_VERIFY((clear_button = item_named(sidebar, QStringLiteral("historySearchClearButton"))) !=
+                nullptr);
+    QVERIFY(clear_button->isVisible());
+    QVERIFY(QMetaObject::invokeMethod(clear_button, "clicked"));
+    QTRY_COMPARE(model.history_search(), QString());
+    QTRY_COMPARE(field->property("text").toString(), QString());
+    QTRY_COMPARE(items_named(sidebar, QStringLiteral("historySectionHeader")).size(), qsizetype(3));
+
+    QTRY_VERIFY((field = item_named(sidebar, QStringLiteral("historySearchField"))) != nullptr);
+    field->setProperty("text", QStringLiteral("needle"));
+    QVERIFY(QMetaObject::invokeMethod(field, "textEdited"));
+    QTRY_COMPARE(model.history_search(), QStringLiteral("needle"));
+    field->forceActiveFocus();
+    QTRY_VERIFY(field->hasActiveFocus());
+    QTest::keyClick(&window, Qt::Key_Escape);
+    QTRY_COMPARE(model.history_search(), QString());
+    QTRY_COMPARE(field->property("text").toString(), QString());
+    QTRY_COMPARE(items_named(sidebar, QStringLiteral("historySectionHeader")).size(), qsizetype(3));
+    QTRY_VERIFY(!field->hasActiveFocus());
+
+    field = item_named(sidebar, QStringLiteral("historySearchField"));
+    QVERIFY(field != nullptr);
+    field->setProperty("text", QStringLiteral("absent"));
+    QVERIFY(QMetaObject::invokeMethod(field, "textEdited"));
+    QTRY_COMPARE(model.history_search(), QStringLiteral("absent"));
+    QTRY_COMPARE(items_named(sidebar, QStringLiteral("historySectionHeader")).size(), qsizetype(0));
+    QQuickItem* no_results = nullptr;
+    QTRY_VERIFY((no_results = item_named(sidebar, QStringLiteral("historyNoResults"))) != nullptr);
+    QTRY_VERIFY(no_results->isVisible());
+    QVERIFY(visual_texts(no_results).join(QLatin1Char('\n')).contains(QStringLiteral("absent")));
+
+    QTRY_VERIFY((field = item_named(sidebar, QStringLiteral("historySearchField"))) != nullptr);
+    field->setProperty("text", QString());
+    QVERIFY(QMetaObject::invokeMethod(field, "textEdited"));
+    QTRY_VERIFY(!model.history_search_active());
+    QTRY_COMPARE(items_named(sidebar, QStringLiteral("historySectionHeader")).size(), qsizetype(3));
+    QQuickItem* cleared_results = item_named(sidebar, QStringLiteral("historyNoResults"));
+    QVERIFY(cleared_results == nullptr || !cleared_results->isVisible());
+
+    // B4: the row context menu routes jump, copy and delete for its id.
+    QTRY_VERIFY((field = item_named(sidebar, QStringLiteral("historySearchField"))) != nullptr);
+    field->setProperty("text", QStringLiteral("needle"));
+    QVERIFY(QMetaObject::invokeMethod(field, "textEdited"));
+    QTRY_COMPARE(model.history_search(), QStringLiteral("needle"));
+    model.setVideo(QUrl::fromLocalFile(QStringLiteral("/tmp/A.mkv")));
+    model.setPlaybackReady(true);
+    model.updatePlayback(0.0, 0.5);
+    QTRY_VERIFY((row = item_named(sidebar, QStringLiteral("historyRow"))) != nullptr);
+    QTest::mouseClick(&window, Qt::RightButton, Qt::NoModifier,
+                      row->mapToScene(QPointF(row->width() / 2, row->height() / 2)).toPoint());
+    QQuickItem* menu_jump = nullptr;
+    QTRY_VERIFY((menu_jump = item_named(window.contentItem(),
+                                        QStringLiteral("historyJumpMenuItem"))) != nullptr);
+    history_requests.clear();
+    QVERIFY(QMetaObject::invokeMethod(menu_jump, "triggered"));
+    QTRY_COMPARE(history_requests.size(), 1);
+    QCOMPARE(history_requests.takeFirst().at(2).toDouble(), 1.5);
+
+    QQuickItem* menu_copy = nullptr;
+    QTRY_VERIFY((row = item_named(sidebar, QStringLiteral("historyRow"))) != nullptr);
+    QTest::mouseClick(&window, Qt::RightButton, Qt::NoModifier,
+                      row->mapToScene(QPointF(row->width() / 2, row->height() / 2)).toPoint());
+    QTRY_VERIFY((menu_copy = item_named(window.contentItem(),
+                                        QStringLiteral("historyCopyMenuItem"))) != nullptr);
+    QGuiApplication::clipboard()->setText(QStringLiteral("before"));
+    QVERIFY(QMetaObject::invokeMethod(menu_copy, "triggered"));
+    QCOMPARE(QGuiApplication::clipboard()->text(), QStringLiteral("alpha needle"));
+
+    QQuickItem* menu_delete = nullptr;
+    QTRY_VERIFY((row = item_named(sidebar, QStringLiteral("historyRow"))) != nullptr);
+    QTest::mouseClick(&window, Qt::RightButton, Qt::NoModifier,
+                      row->mapToScene(QPointF(row->width() / 2, row->height() / 2)).toPoint());
+    QTRY_VERIFY((menu_delete = item_named(window.contentItem(),
+                                          QStringLiteral("historyDeleteMenuItem"))) != nullptr);
+    const qsizetype history_before = model.history().size();
+    QVERIFY(QMetaObject::invokeMethod(menu_delete, "triggered"));
+    QTRY_COMPARE(model.history().size(), history_before - 1);
+    QTRY_COMPARE(items_named(sidebar, QStringLiteral("historyRow")).size(), qsizetype(0));
+
+    // Re-add the record and exercise the row's delete button as well.
+    QVERIFY(add("a-old", 100.0, "A.mkv", "alpha needle"));
+    model.refreshHistory();
+    QTRY_VERIFY((field = item_named(sidebar, QStringLiteral("historySearchField"))) != nullptr);
+    field->setProperty("text", QStringLiteral("needle"));
+    QVERIFY(QMetaObject::invokeMethod(field, "textEdited"));
+    QTRY_COMPARE(model.history_search(), QStringLiteral("needle"));
+    QTRY_VERIFY((delete_button = item_named(sidebar, QStringLiteral("deleteHistoryButton"))) !=
+                nullptr);
+    const qsizetype button_before = model.history().size();
+    QVERIFY(QMetaObject::invokeMethod(delete_button, "clicked"));
+    QTRY_COMPARE(model.history().size(), button_before - 1);
+    QTRY_COMPARE(items_named(sidebar, QStringLiteral("historyRow")).size(), qsizetype(0));
+
+    // An empty history shows its own state and no toolbar.
+    QVERIFY(store.clear());
+    model.refreshHistory();
+    QTRY_VERIFY(item_named(sidebar, QStringLiteral("historySearchField")) == nullptr);
+    QQuickItem* empty = nullptr;
+    QTRY_VERIFY((empty = item_named(sidebar, QStringLiteral("historyEmptyState"))) != nullptr);
+    QTRY_VERIFY(empty->isVisible());
+    QVERIFY(visual_texts(empty)
+                .join(QLatin1Char('\n'))
+                .contains(QStringLiteral("Mining History Empty")));
+    QVERIFY(visual_texts(empty)
+                .join(QLatin1Char('\n'))
+                .contains(QStringLiteral("Mined video subtitles will appear here.")));
+
+    // A zero limit is the disabled state, distinct from an empty history.
+    QVERIFY(niratan::player::store_video_settings(
+        niratan::storage::data_root(), {{QStringLiteral("videoMiningHistoryLimit"), 0}}));
+    model.refreshHistory();
+    QTRY_COMPARE(model.history_limit(), 0);
+    QTRY_VERIFY(item_named(sidebar, QStringLiteral("historySearchField")) == nullptr);
+    QTRY_COMPARE(items_named(sidebar, QStringLiteral("historySectionHeader")).size(), qsizetype(0));
+    QTRY_VERIFY(visual_texts(sidebar)
+                    .join(QLatin1Char('\n'))
+                    .contains(QStringLiteral("Mining History is disabled in Video Settings.")));
+}
+
+// B6: PlayerPage captures the play state before a jump and restores it after
+// the resolved seek, including when the jump opens another video.
+void PlayerControlsTest::history_jump_preserves_pause() {
+    niratan::test::TempDataRoot root;
+    QVERIFY(root.isValid());
+    const QString video = make_video(root.path());
+    const QString other = touch_file(root.path() + QStringLiteral("/Anime/Beta.mp4"), 10);
+    QVERIFY(!other.isEmpty());
+
+    auto store = niratan::player::MiningHistoryStore::at_data_root();
+    QVERIFY(store.clear());
+    const auto record = [](const char* id, double created_at, const QString& file_name,
+                           const QString& path, double cue_start) {
+        niratan::player::MiningHistoryItem item;
+        item.id = id;
+        item.created_at = created_at;
+        item.subtitle_text = "cue";
+        item.video_file_name = file_name.toStdString();
+        item.video_title = item.video_file_name;
+        item.subtitle_source_name = item.video_file_name;
+        if (!path.isEmpty()) {
+            item.video_path = path.toStdString();
+        }
+        item.cue_start = cue_start;
+        item.cue_end = cue_start + 1.0;
+        return item;
+    };
+    QVERIFY(store.add(record("same", 100.0, QFileInfo(video).fileName(), QString(), 12.5), 25));
+    QVERIFY(store.add(record("other", 200.0, QFileInfo(other).fileName(),
+                             QFileInfo(other).canonicalFilePath(), 3.0),
+                      25));
+
+    QQmlApplicationEngine engine;
+    QQuickWindow* video_window = nullptr;
+    QQuickItem* player = open_video_in_window(engine, video, &video_window);
+    QVERIFY(player != nullptr);
+    auto* study = player->findChild<niratan::viewmodels::PlayerStudyViewModel*>();
+    QVERIFY(study != nullptr);
+    study->refreshHistory();
+    study->setVideo(QUrl::fromLocalFile(video));
+    study->setPlaybackReady(true);
+    study->updatePlayback(0.0, 0.0);
+    QQuickItem* mpv = item_named(video_window->contentItem(), QStringLiteral("mpvItem"));
+    QVERIFY(mpv != nullptr);
+    QSignalSpy requests(study,
+                        &niratan::viewmodels::PlayerStudyViewModel::historySubtitleRequested);
+
+    // A jump inside the current video while paused stays paused after its seek.
+    mpv->setProperty("paused", true);
+    QVERIFY(QMetaObject::invokeMethod(player, "jumpToHistory",
+                                      Q_ARG(QVariant, QVariant(QStringLiteral("same")))));
+    QCOMPARE(requests.size(), 1);
+    QVERIFY(mpv->property("paused").toBool());
+
+    // A jump to another video captures the state before the open and restores
+    // it after the new video's resolved seek.
+    requests.clear();
+    mpv->setProperty("paused", true);
+    QVERIFY(QMetaObject::invokeMethod(player, "jumpToHistory",
+                                      Q_ARG(QVariant, QVariant(QStringLiteral("other")))));
+    QCOMPARE(player->property("historyJumpWasPlaying").toBool(), false);
+    QCOMPARE(requests.size(), 0);
+    study->setPlaybackReady(true);
+    QCOMPARE(requests.size(), 1);
+    QVERIFY(mpv->property("paused").toBool());
 }
 
 int main(int argc, char* argv[]) {

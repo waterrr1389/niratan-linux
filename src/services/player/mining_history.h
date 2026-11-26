@@ -116,6 +116,58 @@ struct MiningHistoryItem {
     bool operator==(const MiningHistoryItem&) const = default;
 };
 
+// VideoMiningHistoryNavigation.swift: a record resolves to local media or a
+// remote identity, and a ready jump carries the subtitle source, embedded track
+// and seek time it restores.
+//
+// The media is remote whenever the record carries a remote identity, without
+// filesystem checks. A stored local video path must exist or the resolution is
+// missing_video. A pathless record uses the current video only when its file
+// name equals the record's video file name, else it is
+// legacy_source_unavailable. The subtitle is absent for remote and embedded
+// records; a stored external path must exist or the resolution is
+// missing_subtitle, and a record naming a format without a path is
+// missing_subtitle as well. A ready destination seeks to
+// max(0, cueStart + subtitleDelay) and reports local paths as absolute paths.
+enum class MiningHistoryMediaKind { local_file, remote };
+
+struct MiningHistoryMedia {
+    MiningHistoryMediaKind kind = MiningHistoryMediaKind::local_file;
+    // The file for local_file; empty for remote.
+    QString path;
+    // The stored identity for remote; unused for local_file.
+    MiningHistoryItem::RemoteVideoIdentity remote;
+    bool operator==(const MiningHistoryMedia&) const = default;
+};
+
+struct MiningHistoryDestination {
+    MiningHistoryMedia media;
+    std::optional<QString> subtitle_path;
+    std::optional<int> embedded_subtitle_track_id;
+    double seek_time = 0.0;
+    bool operator==(const MiningHistoryDestination&) const = default;
+};
+
+enum class MiningHistoryNavigationStatus {
+    ready,
+    missing_video,
+    missing_subtitle,
+    legacy_source_unavailable,
+};
+
+struct MiningHistoryNavigationResolution {
+    MiningHistoryNavigationStatus status = MiningHistoryNavigationStatus::legacy_source_unavailable;
+    MiningHistoryDestination destination;
+    bool operator==(const MiningHistoryNavigationResolution&) const = default;
+};
+
+// VideoMiningHistoryNavigationResolver.resolve. The current video path is empty
+// when no local video is open; a stored video and subtitle path is checked on
+// disk, while the current video is only compared by file name.
+MiningHistoryNavigationResolution
+resolve_mining_history_navigation(const MiningHistoryItem& item, const QString& current_video_path,
+                                  double subtitle_delay);
+
 std::filesystem::path mining_history_path(const std::filesystem::path& app_directory);
 
 // VideoMiningHistorySidebar.historyRow uses a named relative date. The Linux

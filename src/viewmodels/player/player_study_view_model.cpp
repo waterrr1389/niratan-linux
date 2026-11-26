@@ -54,6 +54,82 @@ QUrl local_url(const std::string& path) {
     return QUrl::fromLocalFile(QString::fromStdString(path));
 }
 
+// URL.standardizedFileURL for a video path, the normalisation the resolver
+// reports, so two spellings of one file compare equal. A pathless probe makes
+// the resolver return the standardized current video without this layer
+// touching the filesystem.
+QString standardized_video_path(const QString& path) {
+    if (path.isEmpty()) {
+        return {};
+    }
+    MiningHistoryItem probe;
+    const qsizetype slash = path.lastIndexOf(QLatin1Char('/'));
+    probe.video_file_name = (slash < 0 ? path : path.mid(slash + 1)).toStdString();
+    const player::MiningHistoryNavigationResolution resolution =
+        player::resolve_mining_history_navigation(probe, path, 0.0);
+    if (resolution.status == player::MiningHistoryNavigationStatus::ready) {
+        return resolution.destination.media.path;
+    }
+    return QUrl::fromLocalFile(path).adjusted(QUrl::NormalizePathSegments).toLocalFile();
+}
+
+// VideoMiningHistorySidebar.historySections: newest first, filtered by the
+// trimmed history query against subtitle text or video title, then grouped into
+// consecutive runs of the same title. Rows carry the match ranges into their
+// own subtitle text.
+QVariantList history_sections_from(const std::vector<MiningHistoryItem>& items,
+                                   const QString& history_search) {
+    const QString query = player::normalized_study_query(history_search);
+    const QDateTime now = QDateTime::currentDateTime();
+    struct Section {
+        QString title;
+        QVariantList rows;
+    };
+    QList<Section> grouped;
+    for (auto item = items.crbegin(); item != items.crend(); ++item) {
+        const QString text = QString::fromStdString(item->subtitle_text);
+        const QString stored_title = QString::fromStdString(item->video_title);
+        const QString title =
+            stored_title.isEmpty() ? QString::fromStdString(item->video_file_name) : stored_title;
+        if (!query.isEmpty() && !player::study_search_matches(text, query) &&
+            !player::study_search_matches(stored_title, query)) {
+            continue;
+        }
+        QVariantList highlights;
+        if (!query.isEmpty()) {
+            for (const player::StudySearchRange& range : player::study_search_ranges(text, query)) {
+                highlights.append(QVariantMap{{QStringLiteral("start"), range.start},
+                                              {QStringLiteral("length"), range.length}});
+            }
+        }
+        const QVariantMap row{
+            {QStringLiteral("id"), QString::fromStdString(item->id)},
+            {QStringLiteral("text"), text},
+            {QStringLiteral("highlights"), highlights},
+            {QStringLiteral("start"), item->cue_start},
+            {QStringLiteral("relativeDate"),
+             player::mining_history_date_label(item->created_at, now)},
+        };
+        if (!grouped.isEmpty() && grouped.last().title == title) {
+            grouped.last().rows.append(row);
+        } else {
+            grouped.append({title, {row}});
+        }
+    }
+    QVariantList sections;
+    sections.reserve(grouped.size());
+    for (qsizetype i = 0; i < grouped.size(); ++i) {
+        const Section& section = grouped.at(i);
+        sections.append(QVariantMap{
+            {QStringLiteral("id"), section.title + QLatin1Char('-') + QString::number(i)},
+            {QStringLiteral("title"), section.title},
+            {QStringLiteral("count"), section.rows.size()},
+            {QStringLiteral("items"), section.rows},
+        });
+    }
+    return sections;
+}
+
 }  // namespace
 
 PlayerStudyViewModel::PlayerStudyViewModel(QObject* parent)
@@ -92,6 +168,27 @@ int PlayerStudyViewModel::search_match_count() const {
 bool PlayerStudyViewModel::can_show_earlier() const { return state_->first > 0; }
 bool PlayerStudyViewModel::can_show_later() const { return state_->last < state_->filtered.size(); }
 QVariantList PlayerStudyViewModel::history() const { return state_->history; }
+QString PlayerStudyViewModel::history_search() const {
+    return state_->history_search;
+}
+bool PlayerStudyViewModel::history_search_active() const {
+    return !player::normalized_study_query(state_->history_search).isEmpty();
+}
+QVariantList PlayerStudyViewModel::history_sections() const {
+    return state_->history_sections;
+}
+void PlayerStudyViewModel::set_history_search(const QString& query) {
+    if (state_->history_search == query) {
+        return;
+    }
+    state_->history_search = query;
+    emit historySearchChanged();
+    QVariantList sections = history_sections_from(state_->snapshot.items, query);
+    if (state_->history_sections != sections) {
+        state_->history_sections = std::move(sections);
+        emit historySectionsChanged();
+    }
+}
 QVariantList PlayerStudyViewModel::chapters() const { return state_->chapters; }
 int PlayerStudyViewModel::current_chapter() const { return state_->current_chapter; }
 double PlayerStudyViewModel::current_chapter_progress() const {
@@ -166,8 +263,9 @@ void PlayerStudyViewModel::setVideo(const QUrl& video) {
     state_->video = video.isLocalFile()
         ? local_url(video.toLocalFile().toStdString()) : video;
     if (state_->pending_jump &&
-        (!state_->pending_jump->video_path ||
-         local_url(*state_->pending_jump->video_path) != state_->video)) {
+        standardized_video_path(state_->pending_jump->media.path) !=
+            standardized_video_path(state_->video.isLocalFile() ? state_->video.toLocalFile()
+                                                                : QString{})) {
         state_->pending_jump.reset();
     }
     const double previous_time = adjusted_time();
@@ -503,18 +601,35 @@ void PlayerStudyViewModel::jumpToHistory(const QString& id) {
     if (item == state_->snapshot.items.cend()) {
         return;
     }
+    // Remote video navigation is not wired in this release.
     if (item->remote_video_identity) {
         set_notice(tr("This remote video cannot be reopened from history."));
         return;
     }
-    const QUrl target = item->video_path ? local_url(*item->video_path) : QUrl{};
-    if (target.isEmpty() && (!state_->ready || state_->video.fileName().toStdString() != item->video_file_name)) {
-        set_notice(tr("The original video is unavailable."));
-        return;
+    const QString current = state_->video.isLocalFile() ? state_->video.toLocalFile() : QString{};
+    const player::MiningHistoryNavigationResolution resolution =
+        player::resolve_mining_history_navigation(*item, current, state_->delay);
+    switch (resolution.status) {
+        case player::MiningHistoryNavigationStatus::missing_video:
+            set_notice(
+                tr("The saved video file is no longer available. Open it again to continue."));
+            return;
+        case player::MiningHistoryNavigationStatus::missing_subtitle:
+            set_notice(
+                tr("The saved subtitle file is no longer available. Open it again to continue."));
+            return;
+        case player::MiningHistoryNavigationStatus::legacy_source_unavailable:
+            set_notice(tr("Open the matching video before using this older Mining History item."));
+            return;
+        case player::MiningHistoryNavigationStatus::ready:
+            break;
     }
-    state_->pending_jump = *item;
+
+    state_->pending_jump = resolution.destination;
     set_notice({});
-    if (!target.isEmpty() && (target != state_->video || !state_->ready)) {
+    const QUrl target = QUrl::fromLocalFile(resolution.destination.media.path);
+    if (standardized_video_path(resolution.destination.media.path) !=
+        standardized_video_path(current)) {
         emit videoRequested(target);
     } else {
         complete_jump();
@@ -525,11 +640,12 @@ void PlayerStudyViewModel::complete_jump() {
     if (!state_->pending_jump) {
         return;
     }
-    const MiningHistoryItem item = std::move(*state_->pending_jump);
+    const player::MiningHistoryDestination destination = std::move(*state_->pending_jump);
     state_->pending_jump.reset();
-    const QUrl subtitle = item.subtitle_source_path ? local_url(*item.subtitle_source_path) : QUrl{};
-    emit historySubtitleRequested(subtitle, item.embedded_subtitle_track_id.value_or(-1),
-                                  std::max(0.0, item.cue_start + state_->delay));
+    const QUrl subtitle =
+        destination.subtitle_path ? QUrl::fromLocalFile(*destination.subtitle_path) : QUrl{};
+    emit historySubtitleRequested(subtitle, destination.embedded_subtitle_track_id.value_or(-1),
+                                  destination.seek_time);
 }
 
 void PlayerStudyViewModel::copyHistory(const QString& id) const {
@@ -574,9 +690,15 @@ void PlayerStudyViewModel::refreshHistory() {
     }
     const bool changed = state_->snapshot.limit != snapshot.limit || state_->history != history;
     state_->snapshot = std::move(snapshot);
+    QVariantList sections = history_sections_from(state_->snapshot.items, state_->history_search);
+    const bool sections_changed = state_->history_sections != sections;
     if (changed) {
         state_->history = std::move(history);
         emit historyChanged();
+    }
+    if (sections_changed) {
+        state_->history_sections = std::move(sections);
+        emit historySectionsChanged();
     }
     update_can_mine();
 }

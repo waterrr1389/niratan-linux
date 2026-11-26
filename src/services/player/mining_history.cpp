@@ -10,6 +10,8 @@
 #include "mining_history.h"
 
 #include <QCoreApplication>
+#include <QDir>
+#include <QFileInfo>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
@@ -37,6 +39,14 @@ namespace {
 
 QString text(const std::string& value) {
     return QString::fromStdString(value);
+}
+
+// URL.standardizedFileURL: absolute and normalized, resolving symlinks when the
+// path exists. An open current video need not be on disk.
+QString standardized_path(const QString& path) {
+    const QFileInfo info(path);
+    const QString canonical = info.canonicalFilePath();
+    return canonical.isEmpty() ? QDir::cleanPath(info.absoluteFilePath()) : canonical;
 }
 
 // Synthesized Codable decodes an optional property from an absent key and from
@@ -444,6 +454,57 @@ bool remove(const std::filesystem::path& app_directory, std::string_view id) {
 
 bool clear(const std::filesystem::path& app_directory) {
     return save(app_directory, {});
+}
+
+MiningHistoryNavigationResolution
+resolve_mining_history_navigation(const MiningHistoryItem& item, const QString& current_video_path,
+                                  double subtitle_delay) {
+    MiningHistoryNavigationResolution resolution;
+    MiningHistoryMedia media;
+
+    if (item.remote_video_identity) {
+        media.kind = MiningHistoryMediaKind::remote;
+        media.remote = *item.remote_video_identity;
+    } else if (item.video_path) {
+        const QString path = standardized_path(text(*item.video_path));
+        if (!QFileInfo::exists(path)) {
+            resolution.status = MiningHistoryNavigationStatus::missing_video;
+            return resolution;
+        }
+        media.kind = MiningHistoryMediaKind::local_file;
+        media.path = path;
+    } else {
+        if (current_video_path.isEmpty() ||
+            QFileInfo(current_video_path).fileName() != text(item.video_file_name)) {
+            resolution.status = MiningHistoryNavigationStatus::legacy_source_unavailable;
+            return resolution;
+        }
+        media.kind = MiningHistoryMediaKind::local_file;
+        media.path = standardized_path(current_video_path);
+    }
+
+    std::optional<QString> subtitle_path;
+    const bool embedded = item.subtitle_format && text(*item.subtitle_format) == "embedded";
+    if (item.remote_video_identity || embedded) {
+        subtitle_path.reset();
+    } else if (item.subtitle_source_path) {
+        const QString path = standardized_path(text(*item.subtitle_source_path));
+        if (!QFileInfo::exists(path)) {
+            resolution.status = MiningHistoryNavigationStatus::missing_subtitle;
+            return resolution;
+        }
+        subtitle_path = path;
+    } else if (item.subtitle_format) {
+        resolution.status = MiningHistoryNavigationStatus::missing_subtitle;
+        return resolution;
+    }
+
+    resolution.status = MiningHistoryNavigationStatus::ready;
+    resolution.destination.media = std::move(media);
+    resolution.destination.subtitle_path = std::move(subtitle_path);
+    resolution.destination.embedded_subtitle_track_id = item.embedded_subtitle_track_id;
+    resolution.destination.seek_time = std::max(0.0, item.cue_start + subtitle_delay);
+    return resolution;
 }
 
 }  // namespace niratan::player
