@@ -6,21 +6,22 @@
 // `minimalControlGroup`, with `VideoPlayerScreen.toggleFullScreen`.
 //
 // Order at full density: Fast-forward Subtitle Gaps, Mining History, Open
-// Video, Mine Current Subtitle, Inspector, Full Screen. Condensed keeps the
-// episode group (drawn by VideoTransportControls), the speed pill, Open Video,
-// Inspector and Full Screen; minimal drops all but the episode group and Full
-// Screen, so the Inspector button is absent there, as in Swift's
-// `minimalControlGroup`. Swift's screenshot button is not built.
+// Video, Mine Current Subtitle, Inspector, Save Clean Screenshot, Full Screen.
+// Condensed keeps the episode group (drawn by VideoTransportControls), the
+// speed pill, Open Video, Inspector, Save Clean Screenshot and Full Screen;
+// minimal keeps the episode group, Save Clean Screenshot and Full Screen, as
+// in Swift's `minimalControlGroup`, so the Inspector button is absent there.
 // Mining History is active while the study sidebar is open; Fast-forward
 // Subtitle Gaps is active while the preference is on; Mine Current Subtitle
-// follows `canMine`; Inspector is active while its panel is open.
+// follows `canMine`; Inspector is active while its panel is open; Save Clean
+// Screenshot follows `canSaveScreenshot`.
 // The full-screen glyph enters from windowed and leaves from full screen.
 //
 // Object names: gapFastForwardButton, miningHistoryButton, openVideoButton,
-// mineSubtitleButton, inspectorButton, fullScreenButton; the full-screen glyph
-// is fullScreenIcon and switches between arrows-out and arrows-in. Every button
-// carries a `tip` string; Mining History, Fast-forward Subtitle Gaps and
-// Inspector expose `active`.
+// mineSubtitleButton, inspectorButton, screenshotButton, fullScreenButton; the
+// full-screen glyph is fullScreenIcon and switches between arrows-out and
+// arrows-in. Every button carries a `tip` string; Mining History, Fast-forward
+// Subtitle Gaps and Inspector expose `active`.
 pragma ComponentBehavior: Bound
 
 import QtQuick
@@ -38,6 +39,7 @@ Item {
     property bool isFullScreen: false
     property bool inspectorOpen: false
     property bool gapFastForwardEnabled: false
+    property bool canSaveScreenshot: false
 
     implicitWidth: row.implicitWidth
     implicitHeight: row.implicitHeight
@@ -48,6 +50,7 @@ Item {
     signal toggleInspectorRequested()
     signal toggleFullScreenRequested()
     signal toggleGapFastForwardRequested()
+    signal saveScreenshotRequested()
 
     component UtilityButton: ChromeButton {
         diameter: Theme.chromeToolDiameter
@@ -101,6 +104,14 @@ Item {
             active: utility.inspectorOpen
             visible: utility.density !== "minimal"
             onClicked: utility.toggleInspectorRequested()
+        }
+
+        UtilityButton {
+            objectName: "screenshotButton"
+            tip: qsTr("Save Clean Screenshot")
+            symbol: "camera"
+            enabled: utility.canSaveScreenshot
+            onClicked: utility.saveScreenshotRequested()
         }
 
         UtilityButton {

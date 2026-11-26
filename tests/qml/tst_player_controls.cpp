@@ -344,6 +344,13 @@ class PlayerControlsTest : public QObject {
     void chapter_progress_follows_raw_playback();
     void history_search_sections_and_highlights();
     void history_jump_preserves_pause();
+    void screenshot_control_is_available_at_every_density();
+    void page_drop_picks_the_first_media_and_subtitle();
+    void page_wheel_volume_follows_the_scroll_delta();
+    void timeline_preview_capsule_follows_hover_and_linger();
+    void screenshot_name_follows_swift();
+    void failed_screenshot_discards_the_capture();
+    void full_screen_sidebar_keeps_the_stored_width();
 };
 
 namespace {
@@ -356,16 +363,17 @@ struct BarCase {
 const QStringList kUtilityButtons{
     QStringLiteral("gapFastForwardButton"), QStringLiteral("miningHistoryButton"),
     QStringLiteral("openVideoButton"),      QStringLiteral("mineSubtitleButton"),
-    QStringLiteral("inspectorButton"),      QStringLiteral("fullScreenButton"),
+    QStringLiteral("inspectorButton"),      QStringLiteral("screenshotButton"),
+    QStringLiteral("fullScreenButton"),
 };
 
 const QStringList kFullDensityButtons{
     QStringLiteral("gapFastForwardButton"), QStringLiteral("miningHistoryButton"),
     QStringLiteral("openVideoButton"),      QStringLiteral("mineSubtitleButton"),
-    QStringLiteral("inspectorButton"),      QStringLiteral("fullScreenButton"),
-    QStringLiteral("volumeButton"),         QStringLiteral("previousButton"),
-    QStringLiteral("nextButton"),           QStringLiteral("playButton"),
-    QStringLiteral("speedButton"),
+    QStringLiteral("inspectorButton"),      QStringLiteral("screenshotButton"),
+    QStringLiteral("fullScreenButton"),     QStringLiteral("volumeButton"),
+    QStringLiteral("previousButton"),       QStringLiteral("nextButton"),
+    QStringLiteral("playButton"),           QStringLiteral("speedButton"),
 };
 
 void verify_density_cases(QQmlApplicationEngine& engine, const QString& layout,
@@ -437,20 +445,19 @@ void PlayerControlsTest::floating_groups_follow_the_density() {
                         QStringLiteral("speedButton"), QStringLiteral("gapFastForwardButton"),
                         QStringLiteral("miningHistoryButton"), QStringLiteral("openVideoButton"),
                         QStringLiteral("mineSubtitleButton"), QStringLiteral("inspectorButton"),
-                        QStringLiteral("fullScreenButton")}) ==
+                        QStringLiteral("screenshotButton"), QStringLiteral("fullScreenButton")}) ==
             QStringList({QStringLiteral("volumeButton"), QStringLiteral("previousButton"),
                          QStringLiteral("playButton"), QStringLiteral("nextButton"),
                          QStringLiteral("speedButton"), QStringLiteral("gapFastForwardButton"),
                          QStringLiteral("miningHistoryButton"), QStringLiteral("openVideoButton"),
                          QStringLiteral("mineSubtitleButton"), QStringLiteral("inspectorButton"),
-                         QStringLiteral("fullScreenButton")}),
+                         QStringLiteral("screenshotButton"), QStringLiteral("fullScreenButton")}),
         "the lower row clusters are out of order");
     for (const QString& name : kFullDensityButtons) {
         QVERIFY2(shown(bar, name), qPrintable(name + QStringLiteral(" is missing at full")));
     }
     for (const QString& name :
-         {QStringLiteral("screenshotButton"), QStringLiteral("cycleSubtitlesButton"),
-          QStringLiteral("videoSettingsButton")}) {
+         {QStringLiteral("cycleSubtitlesButton"), QStringLiteral("videoSettingsButton")}) {
         QVERIFY2(item_named(bar, name) == nullptr, qPrintable(name + QStringLiteral(" is built")));
     }
 
@@ -460,7 +467,7 @@ void PlayerControlsTest::floating_groups_follow_the_density() {
          {QStringLiteral("previousButton"), QStringLiteral("playButton"),
           QStringLiteral("nextButton"), QStringLiteral("speedButton"),
           QStringLiteral("openVideoButton"), QStringLiteral("inspectorButton"),
-          QStringLiteral("fullScreenButton")}) {
+          QStringLiteral("screenshotButton"), QStringLiteral("fullScreenButton")}) {
         QVERIFY2(shown(bar, name), qPrintable(name + QStringLiteral(" is missing condensed")));
     }
     for (const QString& name :
@@ -475,7 +482,8 @@ void PlayerControlsTest::floating_groups_follow_the_density() {
     QTRY_COMPARE(bar->property("density").toString(), QStringLiteral("minimal"));
     QTRY_COMPARE(close_spy.count(), 1);
     for (const QString& name : {QStringLiteral("previousButton"), QStringLiteral("playButton"),
-                                QStringLiteral("nextButton"), QStringLiteral("fullScreenButton")}) {
+                                QStringLiteral("nextButton"), QStringLiteral("screenshotButton"),
+                                QStringLiteral("fullScreenButton")}) {
         QVERIFY2(shown(bar, name), qPrintable(name + QStringLiteral(" is missing minimal")));
     }
     for (const QString& name :
@@ -510,7 +518,8 @@ void PlayerControlsTest::compact_groups_follow_the_density() {
         QStringLiteral("compactTime"),          QStringLiteral("speedButton"),
         QStringLiteral("gapFastForwardButton"), QStringLiteral("miningHistoryButton"),
         QStringLiteral("openVideoButton"),      QStringLiteral("mineSubtitleButton"),
-        QStringLiteral("inspectorButton"),      QStringLiteral("fullScreenButton"),
+        QStringLiteral("inspectorButton"),      QStringLiteral("screenshotButton"),
+        QStringLiteral("fullScreenButton"),
     };
     QVERIFY2(named_in_order(bar, compact_row) == compact_row,
              "the compact full row is out of order");
@@ -528,7 +537,7 @@ void PlayerControlsTest::compact_groups_follow_the_density() {
          {QStringLiteral("previousButton"), QStringLiteral("playButton"),
           QStringLiteral("nextButton"), QStringLiteral("speedButton"),
           QStringLiteral("openVideoButton"), QStringLiteral("inspectorButton"),
-          QStringLiteral("fullScreenButton")}) {
+          QStringLiteral("screenshotButton"), QStringLiteral("fullScreenButton")}) {
         QVERIFY2(shown(bar, name),
                  qPrintable(name + QStringLiteral(" is missing compact condensed")));
     }
@@ -540,7 +549,8 @@ void PlayerControlsTest::compact_groups_follow_the_density() {
     bar->setProperty("availableWidth", 389.0);
     QTRY_COMPARE(bar->property("density").toString(), QStringLiteral("minimal"));
     for (const QString& name : {QStringLiteral("previousButton"), QStringLiteral("playButton"),
-                                QStringLiteral("nextButton"), QStringLiteral("fullScreenButton")}) {
+                                QStringLiteral("nextButton"), QStringLiteral("screenshotButton"),
+                                QStringLiteral("fullScreenButton")}) {
         QVERIFY2(shown(bar, name),
                  qPrintable(name + QStringLiteral(" is missing compact minimal")));
     }
@@ -2062,6 +2072,332 @@ void PlayerControlsTest::history_jump_preserves_pause() {
     study->setPlaybackReady(true);
     QCOMPARE(requests.size(), 1);
     QVERIFY(mpv->property("paused").toBool());
+}
+
+// B2: Save Clean Screenshot sits after Inspector and before Full Screen at
+// every density, follows canSaveScreenshot and emits its request.
+void PlayerControlsTest::screenshot_control_is_available_at_every_density() {
+    QQmlApplicationEngine engine;
+    QString error;
+    std::unique_ptr<QObject> object =
+        create_player_component(engine, QStringLiteral("VideoUtilityControls"),
+                                {{QStringLiteral("density"), QStringLiteral("full")}}, error);
+    QVERIFY2(object != nullptr, qPrintable(error));
+    QQuickWindow window;
+    QQuickItem* utility = attach(window, object.get());
+    QVERIFY(utility != nullptr);
+
+    for (const QString& density :
+         {QStringLiteral("full"), QStringLiteral("condensed"), QStringLiteral("minimal")}) {
+        utility->setProperty("density", density);
+        QQuickItem* button = item_named(utility, QStringLiteral("screenshotButton"));
+        QVERIFY2(button != nullptr, qPrintable(density));
+        QTRY_VERIFY2(button->isVisible(), qPrintable(density));
+        QCOMPARE(button->property("tip").toString(), QStringLiteral("Save Clean Screenshot"));
+        QVERIFY(!button->property("enabled").toBool());
+    }
+
+    QQuickItem* button = item_named(utility, QStringLiteral("screenshotButton"));
+    utility->setProperty("density", QStringLiteral("full"));
+    utility->setProperty("canSaveScreenshot", true);
+    QTRY_VERIFY(button->property("enabled").toBool());
+    QSignalSpy request_spy(utility, SIGNAL(saveScreenshotRequested()));
+    click(button);
+    QCOMPARE(request_spy.count(), 1);
+
+    const QStringList order =
+        named_in_order(utility,
+                       {QStringLiteral("inspectorButton"), QStringLiteral("screenshotButton"),
+                        QStringLiteral("fullScreenButton")});
+    QCOMPARE(order,
+             QStringList({QStringLiteral("inspectorButton"), QStringLiteral("screenshotButton"),
+                          QStringLiteral("fullScreenButton")}));
+}
+
+// B1: the first media file wins and binds the first subtitle; a subtitle
+// alone loads into the open video; other and remote files do nothing.
+void PlayerControlsTest::page_drop_picks_the_first_media_and_subtitle() {
+    niratan::test::TempDataRoot root;
+    QVERIFY(root.isValid());
+    const QString video = make_video(root.path());
+    const QString folder = QFileInfo(video).absolutePath();
+    const QString other_video = touch_file(folder + QStringLiteral("/Beta.MKV"), 10);
+    const QString subtitle = touch_file(folder + QStringLiteral("/Episode.SRT"), 10);
+    const QString other = touch_file(folder + QStringLiteral("/notes.txt"), 10);
+    QVERIFY(!other_video.isEmpty() && !subtitle.isEmpty() && !other.isEmpty());
+
+    QQmlApplicationEngine engine;
+    QQuickWindow* video_window = nullptr;
+    QQuickItem* player = open_video_in_window(engine, video, &video_window);
+    QVERIFY2(player != nullptr, "the Video window did not open the player");
+
+    const QVariantList drop{QVariant(QUrl::fromLocalFile(subtitle)),
+                            QVariant(QUrl::fromLocalFile(other)),
+                            QVariant(QUrl::fromLocalFile(other_video))};
+    QVERIFY(
+        QMetaObject::invokeMethod(player, "handleDroppedUrls", Q_ARG(QVariant, QVariant(drop))));
+    QTRY_COMPARE(player->property("videoFile").toUrl(), QUrl::fromLocalFile(other_video));
+    QTRY_COMPARE(player->property("pendingSubtitleUrl").toUrl(), QUrl::fromLocalFile(subtitle));
+
+    // A subtitle alone stays on the current video instead of opening media.
+    const QVariantList subtitle_only{QVariant(QUrl::fromLocalFile(subtitle))};
+    QVERIFY(QMetaObject::invokeMethod(player, "handleDroppedUrls",
+                                      Q_ARG(QVariant, QVariant(subtitle_only))));
+    QCOMPARE(player->property("videoFile").toUrl(), QUrl::fromLocalFile(other_video));
+
+    // An unrelated file leaves the page alone.
+    const QVariantList unrelated{QVariant(QUrl::fromLocalFile(other))};
+    QVERIFY(QMetaObject::invokeMethod(player, "handleDroppedUrls",
+                                      Q_ARG(QVariant, QVariant(unrelated))));
+    QCOMPARE(player->property("videoFile").toUrl(), QUrl::fromLocalFile(other_video));
+
+    // A remote URL is not a dropped file.
+    const QVariantList remote{
+        QVariant(QUrl(QStringLiteral("https://example.com/Episode%2001.mp4")))};
+    QVERIFY(
+        QMetaObject::invokeMethod(player, "handleDroppedUrls", Q_ARG(QVariant, QVariant(remote))));
+    QCOMPARE(player->property("videoFile").toUrl(), QUrl::fromLocalFile(other_video));
+
+    // With no video open a dropped subtitle does nothing.
+    QVERIFY(QMetaObject::invokeMethod(player, "unloadVideo"));
+    QCOMPARE(player->property("videoFile").toUrl(), QUrl());
+    QVERIFY(QMetaObject::invokeMethod(player, "handleDroppedUrls",
+                                      Q_ARG(QVariant, QVariant(subtitle_only))));
+    QCOMPARE(player->property("videoFile").toUrl(), QUrl());
+}
+
+// B3: VideoVolumeScrollDelta.adjustment through the page: ±5 per notch, half
+// a pixel delta capped at ±5, the 0.1 and 0.01 floors, horizontal dominance,
+// the 0...100 clamp, the Volume OSD and the Inspector exclusion.
+void PlayerControlsTest::page_wheel_volume_follows_the_scroll_delta() {
+    niratan::test::TempDataRoot root;
+    QVERIFY(root.isValid());
+    const QString video = make_video(root.path());
+
+    QQmlApplicationEngine engine;
+    QQuickWindow* video_window = nullptr;
+    QQuickItem* player = open_video_in_window(engine, video, &video_window);
+    QVERIFY2(player != nullptr, "the Video window did not open the player");
+    QQuickItem* mpv = item_named(video_window->contentItem(), QStringLiteral("mpvItem"));
+    QVERIFY(mpv != nullptr);
+
+    const auto scroll = [player](double x, double y, double dx, double dy, bool precise) {
+        QVariant result;
+        if (!QMetaObject::invokeMethod(player, "handleVolumeScroll", Q_RETURN_ARG(QVariant, result),
+                                       Q_ARG(QVariant, x), Q_ARG(QVariant, y), Q_ARG(QVariant, dx),
+                                       Q_ARG(QVariant, dy), Q_ARG(QVariant, precise))) {
+            return false;
+        }
+        return result.toBool();
+    };
+
+    mpv->setProperty("volume", 50.0);
+    QVERIFY(scroll(10, 10, 0, 120, false));
+    QTRY_COMPARE(mpv->property("volume").toDouble(), 55.0);
+    QCOMPARE(player->property("osdTitle").toString(), QStringLiteral("Volume"));
+    QCOMPARE(player->property("osdValue").toString(), QStringLiteral("55"));
+
+    QVERIFY(scroll(10, 10, 0, -120, false));
+    QTRY_COMPARE(mpv->property("volume").toDouble(), 50.0);
+
+    QVERIFY(scroll(10, 10, 0, 4, true));
+    QTRY_COMPARE(mpv->property("volume").toDouble(), 52.0);
+    QVERIFY(!scroll(10, 10, 0, 0.1, true));
+    QCOMPARE(mpv->property("volume").toDouble(), 52.0);
+    QVERIFY(scroll(10, 10, 0, 100, true));
+    QTRY_COMPARE(mpv->property("volume").toDouble(), 57.0);
+    QVERIFY(scroll(10, 10, 0, -100, true));
+    QTRY_COMPARE(mpv->property("volume").toDouble(), 52.0);
+
+    QVERIFY(!scroll(10, 10, 5, 4, true));
+    QCOMPARE(mpv->property("volume").toDouble(), 52.0);
+    QVERIFY(!scroll(10, 10, 0, 0.005, true));
+    QCOMPARE(mpv->property("volume").toDouble(), 52.0);
+
+    mpv->setProperty("volume", 99.0);
+    QVERIFY(scroll(10, 10, 0, 120, false));
+    QTRY_COMPARE(mpv->property("volume").toDouble(), 100.0);
+    mpv->setProperty("volume", 1.0);
+    QVERIFY(scroll(10, 10, 0, -120, false));
+    QTRY_COMPARE(mpv->property("volume").toDouble(), 0.0);
+
+    // The open Inspector owns its area.
+    player->setProperty("inspectorOpen", true);
+    QQuickItem* inspector =
+        item_named(video_window->contentItem(), QStringLiteral("videoInspectorPanel"));
+    QVERIFY(inspector != nullptr);
+    QTRY_VERIFY(inspector->isVisible());
+    QTRY_VERIFY(inspector->width() > 0 && inspector->height() > 0);
+    const QPointF inside = inspector->mapToItem(player, inspector->boundingRect().center());
+    mpv->setProperty("volume", 50.0);
+    QVERIFY(!scroll(inside.x(), inside.y(), 0, 120, false));
+    QCOMPARE(mpv->property("volume").toDouble(), 50.0);
+
+    // No video open means the stage does not take the wheel.
+    QVERIFY(QMetaObject::invokeMethod(player, "unloadVideo"));
+    QVERIFY(!scroll(10, 10, 0, 120, false));
+    QCOMPARE(mpv->property("volume").toDouble(), 50.0);
+}
+
+// B4: the capsule follows the pointer inside the track, clears on exit, and
+// lingers for eight seconds after a scrub or a scheduled hide.
+void PlayerControlsTest::timeline_preview_capsule_follows_hover_and_linger() {
+    QQmlApplicationEngine engine;
+    QString error;
+    std::unique_ptr<QObject> object = create_player_component(
+        engine, QStringLiteral("VideoProgressStrip"), {{QStringLiteral("duration"), 100.0}}, error);
+    QVERIFY2(object != nullptr, qPrintable(error));
+    QQuickWindow window;
+    QQuickItem* strip = attach(window, object.get());
+    QVERIFY(strip != nullptr);
+    strip->setWidth(800);
+    strip->setHeight(window.height());
+    QQuickItem* timeline = item_named(strip, QStringLiteral("timeline"));
+    QVERIFY(timeline != nullptr);
+    QTRY_VERIFY(timeline->width() > 0);
+
+    QQuickItem* bubble = item_named(strip, QStringLiteral("timelinePreviewBubble"));
+    QVERIFY2(bubble != nullptr, "the timeline preview capsule is missing");
+    QVERIFY(!bubble->isVisible());
+    QCOMPARE(bubble->property("objectName").toString(), QStringLiteral("timelinePreviewBubble"));
+
+    const double width = timeline->width();
+    QVERIFY(QMetaObject::invokeMethod(strip, "handleProgressHover", Q_ARG(QVariant, width / 2)));
+    QTRY_VERIFY(strip->property("previewActive").toBool());
+    QTRY_VERIFY(bubble->isVisible());
+    QCOMPARE(bubble->property("text").toString(), QStringLiteral("0:50"));
+    QVERIFY(bubble->x() >= 0.0);
+    QVERIFY(bubble->x() + bubble->width() <= width + 0.5);
+
+    // The bubble is clamped inside the track at both ends.
+    QVERIFY(QMetaObject::invokeMethod(strip, "handleProgressHover", Q_ARG(QVariant, width + 400)));
+    QTRY_COMPARE(bubble->property("text").toString(), QStringLiteral("1:40"));
+    QVERIFY(bubble->x() + bubble->width() <= width + 0.5);
+
+    QVERIFY(QMetaObject::invokeMethod(strip, "handleProgressExit"));
+    QTRY_VERIFY(!strip->property("previewActive").toBool());
+    QTRY_VERIFY(!bubble->isVisible());
+
+    // A scheduled hide keeps the capsule and clears it when the timer fires.
+    QVERIFY(QMetaObject::invokeMethod(strip, "updateProgressPreview", Q_ARG(QVariant, 25)));
+    QTRY_VERIFY(bubble->isVisible());
+    QCOMPARE(bubble->property("text").toString(), QStringLiteral("0:25"));
+    QVERIFY(QMetaObject::invokeMethod(strip, "scheduleProgressPreviewHide"));
+    QObject* timer = strip->findChild<QObject*>(QStringLiteral("timelinePreviewHideTimer"));
+    QVERIFY(timer != nullptr);
+    QTRY_VERIFY(timer->property("running").toBool());
+    QCOMPARE(timer->property("interval").toInt(), 8000);
+    QVERIFY(QMetaObject::invokeMethod(strip, "handleProgressExit"));
+    QVERIFY(strip->property("previewActive").toBool());
+    timer->setProperty("interval", 30);
+    QTRY_VERIFY(!strip->property("previewActive").toBool());
+    QTRY_VERIFY(!bubble->isVisible());
+
+    // The scrub bubble owns the capsule while dragging; the preview returns
+    // after the scrub ends.
+    QVERIFY(QMetaObject::invokeMethod(strip, "updateProgressPreview", Q_ARG(QVariant, 30)));
+    strip->setProperty("scrubbing", true);
+    QTRY_VERIFY(!bubble->isVisible());
+    strip->setProperty("scrubbing", false);
+    QTRY_VERIFY(bubble->isVisible());
+
+    // No preview with an unknown duration.
+    QVERIFY(QMetaObject::invokeMethod(strip, "clearTimelinePreview"));
+    strip->setProperty("duration", 0.0);
+    QVERIFY(QMetaObject::invokeMethod(strip, "handleProgressHover", Q_ARG(QVariant, width / 2)));
+    QVERIFY(!strip->property("previewActive").toBool());
+    QVERIFY(!bubble->isVisible());
+}
+
+// B2: the save panel's default file name is the video stem with ":" replaced
+// by "-", then the current seconds with three decimals.
+void PlayerControlsTest::screenshot_name_follows_swift() {
+    niratan::test::TempDataRoot root;
+    QVERIFY(root.isValid());
+    const QString video = make_video(root.path());
+
+    QQmlApplicationEngine engine;
+    QQuickWindow* video_window = nullptr;
+    QQuickItem* player = open_video_in_window(engine, video, &video_window);
+    QVERIFY2(player != nullptr, "the Video window did not open the player");
+
+    QVariant name;
+    QVERIFY(QMetaObject::invokeMethod(player, "screenshotFileName", Q_RETURN_ARG(QVariant, name),
+                                      Q_ARG(QVariant, 65.5)));
+    QCOMPARE(name.toString(), QStringLiteral("Alpha-65.500.png"));
+    QVERIFY(QMetaObject::invokeMethod(player, "screenshotFileName", Q_RETURN_ARG(QVariant, name),
+                                      Q_ARG(QVariant, 12.3456)));
+    QCOMPARE(name.toString(), QStringLiteral("Alpha-12.346.png"));
+
+    player->setProperty("videoFile",
+                        QUrl::fromLocalFile(QFileInfo(video).absolutePath() +
+                                            QStringLiteral("/Alpha: Part 2.mkv")));
+    QVERIFY(QMetaObject::invokeMethod(player, "screenshotFileName", Q_RETURN_ARG(QVariant, name),
+                                      Q_ARG(QVariant, 0.0)));
+    QCOMPARE(name.toString(), QStringLiteral("Alpha- Part 2-0.000.png"));
+
+    QObject* dialog = video_window->findChild<QObject*>(QStringLiteral("screenshotFileDialog"));
+    QVERIFY2(dialog != nullptr, "the screenshot save panel is missing");
+    QCOMPARE(dialog->property("fileMode").toInt(), 2);
+    QCOMPARE(dialog->property("defaultSuffix").toString(), QStringLiteral("png"));
+    QVERIFY(!player->property("canSaveScreenshot").toBool());
+}
+
+// B2: a write that cannot reach the destination still discards the temporary
+// capture, so a failed save leaves no stray file.
+void PlayerControlsTest::failed_screenshot_discards_the_capture() {
+    niratan::test::TempDataRoot root;
+    QVERIFY(root.isValid());
+    const QString video = make_video(root.path());
+
+    QQmlApplicationEngine engine;
+    QQuickWindow* video_window = nullptr;
+    QQuickItem* player = open_video_in_window(engine, video, &video_window);
+    QVERIFY2(player != nullptr, "the Video window did not open the player");
+
+    QObject* controller = video_window->findChild<QObject*>(QStringLiteral("playerScreenshot"));
+    QVERIFY2(controller != nullptr, "the screenshot controller is missing");
+    const QString capture = touch_file(root.path() + QStringLiteral("/capture.png"), 16);
+    QVERIFY(!capture.isEmpty());
+    QVERIFY(controller->setProperty("pendingCapture", QUrl::fromLocalFile(capture)));
+    QSignalSpy failed_spy(controller, SIGNAL(failed()));
+
+    const QString missing = QFileInfo(capture).absolutePath() + QStringLiteral("/missing/out.png");
+    QVERIFY(!QFileInfo(QFileInfo(missing).absolutePath()).exists());
+    QVERIFY(QMetaObject::invokeMethod(controller, "write",
+                                      Q_ARG(QVariant, QVariant(QUrl::fromLocalFile(missing)))));
+    QCOMPARE(failed_spy.count(), 1);
+    QVERIFY2(!QFile::exists(capture), "the failed save leaked the temporary capture");
+    QVERIFY(!QFile::exists(missing));
+    QVERIFY(controller->property("pendingCapture").toUrl().isEmpty());
+}
+
+// B6: in full screen the study sidebar ignores the video aspect ratio and
+// keeps its clamped stored width.
+void PlayerControlsTest::full_screen_sidebar_keeps_the_stored_width() {
+    niratan::test::TempDataRoot root;
+    QVERIFY(root.isValid());
+    const QString video = make_video(root.path());
+
+    QQmlApplicationEngine engine;
+    QQuickWindow* video_window = nullptr;
+    QQuickItem* player = open_video_in_window(engine, video, &video_window);
+    QVERIFY2(player != nullptr, "the Video window did not open the player");
+    QQuickItem* mpv = item_named(video_window->contentItem(), QStringLiteral("mpvItem"));
+    QVERIFY(mpv != nullptr);
+    QVERIFY(mpv->setProperty("aspectRatio", QStringLiteral("16:9")));
+    QTRY_COMPARE(player->property("videoAspectRatio").toDouble(), 16.0 / 9.0);
+
+    player->setProperty("studyOpen", true);
+    QQuickItem* sidebar = item_named(video_window->contentItem(), QStringLiteral("studySidebar"));
+    QVERIFY(sidebar != nullptr);
+    QTRY_VERIFY(sidebar->isVisible());
+
+    QVERIFY(QMetaObject::invokeMethod(player, "toggleFullScreen"));
+    QTRY_COMPARE(int(video_window->visibility()), int(QWindow::FullScreen));
+    QTRY_VERIFY(player->property("fullScreen").toBool());
+    QTRY_COMPARE(player->property("studySidebarLayoutWidth").toDouble(), 340.0);
+    QCOMPARE(sidebar->width(), 340.0);
 }
 
 int main(int argc, char* argv[]) {

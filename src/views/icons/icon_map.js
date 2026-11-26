@@ -112,6 +112,7 @@ var icons = {
     "circle.lefthalf.filled": { weight: "regular", name: "circle-half" },
     "drop": { weight: "regular", name: "drop" },
     "camera.filters": { weight: "regular", name: "faders" },
+    "camera": { weight: "regular", name: "camera" },
     "keyboard": { weight: "regular", name: "keyboard" },
     "textformat.alt": { weight: "regular", name: "text-t" },
     "textformat.size": { weight: "regular", name: "text-aa" },

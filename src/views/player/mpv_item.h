@@ -47,6 +47,7 @@
 #include <QHash>
 #include <QJsonObject>
 #include <QSize>
+#include <QSizeF>
 #include <QString>
 #include <QTimer>
 #include <QUrl>
@@ -64,6 +65,13 @@ class MpvItem : public QQuickFramebufferObject {
     Q_PROPERTY(qreal duration READ duration NOTIFY durationChanged)
     Q_PROPERTY(bool paused READ paused WRITE setPaused NOTIFY pausedChanged)
     Q_PROPERTY(bool loaded READ loaded NOTIFY loadedChanged)
+    // mpv's seeking flag: the current frame is not final while a seek runs.
+    Q_PROPERTY(bool seeking READ seeking NOTIFY seekingChanged)
+    // mpv's dwidth/dheight (the display size with the aspect applied) and
+    // video-rotate, empty and 0 while no file is loaded. The Video window
+    // derives its aspect fit from these.
+    Q_PROPERTY(QSizeF videoDisplaySize READ videoDisplaySize NOTIFY videoDisplaySizeChanged)
+    Q_PROPERTY(int videoRotation READ videoRotation NOTIFY videoRotationChanged)
     Q_PROPERTY(bool muted READ muted WRITE setMuted NOTIFY mutedChanged)
     Q_PROPERTY(qreal volume READ volume WRITE setVolume NOTIFY volumeChanged)
     Q_PROPERTY(qreal speed READ speed WRITE setSpeed NOTIFY speedChanged)
@@ -103,6 +111,9 @@ class MpvItem : public QQuickFramebufferObject {
     bool paused() const;
     void setPaused(bool paused);
     bool loaded() const;
+    bool seeking() const;
+    QSizeF videoDisplaySize() const;
+    int videoRotation() const;
     bool muted() const;
     void setMuted(bool muted);
     qreal volume() const;
@@ -152,6 +163,10 @@ class MpvItem : public QQuickFramebufferObject {
     // Reports whether mpv accepted the asynchronous request; screenshotSaved
     // follows once mpv has finished writing (or failed to write) the file.
     Q_INVOKABLE bool screenshot(const QUrl& file);
+    // The save panel's temporary capture, and moving it to the chosen
+    // destination. An empty destination discards the capture.
+    Q_INVOKABLE QUrl temporaryScreenshotFile() const;
+    Q_INVOKABLE bool writeScreenshotFile(const QUrl& source, const QUrl& destination);
     // Returns the selected ID, 0 for Off, or -1 if there are no tracks.
     Q_INVOKABLE int cycleSubtitles();
     Q_INVOKABLE void toggleSubtitles();
@@ -182,6 +197,9 @@ class MpvItem : public QQuickFramebufferObject {
     void durationChanged();
     void pausedChanged();
     void loadedChanged();
+    void seekingChanged();
+    void videoDisplaySizeChanged();
+    void videoRotationChanged();
     void mutedChanged();
     void volumeChanged();
     void speedChanged();
@@ -252,6 +270,9 @@ class MpvItem : public QQuickFramebufferObject {
     qreal duration_ = 0.0;
     bool paused_ = false;
     bool loaded_ = false;
+    bool seeking_ = false;
+    QSizeF video_display_size_;
+    int video_rotation_ = 0;
     bool muted_ = false;
     qreal volume_ = 100.0;
     qreal speed_ = 1.0;

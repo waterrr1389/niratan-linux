@@ -176,6 +176,18 @@ bool MpvItem::loaded() const {
     return loaded_;
 }
 
+bool MpvItem::seeking() const {
+    return seeking_;
+}
+
+QSizeF MpvItem::videoDisplaySize() const {
+    return video_display_size_;
+}
+
+int MpvItem::videoRotation() const {
+    return video_rotation_;
+}
+
 bool MpvItem::muted() const {
     return muted_;
 }
@@ -250,20 +262,6 @@ void MpvItem::setLooping(bool looping) {
     looping_ = looping;
     set_property("loop-file", looping_ ? QStringLiteral("inf") : QStringLiteral("no"));
     emit loopingChanged();
-}
-
-QString MpvItem::aspectRatio() const {
-    return aspect_ratio_;
-}
-
-void MpvItem::setAspectRatio(const QString& aspectRatio) {
-    const QString value = aspectRatio.isEmpty() ? QStringLiteral("-1") : aspectRatio;
-    if (aspect_ratio_ == value) {
-        return;
-    }
-    aspect_ratio_ = value;
-    set_property("video-aspect-override", aspect_ratio_);
-    emit aspectRatioChanged();
 }
 
 QString MpvItem::error() const {
@@ -499,22 +497,6 @@ void MpvItem::extractTranscript() {
     transcript_extractor_.start(local_video_path_, selected_subtitle_id_, index);
 }
 
-bool MpvItem::screenshot(const QUrl& file) {
-    if (handle_ == nullptr || !file.isLocalFile() || file.toLocalFile().isEmpty()) {
-        return false;
-    }
-    const QByteArray path = file.toLocalFile().toUtf8();
-    const char* args[] = {"screenshot-to-file", path.constData(), "video", nullptr};
-    // A capture can wait for the render thread; do not block the GUI thread.
-    // The file exists only once mpv replies, so the reply reports completion.
-    const quint64 reply = next_screenshot_reply_++;
-    if (mpv_command_async(handle_, reply, args) < 0) {
-        return false;
-    }
-    pending_screenshots_.insert(reply, file);
-    return true;
-}
-
 void MpvItem::selectTrack(const QString& type, int id) {
     // Subtitle selection keeps its remembering path; the page calls
     // selectSubtitleTrack or disableSubtitles for it.
@@ -575,15 +557,6 @@ void MpvItem::clearABLoop() {
     set_property("ab-loop-a", QStringLiteral("no"));
     set_property("ab-loop-b", QStringLiteral("no"));
     emit abLoopChanged();
-}
-
-void MpvItem::rotateClockwise() {
-    if (handle_ == nullptr) {
-        return;
-    }
-    int rotation = static_cast<int>(std::lround(get_double("video-rotate", 0.0)));
-    rotation = ((rotation % 360) + 360) % 360;
-    set_property("video-rotate", (rotation + 90) % 360);
 }
 
 void MpvItem::stepSpeed(int direction) {
@@ -863,6 +836,14 @@ void MpvItem::poll() {
     const double duration = file_ready_ ? get_double("duration", 0.0) : 0.0;
     const bool paused = get_bool("pause", paused_);
     const bool loaded = duration > 0.0 && error_.isEmpty();
+    const bool seeking = file_ready_ && get_bool("seeking", false);
+    QSizeF display_size;
+    int rotation = 0;
+    if (file_ready_) {
+        display_size = QSizeF(get_double("dwidth", 0.0), get_double("dheight", 0.0));
+        rotation = static_cast<int>(std::lround(get_double("video-rotate", 0.0)));
+        rotation = ((rotation % 360) + 360) % 360;
+    }
     const double volume = get_double("volume", volume_);
     const bool muted = get_bool("mute", muted_);
     const int chapter = file_ready_ ? static_cast<int>(get_double("chapter", -1.0)) : -1;
@@ -909,6 +890,18 @@ void MpvItem::poll() {
     if (paused_changed) {
         paused_ = paused;
         emit pausedChanged();
+    }
+    if (seeking != seeking_) {
+        seeking_ = seeking;
+        emit seekingChanged();
+    }
+    if (display_size != video_display_size_) {
+        video_display_size_ = display_size;
+        emit videoDisplaySizeChanged();
+    }
+    if (rotation != video_rotation_) {
+        video_rotation_ = rotation;
+        emit videoRotationChanged();
     }
     if (std::abs(volume - volume_) > kValueEpsilon) {
         volume_ = volume;

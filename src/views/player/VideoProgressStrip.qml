@@ -14,9 +14,18 @@
 //
 // Object names: currentTimeLabel, timeline, remainingTimeLabel for the strip's
 // three columns in that order; the timeline draws chapterMarker delegates, a
-// scrubBubble while dragging and a hoverKnob while the pointer is over it.
-// `showLabels` is false in the compact layout, which draws the bare timeline
-// above its control row.
+// scrubBubble while dragging, a timelinePreviewBubble for the hover preview
+// and a hoverKnob while the pointer is over it. `showLabels` is false in the
+// compact layout, which draws the bare timeline above its control row.
+//
+// The hover preview follows VideoControlsView.swift `handleProgressHover`,
+// `handleProgressExit`, `updateProgressPreview`,
+// `scheduleProgressPreviewHide` and `activeTimelinePreview`: the capsule sits
+// above the pointer, clamped inside the track, and shows the hovered time.
+// It follows a scrub and lingers for eight seconds when a scrub ends with the
+// pointer away; a plain hover exit clears at once, as in Swift.
+// `timelinePreviewActive` keeps the page's chrome visible. No preview appears
+// while the duration is 0.
 pragma ComponentBehavior: Bound
 
 import QtQuick
@@ -46,6 +55,14 @@ Item {
     readonly property string remainingText: "-" + strip.formatTime(
                                                 Math.max(strip.duration - strip.activeTime, 0))
     readonly property real timelineWidth: timeline.width
+    // VideoControlsView.activeTimelinePreview: the capsule shows while the
+    // pointer preview is active or a scrub runs, and the page keeps its chrome
+    // visible for as long as either holds.
+    readonly property bool timelinePreviewActive: strip.previewActive || strip.scrubbing
+    property bool previewActive: false
+    property bool previewHovering: false
+    property real previewTime: 0
+    property real previewX: 0
     // VideoTimelineChapterMarkers.markerTimes: chapter starts inside the clip,
     // close starts collapsed to one tick.
     readonly property var markerTimes: {
@@ -94,6 +111,58 @@ Item {
         if (strip.duration <= 0 || timeline.width <= 0)
             return 0
         return Math.max(0, Math.min(strip.duration, strip.duration * x / timeline.width))
+    }
+
+    onDurationChanged: {
+        if (strip.duration <= 0)
+            strip.clearTimelinePreview()
+    }
+
+    // VideoControlsView.handleProgressHover: a hover moves the preview and
+    // cancels any pending hide.
+    function handleProgressHover(localX) {
+        if (strip.duration <= 0 || timeline.width <= 0)
+            return
+        previewHideTimer.stop()
+        strip.previewHovering = true
+        strip.previewX = Math.max(0, Math.min(timeline.width, localX))
+        strip.updateProgressPreview(strip.timeAt(strip.previewX))
+    }
+
+    // VideoControlsView.handleProgressExit: a scrub keeps the preview; an
+    // already scheduled hide keeps running; otherwise the capsule clears.
+    function handleProgressExit() {
+        strip.previewHovering = false
+        if (strip.scrubbing)
+            return
+        if (previewHideTimer.running)
+            return
+        strip.previewActive = false
+        strip.previewTime = 0
+    }
+
+    // VideoControlsView.updateProgressPreview.
+    function updateProgressPreview(seconds) {
+        if (strip.duration <= 0 || timeline.width <= 0)
+            return
+        previewHideTimer.stop()
+        strip.previewTime = Math.max(0, Math.min(strip.duration, seconds))
+        strip.previewX = timeline.width * strip.previewTime / strip.duration
+        strip.previewActive = true
+    }
+
+    // VideoControlsView.scheduleProgressPreviewHide: eight seconds after a
+    // scrub ends with the pointer away, unless hover or a scrub resumes.
+    function scheduleProgressPreviewHide() {
+        previewHideTimer.restart()
+    }
+
+    // The page clears the preview when the clip changes or the chrome hides.
+    function clearTimelinePreview() {
+        previewHideTimer.stop()
+        strip.previewActive = false
+        strip.previewHovering = false
+        strip.previewTime = 0
     }
 
     // Positions are explicit rather than Row-managed so a caller can map a
@@ -209,6 +278,31 @@ Item {
                 }
             }
 
+            StyledLabel {
+                id: timelinePreviewBubble
+
+                objectName: "timelinePreviewBubble"
+                x: Math.max(0, Math.min(timeline.width - width,
+                                        strip.previewX - width / 2))
+                y: -height - Theme.spacingXs
+                height: Theme.chipHeight
+                leftPadding: Theme.chipPaddingHorizontal
+                rightPadding: Theme.chipPaddingHorizontal
+                verticalAlignment: Text.AlignVCenter
+                visible: strip.duration > 0 && strip.previewActive && !strip.scrubbing
+                text: strip.formatTime(strip.previewTime)
+                textStyle: Theme.captionFont
+                weight: Theme.weightSemibold
+                monospacedDigits: true
+
+                background: Rectangle {
+                    radius: Theme.chipRadius
+                    color: Theme.floatingBackground
+                    border.width: Theme.cardBorderWidth
+                    border.color: Theme.floatingStroke
+                }
+            }
+
             MouseArea {
                 id: timelineMouse
 
@@ -216,18 +310,30 @@ Item {
                 hoverEnabled: true
                 cursorShape: Qt.PointingHandCursor
                 onPressed: function (mouse) {
-                    if (strip.duration > 0)
+                    if (strip.duration > 0) {
+                        strip.updateProgressPreview(strip.timeAt(mouse.x))
                         strip.scrubStarted(strip.timeAt(mouse.x))
+                    }
                 }
                 onPositionChanged: function (mouse) {
-                    if (timelineMouse.pressed && strip.duration > 0)
+                    if (strip.duration <= 0)
+                        return
+                    if (timelineMouse.pressed) {
+                        strip.updateProgressPreview(strip.timeAt(mouse.x))
                         strip.scrubUpdated(strip.timeAt(mouse.x))
+                    } else {
+                        strip.handleProgressHover(mouse.x)
+                    }
                 }
+                onExited: strip.handleProgressExit()
                 onReleased: function (mouse) {
                     if (strip.duration <= 0)
                         return
+                    strip.updateProgressPreview(strip.timeAt(mouse.x))
                     strip.seekRequested(strip.timeAt(mouse.x))
                     strip.scrubFinished(strip.timeAt(mouse.x))
+                    if (!timelineMouse.containsMouse)
+                        strip.scheduleProgressPreviewHide()
                 }
             }
         }
@@ -245,6 +351,19 @@ Item {
             secondary: true
             monospacedDigits: true
             horizontalAlignment: Text.AlignRight
+        }
+    }
+
+    Timer {
+        id: previewHideTimer
+
+        objectName: "timelinePreviewHideTimer"
+        interval: 8000
+        onTriggered: {
+            if (strip.scrubbing || strip.previewHovering)
+                return
+            strip.previewActive = false
+            strip.previewTime = 0
         }
     }
 }

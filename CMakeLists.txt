@@ -109,6 +109,7 @@ qt_add_library(niratan_core STATIC
     src/models/sasayaki/sasayaki.cpp
     src/models/sasayaki/sasayaki_settings.cpp
     src/models/statistics/statistics.cpp
+    src/models/video_window_aspect.cpp
     src/services/sync/ttu_naming.cpp
     src/services/sync/drive_error.cpp
     src/services/sync/drive_files.cpp
@@ -140,6 +141,7 @@ qt_add_library(niratan_core STATIC
     src/services/player/playback_controls.cpp
     src/services/player/playback_history.cpp
     src/services/player/resume_options.cpp
+    src/services/player/screenshot_capture.cpp
     src/services/player/subtitle_default.cpp
     src/services/player/subtitle_document.cpp
     src/services/player/subtitle_gap_playback.cpp
@@ -274,6 +276,9 @@ qt_add_library(niratan_app STATIC
     src/viewmodels/reader/reader_view_model_sync.cpp
     src/views/player/mpv_item.cpp
     src/views/player/mpv_item.h
+    src/views/player/mpv_video_output.cpp
+    src/views/player/video_window_aspect_bridge.cpp
+    src/views/player/video_window_aspect_bridge.h
     src/views/player/mpv_gap_playback.cpp
     src/views/player/mpv_playback_history.cpp
     src/views/player/mpv_subtitles.cpp
@@ -424,6 +429,7 @@ qt_add_qml_module(niratan_app
         src/views/icons/phosphor/regular/arrows-out-simple.svg
         src/views/icons/phosphor/regular/image.svg
         src/views/icons/phosphor/regular/clock.svg
+        src/views/icons/phosphor/regular/camera.svg
         src/views/icons/phosphor/regular/text-aa.svg
         src/views/icons/phosphor/regular/list.svg
         src/views/icons/phosphor/regular/folder.svg
@@ -522,6 +528,8 @@ qt_add_qml_module(niratan_app
         src/views/reader/ReaderGallery.qml
         src/views/reader/ReaderLookupSurface.qml
         src/views/player/PlayerEmptyState.qml
+        src/views/player/PlayerDropHandler.qml
+        src/views/player/PlayerScreenshot.qml
         src/views/player/PlayerLoadingOverlay.qml
         src/views/player/PlayerOsd.qml
         src/views/player/VideoErrorDialog.qml

@@ -10,6 +10,16 @@
 // Episode navigation follows VideoPlaylist.swift (previousURL, nextURL) and
 // VideoPlayerViewModel.swift (playPrevious, playNext, onPlaybackEnded); the
 // autoplay preference is Core/UserConfig.swift's videoAutoPlayNext.
+// Dropped files follow VideoPlayerScreen+Opening.swift
+// `handleDroppedFileURLs` and VideoMediaTypes.swift; the wheel volume follows
+// VideoVolumeScrollDelta.adjustment and
+// VideoPlayerScreen.shouldHandleVideoSurfaceVolumeScroll; the stage cursor
+// follows VideoPlayerScreen+Chrome.swift `hidePlaybackChromeAndCursor` and
+// `revealPlaybackChrome`. Save Clean Screenshot follows
+// VideoControlsView.swift `screenshotButton`/`canSaveScreenshot` and
+// VideoPlayerScreen.saveCleanScreenshot. The window aspect follows
+// VideoWindowAspectLayout and PlayerPage only exposes the resulting ratio; the
+// Video window applies it.
 
 pragma ComponentBehavior: Bound
 
@@ -53,7 +63,43 @@ Item {
     readonly property bool chromeShown: mpv.loaded
         && (page.chromeVisible || mpv.paused || page.barHovered
             || page.scrubbing || page.speedPanelOpen || page.studyOpen
-            || page.inspectorOpen || lookupLayer.hasPopup)
+            || page.inspectorOpen || lookupLayer.hasPopup
+            || page.timelinePreviewActive)
+    // VideoPlayerScreen+Chrome.hidePlaybackChromeAndCursor: only the stage's
+    // cursor blanks, and only while the chrome is hidden with the window
+    // active. Paused, the Inspector, the study sidebar, the speed panel, a
+    // lookup popup, the timeline preview and an inactive window all keep it.
+    readonly property bool cursorHidden: mpv.loaded && !page.chromeShown
+        && page.Window.window !== null && page.Window.window.active
+    // VideoWindowAspectLayout.videoAspectRatio as the Video window consumes
+    // it: 0 when no ratio is known.
+    readonly property real videoAspectRatio: {
+        const ratio = VideoWindowAspect.videoAspectRatio(mpv.videoDisplaySize,
+                                                         mpv.aspectRatio, mpv.videoRotation)
+        return ratio === null || ratio === undefined ? 0 : ratio
+    }
+    // The study sidebar's rendered width, following
+    // VideoPlayerScreen.clampedStudySidebarWidth: the stored width clamped to
+    // the room left beside the video and, when the window's own aspect leaves
+    // room, the width that keeps the video surface aspect-correct.
+    readonly property real studySidebarLayoutWidth: {
+        if (!page.studyOpen)
+            return 0
+        const minimumSurface = 360
+        const minimumWidth = studySidebar.minimumWidth
+        const maximumWidth = Math.max(minimumWidth,
+            Math.min(studySidebar.maximumWidth, page.width - minimumSurface))
+        const proposed = Math.max(minimumWidth,
+            Math.min(maximumWidth, studySidebar.implicitWidth))
+        return VideoWindowAspect.aspectFittingSidebarWidth(Qt.size(page.width, page.height),
+                                                           page.fullScreen ? 0
+                                                                           : page.videoAspectRatio,
+                                                           proposed, minimumWidth,
+                                                           maximumWidth)
+    }
+    // VideoControlsView.timelineProgressControl's preview times and the
+    // page's mirror, which suspends auto-hide while the capsule shows.
+    readonly property bool timelinePreviewActive: controlBar.timelinePreviewActive
     readonly property bool fullScreen: page.Window.window
         ? page.Window.window.visibility === Window.FullScreen
         : false
@@ -88,12 +134,16 @@ Item {
     property bool startFromBeginning: false
     // A bound subtitle waits for mpv to open the file; sub-add before it fails.
     property url pendingSubtitleUrl
+    // VideoControlsView.canSaveScreenshot: a loaded, settled frame of a known
+    // display size, with no capture already running.
+    readonly property bool canSaveScreenshot: screenshot.canSave
     // VideoPlayerScreen.shouldShowVideoLoadingIndicator: an open with a URL,
     // no loaded file and no error.
     readonly property bool openingVideo: page.videoFile.toString().length > 0
                                          && !mpv.loaded && mpv.error.length === 0
 
     onStudyOpenChanged: page.scheduleHide()
+    onTimelinePreviewActiveChanged: page.refreshTimelinePreviewChrome()
 
     focus: true
     Keys.priority: Keys.BeforeItem
@@ -156,7 +206,8 @@ Item {
     }
 
     function scheduleHide() {
-        if (!mpv.loaded || page.studyOpen || page.inspectorOpen) {
+        if (!mpv.loaded || page.studyOpen || page.inspectorOpen
+                || page.timelinePreviewActive) {
             hideTimer.stop()
             return
         }
@@ -165,7 +216,8 @@ Item {
 
     function handleHideTimeout() {
         if (page.barHovered || page.speedPanelHovered || page.scrubbing || mpv.paused
-                || page.speedPanelOpen || page.inspectorOpen || lookupLayer.hasPopup)
+                || page.speedPanelOpen || page.inspectorOpen || lookupLayer.hasPopup
+                || page.timelinePreviewActive)
             return
         if (page.speedPanelOpen)
             page.speedPanelOpen = false
@@ -195,6 +247,61 @@ Item {
 
     function adjustVolume(delta) {
         page.setVolume(mpv.volume + delta)
+    }
+
+    // VideoVolumeScrollDelta.adjustment: a normal wheel is one ±5 step; a
+    // precise scroll is half its pixel delta, capped at ±5, and a step under
+    // 0.1 is swallowed. A delta under 0.01 or a horizontal-dominant scroll
+    // does nothing.
+    function volumeScrollAdjustment(deltaX, deltaY, precise) {
+        if (!isFinite(deltaY) || Math.abs(deltaY) < 0.01 || Math.abs(deltaY) < Math.abs(deltaX))
+            return null
+        if (!precise)
+            return deltaY > 0 ? 5 : -5
+        const step = deltaY * 0.5
+        if (Math.abs(step) < 0.1)
+            return null
+        return Math.max(-5, Math.min(5, step))
+    }
+
+    function pointInside(item, x, y) {
+        if (!item || !item.visible)
+            return false
+        const local = item.mapFromItem(page, x, y)
+        return local.x >= 0 && local.x <= item.width
+            && local.y >= 0 && local.y <= item.height
+    }
+
+    // VideoPlayerScreen.shouldHandleVideoSurfaceVolumeScroll with
+    // videoSurfaceVolumeScrollExcludedRects: only an open video and no lookup
+    // popup, and never over the visible bar or the open Inspector.
+    function handleVolumeScroll(x, y, deltaX, deltaY, precise) {
+        if (page.videoFile.toString().length === 0 || lookupLayer.hasPopup)
+            return false
+        if (page.chromeShown && page.pointInside(controlBar, x, y))
+            return false
+        if (page.pointInside(inspectorPanel, x, y))
+            return false
+        const delta = page.volumeScrollAdjustment(deltaX, deltaY, precise)
+        if (delta === null)
+            return false
+        const volume = Math.max(0, Math.min(100, mpv.volume + delta))
+        mpv.volume = volume
+        page.showOSD(qsTr("Volume"), String(Math.round(volume)), volume / 100)
+        page.notePointerMovement()
+        return true
+    }
+
+    // VideoPlayerScreen.updateTimelinePreview / clearTimelinePreview mirror:
+    // the capsule keeps the chrome visible without scheduling its hide, and
+    // the auto-hide resumes once the capsule clears.
+    function refreshTimelinePreviewChrome() {
+        if (page.timelinePreviewActive) {
+            page.chromeVisible = true
+            hideTimer.stop()
+        } else {
+            page.scheduleHide()
+        }
     }
 
     function toggleMute() {
@@ -394,6 +501,8 @@ Item {
         page.osdValue = ""
         page.osdMeter = -1
         osdTimer.stop()
+        controlBar.clearTimelinePreview()
+        screenshot.cancelSave()
         if (videoErrorDialog.visible)
             videoErrorDialog.close()
     }
@@ -493,6 +602,32 @@ Item {
     function showSubtitleLoadError() {
         studyModel.reportSubtitleLoadFailure()
         videoErrorDialog.showError(qsTr("Could not load the subtitle file."))
+    }
+
+    // VideoPlayerScreen+Opening.handleDroppedFileURLs: the first media file
+    // wins and takes the first subtitle with it; otherwise a subtitle loads
+    // into the open video, and with no video or no match the drop does nothing.
+    function handleDroppedUrls(urls) {
+        dropHandler.handleDroppedUrls(urls)
+    }
+
+    // VideoPlayerScreen.saveCleanScreenshot's file name: the video stem with
+    // ":" replaced by "-", then the current seconds with three decimals.
+    function screenshotFileName(seconds) {
+        return screenshot.fileName(seconds)
+    }
+
+    // VideoControlsView.screenshotButton: the capture is taken before the
+    // save panel opens, so the chosen frame cannot move while the user picks
+    // a destination.
+    function requestScreenshot() {
+        screenshot.requestScreenshot()
+    }
+
+    // saveCleanScreenshot(destination): capture first, then write the chosen
+    // file; an empty destination is ignored.
+    function saveCleanScreenshot(destination) {
+        screenshot.saveCleanScreenshot(destination)
     }
 
     function reloadVideoSettings() {
@@ -702,8 +837,7 @@ Item {
         anchors.right: page.right
         anchors.bottom: page.bottom
         preferredWidth: mpv.videoSettings.studySidebarWidth
-        width: Math.min(studySidebar.implicitWidth,
-                        Math.max(studySidebar.minimumWidth, page.width - 340))
+        width: page.studySidebarLayoutWidth
         onWidthSaveRequested: width => mpv.changeVideoSetting("studySidebarWidth", width)
         study: studyModel
         playbackReady: mpv.loaded
@@ -759,6 +893,11 @@ Item {
     // follow the window background.
     Rectangle {
         id: stage
+        objectName: "playerStage"
+        // The stage blanks its pointer while the chrome is hidden; the bar
+        // keeps its own pointer (Decision).
+        readonly property int cursorShape: page.cursorHidden ? Qt.BlankCursor
+                                                             : Qt.ArrowCursor
         anchors.top: parent.top
         anchors.bottom: parent.bottom
         anchors.left: parent.left
@@ -852,8 +991,27 @@ Item {
         anchors.fill: stage
         acceptedButtons: Qt.NoButton
         hoverEnabled: true
+        cursorShape: stage.cursorShape
         onPositionChanged: page.notePointerMovement()
         onExited: page.scheduleHide()
+
+        // VideoSurfaceScrollMonitorView: the wheel over the stage adjusts the
+        // volume, except over the bar or the Inspector. A touchpad's pixel
+        // delta is precise; a wheel notch is a single step.
+        WheelHandler {
+            id: volumeWheel
+
+            acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad
+            onWheel: function (event) {
+                const pixel = event.pixelDelta
+                const precise = pixel.x !== 0 || pixel.y !== 0
+                const deltaX = precise ? pixel.x : event.angleDelta.x
+                const deltaY = precise ? pixel.y : event.angleDelta.y
+                event.accepted = page.handleVolumeScroll(volumeWheel.point.position.x,
+                                                         volumeWheel.point.position.y,
+                                                         deltaX, deltaY, precise)
+            }
+        }
     }
 
     TapHandler {
@@ -927,6 +1085,7 @@ Item {
         previousEnabled: inspectorModel.canPlayPreviousEpisode
         nextEnabled: inspectorModel.canPlayNextEpisode
         gapFastForwardEnabled: mpv.videoSettings.videoSubtitleGapFastForwardEnabled
+        canSaveScreenshot: page.canSaveScreenshot
 
         onTogglePlaybackRequested: page.togglePause()
         onPreviousRequested: page.playPreviousEpisode()
@@ -957,6 +1116,7 @@ Item {
         onToggleInspectorRequested: page.toggleInspector()
         onToggleFullScreenRequested: page.toggleFullScreen()
         onToggleGapFastForwardRequested: page.toggleSubtitleGapFastForward()
+        onSaveScreenshotRequested: page.requestScreenshot()
         onScrubStarted: function (seconds) {
             page.scrubbing = true
             page.scrubTime = seconds
@@ -1030,6 +1190,39 @@ Item {
         id: videoErrorDialog
 
         focusTarget: page
+    }
+
+    // VideoPlayerScreen+Opening's `.onDrop` and saveCleanScreenshot. The save
+    // panel is owned by PlayerScreenshot (`screenshotFileDialog`), which
+    // captures before opening it.
+    PlayerDropHandler {
+        id: dropHandler
+
+        dropTarget: stage
+        supportedExtensions: page.supportedExtensions
+        videoFile: page.videoFile
+        blocked: lookupLayer.hasPopup
+        onMediaDropped: function (media, subtitle) {
+            page.openVideo(media, false)
+            if (String(subtitle).length > 0)
+                page.pendingSubtitleUrl = subtitle
+        }
+        onSubtitleDropped: function (file) { page.loadSubtitle(file) }
+    }
+
+    PlayerScreenshot {
+        id: screenshot
+
+        engine: mpv
+        videoFile: page.videoFile
+        onSaved: {
+            page.showOSD(qsTr("Screenshot Saved"), "")
+            page.notePointerMovement()
+        }
+        onFailed: {
+            videoErrorDialog.showError(qsTr("Unable to save the video screenshot."))
+            page.notePointerMovement()
+        }
     }
 
     // Popups are not items, so the page exposes item handles that mirror their

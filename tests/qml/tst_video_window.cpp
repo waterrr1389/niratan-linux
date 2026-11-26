@@ -221,6 +221,7 @@ class VideoWindowTest : public QObject {
     void closing_unloads_and_refreshes_the_library();
     void closing_resets_the_player_and_reopening_shows_only_the_new_clip();
     void empty_window_shows_the_no_video_copy();
+    void window_fits_the_video_aspect();
     void opening_a_video_suspends_library_thumbnails_and_closing_resumes();
 };
 
@@ -585,6 +586,55 @@ void VideoWindowTest::empty_window_shows_the_no_video_copy() {
                 nullptr);
     QTRY_COMPARE(opened->property("videoFile").toUrl(), QUrl::fromLocalFile(fixture.beta));
     QTRY_VERIFY(!empty->isVisible());
+}
+
+// B6: the window follows the video aspect ratio when a ratio is known, keeps
+// the top edge, respects the desktop area and the minimum frame, and leaves
+// the geometry alone without a ratio.
+void VideoWindowTest::window_fits_the_video_aspect() {
+    niratan::test::TempDataRoot root;
+    QVERIFY(root.isValid());
+
+    QQmlApplicationEngine engine;
+    engine.load(QUrl(QStringLiteral("qrc:/qt/qml/Niratan/src/views/shell/VideoWindow.qml")));
+    auto* video = qobject_cast<QQuickWindow*>(engine.rootObjects().value(0));
+    QVERIFY(video != nullptr);
+    QVERIFY(QMetaObject::invokeMethod(video, "show"));
+    QVERIFY(QTest::qWaitForWindowExposed(video));
+    QQuickItem* player = video->findChild<QQuickItem*>(QStringLiteral("videoPlayerPage"));
+    QVERIFY(player != nullptr);
+
+    // No known ratio leaves the frame alone.
+    const QSize original(video->width(), video->height());
+    QVERIFY(QMetaObject::invokeMethod(video, "fitVideoWindow", Q_ARG(QVariant, 0.0),
+                                      Q_ARG(QVariant, 340.0)));
+    QCOMPARE(video->size(), original);
+
+    const QRect available = QGuiApplication::primaryScreen()->availableGeometry();
+    const double ratio = 16.0 / 9.0;
+    const double top = video->y();
+    QVERIFY(QMetaObject::invokeMethod(video, "fitVideoWindow", Q_ARG(QVariant, ratio),
+                                      Q_ARG(QVariant, 340.0)));
+    QTRY_VERIFY(video->height() >= 120);
+    QVERIFY2(video->width() <= available.width(),
+             qPrintable(QStringLiteral("width %1 exceeds the screen").arg(video->width())));
+    QVERIFY2(video->height() <= available.height(),
+             qPrintable(QStringLiteral("height %1 exceeds the screen").arg(video->height())));
+    QVERIFY2(std::abs(video->width() - (video->height() * ratio + 340.0)) <= 1.5,
+             qPrintable(QStringLiteral("%1x%2 does not keep 16:9 plus the sidebar")
+                            .arg(video->width())
+                            .arg(video->height())));
+    QVERIFY2(std::abs(video->y() - top) <= available.height(),
+             "the fit dropped the top edge off the window");
+
+    // The minimum frame wins over a tiny fit.
+    QVERIFY(QMetaObject::invokeMethod(video, "fitVideoWindow", Q_ARG(QVariant, 0.001),
+                                      Q_ARG(QVariant, 0.0)));
+    QTRY_VERIFY(video->width() >= 285);
+    QTRY_VERIFY(video->height() >= 120);
+
+    const QString warnings = warnings_after(QStringLiteral("Video aspect"));
+    QVERIFY2(warnings.isEmpty(), qPrintable(warnings));
 }
 
 // B6, B7: a Video session suspends the library's poster generation from the

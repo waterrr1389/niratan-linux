@@ -27,11 +27,13 @@
 // active row is instantiated, so each control exists once.
 //
 // The bar owns no playback state: the page supplies the snapshot through the
-// properties below and receives intents as signals. Swift's drag-to-move
-// surface and the screenshot control are not ported (Decisions);
-// `inspectorOpen` marks the Inspector button active,
-// `previousEnabled`/`nextEnabled` say whether the episode list has a neighbour
-// on each side, and `gapFastForwardEnabled` marks the subtitle gap toggle.
+// properties below and receives intents as signals. `inspectorOpen` marks the
+// Inspector button active, `previousEnabled`/`nextEnabled` say whether the
+// episode list has a neighbour on each side, `gapFastForwardEnabled` marks the
+// subtitle gap toggle, and `canSaveScreenshot` enables Save Clean Screenshot.
+// `timelinePreviewActive` reports the timeline's hover preview so the page
+// keeps the chrome visible while it lingers. Swift's drag-to-move surface is
+// still not ported (Decisions).
 //
 // `density` is "full", "condensed" or "minimal"; `interactive` is true only
 // while the bar accepts pointer input; `trackWidth` is the timeline's drawable
@@ -72,6 +74,7 @@ Item {
     property bool previousEnabled: false
     property bool nextEnabled: false
     property bool gapFastForwardEnabled: false
+    property bool canSaveScreenshot: false
     property var chapters: []
 
     readonly property bool compactLayout: bar.layoutMode === "compactBottom"
@@ -89,6 +92,7 @@ Item {
         return "minimal"
     }
     readonly property bool interactive: bar.videoFileSet && bar.chromeShown
+    readonly property bool timelinePreviewActive: progress.timelinePreviewActive
     readonly property real activeTime: bar.scrubbing ? bar.scrubTime : bar.currentTime
     readonly property real trackWidth: progress.timelineWidth
     readonly property string compactTimeText: bar.formatTime(bar.activeTime)
@@ -117,6 +121,7 @@ Item {
     signal toggleInspectorRequested()
     signal toggleFullScreenRequested()
     signal toggleGapFastForwardRequested()
+    signal saveScreenshotRequested()
     signal barHoverChanged(bool hovered)
     signal speedPanelHoverChanged(bool hovered)
 
@@ -130,6 +135,10 @@ Item {
     onDensityChanged: {
         if (bar.density === "minimal" && bar.speedPanelOpen)
             bar.speedPanelCloseRequested()
+    }
+
+    function clearTimelinePreview() {
+        progress.clearTimelinePreview()
     }
 
     // VideoTimeFormatter.string(from:).
@@ -331,12 +340,14 @@ Item {
                     isFullScreen: bar.isFullScreen
                     inspectorOpen: bar.inspectorOpen
                     gapFastForwardEnabled: bar.gapFastForwardEnabled
+                    canSaveScreenshot: bar.canSaveScreenshot
                     onToggleStudyRequested: bar.toggleStudyRequested()
                     onOpenVideoRequested: bar.openVideoRequested()
                     onMineSubtitleRequested: bar.mineSubtitleRequested()
                     onToggleInspectorRequested: bar.toggleInspectorRequested()
                     onToggleFullScreenRequested: bar.toggleFullScreenRequested()
                     onToggleGapFastForwardRequested: bar.toggleGapFastForwardRequested()
+                    onSaveScreenshotRequested: bar.saveScreenshotRequested()
                 }
             }
         }
@@ -410,12 +421,14 @@ Item {
                 isFullScreen: bar.isFullScreen
                 inspectorOpen: bar.inspectorOpen
                 gapFastForwardEnabled: bar.gapFastForwardEnabled
+                canSaveScreenshot: bar.canSaveScreenshot
                 onToggleStudyRequested: bar.toggleStudyRequested()
                 onOpenVideoRequested: bar.openVideoRequested()
                 onMineSubtitleRequested: bar.mineSubtitleRequested()
                 onToggleInspectorRequested: bar.toggleInspectorRequested()
                 onToggleFullScreenRequested: bar.toggleFullScreenRequested()
                 onToggleGapFastForwardRequested: bar.toggleGapFastForwardRequested()
+                onSaveScreenshotRequested: bar.saveScreenshotRequested()
             }
         }
     }
