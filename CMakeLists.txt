@@ -38,13 +38,17 @@ endif()
 add_subdirectory(third_party/hoshidicts EXCLUDE_FROM_ALL)
 set(CMAKE_CXX_FLAGS ${HOSHI_WARNINGS})
 
-# Most debug compile time is spent parsing Qt and standard headers, and
-# Qt 6.12 instantiates std::format in nearly every file. Debug precompiles
-# those stable headers once; project headers stay out because they change
-# often. Each file still includes what it uses, so the build also works
-# without them (Release, or CMAKE_DISABLE_PRECOMPILE_HEADERS). ccache keeps
-# hitting through the per-project sloppiness passed on its command line.
-if(CMAKE_BUILD_TYPE STREQUAL "Debug" AND NOT CMAKE_DISABLE_PRECOMPILE_HEADERS)
+# The release build is the installed app; the gate builds and runs the
+# tests in the debug build.
+option(NIRATAN_BUILD_TESTS "Build the test executables" ON)
+
+# Most compile time is spent parsing Qt and standard headers, and Qt 6.12
+# instantiates std::format in nearly every file. Those stable headers are
+# precompiled once; project headers stay out because they change often.
+# Each file still includes what it uses, so the build also works with
+# CMAKE_DISABLE_PRECOMPILE_HEADERS. ccache keeps hitting through the
+# per-project sloppiness passed on its command line.
+if(NOT CMAKE_DISABLE_PRECOMPILE_HEADERS)
     set(niratan_core_pch <QVariant> <QDateTime> <QLocale> <QDebug> <QJsonObject>
         <format> <optional> <string> <vector>)
     set(niratan_ui_pch ${niratan_core_pch} <QJSValue> <QtQml/qqmlregistration.h>)
@@ -706,11 +710,13 @@ if(NIRATAN_KBUILDSYCOCA AND CMAKE_BUILD_TYPE STREQUAL "Release")
         VERBATIM)
 endif()
 
-enable_testing()
 if(niratan_core_pch)
     target_precompile_headers(niratan_core PRIVATE ${niratan_core_pch})
     foreach(target niratan_app niratan_style)
         target_precompile_headers(${target} PRIVATE ${niratan_ui_pch})
     endforeach()
 endif()
-add_subdirectory(tests)
+if(NIRATAN_BUILD_TESTS)
+    enable_testing()
+    add_subdirectory(tests)
+endif()

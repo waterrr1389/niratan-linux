@@ -17,6 +17,7 @@
       "binaryDir": "build-release",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Release",
+        "NIRATAN_BUILD_TESTS": "OFF",
         "CMAKE_C_COMPILER": "clang",
         "CMAKE_CXX_COMPILER": "clang++"
       }
