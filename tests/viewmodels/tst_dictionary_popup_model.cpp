@@ -19,7 +19,8 @@
 #include <QFile>
 #include <QJsonDocument>
 #include <QSignalSpy>
-#include <QtTest>
+#include <QJsonArray>
+#include <QTest>
 
 #include <filesystem>
 #include <memory>

@@ -2,7 +2,7 @@
 //
 // ReaderSearchEngine.swift (search, ReaderSearchIndex and ReaderSearchTextFilter).
 
-#include <QtTest>
+#include <QTest>
 
 #include "services/reader/book_search.h"
 

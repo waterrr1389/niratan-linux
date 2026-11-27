@@ -25,7 +25,8 @@
 #include <QSignalSpy>
 #include <QTimeZone>
 #include <QUrlQuery>
-#include <QtTest>
+#include <QJsonArray>
+#include <QTest>
 
 #include <algorithm>
 #include <cmath>

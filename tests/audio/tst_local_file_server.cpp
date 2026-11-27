@@ -8,7 +8,7 @@
 #include <QTcpSocket>
 #include <QUrl>
 #include <QTemporaryDir>
-#include <QtTest>
+#include <QTest>
 
 #include <sqlite3.h>
 

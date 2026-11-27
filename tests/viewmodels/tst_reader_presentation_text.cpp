@@ -27,7 +27,7 @@
 #include <QSignalSpy>
 #include <QUrl>
 #include <QUrlQuery>
-#include <QtTest>
+#include <QTest>
 
 #include <zip.h>
 

@@ -20,7 +20,7 @@
 #include <QQuickItem>
 #include <QQuickStyle>
 #include <QQuickWindow>
-#include <QtTest>
+#include <QTest>
 
 #include <clocale>
 #include <filesystem>

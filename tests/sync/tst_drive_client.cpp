@@ -10,7 +10,8 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QRegularExpression>
-#include <QtTest>
+#include <QTest>
+#include <QTimer>
 
 #include <algorithm>
 

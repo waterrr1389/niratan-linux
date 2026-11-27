@@ -2,7 +2,7 @@
 
 #include "services/reader/theme.h"
 
-#include <QtTest>
+#include <QTest>
 
 #include <optional>
 #include <string>

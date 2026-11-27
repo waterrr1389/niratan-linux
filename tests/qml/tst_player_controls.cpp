@@ -61,7 +61,7 @@
 #include <QTemporaryDir>
 #include <QUrl>
 #include <QVariantMap>
-#include <QtTest>
+#include <QTest>
 
 #include <clocale>
 #include <cmath>

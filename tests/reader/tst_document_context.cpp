@@ -4,7 +4,7 @@
 
 #include <QFile>
 #include <QTemporaryDir>
-#include <QtTest>
+#include <QTest>
 
 using niratan::books::BookMetadata;
 using niratan::books::BookStorage;

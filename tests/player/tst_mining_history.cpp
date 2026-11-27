@@ -14,7 +14,7 @@
 #include <QStringList>
 #include <QTemporaryDir>
 #include <QTimeZone>
-#include <QtTest>
+#include <QTest>
 
 #include <cstddef>
 #include <filesystem>

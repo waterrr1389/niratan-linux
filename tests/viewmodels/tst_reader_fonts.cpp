@@ -12,7 +12,7 @@
 
 #include <QDir>
 #include <QFile>
-#include <QtTest>
+#include <QTest>
 
 #include <filesystem>
 #include <string>

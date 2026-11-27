@@ -7,7 +7,7 @@
 // file's description so a failure names the skip it exercises.
 
 #include <QTemporaryDir>
-#include <QtTest>
+#include <QTest>
 
 #include <zip.h>
 

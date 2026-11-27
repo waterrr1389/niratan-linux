@@ -25,7 +25,7 @@
 #include <QQuickStyle>
 #include <QQuickWindow>
 #include <QSignalSpy>
-#include <QtTest>
+#include <QTest>
 
 #include <cmath>
 #include <memory>

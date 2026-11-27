@@ -2,7 +2,7 @@
 
 #include "services/anki/duplicate_scope.h"
 
-#include <QtTest>
+#include <QTest>
 
 using niratan::anki::DuplicateOptions;
 using niratan::anki::DuplicateScope;

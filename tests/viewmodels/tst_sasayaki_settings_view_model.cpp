@@ -14,7 +14,7 @@
 #include <QSignalSpy>
 #include <QJsonObject>
 #include <QTemporaryDir>
-#include <QtTest>
+#include <QTest>
 
 #include <filesystem>
 #include <fstream>

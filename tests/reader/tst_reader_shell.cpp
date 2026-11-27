@@ -2,7 +2,7 @@
 
 #include "services/reader/reader_shell.h"
 
-#include <QtTest>
+#include <QTest>
 
 #include <string>
 

@@ -7,7 +7,7 @@
 
 #include "services/player/video_study_search.h"
 
-#include <QtTest>
+#include <QTest>
 
 using niratan::player::normalized_study_query;
 using niratan::player::study_search_matches;

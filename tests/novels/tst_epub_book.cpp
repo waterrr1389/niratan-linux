@@ -3,7 +3,7 @@
 #include "services/novels/epub_book.h"
 
 #include <QTemporaryDir>
-#include <QtTest>
+#include <QTest>
 
 #include <zip.h>
 

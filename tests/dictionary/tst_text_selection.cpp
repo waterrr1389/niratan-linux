@@ -2,7 +2,7 @@
 
 #include "services/dictionary/text_selection.h"
 
-#include <QtTest>
+#include <QTest>
 
 using niratan::dictionary::highlight_range;
 using niratan::dictionary::lookup_candidate;

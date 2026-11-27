@@ -9,7 +9,7 @@
 #include <QJsonValue>
 #include <QString>
 #include <QTemporaryDir>
-#include <QtTest>
+#include <QTest>
 
 #include <cstddef>
 #include <cstdint>

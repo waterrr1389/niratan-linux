@@ -17,7 +17,7 @@
 #include <QSignalSpy>
 #include <QTcpServer>
 #include <QUrlQuery>
-#include <QtTest>
+#include <QTest>
 
 #include <zip.h>
 

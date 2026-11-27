@@ -16,7 +16,7 @@
 #include <QQuickStyle>
 #include <QQuickWindow>
 #include <QSignalSpy>
-#include <QtTest>
+#include <QTest>
 #include <QtWebEngineQuick/QtWebEngineQuick>
 
 #include <clocale>

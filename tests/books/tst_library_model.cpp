@@ -3,7 +3,7 @@
 #include "models/books/library_model.h"
 
 #include <QLocale>
-#include <QtTest>
+#include <QTest>
 
 #include <cstddef>
 #include <limits>

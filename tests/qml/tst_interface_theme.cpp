@@ -21,7 +21,7 @@
 #include <QQmlComponent>
 #include <QQuickStyle>
 #include <QQuickWindow>
-#include <QtTest>
+#include <QTest>
 #include <QtWebEngineQuick/QtWebEngineQuick>
 
 #include <clocale>

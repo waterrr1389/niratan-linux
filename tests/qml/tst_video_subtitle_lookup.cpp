@@ -17,7 +17,7 @@
 #include <QQuickWindow>
 #include <QSignalSpy>
 #include <QTemporaryDir>
-#include <QtTest>
+#include <QTest>
 
 #include <clocale>
 #include <memory>

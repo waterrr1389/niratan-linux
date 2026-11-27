@@ -2,7 +2,7 @@
 
 #include "services/anki/glossary_markup.h"
 
-#include <QtTest>
+#include <QTest>
 
 using niratan::anki::strip_dictionary_name;
 using niratan::anki::strip_glossary_headers;

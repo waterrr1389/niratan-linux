@@ -14,7 +14,7 @@
 
 #include <QFile>
 #include <QSignalSpy>
-#include <QtTest>
+#include <QTest>
 
 #include "../flows/epub_fixture.h"
 #include "data_root.h"

@@ -10,7 +10,7 @@
 
 #include <QJsonDocument>
 #include <QJsonObject>
-#include <QtTest>
+#include <QTest>
 
 using namespace niratan::sync;
 using namespace oauth_fixture;

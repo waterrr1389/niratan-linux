@@ -5,7 +5,7 @@
 #include <QFile>
 #include <QJsonDocument>
 #include <QTemporaryDir>
-#include <QtTest>
+#include <QTest>
 
 #include <chrono>
 #include <filesystem>

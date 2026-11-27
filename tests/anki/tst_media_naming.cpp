@@ -2,7 +2,7 @@
 
 #include "services/anki/media_naming.h"
 
-#include <QtTest>
+#include <QTest>
 
 using niratan::anki::direct_audio_markup;
 using niratan::anki::direct_image_markup;

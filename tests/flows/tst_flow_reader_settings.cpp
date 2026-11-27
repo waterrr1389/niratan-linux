@@ -25,7 +25,7 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QUrl>
-#include <QtTest>
+#include <QTest>
 
 #include <filesystem>
 #include <string>

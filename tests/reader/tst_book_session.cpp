@@ -3,7 +3,7 @@
 #include "services/reader/book_session.h"
 
 #include <QTemporaryDir>
-#include <QtTest>
+#include <QTest>
 
 #include <zip.h>
 

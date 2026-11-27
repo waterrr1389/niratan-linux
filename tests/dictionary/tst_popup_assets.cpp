@@ -2,7 +2,7 @@
 
 #include "services/dictionary/popup_assets.h"
 
-#include <QtTest>
+#include <QTest>
 
 #include <string>
 

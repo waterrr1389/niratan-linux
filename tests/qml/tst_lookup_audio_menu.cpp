@@ -26,7 +26,7 @@
 #include <QQuickWindow>
 #include <QTemporaryDir>
 #include <QUrl>
-#include <QtTest>
+#include <QTest>
 #include <QtWebEngineQuick/QtWebEngineQuick>
 
 #include <clocale>

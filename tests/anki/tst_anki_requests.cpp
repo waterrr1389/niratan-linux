@@ -4,7 +4,7 @@
 
 #include <QJsonArray>
 #include <QJsonValue>
-#include <QtTest>
+#include <QTest>
 
 #include <string>
 #include <vector>

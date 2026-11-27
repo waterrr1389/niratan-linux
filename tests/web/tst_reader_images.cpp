@@ -19,7 +19,7 @@
 #include <QWebChannel>
 #include <QWebEnginePage>
 #include <QWebEngineView>
-#include <QtTest>
+#include <QTest>
 
 #include "../viewmodels/data_root.h"
 

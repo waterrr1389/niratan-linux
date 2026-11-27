@@ -2,7 +2,7 @@
 
 #include "services/anki/duplicate_query.h"
 
-#include <QtTest>
+#include <QTest>
 
 using niratan::anki::DuplicateScope;
 using niratan::anki::NoteType;

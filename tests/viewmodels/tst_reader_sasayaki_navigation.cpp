@@ -20,7 +20,7 @@
 #include <QJsonObject>
 #include <QSignalSpy>
 #include <QUrlQuery>
-#include <QtTest>
+#include <QTest>
 
 #include <zip.h>
 

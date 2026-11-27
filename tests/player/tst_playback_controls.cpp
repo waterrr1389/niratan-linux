@@ -6,7 +6,7 @@
 
 #include "services/player/playback_controls.h"
 
-#include <QtTest>
+#include <QTest>
 
 #include <limits>
 

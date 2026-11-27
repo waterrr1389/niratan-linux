@@ -5,7 +5,7 @@
 
 #include "services/anki/fetch_metadata.h"
 
-#include <QtTest>
+#include <QTest>
 
 using niratan::anki::apply_fetched_metadata;
 using niratan::anki::FetchedMetadata;

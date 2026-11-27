@@ -26,7 +26,7 @@
 
 #include <QFile>
 #include <QSignalSpy>
-#include <QtTest>
+#include <QTest>
 
 #include <filesystem>
 #include <memory>

@@ -9,7 +9,7 @@
 #include "models/video_window_aspect.h"
 
 #include <QSizeF>
-#include <QtTest>
+#include <QTest>
 
 #include <cmath>
 

@@ -2,7 +2,7 @@
 
 #include "services/audio/audio_request.h"
 
-#include <QtTest>
+#include <QTest>
 
 #include <optional>
 #include <string>

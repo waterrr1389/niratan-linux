@@ -40,7 +40,7 @@
 #include <QVariantList>
 #include <QVariantMap>
 #include <QWheelEvent>
-#include <QtTest>
+#include <QTest>
 
 #include <algorithm>
 #include <clocale>

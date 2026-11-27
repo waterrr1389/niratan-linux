@@ -16,7 +16,7 @@
 #include "services/storage/app_paths.h"
 
 #include <QFile>
-#include <QtTest>
+#include <QTest>
 
 #include <cstddef>
 #include <filesystem>

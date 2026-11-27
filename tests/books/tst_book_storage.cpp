@@ -6,7 +6,7 @@
 
 #include <QJsonObject>
 #include <QTemporaryDir>
-#include <QtTest>
+#include <QTest>
 
 #include <zip.h>
 

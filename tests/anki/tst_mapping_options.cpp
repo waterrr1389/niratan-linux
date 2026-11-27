@@ -5,7 +5,7 @@
 
 #include "services/anki/mapping_options.h"
 
-#include <QtTest>
+#include <QTest>
 
 using niratan::anki::DictionaryCategory;
 using niratan::anki::mapping_options;

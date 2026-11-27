@@ -18,7 +18,7 @@
 #include <QUrl>
 #include <QVariantList>
 #include <QVariantMap>
-#include <QtTest>
+#include <QTest>
 
 #include <memory>
 

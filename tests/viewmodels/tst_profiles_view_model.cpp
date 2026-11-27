@@ -25,7 +25,7 @@
 #include <QStringList>
 #include <QVariantList>
 #include <QVariantMap>
-#include <QtTest>
+#include <QTest>
 
 #include <filesystem>
 #include <optional>

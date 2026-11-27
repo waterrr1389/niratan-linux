@@ -7,7 +7,8 @@
 #include <QJsonParseError>
 #include <QSaveFile>
 #include <QTemporaryDir>
-#include <QtTest>
+#include <QJsonObject>
+#include <QTest>
 
 #include <filesystem>
 #include <string>

@@ -15,7 +15,7 @@
 #include <QFile>
 #include <QJsonDocument>
 #include <QTemporaryDir>
-#include <QtTest>
+#include <QTest>
 
 #include <filesystem>
 #include <string>

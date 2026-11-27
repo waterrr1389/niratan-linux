@@ -5,7 +5,7 @@
 // are exact multiples of the double nearest 0.01, so a difference of exactly
 // 0.01 is representable in that range; the window is inclusive at both ends.
 
-#include <QtTest>
+#include <QTest>
 
 #include <string>
 #include <vector>

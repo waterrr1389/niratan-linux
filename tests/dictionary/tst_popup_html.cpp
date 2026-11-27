@@ -7,7 +7,7 @@
 #include <QJsonObject>
 #include <QRegularExpression>
 #include <QStringList>
-#include <QtTest>
+#include <QTest>
 
 #include <algorithm>
 #include <cctype>

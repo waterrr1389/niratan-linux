@@ -8,7 +8,7 @@
 #include "services/storage/json_file.h"
 
 #include <QTemporaryDir>
-#include <QtTest>
+#include <QTest>
 
 #include <limits>
 

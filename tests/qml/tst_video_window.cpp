@@ -40,7 +40,7 @@
 #include <QWindow>
 #include <QTemporaryDir>
 #include <QUrl>
-#include <QtTest>
+#include <QTest>
 
 #include <algorithm>
 #include <clocale>

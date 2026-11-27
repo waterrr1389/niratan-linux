@@ -12,7 +12,7 @@
 #include <QFile>
 #include <QTemporaryDir>
 #include <QtEndian>
-#include <QtTest>
+#include <QTest>
 
 #include <optional>
 #include <string>

@@ -8,7 +8,7 @@
 #include "data_root.h"
 
 #include <QSignalSpy>
-#include <QtTest>
+#include <QTest>
 
 using niratan::test::TempDataRoot;
 using niratan::viewmodels::SettingsViewModel;

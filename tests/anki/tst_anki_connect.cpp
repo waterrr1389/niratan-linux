@@ -8,7 +8,8 @@
 #include <QJsonObject>
 #include <QTcpServer>
 #include <QTcpSocket>
-#include <QtTest>
+#include <QJsonArray>
+#include <QTest>
 
 #include <optional>
 #include <string>

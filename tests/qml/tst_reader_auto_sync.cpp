@@ -40,7 +40,7 @@
 #include <QQuickStyle>
 #include <QQuickWindow>
 #include <QUrlQuery>
-#include <QtTest>
+#include <QTest>
 #include <QtWebEngineQuick/QtWebEngineQuick>
 
 #include <algorithm>

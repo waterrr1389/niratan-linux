@@ -3,7 +3,7 @@
 
 #include "services/sync/ttu_naming.h"
 
-#include <QtTest>
+#include <QTest>
 
 using namespace niratan::sync;
 

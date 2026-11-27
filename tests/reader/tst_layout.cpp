@@ -2,7 +2,7 @@
 
 #include "services/reader/layout.h"
 
-#include <QtTest>
+#include <QTest>
 
 using niratan::reader::LayoutInput;
 using niratan::reader::page_layout;

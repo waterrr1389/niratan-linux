@@ -8,7 +8,7 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QTemporaryDir>
-#include <QtTest>
+#include <QTest>
 
 #include <cstddef>
 #include <filesystem>

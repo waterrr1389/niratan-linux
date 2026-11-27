@@ -1235,3 +1235,35 @@ target_compile_options(niratan_demo_seed PRIVATE -Wall -Wextra -Wpedantic -Werro
 # Put them under tests/flows and add them here; scripts/check-wired.sh treats
 # that directory as wiring roots.
 add_subdirectory(flows)
+
+if(niratan_core_pch)
+    # QtTest embeds the source and build directory in compile definitions.
+    # Reuse within each directory and only across compatible Qt module sets.
+    foreach(dir "${CMAKE_CURRENT_SOURCE_DIR}" "${CMAKE_CURRENT_SOURCE_DIR}/flows")
+        unset(core_owner)
+        unset(ui_owner)
+        get_property(targets DIRECTORY "${dir}" PROPERTY BUILDSYSTEM_TARGETS)
+        foreach(target IN LISTS targets)
+            if(NOT target MATCHES "^tst_")
+                continue()
+            endif()
+            get_target_property(libs ${target} LINK_LIBRARIES)
+            if(NOT "Qt6::Test" IN_LIST libs)
+                continue()
+            elseif("Qt6::WebEngineWidgets" IN_LIST libs OR
+                    ("niratan_core" IN_LIST libs AND "Qt6::WebEngineQuick" IN_LIST libs))
+                continue()
+            elseif("niratan_app" IN_LIST libs OR "niratan_qml" IN_LIST libs)
+                set(group ui)
+            else()
+                set(group core)
+            endif()
+            if(DEFINED ${group}_owner)
+                target_precompile_headers(${target} REUSE_FROM ${${group}_owner})
+            else()
+                set(${group}_owner ${target})
+                target_precompile_headers(${target} PRIVATE ${niratan_${group}_pch} <QTest>)
+            endif()
+        endforeach()
+    endforeach()
+endif()

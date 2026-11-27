@@ -3,7 +3,7 @@
 #include "services/storage/app_paths.h"
 
 #include <QTemporaryDir>
-#include <QtTest>
+#include <QTest>
 
 #include <filesystem>
 #include <initializer_list>

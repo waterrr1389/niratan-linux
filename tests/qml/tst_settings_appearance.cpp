@@ -43,7 +43,7 @@
 #include <QQuickStyle>
 #include <QQuickWindow>
 #include <QTemporaryDir>
-#include <QtTest>
+#include <QTest>
 #include <QtWebEngineQuick/QtWebEngineQuick>
 
 #include <clocale>

@@ -2,7 +2,7 @@
 
 #include "services/dictionary/frequency_rank.h"
 
-#include <QtTest>
+#include <QTest>
 
 using niratan::dictionary::frequency_rank_order;
 using niratan::dictionary::FrequencyReading;

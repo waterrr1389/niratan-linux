@@ -4,7 +4,7 @@
 
 #include <sqlite3.h>
 
-#include <QtTest>
+#include <QTest>
 
 #include <array>
 #include <string>

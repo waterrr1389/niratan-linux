@@ -28,7 +28,8 @@
 
 #include <QJsonArray>
 #include <QJsonDocument>
-#include <QtTest>
+#include <QSignalSpy>
+#include <QTest>
 
 #define VERIFY_FLOW_CALL(call)                                                                     \
     do {                                                                                           \

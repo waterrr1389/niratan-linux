@@ -33,7 +33,7 @@
 #include <QTimeZone>
 #include <QUrl>
 #include <QUrlQuery>
-#include <QtTest>
+#include <QTest>
 
 #include <cmath>
 #include <filesystem>

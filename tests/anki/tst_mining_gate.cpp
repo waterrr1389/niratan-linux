@@ -2,7 +2,7 @@
 
 #include "services/anki/mining_gate.h"
 
-#include <QtTest>
+#include <QTest>
 
 #include <string>
 #include <string_view>

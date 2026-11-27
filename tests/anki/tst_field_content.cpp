@@ -2,7 +2,7 @@
 
 #include "services/anki/field_content.h"
 
-#include <QtTest>
+#include <QTest>
 
 using niratan::anki::DictionaryCategory;
 using niratan::anki::MiningContext;

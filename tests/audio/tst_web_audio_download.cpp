@@ -6,7 +6,7 @@
 #include "services/audio/web_audio_download.h"
 
 #include <QTemporaryFile>
-#include <QtTest>
+#include <QTest>
 
 using niratan::audio::WebAudioDownload;
 

@@ -10,7 +10,7 @@
 
 #include "viewmodels/sasayaki/sasayaki_player_policy.h"
 
-#include <QtTest>
+#include <QTest>
 
 #include <cstddef>
 #include <limits>

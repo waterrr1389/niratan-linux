@@ -16,7 +16,7 @@
 #include <QSignalSpy>
 #include <QTemporaryDir>
 #include <QUrl>
-#include <QtTest>
+#include <QTest>
 
 #include <filesystem>
 #include <functional>

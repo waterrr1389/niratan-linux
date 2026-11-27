@@ -38,6 +38,25 @@ endif()
 add_subdirectory(third_party/hoshidicts EXCLUDE_FROM_ALL)
 set(CMAKE_CXX_FLAGS ${HOSHI_WARNINGS})
 
+# Most debug compile time is spent parsing Qt and standard headers, and
+# Qt 6.12 instantiates std::format in nearly every file. Debug precompiles
+# those stable headers once; project headers stay out because they change
+# often. Each file still includes what it uses, so the build also works
+# without them (Release, or CMAKE_DISABLE_PRECOMPILE_HEADERS). ccache keeps
+# hitting through the per-project sloppiness passed on its command line.
+if(CMAKE_BUILD_TYPE STREQUAL "Debug" AND NOT CMAKE_DISABLE_PRECOMPILE_HEADERS)
+    set(niratan_core_pch <QVariant> <QDateTime> <QLocale> <QDebug> <QJsonObject>
+        <format> <optional> <string> <vector>)
+    set(niratan_ui_pch ${niratan_core_pch} <QJSValue> <QtQml/qqmlregistration.h>)
+    if(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+        add_compile_options("$<$<COMPILE_LANGUAGE:CXX>:SHELL:-Xclang -fno-pch-timestamp>")
+        if(CCACHE_PROGRAM)
+            list(APPEND CMAKE_CXX_COMPILER_LAUNCHER
+                "sloppiness=pch_defines,time_macros,include_file_mtime,include_file_ctime")
+        endif()
+    endif()
+endif()
+
 find_package(Qt6 6.12 REQUIRED COMPONENTS Quick QuickControls2 Test Network WebEngineQuick
     WebChannelQuick QuickDialogs2 OpenGL Multimedia)
 find_package(PkgConfig REQUIRED)
@@ -688,4 +707,10 @@ if(NIRATAN_KBUILDSYCOCA AND CMAKE_BUILD_TYPE STREQUAL "Release")
 endif()
 
 enable_testing()
+if(niratan_core_pch)
+    target_precompile_headers(niratan_core PRIVATE ${niratan_core_pch})
+    foreach(target niratan_app niratan_style)
+        target_precompile_headers(${target} PRIVATE ${niratan_ui_pch})
+    endforeach()
+endif()
 add_subdirectory(tests)

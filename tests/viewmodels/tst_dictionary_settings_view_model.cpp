@@ -21,7 +21,8 @@
 #include <QJsonObject>
 #include <QStringList>
 #include <QUrl>
-#include <QtTest>
+#include <QSignalSpy>
+#include <QTest>
 
 #include <atomic>
 #include <chrono>

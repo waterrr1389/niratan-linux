@@ -35,7 +35,7 @@
 #include <QUrl>
 #include <QVariantList>
 #include <QVariantMap>
-#include <QtTest>
+#include <QTest>
 
 #include <clocale>
 #include <memory>

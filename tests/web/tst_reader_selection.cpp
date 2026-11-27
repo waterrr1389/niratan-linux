@@ -14,7 +14,7 @@
 #include <QSignalSpy>
 #include <QTimer>
 #include <QWebEnginePage>
-#include <QtTest>
+#include <QTest>
 #include <QtWebEngineQuick/QtWebEngineQuick>
 
 #include "../viewmodels/data_root.h"

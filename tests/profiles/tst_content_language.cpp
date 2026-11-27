@@ -2,7 +2,7 @@
 
 #include "models/profiles/content_language.h"
 
-#include <QtTest>
+#include <QTest>
 
 #include <optional>
 #include <string>

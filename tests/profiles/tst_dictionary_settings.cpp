@@ -3,7 +3,7 @@
 #include "models/profiles/dictionary_settings.h"
 
 #include <QJsonObject>
-#include <QtTest>
+#include <QTest>
 
 #include <optional>
 #include <string>

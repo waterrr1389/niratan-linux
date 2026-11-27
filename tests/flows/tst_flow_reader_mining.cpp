@@ -49,7 +49,7 @@
 #include <QUrlQuery>
 #include <QWebChannel>
 #include <QWebEnginePage>
-#include <QtTest>
+#include <QTest>
 #include <QtWebEngineQuick/QtWebEngineQuick>
 
 #include <exception>

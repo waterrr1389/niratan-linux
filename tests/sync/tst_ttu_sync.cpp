@@ -9,7 +9,7 @@
 
 #include <QJsonArray>
 #include <QJsonDocument>
-#include <QtTest>
+#include <QTest>
 
 #include <algorithm>
 

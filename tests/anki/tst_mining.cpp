@@ -11,7 +11,7 @@
 #include <QFileInfo>
 #include <QJsonArray>
 #include <QTemporaryDir>
-#include <QtTest>
+#include <QTest>
 
 #include <filesystem>
 #include <set>

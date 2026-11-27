@@ -5,7 +5,7 @@
 
 #include "models/dictionary/dictionary_recommendation.h"
 
-#include <QtTest>
+#include <QTest>
 
 #include <optional>
 #include <string>

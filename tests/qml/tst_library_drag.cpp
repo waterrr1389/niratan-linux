@@ -25,7 +25,7 @@
 #include <QQuickWindow>
 #include <QSignalSpy>
 #include <QUrl>
-#include <QtTest>
+#include <QTest>
 #include <QtWebEngineQuick/QtWebEngineQuick>
 
 #include <memory>

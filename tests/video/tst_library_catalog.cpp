@@ -25,7 +25,7 @@
 #include <QJsonObject>
 #include <QTemporaryDir>
 #include <QTimeZone>
-#include <QtTest>
+#include <QTest>
 
 #include <filesystem>
 

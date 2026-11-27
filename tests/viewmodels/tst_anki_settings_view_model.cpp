@@ -9,7 +9,8 @@
 #include <QFile>
 #include <QJsonArray>
 #include <QJsonObject>
-#include <QtTest>
+#include <QSignalSpy>
+#include <QTest>
 
 #include <filesystem>
 

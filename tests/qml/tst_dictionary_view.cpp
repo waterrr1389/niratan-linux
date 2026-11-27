@@ -47,7 +47,8 @@
 #include <QQuickWindow>
 #include <QSize>
 #include <QUrl>
-#include <QtTest>
+#include <QSignalSpy>
+#include <QTest>
 #include <QtWebEngineQuick/QtWebEngineQuick>
 
 #include <clocale>

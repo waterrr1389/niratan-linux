@@ -5,7 +5,7 @@
 #include "services/novels/epub_book.h"
 
 #include <QTemporaryDir>
-#include <QtTest>
+#include <QTest>
 
 class EpubManifestTest : public QObject {
     Q_OBJECT

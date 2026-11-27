@@ -11,7 +11,7 @@
 #include "services/player/subtitle_gap_playback.h"
 #include "services/player/subtitle_document.h"
 
-#include <QtTest>
+#include <QTest>
 
 #include <limits>
 

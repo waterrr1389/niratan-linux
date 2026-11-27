@@ -54,7 +54,7 @@
 #include <QTime>
 #include <QTimeZone>
 #include <QUrl>
-#include <QtTest>
+#include <QTest>
 #include <QtWebEngineQuick/QtWebEngineQuick>
 
 #include <clocale>

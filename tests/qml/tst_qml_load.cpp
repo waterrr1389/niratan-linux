@@ -41,7 +41,8 @@
 #include <QScopedPointer>
 #include <QTemporaryDir>
 #include <QUrl>
-#include <QtTest>
+#include <QSignalSpy>
+#include <QTest>
 #include <QtWebEngineQuick/QtWebEngineQuick>
 
 #include <algorithm>

@@ -9,7 +9,7 @@
 #include "yomitan_fixture.h"
 
 #include <QFile>
-#include <QtTest>
+#include <QTest>
 
 #include <filesystem>
 #include <vector>

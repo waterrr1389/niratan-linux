@@ -7,7 +7,7 @@
 #include "services/sasayaki/matcher.h"
 
 #include <QString>
-#include <QtTest>
+#include <QTest>
 
 #include <cstddef>
 #include <limits>

@@ -2,7 +2,7 @@
 
 #include "services/anki/field_mapping.h"
 
-#include <QtTest>
+#include <QTest>
 
 using niratan::anki::FieldMappings;
 using niratan::anki::apply_default_mappings;

@@ -2,7 +2,7 @@
 
 #include "services/reader/character_normalizer.h"
 
-#include <QtTest>
+#include <QTest>
 
 #include <string>
 

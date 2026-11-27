@@ -7,7 +7,7 @@
 
 #include "services/anki/popup_options.h"
 
-#include <QtTest>
+#include <QTest>
 
 #include "services/anki/anki_config.h"
 

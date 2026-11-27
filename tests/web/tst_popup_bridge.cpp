@@ -21,7 +21,7 @@
 #include <QTimer>
 #include <QWebChannel>
 #include <QWebEnginePage>
-#include <QtTest>
+#include <QTest>
 #include <QtWebEngineQuick/QtWebEngineQuick>
 
 #include <string>

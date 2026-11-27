@@ -8,7 +8,8 @@
 #include "viewmodels/sync/sync_settings_view_model.h"
 
 #include <QJsonDocument>
-#include <QtTest>
+#include <QSignalSpy>
+#include <QTest>
 
 #include <algorithm>
 

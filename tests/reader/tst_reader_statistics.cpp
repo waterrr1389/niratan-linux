@@ -12,7 +12,7 @@
 // count unit changes.
 
 #include <QLocale>
-#include <QtTest>
+#include <QTest>
 
 #include "models/statistics/reader_statistics.h"
 

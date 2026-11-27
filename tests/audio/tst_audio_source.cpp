@@ -2,7 +2,7 @@
 
 #include "models/dictionary/audio_source.h"
 
-#include <QtTest>
+#include <QTest>
 
 #include <optional>
 #include <set>

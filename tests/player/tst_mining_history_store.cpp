@@ -7,7 +7,7 @@
 #include "services/player/video_settings.h"
 
 #include <QTemporaryDir>
-#include <QtTest>
+#include <QTest>
 
 #include <filesystem>
 

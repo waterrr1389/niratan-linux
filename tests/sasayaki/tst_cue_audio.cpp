@@ -17,7 +17,7 @@
 #include <QFileInfo>
 #include <QSignalSpy>
 #include <QTemporaryDir>
-#include <QtTest>
+#include <QTest>
 
 #include <string>
 #include <vector>

@@ -30,7 +30,7 @@
 #include <QQuickWindow>
 #include <QUrlQuery>
 #include <QVariantMap>
-#include <QtTest>
+#include <QTest>
 #include <QtWebEngineQuick/QtWebEngineQuick>
 
 #include <clocale>

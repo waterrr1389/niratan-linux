@@ -20,7 +20,7 @@
 #include <QQuickStyle>
 #include <QQuickWindow>
 #include <QUrl>
-#include <QtTest>
+#include <QTest>
 #include <QtWebEngineQuick/QtWebEngineQuick>
 
 #include <clocale>

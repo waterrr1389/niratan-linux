@@ -2,7 +2,7 @@
 
 #include "services/dictionary/media_type.h"
 
-#include <QtTest>
+#include <QTest>
 
 #include <string_view>
 

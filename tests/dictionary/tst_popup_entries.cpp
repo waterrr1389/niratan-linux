@@ -3,7 +3,8 @@
 #include "services/dictionary/popup_entries.h"
 
 #include <QJsonDocument>
-#include <QtTest>
+#include <QJsonObject>
+#include <QTest>
 
 #include <string>
 #include <vector>

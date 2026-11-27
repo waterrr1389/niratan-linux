@@ -2,7 +2,7 @@
 
 #include "models/profiles/profile_ops.h"
 
-#include <QtTest>
+#include <QTest>
 
 #include <map>
 #include <optional>

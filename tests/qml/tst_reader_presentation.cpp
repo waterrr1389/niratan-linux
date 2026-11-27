@@ -83,7 +83,7 @@
 #include <QUuid>
 #include <QVariantMap>
 #include <QWebEngineProfile>
-#include <QtTest>
+#include <QTest>
 #include <QtWebEngineQuick/QtWebEngineQuick>
 
 #include <zip.h>
