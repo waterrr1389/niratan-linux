@@ -72,7 +72,7 @@ Rectangle {
         if (player.playing)
             wasPaused = player.pauseForLookup()
         results.loadingPopupDocument = true
-        results.loadHtml(html, "about:blank")
+        results.url = PopupDocuments.publish(results, html)
     }
 
     // NativeReaderView.handleSelection: the selection's offset picks the cue of
@@ -332,7 +332,7 @@ Rectangle {
         onNavigationRequested: function(request) {
             // The generated shell is the only document that may own the bridge.
             const popupDocument = results.loadingPopupDocument && request.isMainFrame
-                && request.url.toString().startsWith("data:text/html;charset=UTF-8,")
+                && PopupDocuments.isDocument(results, request.url)
             if (popupDocument)
                 results.loadingPopupDocument = false
             else if (request.url.toString() !== "about:blank")

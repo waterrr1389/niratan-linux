@@ -150,9 +150,8 @@ Item {
                 registeredObjects: [dictionaryBridge]
             }
             onNavigationRequested: function(request) {
-                // loadHtml sends the generated document as a data URL.
                 const popupDocument = view.loadingPopupDocument && request.isMainFrame
-                    && request.url.toString().startsWith("data:text/html;charset=UTF-8,")
+                    && PopupDocuments.isDocument(view, request.url)
                 if (popupDocument)
                     view.loadingPopupDocument = false
                 else if (request.url.toString() !== "about:blank")
@@ -198,7 +197,7 @@ Item {
             function onHtmlChanged() {
                 if (model.html.length > 0) {
                     view.loadingPopupDocument = true
-                    view.loadHtml(model.html, "about:blank")
+                    view.url = PopupDocuments.publish(view, model.html)
                 }
             }
 

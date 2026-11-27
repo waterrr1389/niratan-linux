@@ -9,8 +9,9 @@
 // status. Only http and https targets are fetched: URLSession rejects other
 // schemes, while QNetworkAccessManager would happily read a file URL.
 //
-// register_popup_url_schemes must run before QGuiApplication is created, as
-// Qt requires for custom schemes. The scheme is secure, fetchable and CORS
+// register_popup_url_schemes registers the popup's audio:, dict: and popup:
+// schemes and must run before QGuiApplication is created, as Qt requires for
+// custom schemes. The scheme is secure, fetchable and CORS
 // enabled so the popup document may use fetch on it.
 
 #pragma once

@@ -323,6 +323,8 @@ qt_add_library(niratan_app ${niratan_library_type}
     src/views/dictionary/audio_scheme_handler.h
     src/views/dictionary/dictionary_media_scheme_handler.cpp
     src/views/dictionary/dictionary_media_scheme_handler.h
+    src/views/dictionary/popup_documents.cpp
+    src/views/dictionary/popup_documents.h
     src/views/theme/theme_state.cpp
     src/views/theme/theme_state.h
 )
@@ -637,6 +639,7 @@ target_link_libraries(niratan_app PUBLIC niratan_core Qt6::Quick Qt6::QuickContr
     Qt6::Multimedia PkgConfig::MPV)
 target_include_directories(niratan_app PUBLIC src/views/theme src/viewmodels/dictionary
     src/viewmodels/anki src/viewmodels/reader src/views/reader src/viewmodels/library src/views/player
+    src/views/dictionary
     src/viewmodels/profiles src/viewmodels/sasayaki src/viewmodels/statistics
     src/viewmodels/player src/viewmodels/settings src/viewmodels/sync src/viewmodels/video)
 target_compile_options(niratan_app PRIVATE -Wall -Wextra -Wpedantic -Werror)

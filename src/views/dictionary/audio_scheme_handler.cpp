@@ -24,6 +24,12 @@ void register_popup_url_schemes() {
     media.setSyntax(QWebEngineUrlScheme::Syntax::Path);
     media.setFlags(QWebEngineUrlScheme::SecureScheme);
     QWebEngineUrlScheme::registerScheme(media);
+
+    // The generated lookup documents, served by PopupDocuments.
+    QWebEngineUrlScheme documents("popup");
+    documents.setSyntax(QWebEngineUrlScheme::Syntax::Path);
+    documents.setFlags(QWebEngineUrlScheme::SecureScheme);
+    QWebEngineUrlScheme::registerScheme(documents);
 }
 
 AudioSchemeHandler::AudioSchemeHandler(QObject* parent)

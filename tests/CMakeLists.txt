@@ -1041,6 +1041,20 @@ add_test(NAME video_lookup_focus COMMAND tst_video_lookup_focus)
 set_tests_properties(video_lookup_focus PROPERTIES
     ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QTWEBENGINE_CHROMIUM_FLAGS=--disable-gpu")
 
+qt_add_executable(tst_popup_documents
+    qml/tst_popup_documents.cpp
+)
+target_include_directories(tst_popup_documents PRIVATE
+    ${CMAKE_SOURCE_DIR}/src
+    ${CMAKE_CURRENT_SOURCE_DIR}/viewmodels
+)
+target_link_libraries(tst_popup_documents PRIVATE niratan_qml Qt6::Test
+    Qt6::Quick Qt6::QuickControls2 Qt6::WebEngineQuick)
+target_compile_options(tst_popup_documents PRIVATE -Wall -Wextra -Wpedantic -Werror)
+add_test(NAME popup_documents COMMAND tst_popup_documents)
+set_tests_properties(popup_documents PROPERTIES
+    ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QTWEBENGINE_CHROMIUM_FLAGS=--disable-gpu")
+
 qt_add_executable(tst_video_subtitle_click
     qml/tst_video_subtitle_click.cpp
 )
