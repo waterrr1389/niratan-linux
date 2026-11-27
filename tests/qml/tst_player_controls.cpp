@@ -331,6 +331,7 @@ class PlayerControlsTest : public QObject {
     void subtitle_alignment_clamps_delay_and_dismisses_lookup();
     void transcript_toolbar_exists_without_search_matches();
     void a_sidebar_button_click_keeps_the_keyboard_in_the_player();
+    void speed_presets_share_their_row_equally();
     void episode_transport_navigation();
     void episode_open_preserves_resume_history();
     void episode_shortcuts_navigate_neighbors();
@@ -2433,6 +2434,40 @@ void PlayerControlsTest::full_screen_sidebar_keeps_the_stored_width() {
     QTRY_VERIFY(player->property("fullScreen").toBool());
     QTRY_COMPARE(player->property("studySidebarLayoutWidth").toDouble(), 340.0);
     QCOMPARE(sidebar->width(), 340.0);
+}
+
+// VideoControlsView.speedControlPanel: every preset is .frame(maxWidth:
+// .infinity), so the four of a row are equally wide whatever their label.
+void PlayerControlsTest::speed_presets_share_their_row_equally() {
+    QQmlApplicationEngine engine;
+    QString error;
+    std::unique_ptr<QObject> object = create_player_component(
+        engine, QStringLiteral("VideoSpeedPanel"), {{QStringLiteral("speed"), 1.0}}, error);
+    QVERIFY2(object != nullptr, qPrintable(error));
+    QQuickWindow window;
+    QQuickItem* panel = attach(window, object.get());
+    QVERIFY(panel != nullptr);
+
+    QList<QQuickItem*> presets;
+    std::function<void(QQuickItem*)> collect = [&](QQuickItem* item) {
+        if (item->objectName() == QStringLiteral("speedPreset") && item->isVisible()) {
+            presets.append(item);
+        }
+        for (QQuickItem* child : item->childItems()) {
+            collect(child);
+        }
+    };
+    QTRY_VERIFY((presets.clear(), collect(panel), presets.size() == 8));
+    for (QQuickItem* preset : presets) {
+        // Within the pixel the layout rounds a quarter of the row to.
+        QVERIFY2(qAbs(preset->width() - presets.first()->width()) <= 1.0,
+                 qPrintable(QStringLiteral("%1 is %2 wide, %3 is %4")
+                                .arg(preset->property("text").toString())
+                                .arg(preset->width())
+                                .arg(presets.first()->property("text").toString())
+                                .arg(presets.first()->width())));
+        QCOMPARE(preset->height(), presets.first()->height());
+    }
 }
 
 int main(int argc, char* argv[]) {

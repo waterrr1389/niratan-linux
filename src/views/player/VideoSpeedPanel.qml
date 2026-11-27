@@ -139,7 +139,10 @@ Rectangle {
                     objectName: "speedPreset"
                     readonly property real speedValue: preset.modelData
 
+                    // .frame(maxWidth: .infinity): the row is shared equally,
+                    // whatever the label's width.
                     Layout.fillWidth: true
+                    Layout.preferredWidth: 0
                     focusPolicy: Qt.NoFocus
                     selected: panel.isPresetSelected(preset.modelData)
                     text: panel.label(preset.modelData) + "x"
