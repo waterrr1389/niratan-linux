@@ -86,8 +86,11 @@ ApplicationWindow {
         if (!videoWindow.resizing)
             Qt.callLater(videoWindow.applyVideoAspectFit)
     }
-    onWidthChanged: videoWindow.handleWindowResize()
-    onHeightChanged: videoWindow.handleWindowResize()
+    // KWin may deliver a maximized size before the Maximized state; the
+    // constraint therefore runs once the pending window events are handled,
+    // when the state is known.
+    onWidthChanged: Qt.callLater(videoWindow.handleWindowResize)
+    onHeightChanged: Qt.callLater(videoWindow.handleWindowResize)
 
     onVisibleChanged: {
         if (videoWindow.visible && !videoWindow.placed) {
@@ -151,6 +154,11 @@ ApplicationWindow {
     // drag cannot alternate between width and height between events.
     function handleWindowResize() {
         if (videoWindow.applyingLayout || !videoWindow.followsVideoAspect())
+            return
+        // A frame as wide as the screen comes from the window manager
+        // (maximize, tiling), not from a drag; it is left as given.
+        const area = videoWindow.availableArea()
+        if (area && videoWindow.width >= area.width)
             return
         const ratio = videoWindow.videoAspectRatio
         if (!(ratio > 0) || !isFinite(ratio))
