@@ -96,7 +96,7 @@ stale copies of staged files.
 ## Layout
 
 - `src/models/`: plain data and pure functions shared by every layer.
-- `src/services/<area>/`: logic and I/O, built into the `niratan_core` static
+- `src/services/<area>/`: logic and I/O, built into the `niratan_core`
   library. No `QtQuick`, `QtGui` or `QtWidgets`; `QtCore` and `QtNetwork`
   only where needed.
 - `src/viewmodels/`: state and commands. Never reads files, opens sockets or
@@ -194,6 +194,37 @@ event loop is needed, `operator== = default` on result structs so `QCOMPARE`
 works, 4-space indentation. Strings are UTF-8; when Swift counts or trims by
 Unicode rules, do the same rather than assuming ASCII.
 
+## Building and testing
+
+- Presets: `debug` builds into `build/`, the tree every test and the gate
+  use; `release` builds into `build-release/` with tests off
+  (`NIRATAN_BUILD_TESTS=OFF`), static and stripped. The KDE desktop entry
+  launches `build-release/niratan`; after rebuilding it the owner must quit
+  Niratan fully and reopen it.
+- Debug links the project libraries (`niratan_core`, `niratan_app`, the
+  style module) as shared objects, and both presets precompile stable Qt and
+  standard headers. Every file still includes what it uses; a missing
+  include hidden by the PCH shows up when configuring with
+  `-DCMAKE_DISABLE_PRECOMPILE_HEADERS=ON`.
+- One test: `cmake --build build --target tst_<name>`, then
+  `ctest --test-dir build -R <name>` or run `build/tests/tst_<name>` with
+  `QT_QPA_PLATFORM=offscreen QTWEBENGINE_CHROMIUM_FLAGS=--disable-gpu`.
+  While iterating, build and run only the affected tests and the quick
+  `scripts/check-*.sh` scripts; run the full gate once, when the change is
+  done.
+- The owner works on this machine while agents build: run builds and
+  tests at low priority and at most four jobs (`nice -n 19 cmake --build
+  build -j4`; the gate uses every core, so run it as `taskset -c 0-3 nice
+  -n 19 sh scripts/check.sh`).
+- `build/` is a symlink into `/tmp`, a 16 GB tmpfs shared with agents'
+  scratch files and renders; a full `/tmp` fails the build with "Disk
+  quota exceeded". Delete renders and scratch under `/tmp` when done.
+- Compile time is mostly header parsing. Keep widely included headers
+  narrow: add a declaration in the smallest header that fits, and include
+  in the `.cpp` what only the implementation needs.
+- Renders: `scripts/screenshot.py` captures the running app offscreen into
+  `/tmp`.
+
 ## Verification
 
 - `scripts/check.sh` runs the convention gates, configures, builds with
@@ -256,8 +287,10 @@ Unicode rules, do the same rather than assuming ASCII.
   and symbols followed. Code copied from Niratan or Niratan-win names its
   source file and commit.
 - One intent per commit; every commit builds and passes. Linear history.
-- Never bypass the hooks (`--no-verify`, `core.hooksPath` changes). A failing
-  gate is fixed, not skipped.
+- Do not bypass the hooks (`--no-verify`, `core.hooksPath` changes) unless
+  the owner asks, typically when the full gate already passed on the same
+  tree and only a comment or message changed since. A failing gate is
+  fixed, not skipped.
 - Only the coordinating agent commits, after review. Delegated agents edit
   the files they are given and never run `git commit`, `git add` or
   `git stash`.
