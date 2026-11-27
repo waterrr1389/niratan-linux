@@ -394,7 +394,16 @@ Item {
                 if (!reorderEnabled || dragSource.length === 0)
                     return
                 const next = bookAt(position, Theme.bookDragHitInset, dragSource)
-                if (next.length > 0 && next !== dragTarget && library.reorderBook(dragSource, next))
+                // ShelfView skips the target it just moved before, so that
+                // the edge of a swap does not flip back and forth; but then
+                // a book cannot be swapped back in the same gesture. Off every
+                // other book, such as over the dragged book's new place, the
+                // gesture may move before that target again.
+                if (next.length === 0) {
+                    dragTarget = ""
+                    return
+                }
+                if (next !== dragTarget && library.reorderBook(dragSource, next))
                     dragTarget = next
             }
 

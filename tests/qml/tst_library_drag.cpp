@@ -288,6 +288,7 @@ void LibraryDragTest::a_book_drags_in_the_main_window() {
     };
 
     // Across Beta to Gamma in one gesture: the drag lasts until the release.
+    const std::vector<std::string> reordered{"Beta", "Gamma", "Alpha"};
     const QPointF from = center(card(QStringLiteral("Alpha")));
     const QPointF to = center(card(QStringLiteral("Gamma")));
     send(QEvent::MouseButtonPress, from, Qt::LeftButton);
@@ -300,9 +301,31 @@ void LibraryDragTest::a_book_drags_in_the_main_window() {
                      qPrintable(QStringLiteral("the drag ended at step %1").arg(i)));
         }
     }
-    send(QEvent::MouseButtonRelease, to, Qt::NoButton);
-    const std::vector<std::string> reordered{"Beta", "Gamma", "Alpha"};
     QTRY_COMPARE(storage.load_book_order(), reordered);
+    // Still held, back to where Alpha started: the swaps undo.
+    for (int i = 1; i <= 80; ++i) {
+        send(QEvent::MouseMove, to + (from - to) * i / 80, Qt::LeftButton);
+        QTest::qWait(5);
+    }
+    send(QEvent::MouseButtonRelease, from, Qt::NoButton);
+    const std::vector<std::string> restored{"Alpha", "Beta", "Gamma"};
+    QTRY_COMPARE(storage.load_book_order(), restored);
+
+    // Alpha onto its neighbour Beta and, still held, straight back.
+    const QPointF next = center(card(QStringLiteral("Beta")));
+    send(QEvent::MouseButtonPress, from, Qt::LeftButton);
+    for (int i = 1; i <= 40; ++i) {
+        send(QEvent::MouseMove, from + (next - from) * i / 40, Qt::LeftButton);
+        QTest::qWait(5);
+    }
+    const std::vector<std::string> swapped{"Beta", "Alpha", "Gamma"};
+    QTRY_COMPARE(storage.load_book_order(), swapped);
+    for (int i = 1; i <= 40; ++i) {
+        send(QEvent::MouseMove, next + (from - next) * i / 40, Qt::LeftButton);
+        QTest::qWait(5);
+    }
+    send(QEvent::MouseButtonRelease, from, Qt::NoButton);
+    QTRY_COMPARE(storage.load_book_order(), restored);
 }
 
 int main(int argc, char* argv[]) {
