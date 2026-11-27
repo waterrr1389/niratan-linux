@@ -286,11 +286,11 @@ QtObject {
     readonly property int bookTitleSpacing: 6
     readonly property int bookTitleHeight: 40
     readonly property int bookBadgeInset: 6
-    // ShelfBookCard's .shadow(radius: 3, y: 2), centred here: the 2 px drop
-    // read as a cover sitting off centre on Linux. The colour is
-    // Theme.bookShadow.
+    // ShelfBookCard's .shadow(radius: 3, y: 2) and shelfDragAppearance's
+    // radius 12, y 5, both centred here: a drop reads as a cover sitting off
+    // centre and as a lit object in an otherwise flat page. The colours are
+    // Theme.bookShadow and Theme.bookDragShadow.
     readonly property int bookShadowBlur: 3
-    readonly property int bookShadowOffset: 0
     // Covers narrower than this use the small title style.
     readonly property int bookCompactWidth: 140
     readonly property int bookTitleLineHeight: 19
@@ -306,7 +306,6 @@ QtObject {
     readonly property int bookDragLift: 3
     readonly property real bookDragSourceScale: 1.035
     readonly property int bookDragShadowBlur: 12
-    readonly property int bookDragShadowOffset: 5
     readonly property int bookDragDuration: 220
     readonly property int shelfHeaderTopInset: 14
     readonly property int shelfHeaderHeight: 36

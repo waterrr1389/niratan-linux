@@ -55,7 +55,6 @@ Item {
     RectangularShadow {
         anchors.fill: frame
         radius: frame.radius
-        offset.y: Theme.bookShadowOffset
         blur: Theme.bookShadowBlur
         color: Theme.bookShadow
     }
@@ -63,7 +62,6 @@ Item {
     RectangularShadow {
         anchors.fill: frame
         radius: frame.radius
-        offset.y: Theme.bookDragShadowOffset
         blur: Theme.bookDragShadowBlur
         color: Theme.bookDragShadow
         opacity: card.dragSource ? 1 : 0
