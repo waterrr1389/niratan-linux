@@ -429,7 +429,7 @@ Item {
                 parent: grid
                 target: null
                 enabled: grid.reorderEnabled
-                acceptedDevices: PointerDevice.Mouse
+                acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad
                 dragThreshold: Theme.bookDragHitInset
                 onActiveChanged: {
                     if (active) {

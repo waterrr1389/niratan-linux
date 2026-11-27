@@ -286,7 +286,9 @@ QtObject {
     readonly property int bookTitleSpacing: 6
     readonly property int bookTitleHeight: 40
     readonly property int bookBadgeInset: 6
-    readonly property real bookShadowOpacity: 0.3
+    // ShelfBookCard's .shadow(radius: 3, y: 2); the colour is Theme.bookShadow.
+    readonly property int bookShadowBlur: 3
+    readonly property int bookShadowOffset: 2
     // Covers narrower than this use the small title style.
     readonly property int bookCompactWidth: 140
     readonly property int bookTitleLineHeight: 19
@@ -302,7 +304,8 @@ QtObject {
     readonly property int bookDragLift: 3
     readonly property real bookDragSourceScale: 1.035
     readonly property real bookDragTargetScale: 1.015
-    readonly property real bookDragShadowOpacity: 0.20
+    readonly property int bookDragShadowBlur: 12
+    readonly property int bookDragShadowOffset: 5
     readonly property real bookDragOutlineOpacity: 0.42
     readonly property int bookDragOutlineInset: 5
     readonly property int bookDragOutlineRadius: 10

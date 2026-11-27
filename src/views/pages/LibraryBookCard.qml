@@ -15,6 +15,7 @@
 // shows the grey placeholder.
 // BookView.shelfDragAppearance lifts the source and outlines the target.
 import QtQuick
+import QtQuick.Effects
 import Niratan
 
 Item {
@@ -48,17 +49,25 @@ Item {
     Accessible.role: Accessible.Button
     Accessible.name: card.title
 
-    // The frame's drop shadow, black at 12% blurred by 3 and lowered by 2 in
-    // Swift, drawn as two offset fills so the software renderer shows it too.
-    Rectangle {
-        x: frame.x - Theme.hairlineWidth
-        y: frame.y + Theme.hairlineWidth
-        width: frame.width + 2 * Theme.hairlineWidth
-        height: frame.height + Theme.bookFrameInset
-        radius: Theme.bookFrameRadius + Theme.hairlineWidth
-        color: Theme.shadow
-        opacity: card.dragSource ? Theme.bookShadowOpacity + Theme.bookDragShadowOpacity
-                                 : Theme.bookShadowOpacity
+    // ShelfBookCard's soft shadow under the frame, and the deeper one
+    // shelfDragAppearance adds while the book is dragged.
+    RectangularShadow {
+        anchors.fill: frame
+        radius: frame.radius
+        offset.y: Theme.bookShadowOffset
+        blur: Theme.bookShadowBlur
+        color: Theme.bookShadow
+    }
+
+    RectangularShadow {
+        anchors.fill: frame
+        radius: frame.radius
+        offset.y: Theme.bookDragShadowOffset
+        blur: Theme.bookDragShadowBlur
+        color: Theme.bookDragShadow
+        opacity: card.dragSource ? 1 : 0
+        visible: opacity > 0
+        Behavior on opacity { NumberAnimation { duration: Theme.bookDragDuration } }
     }
 
     Rectangle {

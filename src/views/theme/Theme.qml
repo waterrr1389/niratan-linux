@@ -134,6 +134,9 @@ ThemeMetrics {
     // macOS systemGray, the opaque grey of filled status glyphs.
     readonly property color systemGray: "#8E8E93"
     readonly property color shadow: dark ? "#66000000" : "#26000000"
+    // ShelfBookCard's black at 12%, and shelfDragAppearance's at 20%.
+    readonly property color bookShadow: "#1F000000"
+    readonly property color bookDragShadow: "#33000000"
 
     // The metrics below are a platform-neutral scale, not macOS values. They
     // keep the density of the source layouts without copying any AppKit or

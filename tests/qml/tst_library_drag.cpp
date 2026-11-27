@@ -18,6 +18,9 @@
 #include "../viewmodels/data_root.h"
 
 #include <QGuiApplication>
+#include <QMouseEvent>
+#include <QPointingDevice>
+#include <QQmlApplicationEngine>
 #include <QQmlComponent>
 #include <QQmlEngine>
 #include <QQuickItem>
@@ -98,6 +101,8 @@ class LibraryDragTest : public QObject {
    private slots:
     void initTestCase();
     void library_drag_wires_books_and_custom_shelves();
+    void a_book_drags_in_the_main_window_data();
+    void a_book_drags_in_the_main_window();
 };
 
 void LibraryDragTest::initTestCase() {
@@ -230,6 +235,67 @@ void LibraryDragTest::library_drag_wires_books_and_custom_shelves() {
     QCOMPARE(model->selected_shelf(), QStringLiteral("shelf:First"));
     QTest::qWait(50);
     QVERIFY2(g_warnings.isEmpty(), qPrintable(g_warnings.join('\n')));
+}
+
+// In the app the page sits in MainWindow; a drag there moves the book in the
+// many small steps a real pointer sends. On Wayland a laptop's touchpad
+// reports itself as a touchpad rather than a mouse, and drags the same way,
+// as a Mac trackpad drags a book.
+void LibraryDragTest::a_book_drags_in_the_main_window_data() {
+    QTest::addColumn<int>("type");
+    QTest::newRow("mouse") << int(QInputDevice::DeviceType::Mouse);
+    QTest::newRow("touchpad") << int(QInputDevice::DeviceType::TouchPad);
+}
+
+void LibraryDragTest::a_book_drags_in_the_main_window() {
+    QFETCH(int, type);
+    using niratan::books::BookStorage;
+    niratan::test::TempDataRoot root;
+    QVERIFY(root.isValid());
+    const BookStorage storage(niratan::storage::data_root());
+    for (const std::string folder : {"Alpha", "Beta", "Gamma"}) {
+        add_book(storage, folder);
+    }
+    QVERIFY(storage.save_book_order({"Alpha", "Beta", "Gamma"}));
+
+    QQmlApplicationEngine engine;
+    engine.loadFromModule(QStringLiteral("Niratan"), QStringLiteral("MainWindow"));
+    QVERIFY(!engine.rootObjects().isEmpty());
+    auto* window = qobject_cast<QQuickWindow*>(engine.rootObjects().constFirst());
+    QVERIFY(window != nullptr);
+    QVERIFY(QTest::qWaitForWindowExposed(window));
+    QQuickItem* content = window->contentItem();
+    const auto card = [content](const QString& title) {
+        return item_named(content, QStringLiteral("libraryBookCard"), title);
+    };
+    QTRY_VERIFY(card(QStringLiteral("Alpha")) && card(QStringLiteral("Beta")));
+
+    static QPointingDevice mouse(
+        QStringLiteral("test mouse"), 9001, QInputDevice::DeviceType::Mouse,
+        QPointingDevice::PointerType::Generic, QInputDevice::Capability::Position, 1, 3);
+    static QPointingDevice touchpad(
+        QStringLiteral("test touchpad"), 9002, QInputDevice::DeviceType::TouchPad,
+        QPointingDevice::PointerType::Finger, QInputDevice::Capability::Position, 1, 3);
+    const QPointingDevice* device =
+        type == int(QInputDevice::DeviceType::TouchPad) ? &touchpad : &mouse;
+    const auto send = [window, device](QEvent::Type event_type, QPointF position,
+                                       Qt::MouseButtons buttons) {
+        const Qt::MouseButton button =
+            event_type == QEvent::MouseMove ? Qt::NoButton : Qt::LeftButton;
+        QMouseEvent event(event_type, position, position, window->mapToGlobal(position), button,
+                          buttons, Qt::NoModifier, device);
+        QGuiApplication::sendEvent(window, &event);
+    };
+
+    const QPointF from = center(card(QStringLiteral("Alpha")));
+    const QPointF to = center(card(QStringLiteral("Beta")));
+    send(QEvent::MouseButtonPress, from, Qt::LeftButton);
+    for (int i = 1; i <= 40; ++i) {
+        send(QEvent::MouseMove, from + (to - from) * i / 40, Qt::LeftButton);
+    }
+    send(QEvent::MouseButtonRelease, to, Qt::NoButton);
+    const std::vector<std::string> reordered{"Beta", "Alpha", "Gamma"};
+    QTRY_COMPARE(storage.load_book_order(), reordered);
 }
 
 int main(int argc, char* argv[]) {

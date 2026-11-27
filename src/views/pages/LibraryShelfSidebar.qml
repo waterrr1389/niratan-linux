@@ -177,7 +177,7 @@ Rectangle {
             parent: list
             target: null
             enabled: column.shelfDraggingEnabled
-            acceptedDevices: PointerDevice.Mouse
+            acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad
             onActiveChanged: {
                 if (active) {
                     list.dragSource = list.shelfOffset(centroid.scenePressPosition, false)
