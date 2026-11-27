@@ -180,6 +180,9 @@ ApplicationWindow {
         StackView {
             id: bookshelfStack
 
+            // Both sliding pages stay inside the detail pane during navigation.
+            clip: true
+
             onDepthChanged: window.bookshelfDepth = bookshelfStack.depth
             Component.onDestruction: window.bookshelfDepth = 1
 

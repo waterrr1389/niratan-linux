@@ -529,12 +529,23 @@ void StatisticsViewTest::main_window_owns_the_toolbar() {
     QVERIFY2(!engine_.rootObjects().isEmpty(), "MainWindow was not created");
     auto* window = qobject_cast<QQuickWindow*>(engine_.rootObjects().constFirst());
     QVERIFY(window != nullptr);
+    window->showMaximized();
     QVERIFY(QTest::qWaitForWindowExposed(window));
 
     QQuickItem* statistics_button = nullptr;
     QTRY_VERIFY((statistics_button = item_with_property(window->contentItem(), "help",
                                                         QStringLiteral("Statistics"))) != nullptr);
-    click(statistics_button);
+    auto* stack = statistics_button->parentItem();
+    while (stack && !stack->inherits("QQuickStackView"))
+        stack = stack->parentItem();
+    QVERIFY(stack != nullptr);
+    const QPointF viewport_origin = stack->mapToScene(QPointF());
+    QVERIFY(viewport_origin.x() > 0);
+    QTest::mouseClick(
+        window, Qt::LeftButton, Qt::NoModifier,
+        statistics_button->mapToScene(statistics_button->boundingRect().center()).toPoint());
+    QVERIFY(stack->property("busy").toBool());
+    QVERIFY2(stack->clip(), "the sliding pages can draw into the sidebar");
 
     QQuickItem* header = nullptr;
     QTRY_VERIFY((header = item_named(window->contentItem(), QStringLiteral("statisticsHeader"))) !=
@@ -547,6 +558,16 @@ void StatisticsViewTest::main_window_owns_the_toolbar() {
     window->setProperty("sidebarVisible", false);
     QTRY_COMPARE(page->property("toolbarInset").toReal(), 44.0);
     QTRY_COMPARE(page->mapToItem(window->contentItem(), QPointF()).y(), 0.0);
+
+    window->setProperty("sidebarVisible", true);
+    QTRY_COMPARE(page->mapToScene(QPointF()), viewport_origin);
+    QTRY_VERIFY(!stack->property("busy").toBool());
+    QTest::mouseClick(window, Qt::LeftButton, Qt::NoModifier,
+                      header->mapToScene(QPointF(32, 24)).toPoint());
+    QVERIFY(stack->property("busy").toBool());
+    QVERIFY(stack->clip());
+    QTRY_COMPARE(stack->property("depth").toInt(), 1);
+    QTRY_VERIFY(!stack->property("busy").toBool());
 
     const QString warnings = warnings_after(QStringLiteral("MainWindow"));
     QVERIFY2(warnings.isEmpty(), qPrintable(warnings));
