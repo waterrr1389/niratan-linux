@@ -155,7 +155,10 @@ toggles, sliders, pickers and panels from the kit and take text sizes,
 weights and spacing from it or from the theme; they do not spell sizes or
 spacing as bare numbers. A control the kit lacks is added to the kit, not
 drawn inside a page. Existing pages move to the kit when they are next
-changed.
+changed. As on macOS, a click on a control never takes the keyboard: the
+style and every kit control built on a bare template set
+`focusPolicy: Qt.TabFocus`, so the player and reader keep their shortcuts.
+Only text inputs and open menus take it.
 
 1. The top comment of each QML file names the Swift files and views it
    follows.

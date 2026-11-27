@@ -14,6 +14,11 @@ import Niratan
 T.Button {
     id: control
 
+    // macOS controls do not take the keyboard on a click, so the view that
+    // held it (the player and its shortcuts) keeps it; Tab still reaches
+    // them. Every clickable control of this style does the same.
+    focusPolicy: Qt.TabFocus
+
     property bool prominent: false
     readonly property bool filled: control.highlighted || control.checked || control.prominent
 

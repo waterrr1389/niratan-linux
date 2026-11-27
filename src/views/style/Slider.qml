@@ -10,6 +10,9 @@ import Niratan
 T.Slider {
     id: control
 
+    // A click leaves the keyboard where it was, as on macOS (see Button.qml).
+    focusPolicy: Qt.TabFocus
+
     property bool small: false
 
     implicitWidth: Math.max(implicitBackgroundWidth + leftInset + rightInset,

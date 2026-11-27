@@ -13,6 +13,10 @@ import Niratan
 T.AbstractButton {
     id: control
 
+    // A click leaves the keyboard where it was, as on macOS (see the
+    // style's Button.qml).
+    focusPolicy: Qt.TabFocus
+
     property url url
     // Caption semibold, as VideoInspectorLinkButtonStyle draws a header action.
     property bool small: false

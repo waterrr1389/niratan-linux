@@ -10,6 +10,9 @@ import Niratan
 T.CheckBox {
     id: control
 
+    // A click leaves the keyboard where it was, as on macOS (see Button.qml).
+    focusPolicy: Qt.TabFocus
+
     implicitWidth: Math.max(implicitBackgroundWidth + leftInset + rightInset,
                             implicitContentWidth + leftPadding + rightPadding)
     implicitHeight: Math.max(implicitBackgroundHeight + topInset + bottomInset,

@@ -62,6 +62,9 @@ class ControlStyleTest : public QObject {
     void combo_list_fits_its_widest_item();
     void dialog_buttons_sit_inside_in_mac_order();
     void anki_alert_buttons_sit_inside_in_mac_order();
+    void clicking_a_control_leaves_the_keyboard_alone_data();
+    void clicking_a_control_leaves_the_keyboard_alone();
+    void clicking_a_text_field_takes_the_keyboard();
 
    private:
     std::unique_ptr<QObject> create(const QByteArray& qml, QQuickWindow& window);
@@ -217,6 +220,85 @@ void ControlStyleTest::anki_alert_buttons_sit_inside_in_mac_order() {
     }
     QVERIFY(fetch != nullptr);
     check_dialog_buttons(fetch, QStringLiteral("Cancel"), QStringLiteral("OK"));
+}
+
+// macOS: a click on a button, switch, checkbox, slider or pop-up button does
+// not move the keyboard focus (only Full Keyboard Access lets Tab reach
+// them), so the view that held the keyboard, such as the video player with
+// its shortcuts, keeps it. Tab still reaches the controls here.
+void ControlStyleTest::clicking_a_control_leaves_the_keyboard_alone_data() {
+    QTest::addColumn<QByteArray>("control");
+    QTest::newRow("Button") << QByteArray("Button { text: \"Go\" }");
+    QTest::newRow("ToolButton") << QByteArray("ToolButton { text: \"Go\" }");
+    QTest::newRow("CheckBox") << QByteArray("CheckBox { text: \"On\" }");
+    QTest::newRow("Switch") << QByteArray("Switch { text: \"On\" }");
+    QTest::newRow("RadioButton") << QByteArray("RadioButton { text: \"On\" }");
+    QTest::newRow("Slider") << QByteArray("Slider { width: 160 }");
+    QTest::newRow("TabButton") << QByteArray("TabButton { text: \"Tab\"; width: 120 }");
+    QTest::newRow("ComboBox") << QByteArray("ComboBox { model: [\"A\", \"B\"] }");
+    // The control kit draws these on the bare templates, outside the style.
+    QTest::newRow("FormButton") << QByteArray("FormButton { text: \"Go\" }");
+    QTest::newRow("LinkButton") << QByteArray("LinkButton { text: \"Go\" }");
+    QTest::newRow("ToggleSwitch") << QByteArray("ToggleSwitch { }");
+    QTest::newRow("TrackSlider") << QByteArray("TrackSlider { width: 160 }");
+    QTest::newRow("MenuPicker") << QByteArray("MenuPicker { model: [\"A\", \"B\"] }");
+}
+
+void ControlStyleTest::clicking_a_control_leaves_the_keyboard_alone() {
+    QFETCH(QByteArray, control);
+    QQuickWindow window;
+    window.resize(400, 300);
+    window.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&window));
+    const QByteArray qml = "import QtQuick\nimport QtQuick.Controls\nimport Niratan\n"
+                           "Item {\n"
+                           "    width: 400; height: 300\n"
+                           "    Item { objectName: \"owner\"; focus: true }\n"
+                           "    " +
+        control.replace(" {", " { objectName: \"control\"; x: 40; y: 40;") + "\n}\n";
+    auto scene = create(qml, window);
+    QVERIFY(scene != nullptr);
+    auto* owner = scene->findChild<QQuickItem*>(QStringLiteral("owner"));
+    auto* clicked = scene->findChild<QQuickItem*>(QStringLiteral("control"));
+    QVERIFY(owner != nullptr);
+    QVERIFY(clicked != nullptr);
+    owner->forceActiveFocus();
+    QTRY_VERIFY(owner->hasActiveFocus());
+
+    QTest::mouseClick(
+        &window, Qt::LeftButton, {},
+        clicked->mapToScene(QPointF(clicked->width() / 2, clicked->height() / 2)).toPoint());
+    // A pop-up button's open menu holds the keyboard until it closes.
+    if (!owner->hasActiveFocus()) {
+        QTest::keyClick(&window, Qt::Key_Escape);
+    }
+    QTRY_VERIFY2(owner->hasActiveFocus(), "the click moved the keyboard focus to the control");
+    QVERIFY(clicked->property("focusPolicy").toInt() & Qt::TabFocus);
+}
+
+// A text field still takes the keyboard on a click, as on macOS.
+void ControlStyleTest::clicking_a_text_field_takes_the_keyboard() {
+    QQuickWindow window;
+    window.resize(400, 300);
+    window.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&window));
+    auto scene = create("import QtQuick\nimport QtQuick.Controls\n"
+                        "Item {\n"
+                        "    width: 400; height: 300\n"
+                        "    Item { objectName: \"owner\"; focus: true }\n"
+                        "    TextField { objectName: \"field\"; x: 40; y: 40; width: 160 }\n"
+                        "}\n",
+                        window);
+    QVERIFY(scene != nullptr);
+    auto* owner = scene->findChild<QQuickItem*>(QStringLiteral("owner"));
+    auto* field = scene->findChild<QQuickItem*>(QStringLiteral("field"));
+    QVERIFY(owner != nullptr);
+    QVERIFY(field != nullptr);
+    owner->forceActiveFocus();
+    QTest::mouseClick(
+        &window, Qt::LeftButton, {},
+        field->mapToScene(QPointF(field->width() / 2, field->height() / 2)).toPoint());
+    QTRY_VERIFY(field->hasActiveFocus());
 }
 
 int main(int argc, char* argv[]) {

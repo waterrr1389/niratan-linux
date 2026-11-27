@@ -17,6 +17,10 @@ import Niratan
 T.AbstractButton {
     id: picker
 
+    // A click leaves the keyboard where it was, as on macOS (see the
+    // style's Button.qml).
+    focusPolicy: Qt.TabFocus
+
     property var model: []
     property int currentIndex: -1
     property real minimumWidth: Theme.pickerMinimumWidth

@@ -330,6 +330,7 @@ class PlayerControlsTest : public QObject {
     void subtitle_shortcuts_navigate_and_align();
     void subtitle_alignment_clamps_delay_and_dismisses_lookup();
     void transcript_toolbar_exists_without_search_matches();
+    void a_sidebar_button_click_keeps_the_keyboard_in_the_player();
     void episode_transport_navigation();
     void episode_open_preserves_resume_history();
     void episode_shortcuts_navigate_neighbors();
@@ -1143,6 +1144,44 @@ void PlayerControlsTest::transcript_toolbar_exists_without_search_matches() {
 
     study->setSubtitleDocument({}, {}, false);
     QTRY_VERIFY(!toolbar->isVisible());
+}
+
+// A click on a sidebar button leaves the keyboard with the player, so Space
+// and the other shortcuts keep working: macOS buttons take no focus on click.
+void PlayerControlsTest::a_sidebar_button_click_keeps_the_keyboard_in_the_player() {
+    niratan::test::TempDataRoot root;
+    QVERIFY(root.isValid());
+    const QString video = make_video(root.path());
+
+    QQmlApplicationEngine engine;
+    QQuickWindow* video_window = nullptr;
+    QQuickItem* player = open_video_in_window(engine, video, &video_window);
+    QVERIFY2(player != nullptr, "the Video window did not open the player");
+    auto* study = player->findChild<niratan::viewmodels::PlayerStudyViewModel*>();
+    QVERIFY(study != nullptr);
+    study->setVideo(QUrl::fromLocalFile(video));
+    study->setPlaybackReady(true);
+    study->setSubtitleDocument(QUrl::fromLocalFile(QStringLiteral("/tmp/navigation.srt")),
+                               kNavigationSrt, true);
+    study->updatePlayback(0.0, 0.0);
+
+    QQuickItem* sidebar = item_named(video_window->contentItem(), QStringLiteral("studySidebar"));
+    QVERIFY(sidebar != nullptr);
+    QVERIFY(QMetaObject::invokeMethod(player, "toggleTranscript"));
+    QTRY_VERIFY(sidebar->isVisible());
+    sidebar->setProperty("selectedTab", 1);
+    QQuickItem* next = item_named(sidebar, QStringLiteral("alignNextSubtitleButton"));
+    QVERIFY(next != nullptr);
+    QTRY_VERIFY(next->isVisible() && next->property("enabled").toBool());
+
+    player->forceActiveFocus();
+    QTRY_VERIFY(player->hasActiveFocus());
+    QSignalSpy alignments(study,
+                          &niratan::viewmodels::PlayerStudyViewModel::subtitleAlignmentRequested);
+    QTest::mouseClick(video_window, Qt::LeftButton, {},
+                      next->mapToScene(QPointF(next->width() / 2, next->height() / 2)).toPoint());
+    QTRY_COMPARE(alignments.size(), 1);
+    QVERIFY2(player->hasActiveFocus(), "the button took the keyboard from the player");
 }
 
 // B4, B6, B9: the page hosts the bar and every control reaches a page action.

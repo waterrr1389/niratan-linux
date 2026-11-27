@@ -14,6 +14,10 @@ import Niratan
 T.AbstractButton {
     id: control
 
+    // A click leaves the keyboard where it was, as on macOS (see the
+    // style's Button.qml).
+    focusPolicy: Qt.TabFocus
+
     property bool destructive: false
     // An SF Symbol name drawn before the text, as NativeSettingsActionButton
     // labels Import and Create Profile.

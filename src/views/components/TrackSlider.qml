@@ -19,6 +19,10 @@ import Niratan
 T.Slider {
     id: control
 
+    // A click leaves the keyboard where it was, as on macOS (see the
+    // style's Button.qml).
+    focusPolicy: Qt.TabFocus
+
     readonly property bool emphasized: hovered || pressed
     property bool onOverlay: false
 

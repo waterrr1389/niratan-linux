@@ -13,6 +13,10 @@ import Niratan
 T.Switch {
     id: control
 
+    // A click leaves the keyboard where it was, as on macOS (see the
+    // style's Button.qml).
+    focusPolicy: Qt.TabFocus
+
     property bool small: false
 
     implicitWidth: implicitIndicatorWidth
