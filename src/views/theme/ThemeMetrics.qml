@@ -286,9 +286,11 @@ QtObject {
     readonly property int bookTitleSpacing: 6
     readonly property int bookTitleHeight: 40
     readonly property int bookBadgeInset: 6
-    // ShelfBookCard's .shadow(radius: 3, y: 2); the colour is Theme.bookShadow.
+    // ShelfBookCard's .shadow(radius: 3, y: 2), centred here: the 2 px drop
+    // read as a cover sitting off centre on Linux. The colour is
+    // Theme.bookShadow.
     readonly property int bookShadowBlur: 3
-    readonly property int bookShadowOffset: 2
+    readonly property int bookShadowOffset: 0
     // Covers narrower than this use the small title style.
     readonly property int bookCompactWidth: 140
     readonly property int bookTitleLineHeight: 19

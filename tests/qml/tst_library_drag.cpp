@@ -287,14 +287,21 @@ void LibraryDragTest::a_book_drags_in_the_main_window() {
         QGuiApplication::sendEvent(window, &event);
     };
 
+    // Across Beta to Gamma in one gesture: the drag lasts until the release.
     const QPointF from = center(card(QStringLiteral("Alpha")));
-    const QPointF to = center(card(QStringLiteral("Beta")));
+    const QPointF to = center(card(QStringLiteral("Gamma")));
     send(QEvent::MouseButtonPress, from, Qt::LeftButton);
-    for (int i = 1; i <= 40; ++i) {
-        send(QEvent::MouseMove, from + (to - from) * i / 40, Qt::LeftButton);
+    for (int i = 1; i <= 80; ++i) {
+        send(QEvent::MouseMove, from + (to - from) * i / 80, Qt::LeftButton);
+        QTest::qWait(5);
+        if (i > 10) {
+            const QQuickItem* alpha = card(QStringLiteral("Alpha"));
+            QVERIFY2(alpha && alpha->property("dragSource").toBool(),
+                     qPrintable(QStringLiteral("the drag ended at step %1").arg(i)));
+        }
     }
     send(QEvent::MouseButtonRelease, to, Qt::NoButton);
-    const std::vector<std::string> reordered{"Beta", "Alpha", "Gamma"};
+    const std::vector<std::string> reordered{"Beta", "Gamma", "Alpha"};
     QTRY_COMPARE(storage.load_book_order(), reordered);
 }
 

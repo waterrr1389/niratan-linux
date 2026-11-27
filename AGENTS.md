@@ -280,6 +280,16 @@ Unicode rules, do the same rather than assuming ASCII.
     `QWebEnginePage`.
 - A flow counts as done when its flow test passes. The owner then uses it on
   the device and reports problems in plain language.
+- Every user interaction (a click, drag, key, wheel or selection) gets an
+  end-to-end test the way the owner performs it: the real window
+  (`MainWindow`, `VideoWindow`, `ReaderWindow`) rather than the page alone,
+  real input events sent to the window rather than view model calls, the
+  input devices the owner uses (mouse and touchpad, which Wayland reports
+  separately) and real gestures (many small moves, held until release),
+  checked down to what the owner sees or what is saved. A test that only
+  calls the view model or loads a page by itself does not prove the
+  interaction works. When the owner finds a bug on the device, first ask
+  which end-to-end test should have caught it, and add that test.
 
 ## Commits
 
