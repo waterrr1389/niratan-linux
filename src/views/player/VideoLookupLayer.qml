@@ -243,8 +243,10 @@ Item {
             playerLookup.setSubtitleDocument(file, bytes, readable)
             layer.syncPlayback()
         }
+        // The transcript arrives as an ArrayBuffer, which has byteLength and
+        // no length.
         function onEmbeddedTranscriptChanged(bytes, error) {
-            layer.embeddedText = error.length === 0 && bytes.length > 0
+            layer.embeddedText = error.length === 0 && bytes.byteLength > 0
             if (layer.embeddedText) {
                 layer.externalText = false
                 playerLookup.setEmbeddedSubtitle(bytes)
