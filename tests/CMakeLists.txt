@@ -1041,6 +1041,20 @@ add_test(NAME video_lookup_focus COMMAND tst_video_lookup_focus)
 set_tests_properties(video_lookup_focus PROPERTIES
     ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QTWEBENGINE_CHROMIUM_FLAGS=--disable-gpu")
 
+qt_add_executable(tst_video_subtitle_click
+    qml/tst_video_subtitle_click.cpp
+)
+target_include_directories(tst_video_subtitle_click PRIVATE
+    ${CMAKE_SOURCE_DIR}/src
+    ${CMAKE_CURRENT_SOURCE_DIR}/viewmodels
+)
+target_link_libraries(tst_video_subtitle_click PRIVATE niratan_qml Qt6::Test
+    Qt6::Quick Qt6::QuickControls2 Qt6::WebEngineQuick)
+target_compile_options(tst_video_subtitle_click PRIVATE -Wall -Wextra -Wpedantic -Werror)
+add_test(NAME video_subtitle_click COMMAND tst_video_subtitle_click)
+set_tests_properties(video_subtitle_click PROPERTIES
+    ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QTWEBENGINE_CHROMIUM_FLAGS=--disable-gpu")
+
 qt_add_executable(tst_video_embedded_subtitles
     qml/tst_video_embedded_subtitles.cpp
 )

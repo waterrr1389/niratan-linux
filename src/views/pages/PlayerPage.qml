@@ -994,23 +994,23 @@ Item {
         cursorShape: stage.cursorShape
         onPositionChanged: page.notePointerMovement()
         onExited: page.scheduleHide()
+    }
 
-        // VideoSurfaceScrollMonitorView: the wheel over the stage adjusts the
-        // volume, except over the bar or the Inspector. A touchpad's pixel
-        // delta is precise; a wheel notch is a single step.
-        WheelHandler {
-            id: volumeWheel
-
-            acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad
-            onWheel: function (event) {
-                const pixel = event.pixelDelta
-                const precise = pixel.x !== 0 || pixel.y !== 0
-                const deltaX = precise ? pixel.x : event.angleDelta.x
-                const deltaY = precise ? pixel.y : event.angleDelta.y
-                event.accepted = page.handleVolumeScroll(volumeWheel.point.position.x,
-                                                         volumeWheel.point.position.y,
-                                                         deltaX, deltaY, precise)
-            }
+    // VideoSurfaceScrollMonitorView: the wheel sets the volume except over the
+    // bar or Inspector. It sits on the stage: a handler makes its parent take
+    // every button, so in the hover area it would eat the subtitles' clicks.
+    WheelHandler {
+        id: volumeWheel
+        parent: stage
+        acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad
+        onWheel: function (event) {
+            const pixel = event.pixelDelta
+            const precise = pixel.x !== 0 || pixel.y !== 0
+            const deltaX = precise ? pixel.x : event.angleDelta.x
+            const deltaY = precise ? pixel.y : event.angleDelta.y
+            event.accepted = page.handleVolumeScroll(volumeWheel.point.position.x,
+                                                     volumeWheel.point.position.y,
+                                                     deltaX, deltaY, precise)
         }
     }
 
