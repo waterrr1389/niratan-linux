@@ -20,6 +20,7 @@
 // one, so a bookmark at chapter 1 progress 0.24 is the position the fixture's
 // remote progress resolves to.
 
+#include "models/sasayaki/sasayaki.h"
 #include "models/statistics/statistics.h"
 #include "services/books/book_storage.h"
 #include "services/statistics/statistics_storage.h"

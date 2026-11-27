@@ -5,6 +5,8 @@
 #include <algorithm>
 #include <string_view>
 
+#include "services/anki/anki_config.h"
+
 namespace niratan::anki {
 namespace {
 

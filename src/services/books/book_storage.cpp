@@ -16,6 +16,7 @@
 #include <utility>
 #include <vector>
 
+#include "models/sasayaki/sasayaki.h"
 #include "services/novels/epub_book.h"
 #include "services/reader/book_session.h"
 #include "services/storage/app_paths.h"

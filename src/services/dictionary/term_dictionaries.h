@@ -42,7 +42,7 @@
 #include <filesystem>
 #include <vector>
 
-#include "models/anki/mining_context.h"
+#include "models/dictionary/term_dictionary.h"
 
 namespace niratan::profiles {
 class ProfileRepository;

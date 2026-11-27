@@ -18,6 +18,7 @@
 #include <system_error>
 #include <utility>
 
+#include "services/anki/anki_config.h"
 #include "services/anki/anki_requests.h"
 
 using namespace niratan::anki;

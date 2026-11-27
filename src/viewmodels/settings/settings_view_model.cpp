@@ -20,7 +20,7 @@
 #include "services/fonts/font_store.h"
 #include "services/settings/global_settings.h"
 #include "services/settings/settings_store.h"
-#include "services/storage/app_paths.h"
+#include "services/storage/app_roots.h"
 
 namespace niratan::viewmodels {
 namespace {

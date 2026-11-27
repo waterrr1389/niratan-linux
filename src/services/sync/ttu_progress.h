@@ -9,7 +9,7 @@
 #pragma once
 
 #include "drive_files.h"
-#include "models/books/book.h"
+#include "models/books/book_position.h"
 #include "models/statistics/statistics.h"
 
 namespace niratan::sync {

@@ -18,8 +18,9 @@
 #include "services/audio/local_audio.h"
 #include "services/audio/local_file_server.h"
 #include "services/books/book_storage.h"
+#include "services/reader/book_session.h"
 #include "services/reader/reading_tracker.h"
-#include "services/storage/app_paths.h"
+#include "services/storage/app_roots.h"
 
 namespace niratan::viewmodels {
 

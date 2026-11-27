@@ -56,7 +56,7 @@
 #include <QString>
 #include <QStringList>
 
-#include "services/anki/anki_config.h"
+#include "models/anki/media_compression.h"
 
 class QProcess;
 

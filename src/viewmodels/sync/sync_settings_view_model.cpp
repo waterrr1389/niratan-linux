@@ -5,6 +5,7 @@
 #include "services/settings/global_settings.h"
 #include "services/storage/app_paths.h"
 #include "services/sync/ttu_convert.h"
+#include "services/sync/ttu_sync.h"
 
 #include <QPointer>
 #include <QQmlEngine>

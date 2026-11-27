@@ -8,7 +8,7 @@
 #include "mpv_renderer.h"
 
 #include "services/player/video_settings.h"
-#include "services/storage/app_paths.h"
+#include "services/storage/app_roots.h"
 
 #include <QByteArray>
 #include <QChar>

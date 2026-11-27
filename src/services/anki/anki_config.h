@@ -64,6 +64,7 @@
 #include <string_view>
 #include <vector>
 
+#include "models/anki/media_compression.h"
 #include "models/anki/note_type.h"
 #include "services/anki/duplicate_scope.h"
 
@@ -72,10 +73,6 @@ class ProfileRepository;
 }
 
 namespace niratan::anki {
-
-enum class ImageCompressionFormat { jpeg, avif };
-
-enum class AudioCompressionFormat { aac, mp3 };
 
 // Models/Anki.swift:AnkiConnectConfig. The URL is optional in the stored file;
 // an absent or whitespace-only URL becomes the default after a load.

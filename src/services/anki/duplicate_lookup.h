@@ -84,11 +84,12 @@
 #include <string>
 #include <string_view>
 
-#include "services/anki/anki_config.h"
 #include "services/anki/anki_connect.h"
 #include "services/anki/mining_gate.h"
 
 namespace niratan::anki {
+
+struct AnkiSettings;
 
 // An injected request seam with the shape of AnkiConnectClient::request, so a
 // test answers without a network and the app passes the client's method.

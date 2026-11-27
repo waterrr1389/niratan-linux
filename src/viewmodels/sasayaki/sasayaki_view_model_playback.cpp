@@ -38,7 +38,7 @@
 #include "sasayaki_view_model_state.h"
 #include "services/books/book_storage.h"
 #include "services/sasayaki/matcher.h"
-#include "services/storage/app_paths.h"
+#include "services/storage/app_roots.h"
 #include "viewmodels/reader/reader_view_model.h"
 
 namespace niratan::viewmodels {

@@ -2,6 +2,8 @@
 
 #include "ttu_sync_sidecars.h"
 
+#include "models/sasayaki/sasayaki.h"
+
 namespace niratan::sync::detail {
 namespace {
 

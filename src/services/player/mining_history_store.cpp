@@ -5,7 +5,7 @@
 #include <utility>
 
 #include "services/player/video_settings.h"
-#include "services/storage/app_paths.h"
+#include "services/storage/app_roots.h"
 
 namespace niratan::player {
 

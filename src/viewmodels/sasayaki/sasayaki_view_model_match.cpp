@@ -28,7 +28,7 @@
 #include "services/reader/book_session.h"
 #include "services/sasayaki/match_chapters.h"
 #include "services/sasayaki/matcher.h"
-#include "services/storage/app_paths.h"
+#include "services/storage/app_roots.h"
 #include "viewmodels/reader/reader_view_model.h"
 
 namespace niratan::viewmodels {

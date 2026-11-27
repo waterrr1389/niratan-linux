@@ -6,7 +6,7 @@
 
 #include "services/video/thumbnail_store.h"
 
-#include "services/storage/app_paths.h"
+#include "services/storage/app_roots.h"
 
 #include <QDir>
 #include <QFile>

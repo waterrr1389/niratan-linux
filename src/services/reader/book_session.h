@@ -36,18 +36,14 @@
 #include <utility>
 #include <vector>
 
-#include "models/books/book.h"
+#include "models/books/book_position.h"
 #include "models/profiles/dictionary_settings.h"
 #include "models/profiles/reader_settings.h"
 #include "services/novels/epub_book.h"
 #include "services/reader/reader_shell.h"
+#include "services/reader/session_resource.h"
 
 namespace niratan::reader {
-
-struct SessionResource {
-    std::string bytes;
-    std::string mime_type;
-};
 
 struct ContentsEntry {
     int spine_index;

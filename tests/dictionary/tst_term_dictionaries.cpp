@@ -22,6 +22,7 @@
 #include <vector>
 
 #include "../viewmodels/data_root.h"
+#include "models/dictionary/dictionary_config.h"
 #include "services/profiles/profile_repository.h"
 #include "services/storage/app_paths.h"
 

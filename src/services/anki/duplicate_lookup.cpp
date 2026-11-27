@@ -18,6 +18,7 @@
 #include <vector>
 
 #include "models/anki/note_type.h"
+#include "services/anki/anki_config.h"
 #include "services/anki/anki_requests.h"
 #include "services/anki/duplicate_query.h"
 #include "services/storage/json_file.h"

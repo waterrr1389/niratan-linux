@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#include "reader_view_model.h"
+#include "reader_view_model_state.h"
 
 #include <QFutureWatcher>
+#include <QJSEngine>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
@@ -15,7 +16,6 @@
 #include <string>
 #include <utility>
 
-#include "reader_view_model_state.h"
 #include "models/sasayaki/sasayaki_settings.h"
 #include "services/reader/book_search.h"
 #include "services/reader/theme.h"

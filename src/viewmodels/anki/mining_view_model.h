@@ -80,8 +80,12 @@
 #include <string>
 #include <vector>
 
-#include "models/anki/mining_context.h"
-#include "services/anki/mining.h"
+#include "models/dictionary/term_dictionary.h"
+
+namespace niratan::anki {
+struct MiningAttempt;
+struct AnkiMiningResult;
+}  // namespace niratan::anki
 
 namespace niratan::viewmodels {
 

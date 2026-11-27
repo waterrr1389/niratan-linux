@@ -73,8 +73,8 @@
 #include <string>
 #include <string_view>
 
+#include "models/anki/media_compression.h"
 #include "models/anki/mining_context.h"
-#include "services/anki/anki_config.h"
 #include "services/player/subtitle_document.h"
 
 namespace niratan::player {

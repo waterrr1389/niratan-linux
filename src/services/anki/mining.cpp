@@ -7,6 +7,7 @@
 
 #include <utility>
 
+#include "services/anki/anki_config.h"
 #include "services/anki/anki_requests.h"
 #include "services/anki/mining_gate.h"
 

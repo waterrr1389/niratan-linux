@@ -60,7 +60,7 @@
 #include <string_view>
 #include <vector>
 
-#include "models/anki/mining_context.h"
+#include "models/dictionary/term_dictionary.h"
 
 namespace niratan::dictionary {
 

@@ -16,7 +16,7 @@
 
 #include "models/books/library_model.h"
 #include "services/books/book_storage.h"
-#include "services/storage/app_paths.h"
+#include "services/storage/app_roots.h"
 
 namespace niratan::viewmodels {
 namespace {

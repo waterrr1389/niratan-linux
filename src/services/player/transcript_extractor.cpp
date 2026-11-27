@@ -2,7 +2,7 @@
 
 #include "transcript_extractor.h"
 
-#include "services/storage/app_paths.h"
+#include "services/storage/app_roots.h"
 
 #include <QCryptographicHash>
 #include <QDir>

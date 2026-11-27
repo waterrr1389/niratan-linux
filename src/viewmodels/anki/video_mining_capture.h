@@ -49,8 +49,8 @@
 #include <optional>
 #include <string>
 
+#include "models/anki/media_compression.h"
 #include "models/anki/mining_context.h"
-#include "services/anki/anki_config.h"
 #include "services/player/video_mining.h"
 #include "services/player/video_mining_store.h"
 

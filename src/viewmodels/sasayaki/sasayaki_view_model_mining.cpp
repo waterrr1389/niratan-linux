@@ -17,9 +17,9 @@
 
 #include <string>
 
+#include "models/anki/media_compression.h"
 #include "models/sasayaki/sasayaki.h"
 #include "sasayaki_view_model_state.h"
-#include "services/anki/anki_config.h"
 #include "services/sasayaki/cue_audio.h"
 
 namespace niratan::viewmodels {

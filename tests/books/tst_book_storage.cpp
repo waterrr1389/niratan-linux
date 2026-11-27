@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+#include "models/sasayaki/sasayaki.h"
 #include "services/books/book_storage.h"
 #include "services/storage/json_file.h"
 

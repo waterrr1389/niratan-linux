@@ -163,10 +163,8 @@
 
 #pragma once
 
-#include <QJSEngine>
 #include <QObject>
 #include <QColor>
-#include <QQmlEngine>
 #include <QString>
 #include <QUrl>
 #include <QVariantList>
@@ -177,7 +175,12 @@
 #include <optional>
 #include <string>
 
-#include "services/reader/book_session.h"
+#include "services/reader/session_resource.h"
+
+QT_BEGIN_NAMESPACE
+class QJSEngine;
+class QQmlEngine;
+QT_END_NAMESPACE
 
 namespace niratan::viewmodels {
 

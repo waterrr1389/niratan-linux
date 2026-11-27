@@ -3,6 +3,7 @@
 // script/test_sasayaki_sync_contract.swift: import-only audio before synced return.
 
 #include "fakes/ttu_fixture.h"
+#include "models/sasayaki/sasayaki.h"
 #include "services/statistics/statistics_storage.h"
 #include "services/sync/ttu_naming.h"
 

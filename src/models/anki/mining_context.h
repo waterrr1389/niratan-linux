@@ -1,14 +1,13 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
 // What card field rendering and mining read from the mining session,
-// matching MiningContext and VideoMiningContext in Models/Anki.swift
-// and DictionaryInfo and DictionaryCategory in Models/Dictionary.swift.
+// matching MiningContext and VideoMiningContext in Models/Anki.swift.
 //
 // Swift serves the book cover and the Sasayaki audio from LocalFileServer
 // while it renders. The caller supplies the served URLs for rendering and
 // a separate local cover path for attachments. An empty string means absent.
 // The popup's mined cue audio travels as bytes with its format extension,
-// because models/ cannot name services/anki's compression enum.
+// as supplied by the audio exporter.
 
 #pragma once
 
@@ -16,17 +15,10 @@
 
 #include <optional>
 #include <string>
-#include <vector>
+
+#include "models/dictionary/term_dictionary.h"
 
 namespace niratan::anki {
-
-enum class DictionaryCategory { none, monolingual, bilingual, exclude };
-
-// A term dictionary in the order the user ranked it.
-struct TermDictionary {
-    std::string title;
-    DictionaryCategory category = DictionaryCategory::none;
-};
 
 struct VideoMiningContext {
     std::string file_name;

@@ -4,6 +4,8 @@
 
 #include <cstdlib>
 
+#include "models/dictionary/dictionary_config.h"
+
 namespace niratan::storage {
 namespace {
 

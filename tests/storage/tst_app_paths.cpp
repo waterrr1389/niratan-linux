@@ -10,6 +10,8 @@
 #include <string>
 #include <vector>
 
+#include "models/dictionary/dictionary_config.h"
+
 using niratan::dictionary::DictionaryType;
 using niratan::storage::cache_root;
 using niratan::storage::data_root;

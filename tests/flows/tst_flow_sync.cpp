@@ -14,6 +14,7 @@
 #include "fakes/oauth_fixture.h"
 #include "fakes/ttu_fixture.h"
 #include "fakes/ttu_converter_fixture.h"
+#include "models/sasayaki/sasayaki.h"
 #include "services/settings/global_settings.h"
 #include "services/statistics/statistics_storage.h"
 #include "services/sync/drive_client.h"

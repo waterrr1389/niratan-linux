@@ -18,9 +18,9 @@
 
 #pragma once
 
-#include "services/anki/anki_config.h"
-
 namespace niratan::anki {
+
+struct AnkiSettings;
 
 struct PopupOptions {
     bool needs_audio = false;

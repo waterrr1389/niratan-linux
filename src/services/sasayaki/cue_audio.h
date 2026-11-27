@@ -59,7 +59,7 @@
 #include <vector>
 
 #include "models/sasayaki/sasayaki.h"
-#include "services/anki/anki_config.h"
+#include "models/anki/media_compression.h"
 
 class QProcess;
 

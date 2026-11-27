@@ -2,6 +2,8 @@
 
 #include "ttu_sync.h"
 
+#include "models/sasayaki/sasayaki.h"
+
 #include "services/statistics/statistics_storage.h"
 #include "ttu_sync_sidecars.h"
 

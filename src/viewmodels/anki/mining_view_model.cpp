@@ -24,7 +24,6 @@
 #include "services/dictionary/dictionary_media.h"
 #include "services/dictionary/term_dictionaries.h"
 #include "services/profiles/profile_repository.h"
-#include "services/storage/app_paths.h"
 #include "viewmodels/anki/video_mining_capture.h"
 #include "viewmodels/anki/video_mining_capture_start.h"
 

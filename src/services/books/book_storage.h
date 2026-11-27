@@ -47,7 +47,11 @@
 #include <vector>
 
 #include "models/books/book.h"
-#include "models/sasayaki/sasayaki.h"
+
+namespace niratan::sasayaki {
+struct SasayakiPlaybackData;
+struct SasayakiMatchData;
+}  // namespace niratan::sasayaki
 
 namespace niratan::books {
 

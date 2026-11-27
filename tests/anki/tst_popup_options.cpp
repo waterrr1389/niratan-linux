@@ -9,6 +9,8 @@
 
 #include <QtTest>
 
+#include "services/anki/anki_config.h"
+
 using niratan::anki::AnkiSettings;
 using niratan::anki::popup_options;
 using niratan::anki::PopupOptions;

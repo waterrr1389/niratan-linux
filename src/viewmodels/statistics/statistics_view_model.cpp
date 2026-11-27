@@ -24,7 +24,7 @@
 #include "services/books/library_watch.h"
 #include "services/settings/global_settings.h"
 #include "services/statistics/statistics_storage.h"
-#include "services/storage/app_paths.h"
+#include "services/storage/app_roots.h"
 
 namespace niratan::viewmodels {
 namespace {

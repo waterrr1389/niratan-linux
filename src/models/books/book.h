@@ -20,13 +20,19 @@
 
 #pragma once
 
-#include <QJsonDocument>
+#include <QtCore/qtconfigmacros.h>
 
 #include <cstdint>
-#include <map>
 #include <optional>
 #include <string>
+#include <string_view>
 #include <vector>
+
+#include "models/books/book_position.h"
+
+QT_BEGIN_NAMESPACE
+class QJsonDocument;
+QT_END_NAMESPACE
 
 namespace niratan::books {
 
@@ -62,15 +68,6 @@ struct BookMetadata {
     bool operator==(const BookMetadata&) const = default;
 };
 
-struct Bookmark {
-    int chapter_index = 0;
-    double progress = 0.0;
-    int character_count = 0;
-    std::optional<double> last_modified;
-
-    bool operator==(const Bookmark&) const = default;
-};
-
 // Models/Highlight.swift (Highlight): character is book-global; offset is
 // chapter-local raw DOM text. They use different counting rules.
 struct Highlight {
@@ -88,29 +85,6 @@ QJsonDocument highlights_to_json(const std::vector<Highlight>& highlights);
 std::optional<std::vector<Highlight>> highlights_from_json(const QJsonDocument& document);
 std::vector<Highlight> highlights_in_range(const std::vector<Highlight>& highlights,
                                            int start, int end);
-
-struct ChapterInfo {
-    std::optional<int> spine_index;
-    int current_total = 0;
-    int chapter_count = 0;
-    std::optional<std::map<std::string, int>> fragment_offsets;
-
-    bool operator==(const ChapterInfo&) const = default;
-};
-
-struct BookInfo {
-    int character_count = 0;
-    std::map<std::string, ChapterInfo> chapter_info;
-    std::optional<std::vector<std::string>> images;
-    std::optional<std::map<std::string, int>> image_positions;
-
-    bool operator==(const BookInfo&) const = default;
-
-    // BookInfo.resolveCharacterPosition: the spine index and the progress
-    // inside that chapter for a global character offset. nullopt when no
-    // chapter covers it.
-    std::optional<std::pair<int, double>> resolve_character_position(int characters) const;
-};
 
 struct BookShelf {
     std::string name;

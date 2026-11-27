@@ -3,7 +3,7 @@
 #include "video_settings_view_model.h"
 
 #include "services/player/video_settings.h"
-#include "services/storage/app_paths.h"
+#include "services/storage/app_roots.h"
 
 #include <QJsonObject>
 #include <QJsonValue>

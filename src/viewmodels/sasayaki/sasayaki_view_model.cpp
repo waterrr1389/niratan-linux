@@ -23,7 +23,7 @@
 #include "services/settings/global_settings.h"
 #include "services/sasayaki/cue_timeline.h"
 #include "services/sasayaki/srt_parser.h"
-#include "services/storage/app_paths.h"
+#include "services/storage/app_roots.h"
 #include "viewmodels/reader/reader_view_model.h"
 
 namespace niratan::viewmodels {

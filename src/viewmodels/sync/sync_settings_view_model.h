@@ -33,12 +33,19 @@
 #pragma once
 
 #include "services/sync/oauth_client.h"
-#include "services/sync/ttu_sync.h"
 
+#include <QTimeZone>
 #include <QtQmlIntegration/qqmlintegration.h>
+
+#include <memory>
+#include <string>
 
 class QQmlEngine;
 class QJSEngine;
+
+namespace niratan::sync {
+struct TtuSyncOptions;
+}
 
 namespace niratan::viewmodels {
 

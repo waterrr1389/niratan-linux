@@ -49,8 +49,8 @@
 #include <utility>
 #include <vector>
 
+#include "models/anki/media_compression.h"
 #include "models/anki/mining_context.h"
-#include "services/anki/anki_config.h"
 #include "services/anki/duplicate_lookup.h"
 #include "services/anki/field_content.h"
 

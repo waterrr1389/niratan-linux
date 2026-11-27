@@ -12,6 +12,7 @@
 #include <memory>
 #include <utility>
 
+#include "services/anki/anki_config.h"
 #include "services/anki/anki_requests.h"
 #include "services/anki/media_naming.h"
 

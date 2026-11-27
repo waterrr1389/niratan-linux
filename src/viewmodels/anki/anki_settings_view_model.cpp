@@ -11,7 +11,7 @@
 #include "services/anki/mapping_options.h"
 #include "services/dictionary/term_dictionaries.h"
 #include "services/profiles/profile_repository.h"
-#include "services/storage/app_paths.h"
+#include "services/storage/app_roots.h"
 
 namespace niratan::viewmodels {
 namespace {
