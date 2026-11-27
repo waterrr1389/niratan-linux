@@ -218,6 +218,8 @@ class VideoWindowTest : public QObject {
     void closing_resets_the_player_and_reopening_shows_only_the_new_clip();
     void empty_window_shows_the_no_video_copy();
     void window_fits_the_video_aspect();
+    void manual_resize_stays_and_restore_refits_data();
+    void manual_resize_stays_and_restore_refits();
     void opening_a_video_suspends_library_thumbnails_and_closing_resumes();
 };
 
@@ -631,6 +633,69 @@ void VideoWindowTest::window_fits_the_video_aspect() {
 
     const QString warnings = warnings_after(QStringLiteral("Video aspect"));
     QVERIFY2(warnings.isEmpty(), qPrintable(warnings));
+}
+
+void VideoWindowTest::manual_resize_stays_and_restore_refits_data() {
+    QTest::addColumn<bool>("full_screen");
+    QTest::newRow("maximize") << false;
+    QTest::newRow("full screen") << true;
+}
+
+void VideoWindowTest::manual_resize_stays_and_restore_refits() {
+    QFETCH(bool, full_screen);
+    niratan::test::TempDataRoot root;
+    QVERIFY(root.isValid());
+
+    QQmlApplicationEngine engine;
+    engine.load(QUrl(QStringLiteral("qrc:/qt/qml/Niratan/src/views/shell/VideoWindow.qml")));
+    auto* video = qobject_cast<QQuickWindow*>(engine.rootObjects().value(0));
+    QVERIFY(video != nullptr);
+    video->show();
+    QVERIFY(QTest::qWaitForWindowExposed(video));
+    if (QGuiApplication::platformName() == QStringLiteral("wayland"))
+        QVERIFY(QTest::qWaitForWindowActive(video));
+    auto* mpv = video->findChild<QQuickItem*>(QStringLiteral("mpvItem"));
+    QVERIFY(mpv != nullptr);
+    const QSize manual_size(560, 300);
+    video->resize(manual_size);
+    QTRY_COMPARE(video->size(), manual_size);
+    QVERIFY(mpv->setProperty("aspectRatio", QStringLiteral("4:3")));
+    QTRY_COMPARE(video->size(), QSize(400, 300));
+
+    // Deliver the content size a window manager would give after an edge drag.
+    video->resize(manual_size);
+    QTest::qWait(350);
+    QCOMPARE(video->size(), manual_size);
+
+    if (full_screen) {
+        video->showFullScreen();
+    } else {
+        video->showMaximized();
+    }
+    QTRY_COMPARE(video->visibility(), full_screen ? QWindow::FullScreen : QWindow::Maximized);
+    if (QGuiApplication::platformName() == QStringLiteral("wayland")) {
+        const QRect screen_area =
+            full_screen ? video->screen()->geometry() : video->screen()->availableGeometry();
+        QTRY_COMPARE(video->width(), screen_area.width());
+    }
+    const QSize state_size = video->size();
+    QVERIFY(mpv->setProperty("aspectRatio", QStringLiteral("1:1")));
+    QTest::qWait(50);
+    QCOMPARE(video->size(), state_size);
+    QVERIFY(mpv->setProperty("aspectRatio", QStringLiteral("4:3")));
+    video->showNormal();
+    QTRY_COMPARE(video->size(), QSize(400, 300));
+
+    auto* player = video->findChild<QQuickItem*>(QStringLiteral("videoPlayerPage"));
+    QVERIFY(player != nullptr);
+    video->resize(manual_size);
+    QVERIFY(QMetaObject::invokeMethod(player, "videoLoaded"));
+    QTRY_COMPARE(video->size(), QSize(400, 300));
+
+    QVERIFY(QMetaObject::invokeMethod(player, "toggleTranscript"));
+    const int sidebar_width = qRound(player->property("studySidebarFitWidth").toReal());
+    QVERIFY(sidebar_width > 0);
+    QTRY_COMPARE(video->size(), QSize(400 + sidebar_width, 300));
 }
 
 // B6, B7: a Video session suspends the library's poster generation from the

@@ -71,17 +71,17 @@ Item {
     // lookup popup, the timeline preview and an inactive window all keep it.
     readonly property bool cursorHidden: mpv.loaded && !page.chromeShown
         && page.Window.window !== null && page.Window.window.active
-    // VideoWindowAspectLayout.videoAspectRatio as the Video window consumes
-    // it: 0 when no ratio is known.
+    // VideoWindowAspectLayout.videoAspectRatio: 0 when no ratio is known.
     readonly property real videoAspectRatio: {
         const ratio = VideoWindowAspect.videoAspectRatio(mpv.videoDisplaySize,
                                                          mpv.aspectRatio, mpv.videoRotation)
         return ratio === null || ratio === undefined ? 0 : ratio
     }
-    // The study sidebar's rendered width, following
-    // VideoPlayerScreen.clampedStudySidebarWidth: the stored width clamped to
-    // the room left beside the video and, when the window's own aspect leaves
-    // room, the width that keeps the video surface aspect-correct.
+    // VideoWindowChromeController.setVideoLayout fits the requested sidebar width.
+    // The displayed width depends on the frame and must not trigger a fit.
+    readonly property real studySidebarFitWidth: studyOpen
+        ? Math.max(studySidebar.minimumWidth, Math.min(studySidebar.maximumWidth, studySidebar.implicitWidth)) : 0
+    // The displayed width follows VideoPlayerScreen.clampedStudySidebarWidth.
     readonly property real studySidebarLayoutWidth: {
         if (!page.studyOpen)
             return 0
@@ -97,8 +97,8 @@ Item {
                                                            proposed, minimumWidth,
                                                            maximumWidth)
     }
-    // VideoControlsView.timelineProgressControl's preview times and the
-    // page's mirror, which suspends auto-hide while the capsule shows.
+    signal videoLoaded()
+    // VideoControlsView.timelineProgressControl's preview suspends auto-hide.
     readonly property bool timelinePreviewActive: controlBar.timelinePreviewActive
     readonly property bool fullScreen: page.Window.window
         ? page.Window.window.visibility === Window.FullScreen
@@ -517,8 +517,7 @@ Item {
         page.resetVideoState()
     }
 
-    // VideoWindow.openVideo -> VideoPlayerScreen+Opening.handleExternalOpenRequest:
-    // replay the page state, then open the new clip with its subtitle.
+    // VideoPlayerScreen+Opening.handleExternalOpenRequest.
     function openRequest(url, subtitleUrl, fromBeginning) {
         page.resetVideoState()
         page.initialVideoUrl = url
@@ -917,6 +916,7 @@ Item {
                 page.syncInspectorState()
                 if (!mpv.loaded)
                     return
+                page.videoLoaded()
                 if (page.pendingSubtitleUrl.toString().length > 0) {
                     const subtitle = page.pendingSubtitleUrl
                     page.pendingSubtitleUrl = ""
