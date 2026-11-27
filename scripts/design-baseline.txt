@@ -6,7 +6,7 @@ src/views/MainWindow.qml 0 0 0 4
 src/views/dictionary/AnkiMiningToast.qml 0 0 0 3
 src/views/pages/AnkiSettingsPage.qml 0 0 0 1
 src/views/pages/DictionaryPage.qml 0 0 0 1
-src/views/pages/LibraryBookCard.qml 0 0 0 3
+src/views/pages/LibraryBookCard.qml 0 0 0 2
 src/views/pages/LibraryPage.qml 0 0 0 3
 src/views/pages/LibraryShelfSidebar.qml 0 0 0 2
 src/views/pages/PlayerPage.qml 0 0 0 1

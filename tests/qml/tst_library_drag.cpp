@@ -188,7 +188,6 @@ void LibraryDragTest::library_drag_wires_books_and_custom_shelves() {
     QTRY_COMPARE(storage.load_book_order(), reordered);
     QTRY_VERIFY(card(QStringLiteral("Alpha")) && card(QStringLiteral("Beta")));
     QVERIFY(card(QStringLiteral("Alpha"))->property("dragSource").toBool());
-    QVERIFY(card(QStringLiteral("Beta"))->property("dragTarget").toBool());
     QCOMPARE(model->sort_option(), 2);
     QCOMPARE(moved.count(), 1);
     QTest::mouseMove(&window, center(card(QStringLiteral("Beta"))));
@@ -199,7 +198,6 @@ void LibraryDragTest::library_drag_wires_books_and_custom_shelves() {
     const std::vector<std::string> released{"Beta", "Gamma", "Alpha"};
     QTRY_COMPARE(storage.load_book_order(), released);
     QTRY_VERIFY(!card(QStringLiteral("Alpha"))->property("dragSource").toBool());
-    QVERIFY(!card(QStringLiteral("Beta"))->property("dragTarget").toBool());
     QCOMPARE(opened.count(), 1);
 
     model->setSelectedShelf(QStringLiteral("shelf:First"));

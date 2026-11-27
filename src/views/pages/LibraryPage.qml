@@ -526,7 +526,7 @@ Item {
 
                 width: grid.cellWidth
                 height: grid.cellHeight
-                z: bookCard.dragSource ? 2 : bookCard.dragTarget ? 1 : 0
+                z: bookCard.dragSource ? 1 : 0
 
                 LibraryBookCard {
                     id: bookCard
@@ -540,7 +540,6 @@ Item {
                     finished: cell.modelData.finished
                     chosen: page.selecting && page.selectedFolders[cell.modelData.folder] === true
                     dragSource: grid.dragSource === cell.modelData.folder
-                    dragTarget: grid.dragTarget === cell.modelData.folder
                     onClicked: {
                         if (page.selecting)
                             page.toggleSelection(cell.modelData.folder)

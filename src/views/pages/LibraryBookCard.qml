@@ -13,7 +13,9 @@
 // cover's bottom trailing corner; while selecting, a chosen book carries the
 // accent check at the top trailing corner instead. A book without a cover
 // shows the grey placeholder.
-// BookView.shelfDragAppearance lifts the source and outlines the target.
+// BookView.shelfDragAppearance lifts the dragged book. Its target scale and
+// outline are left out: the outline sat on the book just pushed aside, which
+// read as the wrong book being dragged.
 import QtQuick
 import QtQuick.Effects
 import Niratan
@@ -29,7 +31,6 @@ Item {
     property bool chosen: false
     property real coverWidth: Theme.bookCoverDefaultWidth
     property bool dragSource: false
-    property bool dragTarget: false
 
     signal clicked()
     signal contextMenuRequested()
@@ -41,7 +42,7 @@ Item {
     width: card.coverWidth
     height: frame.height + Theme.bookTitleSpacing + Theme.bookTitleHeight
     y: dragSource ? -Theme.bookDragLift : 0
-    scale: dragSource ? Theme.bookDragSourceScale : dragTarget ? Theme.bookDragTargetScale : 1
+    scale: dragSource ? Theme.bookDragSourceScale : 1
 
     Behavior on y { NumberAnimation { duration: Theme.bookDragDuration } }
     Behavior on scale { NumberAnimation { duration: Theme.bookDragDuration } }
@@ -172,17 +173,6 @@ Item {
         wrapMode: Text.Wrap
         elide: Text.ElideRight
         verticalAlignment: Text.AlignTop
-    }
-
-    Rectangle {
-        anchors.fill: parent
-        anchors.margins: -Theme.bookDragOutlineInset
-        radius: Theme.bookDragOutlineRadius
-        opacity: card.dragTarget ? Theme.bookDragOutlineOpacity : 0
-        color: "transparent"
-        border.color: Theme.accent
-        border.width: Theme.bookDragOutlineWidth
-        Behavior on opacity { NumberAnimation { duration: Theme.bookDragDuration } }
     }
 
     TapHandler {
