@@ -30,7 +30,7 @@
 // the current height clamped by the screen, the width is that height times the
 // ratio plus the visible study sidebar, and a live resize keeps
 // (width - sidebar) / height on the ratio with one frozen driver for the drag.
-// Full screen and a window with no video keep their geometry. The Linux title
+// Maximized, full screen and a window with no video keep their geometry. The Linux title
 // frame is the desktop's and is outside the content size (Decision).
 pragma ComponentBehavior: Bound
 
@@ -112,8 +112,15 @@ ApplicationWindow {
     // keep the current height within the screen, derive the width from the
     // ratio plus the visible sidebar, clamp to the screen, keep the top edge
     // and respect the minimum frame.
+    // Only a normal window follows the ratio. Maximized and full screen
+    // belong to the window manager: resizing them back to the ratio leaves a
+    // maximized window at the wrong size, and the video letterboxes instead.
+    function followsVideoAspect() {
+        return videoWindow.visibility === Window.Windowed
+    }
+
     function fitVideoWindow(ratio, sidebarWidth) {
-        if (!(ratio > 0) || !isFinite(ratio) || videoWindow.visibility === Window.FullScreen)
+        if (!(ratio > 0) || !isFinite(ratio) || !videoWindow.followsVideoAspect())
             return
         const area = videoWindow.availableArea()
         if (!area)
@@ -143,7 +150,7 @@ ApplicationWindow {
     // when the drag starts and reused until the resize settles, so a corner
     // drag cannot alternate between width and height between events.
     function handleWindowResize() {
-        if (videoWindow.applyingLayout || videoWindow.visibility === Window.FullScreen)
+        if (videoWindow.applyingLayout || !videoWindow.followsVideoAspect())
             return
         const ratio = videoWindow.videoAspectRatio
         if (!(ratio > 0) || !isFinite(ratio))
