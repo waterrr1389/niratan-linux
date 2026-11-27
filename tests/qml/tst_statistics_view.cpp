@@ -54,16 +54,12 @@
 #include <QTime>
 #include <QTimeZone>
 #include <QUrl>
-#include <QtQml/qqmlextensionplugin.h>
 #include <QtTest>
 #include <QtWebEngineQuick/QtWebEngineQuick>
 
 #include <clocale>
 #include <functional>
 #include <memory>
-
-Q_IMPORT_QML_PLUGIN(NiratanPlugin)
-Q_IMPORT_QML_PLUGIN(NiratanStylePlugin)
 
 namespace {
 

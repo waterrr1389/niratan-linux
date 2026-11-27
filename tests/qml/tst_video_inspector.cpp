@@ -40,15 +40,11 @@
 #include <QVariantList>
 #include <QVariantMap>
 #include <QWheelEvent>
-#include <QtQml/qqmlextensionplugin.h>
 #include <QtTest>
 
 #include <algorithm>
 #include <clocale>
 #include <memory>
-
-Q_IMPORT_QML_PLUGIN(NiratanPlugin)
-Q_IMPORT_QML_PLUGIN(NiratanStylePlugin)
 
 namespace {
 

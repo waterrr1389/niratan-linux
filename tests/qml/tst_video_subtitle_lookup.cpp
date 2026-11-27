@@ -17,14 +17,10 @@
 #include <QQuickWindow>
 #include <QSignalSpy>
 #include <QTemporaryDir>
-#include <QtQml/qqmlextensionplugin.h>
 #include <QtTest>
 
 #include <clocale>
 #include <memory>
-
-Q_IMPORT_QML_PLUGIN(NiratanPlugin)
-Q_IMPORT_QML_PLUGIN(NiratanStylePlugin)
 
 class VideoSubtitleLookupTest : public QObject {
     Q_OBJECT

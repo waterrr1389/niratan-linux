@@ -25,13 +25,9 @@
 #include <QQuickWindow>
 #include <QTest>
 #include <QUrl>
-#include <QtQml/qqmlextensionplugin.h>
 #include <QtWebEngineQuick/QtWebEngineQuick>
 
 #include <memory>
-
-Q_IMPORT_QML_PLUGIN(NiratanPlugin)
-Q_IMPORT_QML_PLUGIN(NiratanStylePlugin)
 
 namespace {
 

@@ -40,7 +40,6 @@
 #include <QQuickStyle>
 #include <QQuickWindow>
 #include <QUrlQuery>
-#include <QtQml/qqmlextensionplugin.h>
 #include <QtTest>
 #include <QtWebEngineQuick/QtWebEngineQuick>
 
@@ -52,9 +51,6 @@
 
 #include "data_root.h"
 #include "epub_fixture.h"
-
-Q_IMPORT_QML_PLUGIN(NiratanPlugin)
-Q_IMPORT_QML_PLUGIN(NiratanStylePlugin)
 
 using niratan::statistics::StatisticsSyncMode;
 using niratan::viewmodels::ReaderViewModel;

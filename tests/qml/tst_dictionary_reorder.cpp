@@ -20,15 +20,11 @@
 #include <QQuickItem>
 #include <QQuickStyle>
 #include <QQuickWindow>
-#include <QtQml/qqmlextensionplugin.h>
 #include <QtTest>
 
 #include <clocale>
 #include <filesystem>
 #include <memory>
-
-Q_IMPORT_QML_PLUGIN(NiratanPlugin)
-Q_IMPORT_QML_PLUGIN(NiratanStylePlugin)
 
 class DictionaryReorderTest : public QObject {
     Q_OBJECT

@@ -26,16 +26,12 @@
 #include <QQuickWindow>
 #include <QTemporaryDir>
 #include <QUrl>
-#include <QtQml/qqmlextensionplugin.h>
 #include <QtTest>
 #include <QtWebEngineQuick/QtWebEngineQuick>
 
 #include <clocale>
 #include <filesystem>
 #include <memory>
-
-Q_IMPORT_QML_PLUGIN(NiratanPlugin)
-Q_IMPORT_QML_PLUGIN(NiratanStylePlugin)
 
 using niratan::viewmodels::DictionaryPopupModel;
 

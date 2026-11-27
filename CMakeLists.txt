@@ -7,8 +7,8 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
-# Debug executables carry hundreds of megabytes of Qt and QML objects. LLD
-# links them several times faster than GNU ld, which matters for every test.
+# Tests link the whole application layer, and LLD links it several times
+# faster than GNU ld.
 find_program(LLD_PROGRAM ld.lld)
 if(LLD_PROGRAM)
     add_link_options(-fuse-ld=lld)
@@ -25,6 +25,16 @@ endif()
 # The dictionary library is consumed as-is. Its own warnings must not fail
 # this build, and its sources are never patched from here.
 set(HOSHI_WARNINGS ${CMAKE_CXX_FLAGS})
+# Debug builds the project libraries as shared objects, so the many test
+# executables do not each carry a copy of them; Release stays static so the
+# installed binary depends only on system libraries.
+if(CMAKE_BUILD_TYPE STREQUAL "Debug")
+    set(CMAKE_POSITION_INDEPENDENT_CODE ON)
+    set(niratan_library_type SHARED)
+    set(niratan_qml_options NO_PLUGIN)
+else()
+    set(niratan_library_type STATIC)
+endif()
 add_subdirectory(third_party/hoshidicts EXCLUDE_FROM_ALL)
 set(CMAKE_CXX_FLAGS ${HOSHI_WARNINGS})
 
@@ -39,7 +49,7 @@ set(QT_QML_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/qml)
 find_package(SQLite3 REQUIRED)
 find_package(libzip REQUIRED)
 
-qt_add_library(niratan_core STATIC
+qt_add_library(niratan_core ${niratan_library_type}
     src/models/dictionary/audio_source.cpp
     src/models/dictionary/dictionary_config.cpp
     src/models/dictionary/dictionary_recommendation.cpp
@@ -197,8 +207,8 @@ target_link_libraries(niratan_core PUBLIC hoshidicts Qt6::Core Qt6::Network SQLi
 target_compile_options(niratan_core PRIVATE -Wall -Wextra -Wpedantic -Werror)
 
 # The application layer above niratan_core: view models, view C++ types and
-# the Niratan QML module. It is a static library so tests can link it.
-qt_add_library(niratan_app STATIC
+# the Niratan QML module, as a library so tests can link it.
+qt_add_library(niratan_app ${niratan_library_type}
     src/viewmodels/anki/mining_view_model.cpp
     src/viewmodels/anki/mining_view_model.h
     src/viewmodels/anki/mining_view_model_capture.cpp
@@ -307,6 +317,7 @@ set_source_files_properties(src/views/theme/Theme.qml PROPERTIES QT_QML_SINGLETO
 set_source_files_properties(src/views/components/FontFamilies.qml
     PROPERTIES QT_QML_SINGLETON_TYPE TRUE)
 qt_add_qml_module(niratan_app
+    ${niratan_qml_options}
     URI Niratan
     QML_FILES
         src/views/MainWindow.qml
@@ -609,8 +620,9 @@ target_compile_options(niratan_app PRIVATE -Wall -Wextra -Wpedantic -Werror)
 
 # The Niratan control style: every Qt Quick control drawn after its macOS
 # counterpart from Theme tokens. Controls it does not define come from Basic.
-qt_add_library(niratan_style STATIC)
+qt_add_library(niratan_style ${niratan_library_type})
 qt_add_qml_module(niratan_style
+    ${niratan_qml_options}
     URI NiratanStyle
     VERSION 1.0
     IMPORTS QtQuick.Controls.Basic
@@ -650,11 +662,19 @@ qt_add_qml_module(niratan_style
 target_link_libraries(niratan_style PRIVATE Qt6::Quick Qt6::QuickControls2
     Qt6::QuickTemplates2)
 
-# The QML module is static, so its generated plugin must be imported by the
-# application for the module's types and resources to be registered.
+# Both shared modules register their embedded QML when loaded, even when
+# a QML-only consumer has no C++ symbol references to retain them.
+add_library(niratan_qml INTERFACE)
+if(niratan_library_type STREQUAL "SHARED")
+    target_link_libraries(niratan_qml INTERFACE "-Wl,--push-state,--no-as-needed"
+        niratan_app niratan_style "-Wl,--pop-state")
+else()
+    target_link_libraries(niratan_qml INTERFACE niratan_app niratan_appplugin
+        niratan_style niratan_styleplugin)
+endif()
 qt_add_executable(niratan src/main.cpp)
-target_link_libraries(niratan PRIVATE niratan_app niratan_appplugin niratan_style
-    niratan_styleplugin)
+target_link_libraries(niratan PRIVATE niratan_qml)
+target_link_options(niratan PRIVATE $<$<CONFIG:Release>:-s>)
 target_compile_options(niratan PRIVATE -Wall -Wextra -Wpedantic -Werror)
 
 # The KDE desktop entry launches the release binary, and KDE keeps serving the

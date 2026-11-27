@@ -35,14 +35,10 @@
 #include <QUrl>
 #include <QVariantList>
 #include <QVariantMap>
-#include <QtQml/qqmlextensionplugin.h>
 #include <QtTest>
 
 #include <clocale>
 #include <memory>
-
-Q_IMPORT_QML_PLUGIN(NiratanPlugin)
-Q_IMPORT_QML_PLUGIN(NiratanStylePlugin)
 
 namespace {
 

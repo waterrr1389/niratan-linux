@@ -575,8 +575,7 @@ target_include_directories(tst_video_inspector PRIVATE
     ${CMAKE_SOURCE_DIR}/src
     ${CMAKE_CURRENT_SOURCE_DIR}/viewmodels
 )
-target_link_libraries(tst_video_inspector PRIVATE niratan_app niratan_appplugin niratan_style
-    niratan_styleplugin Qt6::Test
+target_link_libraries(tst_video_inspector PRIVATE niratan_qml Qt6::Test
     Qt6::Quick Qt6::QuickControls2 Qt6::WebEngineQuick)
 target_compile_options(tst_video_inspector PRIVATE -Wall -Wextra -Wpedantic -Werror)
 add_test(NAME video_inspector COMMAND tst_video_inspector)
@@ -936,8 +935,7 @@ qt_add_executable(tst_qml_load
     qml/tst_qml_load.cpp
 )
 target_include_directories(tst_qml_load PRIVATE ${CMAKE_SOURCE_DIR}/src)
-target_link_libraries(tst_qml_load PRIVATE niratan_app niratan_appplugin niratan_style
-    niratan_styleplugin Qt6::Test
+target_link_libraries(tst_qml_load PRIVATE niratan_qml Qt6::Test
     Qt6::Quick Qt6::QuickControls2 Qt6::WebEngineQuick)
 target_compile_options(tst_qml_load PRIVATE -Wall -Wextra -Wpedantic -Werror)
 add_test(NAME qml_load COMMAND tst_qml_load)
@@ -948,8 +946,7 @@ qt_add_executable(tst_library_drag
     qml/tst_library_drag.cpp
 )
 target_include_directories(tst_library_drag PRIVATE ${CMAKE_SOURCE_DIR}/src)
-target_link_libraries(tst_library_drag PRIVATE niratan_app niratan_appplugin niratan_style
-    niratan_styleplugin Qt6::Test
+target_link_libraries(tst_library_drag PRIVATE niratan_qml Qt6::Test
     Qt6::Quick Qt6::QuickControls2 Qt6::WebEngineQuick)
 target_compile_options(tst_library_drag PRIVATE -Wall -Wextra -Wpedantic -Werror)
 add_test(NAME library_drag COMMAND tst_library_drag)
@@ -960,8 +957,7 @@ qt_add_executable(tst_library_import_progress
     qml/tst_library_import_progress.cpp
 )
 target_include_directories(tst_library_import_progress PRIVATE ${CMAKE_SOURCE_DIR}/src)
-target_link_libraries(tst_library_import_progress PRIVATE niratan_app niratan_appplugin
-    niratan_style niratan_styleplugin Qt6::Test
+target_link_libraries(tst_library_import_progress PRIVATE niratan_qml Qt6::Test
     Qt6::Quick Qt6::QuickControls2 Qt6::WebEngineQuick)
 target_compile_options(tst_library_import_progress PRIVATE -Wall -Wextra -Wpedantic -Werror)
 add_test(NAME library_import_progress COMMAND tst_library_import_progress)
@@ -972,8 +968,7 @@ qt_add_executable(tst_lookup_audio_menu
     qml/tst_lookup_audio_menu.cpp
 )
 target_include_directories(tst_lookup_audio_menu PRIVATE ${CMAKE_SOURCE_DIR}/src)
-target_link_libraries(tst_lookup_audio_menu PRIVATE niratan_app niratan_appplugin niratan_style
-    niratan_styleplugin Qt6::Test
+target_link_libraries(tst_lookup_audio_menu PRIVATE niratan_qml Qt6::Test
     Qt6::Quick Qt6::QuickControls2 Qt6::WebEngineQuick)
 target_compile_options(tst_lookup_audio_menu PRIVATE -Wall -Wextra -Wpedantic -Werror)
 add_test(NAME lookup_audio_menu COMMAND tst_lookup_audio_menu)
@@ -984,8 +979,7 @@ qt_add_executable(tst_settings_appearance
     qml/tst_settings_appearance.cpp
 )
 target_include_directories(tst_settings_appearance PRIVATE ${CMAKE_SOURCE_DIR}/src)
-target_link_libraries(tst_settings_appearance PRIVATE niratan_app niratan_appplugin niratan_style
-    niratan_styleplugin Qt6::Test
+target_link_libraries(tst_settings_appearance PRIVATE niratan_qml Qt6::Test
     Qt6::Quick Qt6::QuickControls2 Qt6::WebEngineQuick)
 target_compile_options(tst_settings_appearance PRIVATE -Wall -Wextra -Wpedantic -Werror)
 add_test(NAME settings_appearance COMMAND tst_settings_appearance)
@@ -994,8 +988,7 @@ set_tests_properties(settings_appearance PROPERTIES
 
 qt_add_executable(tst_settings_video qml/tst_settings_video.cpp)
 target_include_directories(tst_settings_video PRIVATE ${CMAKE_SOURCE_DIR}/src)
-target_link_libraries(tst_settings_video PRIVATE niratan_app niratan_appplugin niratan_style
-    niratan_styleplugin Qt6::Test Qt6::Quick Qt6::QuickControls2 Qt6::WebEngineQuick)
+target_link_libraries(tst_settings_video PRIVATE niratan_qml Qt6::Test Qt6::Quick Qt6::QuickControls2 Qt6::WebEngineQuick)
 target_compile_options(tst_settings_video PRIVATE -Wall -Wextra -Wpedantic -Werror)
 add_test(NAME settings_video COMMAND tst_settings_video)
 set_tests_properties(settings_video PROPERTIES
@@ -1003,8 +996,7 @@ set_tests_properties(settings_video PROPERTIES
 
 qt_add_executable(tst_settings_sync qml/tst_settings_sync.cpp)
 target_include_directories(tst_settings_sync PRIVATE ${CMAKE_SOURCE_DIR}/src)
-target_link_libraries(tst_settings_sync PRIVATE niratan_app niratan_appplugin niratan_style
-    niratan_styleplugin Qt6::Test Qt6::Quick Qt6::QuickControls2 Qt6::WebEngineQuick)
+target_link_libraries(tst_settings_sync PRIVATE niratan_qml Qt6::Test Qt6::Quick Qt6::QuickControls2 Qt6::WebEngineQuick)
 target_compile_options(tst_settings_sync PRIVATE -Wall -Wextra -Wpedantic -Werror)
 add_test(NAME settings_sync COMMAND tst_settings_sync)
 # The offscreen platform turns control hover off; the book menu test hovers.
@@ -1016,8 +1008,7 @@ qt_add_executable(tst_control_style
     qml/tst_control_style.cpp
 )
 target_include_directories(tst_control_style PRIVATE ${CMAKE_SOURCE_DIR}/src)
-target_link_libraries(tst_control_style PRIVATE niratan_app niratan_appplugin niratan_style
-    niratan_styleplugin Qt6::Test Qt6::Quick Qt6::QuickControls2 Qt6::WebEngineQuick)
+target_link_libraries(tst_control_style PRIVATE niratan_qml Qt6::Test Qt6::Quick Qt6::QuickControls2 Qt6::WebEngineQuick)
 target_compile_options(tst_control_style PRIVATE -Wall -Wextra -Wpedantic -Werror)
 add_test(NAME control_style COMMAND tst_control_style)
 set_tests_properties(control_style PROPERTIES
@@ -1030,8 +1021,7 @@ target_include_directories(tst_dictionary_reorder PRIVATE
     ${CMAKE_SOURCE_DIR}/src
     ${CMAKE_CURRENT_SOURCE_DIR}/viewmodels
 )
-target_link_libraries(tst_dictionary_reorder PRIVATE niratan_app niratan_appplugin niratan_style
-    niratan_styleplugin Qt6::Test Qt6::Quick Qt6::QuickControls2)
+target_link_libraries(tst_dictionary_reorder PRIVATE niratan_qml Qt6::Test Qt6::Quick Qt6::QuickControls2)
 target_compile_options(tst_dictionary_reorder PRIVATE -Wall -Wextra -Wpedantic -Werror)
 add_test(NAME dictionary_reorder COMMAND tst_dictionary_reorder)
 set_tests_properties(dictionary_reorder PROPERTIES
@@ -1044,8 +1034,7 @@ target_include_directories(tst_video_lookup_focus PRIVATE
     ${CMAKE_SOURCE_DIR}/src
     ${CMAKE_CURRENT_SOURCE_DIR}/viewmodels
 )
-target_link_libraries(tst_video_lookup_focus PRIVATE niratan_app niratan_appplugin niratan_style
-    niratan_styleplugin Qt6::Test
+target_link_libraries(tst_video_lookup_focus PRIVATE niratan_qml Qt6::Test
     Qt6::Quick Qt6::QuickControls2 Qt6::WebEngineQuick)
 target_compile_options(tst_video_lookup_focus PRIVATE -Wall -Wextra -Wpedantic -Werror)
 add_test(NAME video_lookup_focus COMMAND tst_video_lookup_focus)
@@ -1056,8 +1045,7 @@ qt_add_executable(tst_video_subtitle_lookup
     qml/tst_video_subtitle_lookup.cpp
 )
 target_include_directories(tst_video_subtitle_lookup PRIVATE ${CMAKE_SOURCE_DIR}/src)
-target_link_libraries(tst_video_subtitle_lookup PRIVATE niratan_app niratan_appplugin
-    niratan_style niratan_styleplugin Qt6::Test Qt6::Quick Qt6::QuickControls2)
+target_link_libraries(tst_video_subtitle_lookup PRIVATE niratan_qml Qt6::Test Qt6::Quick Qt6::QuickControls2)
 target_compile_options(tst_video_subtitle_lookup PRIVATE -Wall -Wextra -Wpedantic -Werror)
 add_test(NAME video_subtitle_lookup COMMAND tst_video_subtitle_lookup)
 set_tests_properties(video_subtitle_lookup PROPERTIES
@@ -1067,8 +1055,7 @@ qt_add_executable(tst_control_kit
     qml/tst_control_kit.cpp
 )
 target_include_directories(tst_control_kit PRIVATE ${CMAKE_SOURCE_DIR}/src)
-target_link_libraries(tst_control_kit PRIVATE niratan_app niratan_appplugin niratan_style
-    niratan_styleplugin Qt6::Test Qt6::Quick Qt6::QuickControls2)
+target_link_libraries(tst_control_kit PRIVATE niratan_qml Qt6::Test Qt6::Quick Qt6::QuickControls2)
 target_compile_options(tst_control_kit PRIVATE -Wall -Wextra -Wpedantic -Werror)
 add_test(NAME control_kit COMMAND tst_control_kit)
 set_tests_properties(control_kit PROPERTIES
@@ -1079,8 +1066,7 @@ qt_add_executable(tst_dictionary_view
 )
 target_include_directories(tst_dictionary_view PRIVATE ${CMAKE_SOURCE_DIR}/src
     ${CMAKE_SOURCE_DIR}/tests/dictionary)
-target_link_libraries(tst_dictionary_view PRIVATE niratan_app niratan_appplugin niratan_style
-    niratan_styleplugin Qt6::Test
+target_link_libraries(tst_dictionary_view PRIVATE niratan_qml Qt6::Test
     Qt6::Quick Qt6::QuickControls2 Qt6::WebEngineQuick)
 target_compile_options(tst_dictionary_view PRIVATE -Wall -Wextra -Wpedantic -Werror)
 add_test(NAME dictionary_view COMMAND tst_dictionary_view)
@@ -1094,8 +1080,7 @@ target_include_directories(tst_video_window PRIVATE
     ${CMAKE_SOURCE_DIR}/src
     ${CMAKE_CURRENT_SOURCE_DIR}/viewmodels
 )
-target_link_libraries(tst_video_window PRIVATE niratan_app niratan_appplugin niratan_style
-    niratan_styleplugin Qt6::Test
+target_link_libraries(tst_video_window PRIVATE niratan_qml Qt6::Test
     Qt6::Quick Qt6::QuickControls2 Qt6::WebEngineQuick)
 target_compile_options(tst_video_window PRIVATE -Wall -Wextra -Wpedantic -Werror)
 add_test(NAME video_window COMMAND tst_video_window)
@@ -1109,8 +1094,7 @@ target_include_directories(tst_player_controls PRIVATE
     ${CMAKE_SOURCE_DIR}/src
     ${CMAKE_CURRENT_SOURCE_DIR}/viewmodels
 )
-target_link_libraries(tst_player_controls PRIVATE niratan_app niratan_appplugin niratan_style
-    niratan_styleplugin Qt6::Test
+target_link_libraries(tst_player_controls PRIVATE niratan_qml Qt6::Test
     Qt6::Quick Qt6::QuickControls2 Qt6::WebEngineQuick)
 target_compile_options(tst_player_controls PRIVATE -Wall -Wextra -Wpedantic -Werror)
 add_test(NAME player_controls COMMAND tst_player_controls)
@@ -1124,8 +1108,7 @@ target_include_directories(tst_video_library_view PRIVATE
     ${CMAKE_SOURCE_DIR}/src
     ${CMAKE_CURRENT_SOURCE_DIR}/viewmodels
 )
-target_link_libraries(tst_video_library_view PRIVATE niratan_app niratan_appplugin niratan_style
-    niratan_styleplugin Qt6::Test
+target_link_libraries(tst_video_library_view PRIVATE niratan_qml Qt6::Test
     Qt6::Quick Qt6::QuickControls2 Qt6::WebEngineQuick)
 target_compile_options(tst_video_library_view PRIVATE -Wall -Wextra -Wpedantic -Werror)
 add_test(NAME video_library_view COMMAND tst_video_library_view)
@@ -1139,8 +1122,7 @@ target_include_directories(tst_statistics_view PRIVATE
     ${CMAKE_SOURCE_DIR}/src
     ${CMAKE_CURRENT_SOURCE_DIR}/viewmodels
 )
-target_link_libraries(tst_statistics_view PRIVATE niratan_app niratan_appplugin niratan_style
-    niratan_styleplugin Qt6::Test
+target_link_libraries(tst_statistics_view PRIVATE niratan_qml Qt6::Test
     Qt6::Quick Qt6::QuickControls2 Qt6::WebEngineQuick)
 target_compile_options(tst_statistics_view PRIVATE -Wall -Wextra -Wpedantic -Werror)
 add_test(NAME statistics_view COMMAND tst_statistics_view)
@@ -1154,8 +1136,7 @@ target_include_directories(tst_interface_theme PRIVATE
     ${CMAKE_SOURCE_DIR}/src
     ${CMAKE_CURRENT_SOURCE_DIR}/viewmodels
 )
-target_link_libraries(tst_interface_theme PRIVATE niratan_app niratan_appplugin niratan_style
-    niratan_styleplugin Qt6::Test
+target_link_libraries(tst_interface_theme PRIVATE niratan_qml Qt6::Test
     Qt6::Quick Qt6::QuickControls2 Qt6::WebEngineQuick)
 target_compile_options(tst_interface_theme PRIVATE -Wall -Wextra -Wpedantic -Werror)
 add_test(NAME interface_theme COMMAND tst_interface_theme)
@@ -1171,8 +1152,7 @@ target_include_directories(tst_reader_presentation PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/flows
     ${CMAKE_CURRENT_SOURCE_DIR}/dictionary
 )
-target_link_libraries(tst_reader_presentation PRIVATE niratan_app niratan_appplugin niratan_style
-    niratan_styleplugin Qt6::Test
+target_link_libraries(tst_reader_presentation PRIVATE niratan_qml Qt6::Test
     Qt6::Quick Qt6::QuickControls2 Qt6::WebEngineQuick)
 target_compile_options(tst_reader_presentation PRIVATE -Wall -Wextra -Wpedantic -Werror)
 add_test(NAME reader_presentation COMMAND tst_reader_presentation)
@@ -1187,8 +1167,7 @@ target_include_directories(tst_reader_auto_sync PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/viewmodels
     ${CMAKE_CURRENT_SOURCE_DIR}/flows
 )
-target_link_libraries(tst_reader_auto_sync PRIVATE niratan_app niratan_appplugin niratan_style
-    niratan_styleplugin Qt6::Test
+target_link_libraries(tst_reader_auto_sync PRIVATE niratan_qml Qt6::Test
     Qt6::Quick Qt6::QuickControls2 Qt6::WebEngineQuick)
 target_compile_options(tst_reader_auto_sync PRIVATE -Wall -Wextra -Wpedantic -Werror)
 add_test(NAME reader_auto_sync COMMAND tst_reader_auto_sync)
@@ -1203,8 +1182,7 @@ target_include_directories(tst_library_views PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/viewmodels
     ${CMAKE_CURRENT_SOURCE_DIR}/flows
 )
-target_link_libraries(tst_library_views PRIVATE niratan_app niratan_appplugin niratan_style
-    niratan_styleplugin Qt6::Test
+target_link_libraries(tst_library_views PRIVATE niratan_qml Qt6::Test
     Qt6::Quick Qt6::QuickControls2 Qt6::WebEngineQuick)
 target_compile_options(tst_library_views PRIVATE -Wall -Wextra -Wpedantic -Werror)
 add_test(NAME library_views COMMAND tst_library_views)

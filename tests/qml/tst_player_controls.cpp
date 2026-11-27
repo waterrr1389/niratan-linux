@@ -61,16 +61,12 @@
 #include <QTemporaryDir>
 #include <QUrl>
 #include <QVariantMap>
-#include <QtQml/qqmlextensionplugin.h>
 #include <QtTest>
 
 #include <clocale>
 #include <cmath>
 #include <functional>
 #include <memory>
-
-Q_IMPORT_QML_PLUGIN(NiratanPlugin)
-Q_IMPORT_QML_PLUGIN(NiratanStylePlugin)
 
 namespace {
 

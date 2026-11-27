@@ -18,15 +18,11 @@
 #include <QQuickStyle>
 #include <QQuickWindow>
 #include <QTemporaryDir>
-#include <QtQml/qqmlextensionplugin.h>
 #include <QtTest>
 #include <QtWebEngineQuick/QtWebEngineQuick>
 
 #include <clocale>
 #include <memory>
-
-Q_IMPORT_QML_PLUGIN(NiratanPlugin)
-Q_IMPORT_QML_PLUGIN(NiratanStylePlugin)
 
 namespace {
 

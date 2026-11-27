@@ -25,14 +25,10 @@
 #include <QQuickStyle>
 #include <QQuickWindow>
 #include <QSignalSpy>
-#include <QtQml/qqmlextensionplugin.h>
 #include <QtTest>
 
 #include <cmath>
 #include <memory>
-
-Q_IMPORT_QML_PLUGIN(NiratanPlugin)
-Q_IMPORT_QML_PLUGIN(NiratanStylePlugin)
 
 namespace {
 

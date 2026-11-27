@@ -20,15 +20,11 @@
 #include <QQuickStyle>
 #include <QQuickWindow>
 #include <QUrl>
-#include <QtQml/qqmlextensionplugin.h>
 #include <QtTest>
 #include <QtWebEngineQuick/QtWebEngineQuick>
 
 #include <clocale>
 #include <filesystem>
-
-Q_IMPORT_QML_PLUGIN(NiratanPlugin)
-Q_IMPORT_QML_PLUGIN(NiratanStylePlugin)
 
 using niratan::viewmodels::PlayerLookupViewModel;
 

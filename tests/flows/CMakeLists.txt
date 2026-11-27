@@ -57,8 +57,7 @@ target_include_directories(tst_flow_video_inspector PRIVATE
     ${CMAKE_SOURCE_DIR}/src
     ${CMAKE_CURRENT_SOURCE_DIR}/../viewmodels
 )
-target_link_libraries(tst_flow_video_inspector PRIVATE niratan_app niratan_appplugin
-    niratan_style niratan_styleplugin Qt6::Test Qt6::Quick Qt6::QuickControls2
+target_link_libraries(tst_flow_video_inspector PRIVATE niratan_qml Qt6::Test Qt6::Quick Qt6::QuickControls2
     Qt6::WebEngineQuick)
 target_compile_options(tst_flow_video_inspector PRIVATE -Wall -Wextra -Wpedantic -Werror)
 add_test(NAME flow_video_inspector COMMAND tst_flow_video_inspector)

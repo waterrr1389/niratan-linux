@@ -83,7 +83,6 @@
 #include <QUuid>
 #include <QVariantMap>
 #include <QWebEngineProfile>
-#include <QtQml/qqmlextensionplugin.h>
 #include <QtTest>
 #include <QtWebEngineQuick/QtWebEngineQuick>
 
@@ -102,9 +101,6 @@
 #include "data_root.h"
 #include "epub_fixture.h"
 #include "yomitan_fixture.h"
-
-Q_IMPORT_QML_PLUGIN(NiratanPlugin)
-Q_IMPORT_QML_PLUGIN(NiratanStylePlugin)
 
 using niratan::viewmodels::ReaderViewModel;
 using niratan::viewmodels::SasayakiViewModel;

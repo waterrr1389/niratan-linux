@@ -25,16 +25,12 @@
 #include <QQuickWindow>
 #include <QSignalSpy>
 #include <QUrl>
-#include <QtQml/qqmlextensionplugin.h>
 #include <QtTest>
 #include <QtWebEngineQuick/QtWebEngineQuick>
 
 #include <memory>
 #include <string>
 #include <vector>
-
-Q_IMPORT_QML_PLUGIN(NiratanPlugin)
-Q_IMPORT_QML_PLUGIN(NiratanStylePlugin)
 
 namespace {
 
