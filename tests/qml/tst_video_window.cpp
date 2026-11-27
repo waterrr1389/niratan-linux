@@ -673,6 +673,7 @@ void VideoWindowTest::manual_resize_stays_and_restore_refits() {
         video->showMaximized();
     }
     QTRY_COMPARE(video->visibility(), full_screen ? QWindow::FullScreen : QWindow::Maximized);
+    QTRY_VERIFY(video->size() != manual_size);
     if (QGuiApplication::platformName() == QStringLiteral("wayland")) {
         const QRect screen_area =
             full_screen ? video->screen()->geometry() : video->screen()->availableGeometry();
@@ -689,6 +690,7 @@ void VideoWindowTest::manual_resize_stays_and_restore_refits() {
     auto* player = video->findChild<QQuickItem*>(QStringLiteral("videoPlayerPage"));
     QVERIFY(player != nullptr);
     video->resize(manual_size);
+    QTRY_COMPARE(video->size(), manual_size);
     QVERIFY(QMetaObject::invokeMethod(player, "videoLoaded"));
     QTRY_COMPARE(video->size(), QSize(400, 300));
 
